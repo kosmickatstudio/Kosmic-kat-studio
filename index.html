@@ -793,7 +793,7 @@ function renderProjectWorkspace(p){
   const chars=S.characters.filter(c=>c.projectId===p.id);
   el.innerHTML=`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-      <button class="btn btn-ghost btn-sm" onclick="switchMod('projects',document.querySelector('[data-mod=projects]'))">← Projects</button>
+      <button class="btn btn-ghost btn-sm" onclick="switchMod('projects',document.querySelector('[data-mod=projects]')||null)">← Projects</button>
       <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);flex:1">${p.name}</div>
       <span class="badge badge-gray">${p.status}</span>
     </div>
@@ -1292,6 +1292,7 @@ document.getElementById("cmdBar").addEventListener("keydown",e=>{if(e.key==="Esc
 
 // ── INIT ──
 function init(){
+  try{
   initStars();
   injectLogos();
   buildApiKeyFields();
@@ -1312,11 +1313,16 @@ function init(){
     updateUserUI();
   }
 
-  // Hide loader
-  setTimeout(()=>{
-    const loader=document.getElementById("pageLoader");
-    if(loader){loader.style.opacity="0";loader.style.transition="opacity 0.5s";setTimeout(()=>loader.classList.add("hidden"),500);}
-  },800);
+  // Hide loader — fast, with safety fallback
+  const loader=document.getElementById("pageLoader");
+  if(loader){loader.style.opacity="0";loader.style.transition="opacity 0.3s";setTimeout(()=>loader.classList.add("hidden"),350);}
+  setTimeout(()=>{const l=document.getElementById("pageLoader");if(l)l.classList.add("hidden");},2000);
+  }catch(e){
+    console.error("Init error:",e);
+    const l=document.getElementById("pageLoader");if(l)l.classList.add("hidden");
+    const el=document.getElementById("moduleContent");
+    if(el)el.innerHTML='<div style="padding:20px;color:red;font-size:13px">Startup error: '+e.message+'<br>Please refresh.</div>';
+  }
 }
 
 // Style active opt buttons
