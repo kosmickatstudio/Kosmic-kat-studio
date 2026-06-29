@@ -632,7 +632,7 @@ function injectLogos(){
   const imgs = document.querySelectorAll("#logo-img,#modal-logo,#loader-logo-img");
   imgs.forEach(img=>{
     img.src=LOGO_SRC;
-    img.onerror=()=>{img.style.display='none';img.parentElement.innerHTML='🐱';};
+    img.onerror=()=>{img.src=LOGO_SRC+'?v='+Date.now();img.onerror=()=>{img.style.display='none';};};
   });
 }
 
