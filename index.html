@@ -584,7 +584,13 @@ function newProject(){
   S.projects.push({name,genre,desc,status:"Development",c1,c2,emoji,shots:0,chars:0,created:Date.now()});
   save("projects");switchModule("projects",document.querySelector(".mod-btn[onclick*=\"'projects'\"]"));
   toast("Project created: "+name,"success");
-}
+}function openProject(i){
+  const p=S.projects[i];
+  S.activeProject=i;
+  toast("📂 "+p.name+" — active project set","success");
+  // Switch to canvas with project context
+  switchModule("canvas",document.querySelector(".mod-btn[onclick*=\"'canvas'\"]"));
+
 
 // ─────────────────────────────────────────────────
 // MODULE 02 — CHARACTERS
