@@ -561,7 +561,7 @@ function mProjects(){
     <button class="btn btn-primary" onclick="newProject()">+ New Project</button>
   </div>
   ${!ps.length?`<div class="empty-state"><div class="empty-icon">🎬</div><div class="empty-title">No Projects Yet</div><div class="empty-desc">Create your first project. Works with any universe, genre, or format — from Fharomorph-α to brand campaigns.</div><button class="btn btn-primary" onclick="newProject()">Create First Project</button></div>`
-  :`<div class="grid3">${ps.map((p,i)=>`<div class="card" onclick="toast('Opening: ${p.name}')">
+  <div class="card" onclick="openProject(${i})">
     <div style="height:75px;background:linear-gradient(135deg,${p.c1||"#3D1F7A"},${p.c2||"#6240B0"});border-radius:8px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;font-size:28px">${p.emoji||"🎬"}</div>
     <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet);margin-bottom:3px">${p.name}</div>
     <div style="font-size:10px;color:var(--texts);margin-bottom:6px">${p.genre||"General"} · ${p.status||"Development"}</div>
