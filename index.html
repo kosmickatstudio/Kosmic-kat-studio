@@ -498,7 +498,118 @@ const MODULES=[
   {id:"settings",label:"Settings",icon:"⚙️"},
   // SLOTS 15-65 — add here
 ];
+// ── PROJECT DETAIL ──
+function openProject(idx){
+  const p=S.projects[idx];
+  document.getElementById("module-content").innerHTML=`<div class="fade-in">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+      <button class="btn btn-outline btn-sm" onclick="switchModule('projects',null)">← Projects</button>
+      <div style="flex:1">
+        <div style="font-family:'Cinzel',serif;font-size:20px;font-weight:700;color:var(--violet)">${p.emoji||'🎬'} ${p.name}</div>
+        <div style="font-size:11px;color:var(--texts);margin-top:2px">${p.genre||'General'} · ${p.status||'Development'}</div>
+      </div>
+      <button class="btn btn-gold btn-sm" onclick="editProject(${idx})">✏ Edit</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteProject(${idx})">🗑</button>
+    </div>
+    <div class="grid2" style="margin-bottom:14px">
+      <div class="panel">
+        <div class="panel-title">📋 Details</div>
+        <div style="font-size:13px;color:var(--textm);line-height:1.6">${p.desc||'No description yet.'}</div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <span class="badge badge-violet">${p.shots||0} shots</span>
+          <span class="badge badge-gold">${p.chars||0} characters</span>
+          <span class="badge badge-gray">${p.status||'Development'}</span>
+        </div>
+        <div style="font-size:10px;color:var(--texts);margin-top:8px">Created ${new Date(p.created||Date.now()).toLocaleDateString()}</div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">🚀 Quick Actions</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="switchModule('canvas',null)">🎬 Video Canvas</button>
+          <button class="btn btn-outline btn-sm" onclick="switchModule('characters',null)">🎭 Characters</button>
+          <button class="btn btn-outline btn-sm" onclick="switchModule('imagegen',null)">🖼 Image Gen</button>
+          <button class="btn btn-outline btn-sm" onclick="switchModule('directors',null)">🎥 Directors</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function editProject(idx){
+  const p=S.projects[idx];
+  const name=prompt("Project name:",p.name);if(!name)return;
+  const genre=prompt("Genre:",p.genre||'General')||p.genre;
+  const desc=prompt("Description:",p.desc||'')||p.desc||'';
+  const status=prompt("Status:",p.status||'Development')||p.status;
+  S.projects[idx]={...p,name,genre,desc,status};
+  save("projects");openProject(idx);toast("Updated","success");
+}
+function deleteProject(idx){
+  if(!confirm("Delete '"+S.projects[idx].name+"'?"))return;
+  S.projects.splice(idx,1);save("projects");
+  switchModule("projects",null);toast("Deleted","");
+}
 
+// ── CHARACTER DETAIL ──
+function openChar(idx){
+  const c=S.characters[idx];
+  document.getElementById("module-content").innerHTML=`<div class="fade-in">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+      <button class="btn btn-outline btn-sm" onclick="switchModule('characters',null)">← Characters</button>
+      <div style="flex:1">
+        <div style="font-family:'Cinzel',serif;font-size:20px;font-weight:700;color:var(--violet)">${c.emoji||'🎭'} ${c.name}</div>
+        <div style="font-size:11px;color:var(--gold);font-weight:700;margin-top:2px">${c.role||'Character'}</div>
+      </div>
+      <button class="btn btn-gold btn-sm" onclick="editChar(${idx})">✏ Edit</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteChar(${idx})">🗑</button>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-title">🔒 Soul ID</div>
+        <div style="font-size:13px;color:var(--textm);line-height:1.6;margin-bottom:10px">${c.desc||'No description yet.'}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${c.lora?'<span class="badge badge-green">LoRA ✓</span>':'<span class="badge badge-gray">No LoRA</span>'}
+          ${c.voice?'<span class="badge badge-violet">Voice Set</span>':'<span class="badge badge-gray">No Voice</span>'}
+          <span class="badge badge-gold">${c.refs||0} refs</span>
+        </div>
+        ${c.lock?`<div style="margin-top:10px;font-size:11px;background:rgba(61,31,122,0.05);border-radius:8px;padding:8px;color:var(--textm);font-family:monospace">${c.lock}</div>`:''}
+      </div>
+      <div class="panel">
+        <div class="panel-title">🚀 Actions</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn btn-outline btn-sm" onclick="editCharLock(${idx})">🔐 Edit Identity Lock</button>
+          <button class="btn btn-outline btn-sm" onclick="editCharVoice(${idx})">🎙 Set Voice Profile</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function editChar(idx){
+  const c=S.characters[idx];
+  const name=prompt("Name:",c.name);if(!name)return;
+  const role=prompt("Role:",c.role||'Character')||c.role;
+  const desc=prompt("Description:",c.desc||'')||c.desc||'';
+  S.characters[idx]={...c,name,role,desc};
+  save("characters");openChar(idx);toast("Updated","success");
+}
+function editCharLock(idx){
+  const c=S.characters[idx];
+  const lock=prompt("Identity Lock:",c.lock||'');
+  if(lock===null)return;
+  S.characters[idx]={...c,lock};
+  save("characters");openChar(idx);toast("Lock saved","success");
+}
+function editCharVoice(idx){
+  const c=S.characters[idx];
+  const voice=prompt("ElevenLabs Voice ID:",c.voice||'');
+  if(voice===null)return;
+  S.characters[idx]={...c,voice};
+  save("characters");openChar(idx);toast("Voice saved","success");
+}
+function deleteChar(idx){
+  if(!confirm("Delete '"+S.characters[idx].name+"'?"))return;
+  S.characters.splice(idx,1);save("characters");
+  switchModule("characters",null);toast("Deleted","");
+                                           }
 function switchModule(id,btn){
   S.mod=id;
   document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
