@@ -600,7 +600,7 @@ function mCharacters(){
   return`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
     <div><div style="font-family:'Cinzel',serif;font-size:20px;font-weight:700;color:var(--violet)">Character Bible</div><div style="font-size:11px;color:var(--texts);margin-top:2px">${chars.length} character${chars.length!==1?"s":""} · Soul ID + Identity Lock + LoRA Training</div></div>
     <button class="btn btn-primary" onclick="newChar()">+ New Character</button>
-  </div>
+  </div> onclick="openChar(${i})"
   <div class="panel" style="margin-bottom:14px">
     <div class="panel-title"><span>🔒</span>Soul ID System</div>
     <div style="font-size:12px;color:var(--textm);line-height:1.6">Train each character from 20+ reference images for consistent generation across all video models — Seedance 2.0, Kling 3.0, Veo 3.1. Character identity persists across every shot automatically.</div>
