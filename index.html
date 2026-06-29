@@ -219,7 +219,7 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
 <header>
   <a class="h-logo" href="#" onclick="return false">
     <img id="logo-img" alt="Kosmic Kat AI"/>
-    <div><div class="h-logo-text">KOSMIC KAT <span>AI</span></div><div class="h-logo-sub">Creative Studio</div></div>
+    <img id="logo-img" alt="Kosmic Kat AI" style="display:none" onerror="this.style.display='none'" onload="this.style.display='block'"/>
   </a>
   <div class="h-center">
     <input class="cmd-bar" id="cmd-input" placeholder="⌘  Type any studio command... (canvas, characters, budget, audio...)" autocomplete="off"/>
