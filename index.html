@@ -835,17 +835,19 @@ function projectCardHTML(p){
 }
 
 function openProject(id){
-  const p=S.projects.find(x=>x.id===id);
-  if(!p)return;
-  S.activeProject=id;
-  // Highlight active project
-  document.querySelectorAll(".project-card").forEach(c=>c.classList.remove("active-project"));
-  const card=document.getElementById("pc-"+id);
-  if(card)card.classList.add("active-project");
-  toast(`📂 Opened: ${p.name}`,"success");
-  updateAiContext("project:"+p.name);
-  // Switch to project workspace view
-  renderProjectWorkspace(p);
+  try{
+    const p=S.projects.find(x=>x.id===id);
+    if(!p){toast("Project not found — try refreshing","error");return;}
+    S.activeProject=id;
+    document.querySelectorAll(".project-card").forEach(c=>c.classList.remove("active-project"));
+    const card=document.getElementById("pc-"+id);
+    if(card)card.classList.add("active-project");
+    updateAiContext("project:"+p.name);
+    renderProjectWorkspace(p);
+  }catch(e){
+    console.error("openProject error:",e);
+    toast("❌ Couldn't open project: "+e.message,"error");
+  }
 }
 
 function renderProjectWorkspace(p){
@@ -927,13 +929,16 @@ function openProjectModal(editId=null){
     const p=S.projects.find(x=>x.id===editId);
     if(p){
       document.getElementById("pmName").value=p.name||"";
+      document.getElementById("pmGenre").value=p.genre||"Sci-fi";
       document.getElementById("pmDesc").value=p.desc||"";
       document.getElementById("pmStatus").value=p.status||"Development";
       S.thumbColor=p.color||"#7c3aed";
     }
   } else {
     document.getElementById("pmName").value="";
+    document.getElementById("pmGenre").value="Sci-fi";
     document.getElementById("pmDesc").value="";
+    document.getElementById("pmStatus").value="Development";
     S.thumbColor="#7c3aed";
   }
   // Set color picker
@@ -952,22 +957,37 @@ function pickThumbColor(el){
 }
 
 function saveProject(){
-  const name=document.getElementById("pmName").value.trim();
-  if(!name){toast("Project name is required","error");return;}
-  if(S.editingProjectId){
-    const p=S.projects.find(x=>x.id===S.editingProjectId);
-    if(p){
-      p.name=name;p.genre=document.getElementById("pmGenre").value;
-      p.status=document.getElementById("pmStatus").value;
-      p.desc=document.getElementById("pmDesc").value;p.color=S.thumbColor;
-      save("projects");toast("✅ Project updated","success");
+  try{
+    const nameEl=document.getElementById("pmName");
+    const name=nameEl?nameEl.value.trim():"";
+    if(!name){toast("Project name is required","error");return;}
+    const genre=document.getElementById("pmGenre").value;
+    const status=document.getElementById("pmStatus").value;
+    const desc=document.getElementById("pmDesc").value;
+    if(S.editingProjectId){
+      const p=S.projects.find(x=>x.id===S.editingProjectId);
+      if(p){
+        p.name=name;p.genre=genre;p.status=status;p.desc=desc;p.color=S.thumbColor;
+        save("projects");
+        toast("✅ Project updated","success");
+      }
+    } else {
+      const p={id:"proj_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),name,genre,status,desc,color:S.thumbColor,shots:0,chars:0,created:new Date().toISOString()};
+      S.projects.push(p);
+      save("projects");
+      toast("🎉 Project created!","success");
     }
-  } else {
-    const p={id:"proj_"+Date.now(),name,genre:document.getElementById("pmGenre").value,status:document.getElementById("pmStatus").value,desc:document.getElementById("pmDesc").value,color:S.thumbColor,shots:0,chars:0,created:new Date().toISOString()};
-    S.projects.push(p);save("projects");toast("🎉 Project created!","success");
+    S.editingProjectId=null;
+    closeProjectModal();
+    // Force immediate re-render on next frame to guarantee DOM reflects new state
+    requestAnimationFrame(()=>{
+      S.activeProject=null;
+      renderModule("projects");
+    });
+  }catch(e){
+    console.error("saveProject error:",e);
+    toast("❌ Save failed: "+e.message,"error");
   }
-  closeProjectModal();
-  renderModule("projects");
 }
 
 function editProject(id){openProjectModal(id);}
