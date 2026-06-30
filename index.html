@@ -596,8 +596,50 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
   </div>
 </div>
 
-<!-- Toast -->
-<div class="toast" id="toast"></div>
+<!-- Character Modal -->
+<div class="modal-overlay" id="charModal">
+  <div class="modal project-modal">
+    <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:16px" id="charModalTitle">New Character</div>
+    <div class="f-group">
+      <label class="f-label">Character Name *</label>
+      <input class="f-input" id="cmName" placeholder="e.g. Dani, Fharomorph-α…">
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Role</label>
+        <select class="f-select" id="cmRole">
+          <option>Protagonist</option><option>Antagonist</option><option>Supporting</option><option>Side Character</option><option>Narrator</option><option>Mascot</option>
+        </select>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Project</label>
+        <select class="f-select" id="cmProject"></select>
+      </div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Description</label>
+      <textarea class="f-textarea" id="cmDesc" placeholder="Appearance, personality, backstory…" style="min-height:60px"></textarea>
+    </div>
+    <div class="f-group">
+      <label class="f-label">🔒 Identity Lock <span style="font-weight:400;color:var(--texts)">(consistency prompt for image/video gen)</span></label>
+      <textarea class="f-textarea" id="cmLock" placeholder="e.g. silver tabby cat, galaxy-nebula fur pattern, gold eyes, bronze medallion collar…" style="min-height:50px"></textarea>
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">🎙 Voice Profile <span style="font-weight:400;color:var(--texts)">(ElevenLabs voice ID, optional)</span></label>
+        <input class="f-input" id="cmVoice" placeholder="e.g. 21m00Tcm4TlvDq8ikWAM">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Reference Image URL <span style="font-weight:400;color:var(--texts)">(optional)</span></label>
+        <input class="f-input" id="cmRefImg" placeholder="https://…">
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
+      <button class="btn btn-ghost" onclick="closeCharModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCharacter()">💾 Save Character</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // ════════════════════════════════════════
@@ -704,6 +746,7 @@ const MOD_TABS = {
 function switchMod(mod,btn){
   closeSidebar();
   S.mod=mod;
+  if(mod!=="projects")S.activeProject=null;
   document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
   if(btn)btn.classList.add("active");
   renderTabs(mod);
@@ -834,6 +877,7 @@ function renderProjectWorkspace(p){
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn btn-primary btn-sm" onclick="toast('AI Director will generate shots for this project!','success')">🤖 AI Generate Shots</button>
         <button class="btn btn-outline btn-sm" onclick="editProject('${p.id}')">✏️ Edit</button>
+        <button class="btn btn-outline btn-sm" onclick="exportProject('${p.id}')">📤 Export JSON</button>
         <button class="btn btn-danger btn-sm" onclick="deleteProject('${p.id}')">🗑 Delete</button>
       </div>
     </div>
@@ -870,14 +914,8 @@ function deleteShot(id){
 }
 
 function addCharacter(projectId){
-  const name=prompt("Character name:");
-  if(!name)return;
-  const char={id:"char_"+Date.now(),projectId,name,created:new Date().toISOString()};
-  S.characters.push(char);save("characters");
-  const p=S.projects.find(x=>x.id===projectId);
-  if(p){p.chars=(p.chars||0)+1;save("projects");}
-  renderProjectWorkspace(S.projects.find(x=>x.id===projectId));
-  toast(`🎭 Character added: ${name}`,"success");
+  openCharModal();
+  setTimeout(()=>{document.getElementById("cmProject").value=projectId;},50);
 }
 
 // ── PROJECT MODAL ──
@@ -934,6 +972,21 @@ function saveProject(){
 
 function editProject(id){openProjectModal(id);}
 
+function exportProject(id){
+  const p=S.projects.find(x=>x.id===id);
+  if(!p)return;
+  const shots=S.shots.filter(s=>s.projectId===id);
+  const chars=S.characters.filter(c=>c.projectId===id);
+  const data={project:p,shots,characters:chars,exportedAt:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download=`${p.name.replace(/[^a-z0-9]/gi,'_')}_export.json`;
+  document.body.appendChild(a);a.click();a.remove();
+  URL.revokeObjectURL(url);
+  toast("📤 Project exported","success");
+}
+
 function deleteProject(id){
   if(!confirm("Delete this project? This cannot be undone."))return;
   S.projects=S.projects.filter(p=>p.id!==id);
@@ -949,22 +1002,154 @@ function deleteProject(id){
 function renderCharacters(el){
   el.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">Characters</div>
-      <button class="btn btn-primary" onclick="quickAddCharacter()">+ New Character</button>
+      <div>
+        <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">Character Bible</div>
+        <div style="font-size:11px;color:var(--textm);margin-top:2px">${S.characters.length} character${S.characters.length!==1?'s':''} · Soul ID & consistency system</div>
+      </div>
+      <button class="btn btn-primary" onclick="openCharModal()">+ New Character</button>
     </div>
-    ${S.characters.length===0?`<div class="empty-state"><div class="empty-icon">🎭</div><div class="empty-title">No Characters Yet</div><div class="empty-desc">Create characters and link them to projects.</div><button class="btn btn-primary" onclick="quickAddCharacter()">+ Create Character</button></div>`
-    :`<div class="grid2">${S.characters.map(c=>`<div class="card"><div style="font-size:28px;margin-bottom:8px">🎭</div><div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet);margin-bottom:4px">${c.name}</div><div style="font-size:11px;color:var(--textm)">${c.projectId?'Project: '+(S.projects.find(p=>p.id===c.projectId)||{name:'Unknown'}).name:'No project'}</div><button class="btn btn-danger btn-xs" style="margin-top:8px" onclick="deleteChar('${c.id}')">Delete</button></div>`).join('')}</div>`}
+    ${S.characters.length===0?`<div class="empty-state"><div class="empty-icon">🎭</div><div class="empty-title">No Characters Yet</div><div class="empty-desc">Create characters with identity locks to keep their look consistent across every generated shot.</div><button class="btn btn-primary" onclick="openCharModal()">+ Create Character</button></div>`
+    :`<div class="grid2">${S.characters.map(c=>charCardHTML(c)).join('')}</div>`}
   `;
 }
 
-function quickAddCharacter(){
-  const name=prompt("Character name:");if(!name)return;
-  const proj=S.projects.length?S.projects[0].id:null;
-  const char={id:"char_"+Date.now(),name,projectId:proj,created:new Date().toISOString()};
-  S.characters.push(char);save("characters");toast(`🎭 ${name} created`,"success");renderModule("characters");
+function charCardHTML(c){
+  const proj=S.projects.find(p=>p.id===c.projectId);
+  return `
+    <div class="card" id="cc-${c.id}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="font-size:28px;margin-bottom:8px">${c.refImg?`<img src="${c.refImg}" style="width:44px;height:44px;border-radius:8px;object-fit:cover" onerror="this.replaceWith(document.createTextNode('🎭'))">`:'🎭'}</div>
+        <div style="display:flex;gap:4px">
+          <button class="pc-menu-btn" onclick="event.stopPropagation();openCharModal('${c.id}')" title="Edit">✏️</button>
+          <button class="pc-menu-btn" onclick="event.stopPropagation();deleteChar('${c.id}')" title="Delete">🗑</button>
+        </div>
+      </div>
+      <div onclick="openCharDetail('${c.id}')" style="cursor:pointer">
+        <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet);margin-bottom:3px">${c.name}</div>
+        <div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:4px">${c.role||'Character'}</div>
+        <div style="font-size:11px;color:var(--textm);margin-bottom:8px">${proj?'📂 '+proj.name:'No project linked'}</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          ${c.lock?'<span class="badge badge-green">🔒 Identity Lock</span>':'<span class="badge badge-gray">No Lock</span>'}
+          ${c.voice?'<span class="badge badge-violet">🎙 Voice</span>':''}
+        </div>
+      </div>
+    </div>`;
 }
 
-function deleteChar(id){S.characters=S.characters.filter(c=>c.id!==id);save("characters");renderModule("characters");toast("Character deleted","");}
+// ── CHARACTER DETAIL VIEW ──
+function openCharDetail(id){
+  const c=S.characters.find(x=>x.id===id);
+  if(!c)return;
+  const proj=S.projects.find(p=>p.id===c.projectId);
+  const el=document.getElementById("moduleContent");
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <button class="btn btn-ghost btn-sm" onclick="renderModule('characters')">← Characters</button>
+      <div style="flex:1">
+        <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">${c.name}</div>
+        <div style="font-size:11px;color:var(--gold);font-weight:700">${c.role||'Character'}${proj?' · '+proj.name:''}</div>
+      </div>
+      <button class="btn btn-gold btn-sm" onclick="openCharModal('${c.id}')">✏ Edit</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteChar('${c.id}')">🗑</button>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-title">📋 Description</div>
+        <div style="font-size:13px;color:var(--textm);line-height:1.6">${c.desc||'No description yet.'}</div>
+        ${c.refImg?`<img src="${c.refImg}" style="width:100%;border-radius:10px;margin-top:12px;max-height:220px;object-fit:cover" onerror="this.style.display='none'">`:''}
+      </div>
+      <div class="panel">
+        <div class="panel-title">🔒 Identity Lock</div>
+        <div style="font-size:12px;color:var(--textm);line-height:1.6;background:rgba(61,31,122,0.05);border-radius:8px;padding:10px;font-family:monospace;min-height:50px">${c.lock||'No identity lock set — add one to keep this character visually consistent across image/video generations.'}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+          ${c.voice?`<span class="badge badge-violet">🎙 Voice: ${c.voice}</span>`:'<span class="badge badge-gray">No voice profile</span>'}
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">🚀 Use This Character</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="toast('🔒 ${c.name}\\'s identity lock copied — paste into your shot prompt','success')">💉 Copy Lock to Clipboard</button>
+        <button class="btn btn-outline btn-sm" onclick="switchMod('videocanvas',document.querySelector('[data-mod=videocanvas]'))">🎬 Go to Video Canvas</button>
+        <button class="btn btn-outline btn-sm" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))">🖼 Go to Image Gen</button>
+      </div>
+    </div>
+  `;
+}
+
+// ── CHARACTER MODAL ──
+function openCharModal(editId=null){
+  S.editingCharId=editId;
+  const modal=document.getElementById("charModal");
+  document.getElementById("charModalTitle").textContent=editId?"Edit Character":"New Character";
+  // Populate project dropdown
+  const projSel=document.getElementById("cmProject");
+  projSel.innerHTML=`<option value="">No project</option>`+S.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  if(editId){
+    const c=S.characters.find(x=>x.id===editId);
+    if(c){
+      document.getElementById("cmName").value=c.name||"";
+      document.getElementById("cmRole").value=c.role||"Protagonist";
+      document.getElementById("cmProject").value=c.projectId||"";
+      document.getElementById("cmDesc").value=c.desc||"";
+      document.getElementById("cmLock").value=c.lock||"";
+      document.getElementById("cmVoice").value=c.voice||"";
+      document.getElementById("cmRefImg").value=c.refImg||"";
+    }
+  } else {
+    document.getElementById("cmName").value="";
+    document.getElementById("cmRole").value="Protagonist";
+    document.getElementById("cmDesc").value="";
+    document.getElementById("cmLock").value="";
+    document.getElementById("cmVoice").value="";
+    document.getElementById("cmRefImg").value="";
+  }
+  modal.classList.add("show");
+}
+
+function closeCharModal(){document.getElementById("charModal").classList.remove("show");}
+
+function saveCharacter(){
+  const name=document.getElementById("cmName").value.trim();
+  if(!name){toast("Character name is required","error");return;}
+  const data={
+    name,
+    role:document.getElementById("cmRole").value,
+    projectId:document.getElementById("cmProject").value||null,
+    desc:document.getElementById("cmDesc").value,
+    lock:document.getElementById("cmLock").value,
+    voice:document.getElementById("cmVoice").value,
+    refImg:document.getElementById("cmRefImg").value
+  };
+  if(S.editingCharId){
+    const c=S.characters.find(x=>x.id===S.editingCharId);
+    if(c){Object.assign(c,data);save("characters");toast("✅ Character updated","success");}
+  } else {
+    const c={id:"char_"+Date.now(),...data,created:new Date().toISOString()};
+    S.characters.push(c);
+    if(data.projectId){
+      const p=S.projects.find(x=>x.id===data.projectId);
+      if(p){p.chars=(p.chars||0)+1;save("projects");}
+    }
+    save("characters");toast(`🎭 ${name} created`,"success");
+  }
+  closeCharModal();
+  if(S.activeProject){renderProjectWorkspace(S.projects.find(x=>x.id===S.activeProject));}
+  else{renderModule("characters");}
+}
+
+function deleteChar(id){
+  if(!confirm("Delete this character? This cannot be undone."))return;
+  const c=S.characters.find(x=>x.id===id);
+  if(c&&c.projectId){
+    const p=S.projects.find(x=>x.id===c.projectId);
+    if(p){p.chars=Math.max(0,(p.chars||1)-1);save("projects");}
+  }
+  S.characters=S.characters.filter(c=>c.id!==id);
+  save("characters");
+  renderModule("characters");
+  toast("Character deleted","");
+}
 
 // ── IMAGE GEN ──
 function renderImageGen(el){
