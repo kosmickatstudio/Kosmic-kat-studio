@@ -693,10 +693,12 @@ const S = {
   galleryFilter: "all",
   assetFilter: "all",
   editorSequence: JSON.parse(localStorage.getItem("kk_editor_seq")||"[]"),
+  costLog: JSON.parse(localStorage.getItem("kk_cost_log")||"[]"),
+  team: JSON.parse(localStorage.getItem("kk_team")||"[]"),
 };
 
 function save(k){
-  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",settings:"kk_settings"};
+  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",settings:"kk_settings"};
   if(!m[k])return;
   try{
     localStorage.setItem(m[k],JSON.stringify(S[k]));
@@ -711,6 +713,31 @@ function save(k){
 }
 function saveSetting(k,v){S.settings[k]=v;save("settings");}
 function gs(k,d=""){return S.settings[k]??d;}
+
+// ── COST TRACKING (estimates, approximate real-world fal.ai/ElevenLabs pricing) ──
+const COST_TABLE={
+  "fal-ai/flux/schnell":0.003,
+  "fal-ai/flux/dev":0.025,
+  "fal-ai/flux-pro/v1.1":0.05,
+  "bytedance/seedance-2.0/fast/text-to-video":0.25,
+  "bytedance/seedance-2.0/text-to-video":0.50,
+  "fal-ai/kling-video/v2.1/master/text-to-video":1.40,
+  "fal-ai/kling-video/v2.6/pro/text-to-video":0.90,
+  "fal-ai/kling-video/v3/standard/text-to-video":0.70,
+  "fal-ai/veo3.1":2.00,
+  "fal-ai/esrgan":0.01,
+  "fal-ai/clarity-upscaler":0.03,
+  "elevenlabs_tts":0.02
+};
+
+function logCost(key,note){
+  const amt=COST_TABLE[key]!==undefined?COST_TABLE[key]:0.02;
+  if(!S.costLog)S.costLog=[];
+  S.costLog.push({id:"cost_"+Date.now(),key,amt,note:note||"",created:new Date().toISOString()});
+  save("costLog");
+  const current=parseFloat(gs("total_spent","0"))||0;
+  saveSetting("total_spent",(current+amt).toFixed(4));
+}
 
 // ── LOGO ──
 const LOGO_SRC = "https://raw.githubusercontent.com/kosmickatstudio/Kosmic-kat-studio/main/logo.png";
@@ -1339,6 +1366,7 @@ async function generateImage(){
         <a href="${imgUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
         <button class="btn btn-primary btn-sm" onclick="saveImageToGallery('${imgUrl.replace(/'/g,"\\'")}','${prompt.replace(/'/g,"\\'").slice(0,200)}','${projectId}')">💾 Save to Gallery</button>
       </div>`;
+    logCost(model,prompt.slice(0,60));
     toast("✨ Image generated!","success");
   }catch(err){
     console.error("Image gen error:",err);
@@ -1509,6 +1537,7 @@ async function generateVideo(){
         <a href="${videoUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
         <button class="btn btn-primary btn-sm" onclick="saveVideoToGallery('${videoUrl.replace(/'/g,"\\'")}','${prompt.replace(/'/g,"\\'").slice(0,200)}','${projectId}')">💾 Save to Gallery</button>
       </div>`;
+    logCost(model,prompt.slice(0,60));
     toast("🎬 Video generated!","success");
   }catch(err){
     console.error("Video gen error:",err);
@@ -1576,7 +1605,87 @@ function getActiveDirectorPrompt(){
 }
 
 // ── AD STUDIO ──
-function renderAdStudio(el){el.innerHTML=`<div class="empty-state"><div class="empty-icon">📢</div><div class="empty-title">Ad Studio</div><div class="empty-desc">Create and manage AI-powered ads. Requires image/video API keys.</div><button class="btn btn-outline" onclick="openSettings()">⚙️ Add API Keys</button></div>`;}
+function renderAdStudio(el){
+  const hasAiKey=gs("api_anthropic")||gs("api_groq")||gs("api_deepseek")||gs("api_openai");
+  el.innerHTML=`
+    <div class="panel">
+      <div class="panel-title">📢 Ad Brief Generator ${hasAiKey?'<span class="badge badge-green">ACTIVE</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
+      ${!hasAiKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add an AI Director key (Anthropic/Groq/DeepSeek/OpenAI) in Settings — same one powering AI Director chat.</div>`:''}
+      <div class="f-group">
+        <label class="f-label">Product / Service</label>
+        <input class="f-input" id="adProduct" placeholder="e.g. Kosmic Kat AI Studio, a cinematic video toolkit">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Key selling point</label>
+        <textarea class="f-textarea" id="adUSP" placeholder="What makes this worth talking about? e.g. Generate full cinematic scenes from a single prompt, no editing skills needed." style="min-height:60px"></textarea>
+      </div>
+      <div class="f-row">
+        <div class="f-group">
+          <label class="f-label">Ad Format</label>
+          <select class="f-select" id="adFormat">
+            <option>UGC (talking head / testimonial style)</option>
+            <option>CGI Commercial</option>
+            <option>Cinematic Narrative</option>
+            <option>Wild Card / Experimental</option>
+          </select>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Platform</label>
+          <select class="f-select" id="adPlatform">
+            <option>TikTok / Reels / Shorts</option>
+            <option>Meta Feed (Instagram/Facebook)</option>
+            <option>YouTube Pre-roll</option>
+            <option>LinkedIn</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-full" id="adGenBtn" ${!hasAiKey?'disabled':''} onclick="generateAdBrief()">${hasAiKey?'✨ Generate Ad Brief + Hooks':'🔑 Add API Key First'}</button>
+    </div>
+    <div class="panel" id="adResultPanel" style="display:none;margin-top:14px">
+      <div class="panel-title">📋 Result</div>
+      <div id="adResultContent" style="font-size:13px;color:var(--textm);line-height:1.7;white-space:pre-wrap"></div>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">🎬 Next Step</div>
+      <div style="font-size:12px;color:var(--textm)">Take the generated hook and shot ideas into <b>Video Canvas</b> or <b>Image Gen</b> to actually produce the ad creative.</div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="switchMod('videocanvas',document.querySelector('[data-mod=videocanvas]'))">🎬 Video Canvas</button>
+        <button class="btn btn-outline btn-sm" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))">🖼 Image Gen</button>
+      </div>
+    </div>
+  `;
+}
+
+async function generateAdBrief(){
+  const product=document.getElementById("adProduct").value.trim();
+  const usp=document.getElementById("adUSP").value.trim();
+  if(!product||!usp){toast("Fill in product and selling point first","error");return;}
+  const format=document.getElementById("adFormat").value;
+  const platform=document.getElementById("adPlatform").value;
+
+  const btn=document.getElementById("adGenBtn");
+  const resultPanel=document.getElementById("adResultPanel");
+  const resultContent=document.getElementById("adResultContent");
+  btn.disabled=true;btn.textContent="⏳ Writing…";
+  resultPanel.style.display="block";
+  resultContent.textContent="Thinking through hooks and shot structure…";
+
+  const directorStyle=getActiveDirectorPrompt();
+  const systemPrompt=`You are an expert direct-response ad creative strategist. Write a tight, practical ad brief for short-form video ads. Be concrete and specific, not generic marketing fluff. Format your response in clear sections with markdown-style headers.${directorStyle?` Visual style to reference: ${directorStyle}.`:''}`;
+  const userPrompt=`Product: ${product}\nKey selling point: ${usp}\nFormat: ${format}\nPlatform: ${platform}\n\nWrite:\n1. A one-line creative concept\n2. 5 scroll-stopping hook variations (first 3 seconds)\n3. A simple 4-shot structure (what happens in each shot)\n4. A suggested CTA line\n\nKeep it tight and production-ready — this will be used directly to generate video/image prompts.`;
+
+  try{
+    const reply=await callAiSimple(userPrompt,systemPrompt);
+    resultContent.textContent=reply;
+    logCost(gs("ai_model","claude")+"_ad_brief","Ad brief: "+product.slice(0,40));
+    toast("✨ Ad brief generated!","success");
+  }catch(err){
+    console.error("Ad brief error:",err);
+    resultContent.innerHTML=`<div style="color:var(--red)">❌ ${err.message}</div>`;
+    toast("❌ Generation failed: "+err.message,"error");
+  }
+  btn.disabled=false;btn.textContent="✨ Generate Ad Brief + Hooks";
+}
 
 // ── AUDIO ──
 function renderAudio(el){
@@ -1675,6 +1784,7 @@ async function generateAudio(){
         <a href="${audioUrl}" download="voiceover.mp3" class="btn btn-outline btn-sm">⬇ Download</a>
         <button class="btn btn-primary btn-sm" onclick="saveAudioBlobToGallery('${base64Url}','${text.replace(/'/g,"\\'").slice(0,200)}')">💾 Save to Gallery</button>
       </div>`;
+    logCost("elevenlabs_tts",text.slice(0,60));
     toast("🎵 Voice generated!","success");
   }catch(err){
     console.error("Audio gen error:",err);
@@ -2034,6 +2144,7 @@ async function runUpscale(){
         <a href="${outUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
         <button class="btn btn-primary btn-sm" onclick="saveUpscaleToGallery('${outUrl.replace(/'/g,"\\'")}')">💾 Save to Gallery</button>
       </div>`;
+    logCost(engine,"Upscale");
     toast("✨ Upscaled!","success");
   }catch(err){
     console.error("Upscale error:",err);
@@ -2053,11 +2164,155 @@ function saveUpscaleToGallery(url){
 // ── COSTS ──
 function renderCosts(el){
   const total=parseFloat(gs("total_spent","0")).toFixed(2);
-  el.innerHTML=`<div class="panel"><div style="background:linear-gradient(135deg,var(--violet),var(--vm));border-radius:12px;padding:16px;color:#fff;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div><div style="font-size:10px;opacity:0.75;letter-spacing:0.06em;margin-bottom:2px">TOTAL SPENT</div><div style="font-family:'Cinzel',serif;font-size:28px;font-weight:900;color:var(--gold-l)">$${total}</div></div><div style="font-size:32px">💰</div></div><div style="font-size:12px;color:var(--textm)">Connect Razorpay or Stripe in Settings to manage billing.</div></div>`;
+  const log=[...(S.costLog||[])].reverse();
+  // Breakdown by model
+  const byModel={};
+  (S.costLog||[]).forEach(c=>{byModel[c.key]=(byModel[c.key]||0)+c.amt;});
+  const modelRows=Object.entries(byModel).sort((a,b)=>b[1]-a[1]);
+
+  el.innerHTML=`
+    <div class="panel">
+      <div style="background:linear-gradient(135deg,var(--violet),var(--vm));border-radius:12px;padding:16px;color:#fff;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div>
+          <div style="font-size:10px;opacity:0.75;letter-spacing:0.06em;margin-bottom:2px">TOTAL SPENT (ESTIMATED)</div>
+          <div style="font-family:'Cinzel',serif;font-size:28px;font-weight:900;color:var(--gold-l)">$${total}</div>
+          <div style="font-size:10px;opacity:0.7;margin-top:2px">${(S.costLog||[]).length} generation${(S.costLog||[]).length!==1?'s':''} tracked</div>
+        </div>
+        <div style="font-size:32px">💰</div>
+      </div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:12px">Estimates based on published fal.ai/ElevenLabs pricing — actual provider bills may vary slightly. Connect Razorpay or Stripe below for real payment processing.</div>
+      ${(S.costLog||[]).length?`<button class="btn btn-ghost btn-sm" onclick="resetCostLog()">↺ Reset Cost Log</button>`:''}
+    </div>
+
+    ${modelRows.length?`
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">📊 Spend by Model</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${modelRows.map(([key,amt])=>{
+          const pct=total>0?(amt/parseFloat(total)*100):0;
+          return `<div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+              <span style="color:var(--textm)">${key.split('/').slice(-2).join('/')}</span>
+              <span style="color:var(--violet);font-weight:700">$${amt.toFixed(3)}</span>
+            </div>
+            <div style="background:rgba(61,31,122,0.08);border-radius:4px;height:6px;overflow:hidden">
+              <div style="background:var(--vm);height:100%;width:${pct}%"></div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : `<div class="empty-state" style="margin-top:14px"><div class="empty-icon">📊</div><div class="empty-title">No Spend Yet</div><div class="empty-desc">Generate an image, video, or voiceover and real cost estimates will appear here.</div></div>`}
+
+    ${log.length?`
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">🧾 Recent Activity</div>
+      <div style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto">
+        ${log.slice(0,20).map(c=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:6px 8px;background:rgba(61,31,122,0.03);border-radius:6px">
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;color:var(--textm)">${c.note||c.key.split('/').pop()}</div>
+            <div style="color:var(--gold);font-weight:700;margin-left:8px;flex-shrink:0">$${c.amt.toFixed(3)}</div>
+          </div>`).join('')}
+      </div>
+    </div>`:''}
+
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">💳 Payment Processing</div>
+      <div style="font-size:12px;color:var(--textm)">Connect Razorpay or Stripe in Settings to manage real billing for clients or team members.</div>
+    </div>
+  `;
+}
+
+function resetCostLog(){
+  if(!confirm("Reset the cost tracker to $0? This only clears the local log — it does NOT affect your real provider billing."))return;
+  S.costLog=[];
+  save("costLog");
+  saveSetting("total_spent","0");
+  renderCosts(document.getElementById("moduleContent"));
+  toast("Cost log reset","");
 }
 
 // ── TEAM ──
-function renderTeam(el){el.innerHTML=`<div class="empty-state"><div class="empty-icon">👥</div><div class="empty-title">Team</div><div class="empty-desc">Invite collaborators to your studio. Team features coming soon.</div><button class="btn btn-primary" onclick="toast('Invite link copied!','success')">📧 Invite Member</button></div>`;}
+const ROLE_PERMS={
+  Founder:{color:"gold",modules:"All modules — full control"},
+  Director:{color:"violet",modules:"Projects, Characters, Image/Video Gen, Directors, Audio, Gallery"},
+  Creative:{color:"blue",modules:"Characters, Image/Video Gen, Audio, Gallery, Assets"},
+  Producer:{color:"green",modules:"Projects, Cost Tracker, Gallery, Team"},
+  Viewer:{color:"gray",modules:"Gallery, Assets (view only)"}
+};
+
+function renderTeam(el){
+  const roster=S.team||[];
+  el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">Team</div>
+        <div style="font-size:11px;color:var(--textm);margin-top:2px">${roster.length} member${roster.length!==1?'s':''} on the roster</div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openInviteForm()">+ Invite Member</button>
+    </div>
+
+    <div style="font-size:11px;color:var(--textm);background:rgba(201,151,42,0.08);border:1px solid rgba(201,151,42,0.2);border-radius:8px;padding:10px;margin-bottom:14px">
+      ⚠ This roster is stored locally in your browser as a reference list — it does not yet grant real login access to other people. Real multi-user access requires connecting a backend (Firebase Auth), which isn't wired yet.
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">👑 Founders (permanent, hardcoded)</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${FOUNDERS.map(email=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--textm)"><span class="badge badge-gold">👑 Founder</span> ${email}</div>`).join('')}
+      </div>
+    </div>
+
+    ${roster.length?`<div class="panel" style="margin-top:14px">
+      <div class="panel-title">👥 Invited Members</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${roster.map((m,i)=>`
+          <div style="display:flex;align-items:center;gap:10px;background:rgba(61,31,122,0.03);border-radius:8px;padding:10px">
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:700;color:var(--violet)">${m.email}</div>
+              <div style="font-size:10px;color:var(--textm);margin-top:2px">${ROLE_PERMS[m.role]?.modules||''}</div>
+            </div>
+            <span class="badge badge-${ROLE_PERMS[m.role]?.color||'gray'}">${m.role}</span>
+            <button class="pc-menu-btn" onclick="removeTeamMember(${i})">🗑</button>
+          </div>`).join('')}
+      </div>
+    </div>`:`<div class="empty-state" style="margin-top:14px"><div class="empty-icon">👥</div><div class="empty-title">No Members Invited Yet</div><div class="empty-desc">Add collaborators and assign them a role to track studio permissions.</div></div>`}
+
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">🔑 Role Permission Guide</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${Object.entries(ROLE_PERMS).map(([role,p])=>`
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <span class="badge badge-${p.color}" style="flex-shrink:0">${role}</span>
+            <span style="font-size:11px;color:var(--textm)">${p.modules}</span>
+          </div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function openInviteForm(){
+  const email=prompt("Email address to invite:");
+  if(!email||!email.includes("@")){if(email)toast("Enter a valid email","error");return;}
+  const roles=Object.keys(ROLE_PERMS).filter(r=>r!=="Founder");
+  const roleChoice=prompt(`Role for ${email}?\n\n${roles.map((r,i)=>`${i+1}. ${r}`).join('\n')}\n\nEnter a number:`);
+  const idx=parseInt(roleChoice,10)-1;
+  const role=roles[idx];
+  if(!role){toast("Invite cancelled — invalid role","error");return;}
+  if(!S.team)S.team=[];
+  if(S.team.some(m=>m.email===email)){toast("That email is already on the roster","error");return;}
+  S.team.push({email,role,invited:new Date().toISOString()});
+  save("team");
+  toast(`✅ ${email} added as ${role}`,"success");
+  renderTeam(document.getElementById("moduleContent"));
+}
+
+function removeTeamMember(i){
+  if(!confirm("Remove this team member from the roster?"))return;
+  S.team.splice(i,1);
+  save("team");
+  renderTeam(document.getElementById("moduleContent"));
+  toast("Member removed","");
+}
 
 // ── DISPLAY AREA ──
 function toggleDisplay(){
@@ -2202,6 +2457,34 @@ function aiKeyDown(e){
   // Auto-resize
   e.target.style.height="auto";
   e.target.style.height=Math.min(e.target.scrollHeight,80)+"px";
+}
+
+async function callAiSimple(userPrompt,systemPrompt){
+  const model=gs("ai_model","claude");
+  const apiKeyMap={claude:"api_anthropic",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai"};
+  const apiKey=gs(apiKeyMap[model],"");
+  if(!apiKey)throw new Error("Add an AI brain API key (Anthropic/Groq/DeepSeek/OpenAI) in Settings first");
+  if(model==="claude"){
+    const response=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},
+      body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1200,system:systemPrompt,messages:[{role:"user",content:userPrompt}]})
+    });
+    const data=await response.json();
+    if(data.error)throw new Error(data.error.message);
+    return data.content[0].text;
+  } else {
+    const endpoints={groq:"https://api.groq.com/openai/v1/chat/completions",deepseek:"https://api.deepseek.com/v1/chat/completions",openai:"https://api.openai.com/v1/chat/completions"};
+    const modelIds={groq:"llama-3.3-70b-versatile",deepseek:"deepseek-chat",openai:"gpt-4o-mini"};
+    const response=await fetch(endpoints[model],{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
+      body:JSON.stringify({model:modelIds[model],messages:[{role:"system",content:systemPrompt},{role:"user",content:userPrompt}],max_tokens:1200})
+    });
+    const data=await response.json();
+    if(data.error)throw new Error(data.error.message);
+    return data.choices[0].message.content;
+  }
 }
 
 async function sendAiPrompt(){
