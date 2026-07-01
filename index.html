@@ -681,6 +681,7 @@ const S = {
   characters: JSON.parse(localStorage.getItem("kk_characters")||"[]"),
   shots: JSON.parse(localStorage.getItem("kk_shots")||"[]"),
   assets: JSON.parse(localStorage.getItem("kk_assets")||"[]"),
+  uploads: JSON.parse(localStorage.getItem("kk_uploads")||"[]"),
   activeProject: null,
   aiAbort: null,
   aiHistory: [],
@@ -689,10 +690,12 @@ const S = {
   editingProjectId: null,
   editingCharId: null,
   editingCharRefImg: "",
+  galleryFilter: "all",
+  assetFilter: "all",
 };
 
 function save(k){
-  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",assets:"kk_assets",settings:"kk_settings"};
+  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",assets:"kk_assets",uploads:"kk_uploads",settings:"kk_settings"};
   if(!m[k])return;
   try{
     localStorage.setItem(m[k],JSON.stringify(S[k]));
@@ -1689,10 +1692,162 @@ function saveAudioBlobToGallery(url,text){
 }
 
 // ── ASSETS ──
-function renderAssets(el){el.innerHTML=`<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-title">Asset Library</div><div class="empty-desc">Upload and manage your media assets. Atlas Cloud key recommended for cloud storage.</div><button class="btn btn-primary" onclick="toast('Upload coming soon!','')">+ Upload Asset</button></div>`;}
+function renderAssets(el){
+  const uploads=S.uploads||[];
+  const filter=S.assetFilter||"all";
+  const filtered=filter==="all"?uploads:uploads.filter(u=>u.kind===filter);
+  el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">Asset Library</div>
+        <div style="font-size:11px;color:var(--textm);margin-top:2px">${uploads.length} uploaded file${uploads.length!==1?'s':''} — reference images, brand assets, audio beds</div>
+      </div>
+      <input type="file" id="assetUploadInput" accept="image/*,audio/*" multiple style="display:none" onchange="handleAssetUpload(event)">
+      <button class="btn btn-primary btn-sm" onclick="document.getElementById('assetUploadInput').click()">+ Upload File</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:14px">
+      <button class="btn ${filter==='all'?'btn-primary':'btn-outline'} btn-xs" onclick="setAssetFilter('all')">All</button>
+      <button class="btn ${filter==='image'?'btn-primary':'btn-outline'} btn-xs" onclick="setAssetFilter('image')">🖼 Images</button>
+      <button class="btn ${filter==='audio'?'btn-primary':'btn-outline'} btn-xs" onclick="setAssetFilter('audio')">🎵 Audio</button>
+    </div>
+    ${filtered.length===0?`<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-title">No Uploads Yet</div><div class="empty-desc">Upload reference images, brand logos, or audio beds to use across your projects. (For AI-generated content, check the Gallery instead.)</div><button class="btn btn-primary" onclick="document.getElementById('assetUploadInput').click()">+ Upload File</button></div>`
+    :`<div class="grid3">${filtered.map(u=>assetCardHTML(u)).join('')}</div>`}
+  `;
+}
+
+function setAssetFilter(f){
+  S.assetFilter=f;
+  renderAssets(document.getElementById("moduleContent"));
+}
+
+function assetCardHTML(u){
+  const media=u.kind==='image'
+    ?`<img src="${u.data}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover">`
+    :`<div style="background:rgba(61,31,122,0.06);border-radius:8px;padding:16px;display:flex;align-items:center;justify-content:center;font-size:28px">🎵</div><audio src="${u.data}" controls style="width:100%;margin-top:6px;height:32px"></audio>`;
+  return `
+    <div class="card" style="padding:8px">
+      ${media}
+      <div style="font-size:10px;color:var(--textm);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${u.name}">${u.name}</div>
+      <div style="display:flex;gap:5px;margin-top:6px">
+        <a href="${u.data}" download="${u.name}" class="btn btn-outline btn-xs" style="flex:1;text-align:center">⬇</a>
+        <button class="btn btn-danger btn-xs" onclick="deleteUpload('${u.id}')">🗑</button>
+      </div>
+    </div>`;
+}
+
+function handleAssetUpload(event){
+  const files=Array.from(event.target.files||[]);
+  if(!files.length)return;
+  let processed=0;
+  files.forEach(file=>{
+    const isImage=file.type.startsWith("image/");
+    const isAudio=file.type.startsWith("audio/");
+    if(!isImage&&!isAudio){toast(`Skipped ${file.name} — only images and audio supported`,"error");processed++;return;}
+    if(file.size>10*1024*1024){toast(`Skipped ${file.name} — max 10MB`,"error");processed++;return;}
+    const reader=new FileReader();
+    reader.onload=e=>{
+      if(isImage){
+        // Resize/compress images same as character refs
+        const img=new Image();
+        img.onload=()=>{
+          const maxDim=800;
+          let w=img.width,h=img.height;
+          if(w>h&&w>maxDim){h=Math.round(h*(maxDim/w));w=maxDim;}
+          else if(h>maxDim){w=Math.round(w*(maxDim/h));h=maxDim;}
+          const canvas=document.createElement("canvas");
+          canvas.width=w;canvas.height=h;
+          const ctx=canvas.getContext("2d");
+          ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);
+          ctx.drawImage(img,0,0,w,h);
+          const dataUrl=canvas.toDataURL("image/jpeg",0.85);
+          addUpload({id:"upload_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),name:file.name,kind:"image",data:dataUrl,created:new Date().toISOString()});
+          processed++;
+          if(processed===files.length)renderAssets(document.getElementById("moduleContent"));
+        };
+        img.onerror=()=>{toast(`Couldn't read ${file.name}`,"error");processed++;};
+        img.src=e.target.result;
+      } else {
+        addUpload({id:"upload_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),name:file.name,kind:"audio",data:e.target.result,created:new Date().toISOString()});
+        processed++;
+        if(processed===files.length)renderAssets(document.getElementById("moduleContent"));
+      }
+    };
+    reader.onerror=()=>{toast(`Failed to read ${file.name}`,"error");processed++;};
+    reader.readAsDataURL(file);
+  });
+}
+
+function addUpload(u){
+  if(!S.uploads)S.uploads=[];
+  S.uploads.push(u);
+  save("uploads");
+  toast(`📦 ${u.name} uploaded`,"success");
+}
+
+function deleteUpload(id){
+  if(!confirm("Delete this file?"))return;
+  S.uploads=(S.uploads||[]).filter(u=>u.id!==id);
+  save("uploads");
+  renderAssets(document.getElementById("moduleContent"));
+  toast("File deleted","");
+}
 
 // ── GALLERY ──
-function renderGallery(el){el.innerHTML=`<div class="empty-state"><div class="empty-icon">🎞</div><div class="empty-title">Gallery</div><div class="empty-desc">Your generated images and videos will appear here.</div></div>`;}
+function renderGallery(el){
+  const filter=S.galleryFilter||"all";
+  const allAssets=[...S.assets].reverse();
+  const filtered=filter==="all"?allAssets:allAssets.filter(a=>a.type===filter);
+  const counts={all:S.assets.length,image:S.assets.filter(a=>a.type==='image').length,video:S.assets.filter(a=>a.type==='video').length,audio:S.assets.filter(a=>a.type==='audio').length};
+
+  el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">Gallery</div>
+        <div style="font-size:11px;color:var(--textm);margin-top:2px">${S.assets.length} generation${S.assets.length!==1?'s':''} saved</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn ${filter==='all'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryFilter('all')">All (${counts.all})</button>
+        <button class="btn ${filter==='image'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryFilter('image')">🖼 Images (${counts.image})</button>
+        <button class="btn ${filter==='video'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryFilter('video')">🎬 Videos (${counts.video})</button>
+        <button class="btn ${filter==='audio'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryFilter('audio')">🎵 Audio (${counts.audio})</button>
+      </div>
+    </div>
+    ${filtered.length===0?`<div class="empty-state"><div class="empty-icon">🎞</div><div class="empty-title">${filter==='all'?'No Generations Yet':'No '+filter+' saved yet'}</div><div class="empty-desc">Generated images, videos, and voiceovers you save will appear here.</div></div>`
+    :`<div class="grid3">${filtered.map(a=>galleryCardHTML(a)).join('')}</div>`}
+  `;
+}
+
+function setGalleryFilter(f){
+  S.galleryFilter=f;
+  renderGallery(document.getElementById("moduleContent"));
+}
+
+function galleryCardHTML(a){
+  const proj=a.projectId?S.projects.find(p=>p.id===a.projectId):null;
+  const icon=a.type==='image'?'🖼':a.type==='video'?'🎬':'🎵';
+  let media="";
+  if(a.type==='image')media=`<img src="${a.url}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover">`;
+  else if(a.type==='video')media=`<video src="${a.url}" controls style="width:100%;border-radius:8px;aspect-ratio:16/9"></video>`;
+  else media=`<div style="background:rgba(61,31,122,0.06);border-radius:8px;padding:16px;display:flex;align-items:center;justify-content:center;font-size:28px">🎵</div><audio src="${a.url}" controls style="width:100%;margin-top:6px;height:32px"></audio>`;
+  return `
+    <div class="card" style="padding:8px">
+      ${media}
+      <div style="font-size:10px;color:var(--textm);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(a.prompt||'').replace(/"/g,'&quot;')}">${icon} ${a.prompt||'Untitled'}</div>
+      ${proj?`<div style="font-size:9px;color:var(--gold);margin-top:2px">📂 ${proj.name}</div>`:''}
+      <div style="display:flex;gap:5px;margin-top:6px">
+        <a href="${a.url}" ${a.type!=='audio'?'target="_blank"':'download="voiceover.mp3"'} class="btn btn-outline btn-xs" style="flex:1;text-align:center">⬇</a>
+        <button class="btn btn-danger btn-xs" onclick="deleteAsset('${a.id}')">🗑</button>
+      </div>
+    </div>`;
+}
+
+function deleteAsset(id){
+  if(!confirm("Delete this from your gallery? This cannot be undone."))return;
+  S.assets=S.assets.filter(a=>a.id!==id);
+  save("assets");
+  renderGallery(document.getElementById("moduleContent"));
+  toast("Deleted from gallery","");
+}
 
 // ── EDITOR ──
 function renderEditor(el){el.innerHTML=`<div class="empty-state"><div class="empty-icon">✂️</div><div class="empty-title">Video Editor</div><div class="empty-desc">AI-powered video editing tools. PRO feature — coming soon.</div><span class="badge badge-violet" style="font-size:11px;padding:4px 10px">PRO</span></div>`;}
