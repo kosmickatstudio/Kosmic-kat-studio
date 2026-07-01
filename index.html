@@ -1356,7 +1356,7 @@ function renderVideoCanvas(el){
   el.innerHTML=`
     <div class="panel">
       <div class="panel-title">🎬 Video Generation ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
-      ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add a <b>fal.ai</b> API key in Settings to enable real video generation. Same key you use for Image Gen — no separate account needed.</div>`:''}
+      ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add a <b>fal.ai</b> API key in Settings to enable real video generation. This one key powers Seedance, Kling, and Veo — no separate key needed for each.</div>`:''}
       <div class="f-group">
         <label class="f-label">Prompt</label>
         <textarea class="f-textarea" id="vcPrompt" placeholder="A galaxy cat leaping through nebula clouds, camera tracking alongside, cinematic lighting…" style="min-height:80px"></textarea>
@@ -1367,6 +1367,9 @@ function renderVideoCanvas(el){
           <select class="f-select" id="vcModel">
             <option value="bytedance/seedance-2.0/fast/text-to-video">Seedance 2.0 Fast (cheap, quick)</option>
             <option value="bytedance/seedance-2.0/text-to-video">Seedance 2.0 (higher quality)</option>
+            <option value="fal-ai/kling-video/v2.1/master/text-to-video">Kling 2.1 Master (cinematic)</option>
+            <option value="fal-ai/kling-video/v2.6/pro/text-to-video">Kling 2.6 Pro (native audio)</option>
+            <option value="fal-ai/kling-video/v3/standard/text-to-video">Kling 3.0 Standard (latest)</option>
             <option value="fal-ai/veo3.1">Veo 3.1 (premium, native audio)</option>
           </select>
         </div>
@@ -1435,8 +1438,18 @@ async function generateVideo(){
   btn.disabled=true;
   resultPanel.style.display="block";
 
-  const body={prompt,duration,resolution:res,aspect_ratio:ratio};
-  if(model==="fal-ai/veo3.1"){body.audio=true;delete body.resolution;body.resolution=res==="1080p"?"1080p":"720p";}
+  let body={prompt,aspect_ratio:ratio};
+  if(model.startsWith("fal-ai/kling-video")){
+    body.duration=duration;
+    body.generate_audio=true;
+  } else if(model==="fal-ai/veo3.1"){
+    body.audio=true;
+    body.resolution=res==="1080p"?"1080p":"720p";
+  } else {
+    // Seedance
+    body.duration=duration;
+    body.resolution=res;
+  }
 
   try{
     // Step 1: Submit to queue
