@@ -1352,7 +1352,157 @@ function saveImageToGallery(url,prompt,projectId){
 
 // ── VIDEO CANVAS ──
 function renderVideoCanvas(el){
-  el.innerHTML=`<div class="empty-state"><div class="empty-icon">🎬</div><div class="empty-title">Video Canvas</div><div class="empty-desc">Add Kling, Veo, Runway, or Seedance API keys to enable video generation.</div><button class="btn btn-outline" onclick="openSettings()">⚙️ Open Settings</button></div>`;
+  const hasKey=gs("api_falai");
+  el.innerHTML=`
+    <div class="panel">
+      <div class="panel-title">🎬 Video Generation ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
+      ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add a <b>fal.ai</b> API key in Settings to enable real video generation. Same key you use for Image Gen — no separate account needed.</div>`:''}
+      <div class="f-group">
+        <label class="f-label">Prompt</label>
+        <textarea class="f-textarea" id="vcPrompt" placeholder="A galaxy cat leaping through nebula clouds, camera tracking alongside, cinematic lighting…" style="min-height:80px"></textarea>
+      </div>
+      <div class="f-row">
+        <div class="f-group">
+          <label class="f-label">Model</label>
+          <select class="f-select" id="vcModel">
+            <option value="bytedance/seedance-2.0/fast/text-to-video">Seedance 2.0 Fast (cheap, quick)</option>
+            <option value="bytedance/seedance-2.0/text-to-video">Seedance 2.0 (higher quality)</option>
+            <option value="fal-ai/veo3.1">Veo 3.1 (premium, native audio)</option>
+          </select>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Duration</label>
+          <select class="f-select" id="vcDuration">
+            <option value="5">5 seconds</option>
+            <option value="10">10 seconds</option>
+          </select>
+        </div>
+      </div>
+      <div class="f-row">
+        <div class="f-group">
+          <label class="f-label">Aspect Ratio</label>
+          <select class="f-select" id="vcRatio">
+            <option value="16:9">16:9 Widescreen</option>
+            <option value="9:16">9:16 Vertical</option>
+            <option value="1:1">1:1 Square</option>
+          </select>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Resolution</label>
+          <select class="f-select" id="vcRes">
+            <option value="720p">720p</option>
+            <option value="1080p">1080p</option>
+          </select>
+        </div>
+      </div>
+      ${S.projects.length?`<div class="f-group"><label class="f-label">Save to Project</label><select class="f-select" id="vcProject"><option value="">No project</option>${S.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`:''}
+      <button class="btn btn-primary btn-full" id="vcGenBtn" ${!hasKey?'disabled':''} onclick="generateVideo()">${hasKey?'🎬 Generate Video':'🔑 Add API Key First'}</button>
+      <div style="font-size:10px;color:var(--texts);margin-top:8px;text-align:center">⏱ Video generation takes 60–300 seconds — don't close this tab while waiting</div>
+    </div>
+    <div class="panel" id="vcResultPanel" style="display:none;margin-top:14px">
+      <div class="panel-title">🎥 Result</div>
+      <div id="vcResultContent"></div>
+    </div>
+    ${S.assets.filter(a=>a.type==='video').length?`
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">🎞 Recent Videos</div>
+      <div class="grid2" id="vcRecentGrid">${S.assets.filter(a=>a.type==='video').slice(-4).reverse().map(a=>`
+        <div class="card" style="padding:6px">
+          <video src="${a.url}" controls style="width:100%;border-radius:8px;aspect-ratio:16/9"></video>
+          <div style="font-size:10px;color:var(--textm);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.prompt||''}</div>
+        </div>`).join('')}</div>
+    </div>`:''}
+  `;
+}
+
+async function generateVideo(){
+  const promptEl=document.getElementById("vcPrompt");
+  const prompt=promptEl.value.trim();
+  if(!prompt){toast("Enter a prompt first","error");return;}
+  const apiKey=gs("api_falai","");
+  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
+
+  const model=document.getElementById("vcModel").value;
+  const duration=document.getElementById("vcDuration").value;
+  const ratio=document.getElementById("vcRatio").value;
+  const res=document.getElementById("vcRes").value;
+  const projSel=document.getElementById("vcProject");
+  const projectId=projSel?projSel.value:"";
+
+  const btn=document.getElementById("vcGenBtn");
+  const resultPanel=document.getElementById("vcResultPanel");
+  const resultContent=document.getElementById("vcResultContent");
+  btn.disabled=true;
+  resultPanel.style.display="block";
+
+  const body={prompt,duration,resolution:res,aspect_ratio:ratio};
+  if(model==="fal-ai/veo3.1"){body.audio=true;delete body.resolution;body.resolution=res==="1080p"?"1080p":"720p";}
+
+  try{
+    // Step 1: Submit to queue
+    btn.textContent="⏳ Submitting…";
+    resultContent.innerHTML=`<div style="text-align:center;padding:30px;color:var(--textm);font-size:13px">📤 Submitting to ${model.split('/')[0]}…</div>`;
+    const submitRes=await fetch(`https://queue.fal.run/${model}`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+      body:JSON.stringify(body)
+    });
+    const submitData=await submitRes.json();
+    if(!submitRes.ok){
+      const msg=(submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText;
+      throw new Error(msg);
+    }
+    const requestId=submitData.request_id;
+    if(!requestId)throw new Error("No request ID returned from fal.ai");
+    const statusUrl=submitData.status_url||`https://queue.fal.run/${model}/requests/${requestId}/status`;
+    const resultUrl=submitData.response_url||`https://queue.fal.run/${model}/requests/${requestId}`;
+
+    // Step 2: Poll status
+    btn.textContent="⏳ Generating…";
+    let attempts=0;
+    const maxAttempts=90; // ~7.5 min at 5s intervals
+    let finalData=null;
+    while(attempts<maxAttempts){
+      await new Promise(r=>setTimeout(r,5000));
+      attempts++;
+      const statusRes=await fetch(statusUrl,{headers:{"Authorization":"Key "+apiKey}});
+      const statusData=await statusRes.json();
+      resultContent.innerHTML=`<div style="text-align:center;padding:30px;color:var(--textm);font-size:13px">🎬 ${statusData.status||'Processing'}… (${attempts*5}s elapsed)</div>`;
+      if(statusData.status==="COMPLETED"){
+        const finalRes=await fetch(resultUrl,{headers:{"Authorization":"Key "+apiKey}});
+        finalData=await finalRes.json();
+        break;
+      }
+      if(statusData.status==="ERROR"||statusData.status==="FAILED"){
+        throw new Error(statusData.error||"Generation failed on fal.ai's side");
+      }
+    }
+    if(!finalData)throw new Error("Timed out waiting for video — try again, it may still complete on fal.ai's dashboard");
+
+    const videoUrl=finalData.video&&finalData.video.url;
+    if(!videoUrl)throw new Error("No video URL in response");
+
+    resultContent.innerHTML=`
+      <video src="${videoUrl}" controls style="width:100%;border-radius:12px;margin-bottom:10px"></video>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="${videoUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
+        <button class="btn btn-primary btn-sm" onclick="saveVideoToGallery('${videoUrl.replace(/'/g,"\\'")}','${prompt.replace(/'/g,"\\'").slice(0,200)}','${projectId}')">💾 Save to Gallery</button>
+      </div>`;
+    toast("🎬 Video generated!","success");
+  }catch(err){
+    console.error("Video gen error:",err);
+    resultContent.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px;background:rgba(239,68,68,0.08);border-radius:8px">❌ ${err.message}</div>`;
+    toast("❌ Video generation failed: "+err.message,"error");
+  }
+  btn.disabled=false;btn.textContent="🎬 Generate Video";
+}
+
+function saveVideoToGallery(url,prompt,projectId){
+  const asset={id:"asset_"+Date.now(),type:"video",url,prompt,projectId:projectId||null,created:new Date().toISOString()};
+  S.assets.push(asset);
+  save("assets");
+  toast("💾 Saved to Gallery","success");
+  renderVideoCanvas(document.getElementById("moduleContent"));
 }
 
 // ── DIRECTORS ──
