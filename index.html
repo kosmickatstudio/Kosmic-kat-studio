@@ -1247,7 +1247,7 @@ function renderImageGen(el){
   const hasKey=gs("api_falai");
   el.innerHTML=`
     <div class="panel">
-      <div class="panel-title">🖼 Image Generation ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
+      <div class="panel-title">🖼 Image Generation ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}${gs("active_director","")?' <span class="badge badge-violet">🎬 '+(DIRECTORS.find(d=>d.id===gs("active_director",""))||{}).name+'</span>':''}</div>
       ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add a <b>fal.ai</b> API key in Settings to enable real image generation. Get one free at <a href="https://fal.ai" target="_blank" style="color:var(--vm)">fal.ai</a> — pay-per-use, no subscription.</div>`:''}
       <div class="f-group">
         <label class="f-label">Prompt</label>
@@ -1294,8 +1294,10 @@ function renderImageGen(el){
 
 async function generateImage(){
   const promptEl=document.getElementById("igPrompt");
-  const prompt=promptEl.value.trim();
-  if(!prompt){toast("Enter a prompt first","error");return;}
+  const rawPrompt=promptEl.value.trim();
+  if(!rawPrompt){toast("Enter a prompt first","error");return;}
+  const directorStyle=getActiveDirectorPrompt();
+  const prompt=directorStyle?`${rawPrompt}, ${directorStyle}`:rawPrompt;
   const apiKey=gs("api_falai","");
   if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
 
@@ -1355,7 +1357,7 @@ function renderVideoCanvas(el){
   const hasKey=gs("api_falai");
   el.innerHTML=`
     <div class="panel">
-      <div class="panel-title">🎬 Video Generation ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
+      <div class="panel-title">🎬 Video Generation ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}${gs("active_director","")?' <span class="badge badge-violet">🎬 '+(DIRECTORS.find(d=>d.id===gs("active_director",""))||{}).name+'</span>':''}</div>
       ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add a <b>fal.ai</b> API key in Settings to enable real video generation. This one key powers Seedance, Kling, and Veo — no separate key needed for each.</div>`:''}
       <div class="f-group">
         <label class="f-label">Prompt</label>
@@ -1420,8 +1422,10 @@ function renderVideoCanvas(el){
 
 async function generateVideo(){
   const promptEl=document.getElementById("vcPrompt");
-  const prompt=promptEl.value.trim();
-  if(!prompt){toast("Enter a prompt first","error");return;}
+  const rawPrompt=promptEl.value.trim();
+  if(!rawPrompt){toast("Enter a prompt first","error");return;}
+  const directorStyle=getActiveDirectorPrompt();
+  const prompt=directorStyle?`${rawPrompt}, ${directorStyle}`:rawPrompt;
   const apiKey=gs("api_falai","");
   if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
 
@@ -1519,23 +1523,52 @@ function saveVideoToGallery(url,prompt,projectId){
 }
 
 // ── DIRECTORS ──
+const DIRECTORS=[
+  {id:"voss",name:"Director Voss",style:"Dark & Cinematic",cls:"voss",icon:"🎬",prompt:"dark, moody cinematography, high contrast shadows, desaturated color grade, tense atmosphere, slow deliberate camera movements"},
+  {id:"kael",name:"Director Kael",style:"Action & Explosive",cls:"kael",icon:"💥",prompt:"dynamic fast-paced action, explosive energy, quick cuts, dramatic camera shake, high saturation, kinetic motion"},
+  {id:"mira",name:"Director Mira",style:"Soft & Emotional",cls:"mira",icon:"🌙",prompt:"soft natural lighting, warm intimate tones, gentle camera movements, emotional close-ups, dreamy pastel color grade"},
+  {id:"atlas",name:"Director Atlas",style:"Epic & Grand",cls:"atlas",icon:"🏔",prompt:"sweeping epic scale, grand wide shots, golden hour lighting, majestic slow pans, orchestral grandeur, vast landscapes"},
+  {id:"neon",name:"Director Neon",style:"Futuristic & Bold",cls:"neon",icon:"⚡",prompt:"neon-lit cyberpunk aesthetic, bold saturated colors, sharp geometric framing, futuristic atmosphere, electric energy"},
+  {id:"sage",name:"Director Sage",style:"Thoughtful & Precise",cls:"sage",icon:"🌿",prompt:"minimalist precise composition, natural muted tones, static contemplative shots, clean framing, thoughtful pacing"},
+];
+
 function renderDirectors(el){
-  const directors=[
-    {id:"voss",name:"Director Voss",style:"Dark & Cinematic",cls:"voss",icon:"🎬"},
-    {id:"kael",name:"Director Kael",style:"Action & Explosive",cls:"kael",icon:"💥"},
-    {id:"mira",name:"Director Mira",style:"Soft & Emotional",cls:"mira",icon:"🌙"},
-    {id:"atlas",name:"Director Atlas",style:"Epic & Grand",cls:"atlas",icon:"🏔"},
-    {id:"neon",name:"Director Neon",style:"Futuristic & Bold",cls:"neon",icon:"⚡"},
-    {id:"sage",name:"Director Sage",style:"Thoughtful & Precise",cls:"sage",icon:"🌿"},
-  ];
-  el.innerHTML=`<div class="panel-title" style="font-family:'Cinzel',serif;color:var(--violet);margin-bottom:14px">🎥 AI Directors</div><div class="grid2">${directors.map(d=>`<div class="director-card ${d.cls}" onclick="selectDirector('${d.id}',this)"><div style="font-size:24px;margin-bottom:8px">${d.icon}</div><div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet)">${d.name}</div><div style="font-size:11px;color:var(--textm);margin-top:4px">${d.style}</div></div>`).join('')}</div>`;
+  const activeId=gs("active_director","");
+  el.innerHTML=`
+    <div style="margin-bottom:14px">
+      <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">🎥 AI Directors</div>
+      <div style="font-size:11px;color:var(--textm);margin-top:2px">${activeId?`Active: ${DIRECTORS.find(d=>d.id===activeId)?.name||''} — style is auto-injected into AI Director chat and Image/Video prompts`:'Select a director to shape the visual style of every generation'}</div>
+    </div>
+    <div class="grid2">${DIRECTORS.map(d=>`<div class="director-card ${d.cls}${activeId===d.id?' selected':''}" onclick="selectDirector('${d.id}',this)">
+      <div style="font-size:24px;margin-bottom:8px">${d.icon}</div>
+      <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet)">${d.name}</div>
+      <div style="font-size:11px;color:var(--textm);margin-top:4px">${d.style}</div>
+      ${activeId===d.id?'<div style="margin-top:6px"><span class="badge badge-green">✓ Active</span></div>':''}
+    </div>`).join('')}</div>
+    ${activeId?`<div class="panel" style="margin-top:14px"><div class="panel-title">🎨 Style Signature</div><div style="font-size:12px;color:var(--textm);line-height:1.6;font-family:monospace;background:rgba(61,31,122,0.05);border-radius:8px;padding:10px">${DIRECTORS.find(d=>d.id===activeId)?.prompt||''}</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="clearDirector()">✕ Clear Selection</button></div>`:''}
+  `;
 }
 
 function selectDirector(id,el){
   document.querySelectorAll(".director-card").forEach(c=>c.classList.remove("selected"));
   el.classList.add("selected");
   saveSetting("active_director",id);
-  toast(`🎬 ${el.querySelector('[style*=Cinzel]').textContent} selected`,"success");
+  const d=DIRECTORS.find(x=>x.id===id);
+  toast(`🎬 ${d.name} selected — style now injected into AI Director & generation prompts`,"success");
+  renderDirectors(document.getElementById("moduleContent"));
+}
+
+function clearDirector(){
+  saveSetting("active_director","");
+  toast("Director cleared","");
+  renderDirectors(document.getElementById("moduleContent"));
+}
+
+function getActiveDirectorPrompt(){
+  const id=gs("active_director","");
+  if(!id)return"";
+  const d=DIRECTORS.find(x=>x.id===id);
+  return d?d.prompt:"";
 }
 
 // ── AD STUDIO ──
@@ -1543,8 +1576,116 @@ function renderAdStudio(el){el.innerHTML=`<div class="empty-state"><div class="e
 
 // ── AUDIO ──
 function renderAudio(el){
-  const hasKey=gs("api_elevenlabs")||gs("api_suno");
-  el.innerHTML=`<div class="panel"><div class="panel-title">🎵 Audio Tools ${hasKey?'<span class="badge badge-green">ACTIVE</span>':'<span class="badge badge-red">NO KEY</span>'}</div><div class="f-group"><label class="f-label">Generate Voice / Music</label><textarea class="f-textarea" id="audioPrompt" placeholder="Describe audio to generate…"></textarea></div><button class="btn btn-primary" ${!hasKey?'disabled':''} onclick="toast('Generating audio…','');">${hasKey?'🎵 Generate':'🔑 Add ElevenLabs / Suno Key'}</button></div>`;
+  const hasKey=gs("api_elevenlabs");
+  el.innerHTML=`
+    <div class="panel">
+      <div class="panel-title">🎵 Voiceover ${hasKey?'<span class="badge badge-green">ACTIVE — ElevenLabs</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
+      ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add an <b>ElevenLabs</b> API key in Settings to enable real voice generation. Free tier available at <a href="https://elevenlabs.io" target="_blank" style="color:var(--vm)">elevenlabs.io</a>.</div>`:''}
+      <div class="f-group">
+        <label class="f-label">Text to speak</label>
+        <textarea class="f-textarea" id="audioText" placeholder="Enter the line or narration to convert to speech…" style="min-height:80px" maxlength="2000"></textarea>
+      </div>
+      <div class="f-row">
+        <div class="f-group">
+          <label class="f-label">Voice</label>
+          <select class="f-select" id="audioVoice">
+            <option value="21m00Tcm4TlvDq8ikWAM">Rachel (Female, Calm)</option>
+            <option value="ErXwobaYiN019PkySvjV">Antoni (Male, Warm)</option>
+            <option value="EXAVITQu4vr4xnSDxMaL">Bella (Female, Soft)</option>
+            <option value="TxGEqnHWrfWFTfGW9XjX">Josh (Male, Deep)</option>
+            <option value="pNInz6obpgDQGcFmaJgB">Adam (Male, Narrator)</option>
+            <option value="jsCqWAovK2LkecY7zXl4">Freya (Female, Energetic)</option>
+          </select>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Model</label>
+          <select class="f-select" id="audioModel">
+            <option value="eleven_flash_v2_5">Flash v2.5 (Fast, cheap)</option>
+            <option value="eleven_multilingual_v2">Multilingual v2 (Best quality)</option>
+          </select>
+        </div>
+      </div>
+      ${S.characters.filter(c=>c.voice).length?`<div class="f-group"><label class="f-label">Or use a Character's Voice Profile</label><select class="f-select" id="audioCharVoice" onchange="applyCharVoice()"><option value="">— Select character —</option>${S.characters.filter(c=>c.voice).map(c=>`<option value="${c.voice}">${c.name}</option>`).join('')}</select></div>`:''}
+      <button class="btn btn-primary btn-full" id="audioGenBtn" ${!hasKey?'disabled':''} onclick="generateAudio()">${hasKey?'🎵 Generate Voice':'🔑 Add API Key First'}</button>
+    </div>
+    <div class="panel" id="audioResultPanel" style="display:none;margin-top:14px">
+      <div class="panel-title">🔊 Result</div>
+      <div id="audioResultContent"></div>
+    </div>
+    ${S.assets.filter(a=>a.type==='audio').length?`
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">🎧 Recent Voiceovers</div>
+      <div id="audioRecentList" style="display:flex;flex-direction:column;gap:8px">${S.assets.filter(a=>a.type==='audio').slice(-6).reverse().map(a=>`
+        <div style="display:flex;align-items:center;gap:10px;background:rgba(61,31,122,0.04);border-radius:8px;padding:8px">
+          <audio src="${a.url}" controls style="flex:1;height:32px"></audio>
+        </div>`).join('')}</div>
+    </div>`:''}
+  `;
+}
+
+function applyCharVoice(){
+  const sel=document.getElementById("audioCharVoice");
+  if(sel.value)document.getElementById("audioVoice").value=sel.value;
+}
+
+async function generateAudio(){
+  const textEl=document.getElementById("audioText");
+  const text=textEl.value.trim();
+  if(!text){toast("Enter text to convert to speech","error");return;}
+  const apiKey=gs("api_elevenlabs","");
+  if(!apiKey){toast("Add an ElevenLabs API key in Settings first","error");return;}
+
+  const voiceId=document.getElementById("audioVoice").value;
+  const modelId=document.getElementById("audioModel").value;
+
+  const btn=document.getElementById("audioGenBtn");
+  const resultPanel=document.getElementById("audioResultPanel");
+  const resultContent=document.getElementById("audioResultContent");
+  btn.disabled=true;btn.textContent="⏳ Generating…";
+  resultPanel.style.display="block";
+  resultContent.innerHTML=`<div style="text-align:center;padding:20px;color:var(--textm);font-size:13px">🎙 Generating voice…</div>`;
+
+  try{
+    const response=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","xi-api-key":apiKey,"Accept":"audio/mpeg"},
+      body:JSON.stringify({text,model_id:modelId,voice_settings:{stability:0.5,similarity_boost:0.75}})
+    });
+    if(!response.ok){
+      let errMsg=response.statusText;
+      try{const errData=await response.json();errMsg=(errData.detail&&(errData.detail.message||JSON.stringify(errData.detail)))||errMsg;}catch(e){}
+      throw new Error(errMsg);
+    }
+    const blob=await response.blob();
+    const audioUrl=URL.createObjectURL(blob);
+    // Convert to base64 for persistent storage (survives page reload)
+    const base64Url=await new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(reader.result);
+      reader.onerror=reject;
+      reader.readAsDataURL(blob);
+    });
+    resultContent.innerHTML=`
+      <audio src="${audioUrl}" controls style="width:100%;margin-bottom:10px"></audio>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="${audioUrl}" download="voiceover.mp3" class="btn btn-outline btn-sm">⬇ Download</a>
+        <button class="btn btn-primary btn-sm" onclick="saveAudioBlobToGallery('${base64Url}','${text.replace(/'/g,"\\'").slice(0,200)}')">💾 Save to Gallery</button>
+      </div>`;
+    toast("🎵 Voice generated!","success");
+  }catch(err){
+    console.error("Audio gen error:",err);
+    resultContent.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px;background:rgba(239,68,68,0.08);border-radius:8px">❌ ${err.message}</div>`;
+    toast("❌ Voice generation failed: "+err.message,"error");
+  }
+  btn.disabled=false;btn.textContent="🎵 Generate Voice";
+}
+
+function saveAudioBlobToGallery(url,text){
+  const asset={id:"asset_"+Date.now(),type:"audio",url,prompt:text,created:new Date().toISOString()};
+  S.assets.push(asset);
+  save("assets");
+  toast("💾 Saved to Gallery","success");
+  renderAudio(document.getElementById("moduleContent"));
 }
 
 // ── ASSETS ──
@@ -1734,7 +1875,8 @@ async function sendAiPrompt(){
 
   // Build messages
   S.aiHistory.push({role:"user",content:msg});
-  const systemPrompt=`You are the Kosmic Kat AI Director — a creative AI assistant for the Kosmic Kat AI Studio. You help with screenwriting, character development, shot lists, scene descriptions, and creative direction. Be concise and cinematic. Current module: ${S.mod}.`;
+  const directorStyle=getActiveDirectorPrompt();
+  const systemPrompt=`You are the Kosmic Kat AI Director — a creative AI assistant for the Kosmic Kat AI Studio. You help with screenwriting, character development, shot lists, scene descriptions, and creative direction. Be concise and cinematic. Current module: ${S.mod}.${directorStyle?` The active director's visual style is: ${directorStyle}. Weave this style into your creative suggestions.`:''}`;
 
   try{
     // Use Anthropic API if claude selected
