@@ -692,10 +692,11 @@ const S = {
   editingCharRefImg: "",
   galleryFilter: "all",
   assetFilter: "all",
+  editorSequence: JSON.parse(localStorage.getItem("kk_editor_seq")||"[]"),
 };
 
 function save(k){
-  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",assets:"kk_assets",uploads:"kk_uploads",settings:"kk_settings"};
+  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",settings:"kk_settings"};
   if(!m[k])return;
   try{
     localStorage.setItem(m[k],JSON.stringify(S[k]));
@@ -1850,10 +1851,204 @@ function deleteAsset(id){
 }
 
 // ── EDITOR ──
-function renderEditor(el){el.innerHTML=`<div class="empty-state"><div class="empty-icon">✂️</div><div class="empty-title">Video Editor</div><div class="empty-desc">AI-powered video editing tools. PRO feature — coming soon.</div><span class="badge badge-violet" style="font-size:11px;padding:4px 10px">PRO</span></div>`;}
+function renderEditor(el){
+  const videos=S.assets.filter(a=>a.type==='video');
+  const sequence=S.editorSequence||[];
+  el.innerHTML=`
+    <div class="panel">
+      <div class="panel-title">✂️ Video Sequencer</div>
+      <div style="font-size:12px;color:var(--textm);margin-bottom:14px">Arrange your generated clips into a sequence and preview them back-to-back. For frame-accurate cutting, trimming, and export, use a dedicated editor (CapCut, Premiere, DaVinci) with your downloaded clips — a full browser-based editor isn't reliable enough yet to ship honestly, especially on mobile.</div>
+      ${videos.length===0?`<div class="empty-state"><div class="empty-icon">🎬</div><div class="empty-title">No Videos Yet</div><div class="empty-desc">Generate videos in Video Canvas first, then arrange them here.</div></div>`:`
+      <div style="font-size:11px;font-weight:700;color:var(--violet);margin-bottom:8px">AVAILABLE CLIPS</div>
+      <div class="grid3" style="margin-bottom:16px">${videos.map(v=>`
+        <div class="card" style="padding:6px;cursor:pointer" onclick="addToSequence('${v.id}')">
+          <video src="${v.url}" style="width:100%;border-radius:6px;aspect-ratio:16/9" muted></video>
+          <div style="font-size:9px;color:var(--textm);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.prompt||'Untitled'}</div>
+          <button class="btn btn-outline btn-xs" style="width:100%;margin-top:4px">+ Add to Sequence</button>
+        </div>`).join('')}</div>`}
+      ${sequence.length?`
+      <div style="font-size:11px;font-weight:700;color:var(--violet);margin-bottom:8px">SEQUENCE (${sequence.length} clip${sequence.length!==1?'s':''})</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">${sequence.map((id,i)=>{
+        const v=S.assets.find(a=>a.id===id);
+        if(!v)return'';
+        return `<div style="display:flex;align-items:center;gap:8px;background:rgba(61,31,122,0.04);border-radius:8px;padding:6px">
+          <span style="font-size:11px;font-weight:700;color:var(--gold);width:20px">${i+1}</span>
+          <video src="${v.url}" style="width:60px;height:34px;border-radius:4px;object-fit:cover" muted></video>
+          <span style="flex:1;font-size:11px;color:var(--textm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.prompt||'Untitled'}</span>
+          <button class="pc-menu-btn" onclick="moveSeqItem(${i},-1)" ${i===0?'disabled style="opacity:0.3"':''}>↑</button>
+          <button class="pc-menu-btn" onclick="moveSeqItem(${i},1)" ${i===sequence.length-1?'disabled style="opacity:0.3"':''}>↓</button>
+          <button class="pc-menu-btn" onclick="removeSeqItem(${i})">✕</button>
+        </div>`;
+      }).join('')}</div>
+      <button class="btn btn-primary btn-full" onclick="playSequence()">▶ Preview Sequence</button>
+      <div id="seqPlayer" style="margin-top:12px"></div>
+      `:''}
+    </div>
+  `;
+}
+
+function addToSequence(assetId){
+  if(!S.editorSequence)S.editorSequence=[];
+  S.editorSequence.push(assetId);
+  save("editorSequence");
+  toast("Added to sequence","success");
+  renderEditor(document.getElementById("moduleContent"));
+}
+
+function moveSeqItem(i,dir){
+  const seq=S.editorSequence;
+  const j=i+dir;
+  if(j<0||j>=seq.length)return;
+  [seq[i],seq[j]]=[seq[j],seq[i]];
+  save("editorSequence");
+  renderEditor(document.getElementById("moduleContent"));
+}
+
+function removeSeqItem(i){
+  S.editorSequence.splice(i,1);
+  save("editorSequence");
+  renderEditor(document.getElementById("moduleContent"));
+}
+
+function playSequence(){
+  const seq=S.editorSequence||[];
+  if(!seq.length)return;
+  let idx=0;
+  const player=document.getElementById("seqPlayer");
+  player.innerHTML=`<video id="seqVideoEl" src="${S.assets.find(a=>a.id===seq[0]).url}" controls autoplay style="width:100%;border-radius:10px"></video><div id="seqStatus" style="font-size:11px;color:var(--textm);margin-top:6px;text-align:center">Playing clip 1 of ${seq.length}</div>`;
+  const vidEl=document.getElementById("seqVideoEl");
+  vidEl.onended=()=>{
+    idx++;
+    if(idx<seq.length){
+      const next=S.assets.find(a=>a.id===seq[idx]);
+      if(next){vidEl.src=next.url;vidEl.play();document.getElementById("seqStatus").textContent=`Playing clip ${idx+1} of ${seq.length}`;}
+    } else {
+      document.getElementById("seqStatus").textContent="Sequence complete";
+    }
+  };
+}
 
 // ── UPSCALER ──
-function renderUpscaler(el){el.innerHTML=`<div class="empty-state"><div class="empty-icon">⬆️</div><div class="empty-title">AI Upscaler</div><div class="empty-desc">Upscale your images and videos to 4K. Add Replicate API key to enable.</div><button class="btn btn-outline" onclick="openSettings()">⚙️ Add Key</button></div>`;}
+function renderUpscaler(el){
+  const hasKey=gs("api_falai");
+  el.innerHTML=`
+    <div class="panel">
+      <div class="panel-title">⬆️ AI Upscaler ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
+      ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add a <b>fal.ai</b> API key in Settings to enable upscaling. Same key as Image/Video Gen.</div>`:''}
+      <div class="f-group">
+        <label class="f-label">Choose from Gallery</label>
+        <select class="f-select" id="upSourceSelect" onchange="onUpSourceChange()">
+          <option value="">— Or paste a URL below —</option>
+          ${S.assets.filter(a=>a.type==='image').map(a=>`<option value="${a.url}">🖼 ${(a.prompt||'Untitled').slice(0,40)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Image URL</label>
+        <input class="f-input" id="upImageUrl" placeholder="https://… (must be a public URL, not a local file)">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Engine</label>
+        <select class="f-select" id="upEngine">
+          <option value="fal-ai/esrgan">Real-ESRGAN (fast, 4x, general purpose)</option>
+          <option value="fal-ai/clarity-upscaler">Clarity Upscaler (highest fidelity, slower)</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-full" id="upGenBtn" ${!hasKey?'disabled':''} onclick="runUpscale()">${hasKey?'⬆️ Upscale Image':'🔑 Add API Key First'}</button>
+      <div style="font-size:10px;color:var(--texts);margin-top:8px">Note: only works on images with a public URL — base64-stored images from Character Bible/Asset uploads can't be upscaled directly. Gallery images from Image Gen work fine since they're already hosted.</div>
+    </div>
+    <div class="panel" id="upResultPanel" style="display:none;margin-top:14px">
+      <div class="panel-title">✨ Result</div>
+      <div id="upResultContent"></div>
+    </div>
+  `;
+}
+
+function onUpSourceChange(){
+  const sel=document.getElementById("upSourceSelect");
+  if(sel.value)document.getElementById("upImageUrl").value=sel.value;
+}
+
+async function runUpscale(){
+  const url=document.getElementById("upImageUrl").value.trim();
+  if(!url){toast("Choose an image from Gallery or paste a URL","error");return;}
+  if(url.startsWith("data:")){toast("Base64 images can't be upscaled directly — only public URLs (like Gallery images) work","error");return;}
+  const apiKey=gs("api_falai","");
+  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
+
+  const engine=document.getElementById("upEngine").value;
+  const btn=document.getElementById("upGenBtn");
+  const resultPanel=document.getElementById("upResultPanel");
+  const resultContent=document.getElementById("upResultContent");
+  btn.disabled=true;
+  resultPanel.style.display="block";
+
+  try{
+    btn.textContent="⏳ Submitting…";
+    resultContent.innerHTML=`<div style="text-align:center;padding:30px;color:var(--textm);font-size:13px">📤 Submitting to ${engine.split('/')[1]}…</div>`;
+    const submitRes=await fetch(`https://queue.fal.run/${engine}`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+      body:JSON.stringify({image_url:url})
+    });
+    const submitData=await submitRes.json();
+    if(!submitRes.ok){
+      const msg=(submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText;
+      throw new Error(msg);
+    }
+    const requestId=submitData.request_id;
+    if(!requestId)throw new Error("No request ID returned");
+    const statusUrl=submitData.status_url||`https://queue.fal.run/${engine}/requests/${requestId}/status`;
+    const resultUrl=submitData.response_url||`https://queue.fal.run/${engine}/requests/${requestId}`;
+
+    btn.textContent="⏳ Upscaling…";
+    let attempts=0;
+    const maxAttempts=36; // 3 min
+    let finalData=null;
+    while(attempts<maxAttempts){
+      await new Promise(r=>setTimeout(r,5000));
+      attempts++;
+      const statusRes=await fetch(statusUrl,{headers:{"Authorization":"Key "+apiKey}});
+      const statusData=await statusRes.json();
+      resultContent.innerHTML=`<div style="text-align:center;padding:30px;color:var(--textm);font-size:13px">✨ ${statusData.status||'Processing'}… (${attempts*5}s)</div>`;
+      if(statusData.status==="COMPLETED"){
+        const finalRes=await fetch(resultUrl,{headers:{"Authorization":"Key "+apiKey}});
+        finalData=await finalRes.json();
+        break;
+      }
+      if(statusData.status==="ERROR"||statusData.status==="FAILED"){
+        throw new Error(statusData.error||"Upscale failed on fal.ai's side");
+      }
+    }
+    if(!finalData)throw new Error("Timed out — try again");
+
+    const outUrl=finalData.image&&finalData.image.url;
+    if(!outUrl)throw new Error("No image URL in response");
+
+    resultContent.innerHTML=`
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Before / After</div>
+      <div class="grid2" style="margin-bottom:10px">
+        <div><img src="${url}" style="width:100%;border-radius:8px"><div style="font-size:10px;color:var(--texts);text-align:center;margin-top:4px">Original</div></div>
+        <div><img src="${outUrl}" style="width:100%;border-radius:8px"><div style="font-size:10px;color:var(--texts);text-align:center;margin-top:4px">Upscaled</div></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="${outUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
+        <button class="btn btn-primary btn-sm" onclick="saveUpscaleToGallery('${outUrl.replace(/'/g,"\\'")}')">💾 Save to Gallery</button>
+      </div>`;
+    toast("✨ Upscaled!","success");
+  }catch(err){
+    console.error("Upscale error:",err);
+    resultContent.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px;background:rgba(239,68,68,0.08);border-radius:8px">❌ ${err.message}</div>`;
+    toast("❌ Upscale failed: "+err.message,"error");
+  }
+  btn.disabled=false;btn.textContent="⬆️ Upscale Image";
+}
+
+function saveUpscaleToGallery(url){
+  const asset={id:"asset_"+Date.now(),type:"image",url,prompt:"Upscaled image",created:new Date().toISOString()};
+  S.assets.push(asset);
+  save("assets");
+  toast("💾 Saved to Gallery","success");
+}
 
 // ── COSTS ──
 function renderCosts(el){
