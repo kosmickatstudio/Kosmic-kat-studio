@@ -289,6 +289,22 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
   .founder-badge{display:none}
 }
 </style>
+<!-- Firebase Auth -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyDpreHhomC4Ug1LLc6mtAkSj2VnFjFQcrM",
+    authDomain: "kosmic-kat-studio.firebaseapp.com",
+    projectId: "kosmic-kat-studio",
+    storageBucket: "kosmic-kat-studio.firebasestorage.app",
+    messagingSenderId: "284218215783",
+    appId: "1:284218215783:web:d91faccbe22aaac7be33c2",
+    measurementId: "G-5CL9EQ1F5N"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const fbAuth = firebase.auth();
+</script>
 </head>
 <body>
 
@@ -544,9 +560,8 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
       <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:900;color:var(--violet);margin-bottom:4px">KOSMIC KAT AI</div>
       <div style="font-size:12px;color:var(--textm)">Sign in to access your studio</div>
     </div>
-    <button class="auth-btn" onclick="authWith('google')">🌐 Continue with Google</button>
-    <button class="auth-btn" onclick="authWith('x')">𝕏 Continue with X</button>
-    <button class="auth-btn" onclick="authWith('github')">🐙 Continue with GitHub</button>
+    <button class="auth-btn" onclick="authWithGoogle()">🌐 Continue with Google</button>
+    <div style="font-size:11px;color:var(--textm);text-align:center;margin:4px 0 10px">X and GitHub sign-in coming soon</div>
     <button class="btn btn-ghost btn-full" onclick="authGuest()" style="margin-top:6px;font-size:12px;color:var(--textm)">Continue as Guest (limited)</button>
     <button class="btn btn-ghost btn-sm" onclick="closeAuth()" style="position:absolute;top:14px;right:14px">✕</button>
   </div>
@@ -2389,15 +2404,20 @@ function pickOpt(type,el){
 function openAuth(){document.getElementById("authModal").classList.add("show");}
 function closeAuth(){document.getElementById("authModal").classList.remove("show");}
 
-function authWith(provider){
-  // Simulate auth
-  const email=prompt(`Enter your email for ${provider} sign-in:`);
-  if(!email)return;
-  S.user={email,provider,isFounder:FOUNDERS.includes(email)};
-  saveSetting("user_email",email);
-  updateUserUI();
-  closeAuth();
-  toast(`✅ Signed in as ${email}`,"success");
+function authWithGoogle(){
+  const provider=new firebase.auth.GoogleAuthProvider();
+  fbAuth.signInWithPopup(provider)
+    .then(result=>{
+      const email=result.user.email;
+      S.user={email,provider:"google",uid:result.user.uid,photo:result.user.photoURL,isFounder:FOUNDERS.includes(email)};
+      updateUserUI();
+      closeAuth();
+      toast(`✅ Signed in as ${email}`,"success");
+    })
+    .catch(err=>{
+      console.error("Auth error:",err);
+      toast("Sign-in failed: "+err.message,"error");
+    });
 }
 
 function authGuest(){
@@ -2406,7 +2426,9 @@ function authGuest(){
 }
 
 function signOut(){
-  S.user=null;updateUserUI();toast("Signed out","");closeSettings();
+  fbAuth.signOut().then(()=>{
+    S.user=null;updateUserUI();toast("Signed out","");closeSettings();
+  });
 }
 
 function updateUserUI(){
@@ -2627,12 +2649,15 @@ function init(){
   const sel=document.getElementById("aiModelSelect");
   if(sel)sel.value=model;
 
-  // Restore user
-  const savedEmail=gs("user_email","");
-  if(savedEmail){
-    S.user={email:savedEmail,provider:"saved",isFounder:FOUNDERS.includes(savedEmail)};
+  // Restore user — real Firebase session, not a localStorage guess
+  fbAuth.onAuthStateChanged(user=>{
+    if(user){
+      S.user={email:user.email,provider:"google",uid:user.uid,photo:user.photoURL,isFounder:FOUNDERS.includes(user.email)};
+    } else if(S.user&&S.user.provider!=="guest"){
+      S.user=null;
+    }
     updateUserUI();
-  }
+  });
 
   // Hide loader — fast, with safety fallback
   const loader=document.getElementById("pageLoader");
