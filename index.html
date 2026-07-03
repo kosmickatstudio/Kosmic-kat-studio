@@ -585,9 +585,13 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
       <div class="f-group">
         <label class="f-label">Status</label>
         <select class="f-select" id="pmStatus">
-          <option value="Development">Development</option><option value="Pre-production">Pre-production</option><option value="Production">Production</option><option value="Post">Post</option>
+          <option value="Development">Development</option><option value="Pre-production">Pre-production</option><option value="Production">Production</option><option value="Post">Post</option><option value="Complete">Complete</option><option value="Released">Released</option>
         </select>
       </div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Universe <span style="color:var(--textm);font-weight:400">(optional — group projects that share lore/characters)</span></label>
+      <input class="f-input" id="pmUniverse" placeholder="e.g. Fharomorph-α, Kosmic Kat Cinematic Universe…">
     </div>
     <div class="f-group">
       <label class="f-label">Description</label>
@@ -610,6 +614,7 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
     </div>
   </div>
 </div>
+<input type="file" id="importProjectFile" accept="application/json" style="display:none" onchange="handleImportProjectFile(event)">
 
 <!-- Character Modal -->
 <div class="modal-overlay" id="charModal">
@@ -695,6 +700,7 @@ const S = {
   projects: JSON.parse(localStorage.getItem("kk_projects")||"[]"),
   characters: JSON.parse(localStorage.getItem("kk_characters")||"[]"),
   shots: JSON.parse(localStorage.getItem("kk_shots")||"[]"),
+  episodes: JSON.parse(localStorage.getItem("kk_episodes")||"[]"),
   assets: JSON.parse(localStorage.getItem("kk_assets")||"[]"),
   uploads: JSON.parse(localStorage.getItem("kk_uploads")||"[]"),
   activeProject: null,
@@ -713,7 +719,7 @@ const S = {
 };
 
 function save(k){
-  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",settings:"kk_settings"};
+  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",settings:"kk_settings"};
   if(!m[k])return;
   try{
     localStorage.setItem(m[k],JSON.stringify(S[k]));
@@ -858,28 +864,57 @@ function renderModule(mod){
 
 // ── PROJECTS ──
 function renderProjects(el){
-  const hasProjects = S.projects.length > 0;
+  const showArchived = S.showArchivedProjects||false;
+  const visible = S.projects.filter(p=>!!p.archived===showArchived);
   el.innerHTML=`
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:8px;flex-wrap:wrap">
       <div>
         <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">Projects</div>
-        <div style="font-size:11px;color:var(--textm);margin-top:2px">${S.projects.length} project${S.projects.length!==1?'s':''} · Universe-agnostic creative studio</div>
+        <div style="font-size:11px;color:var(--textm);margin-top:2px">${visible.length} ${showArchived?'archived':'active'} project${visible.length!==1?'s':''} · Universe-agnostic creative studio</div>
       </div>
-      <button class="btn btn-primary" onclick="openProjectModal()">+ New Project</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="toggleArchivedView()">${showArchived?'📂 Active Projects':'🗄 Archived ('+S.projects.filter(p=>p.archived).length+')'}</button>
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('importProjectFile').click()">📥 Import</button>
+        <button class="btn btn-primary btn-sm" onclick="openProjectModal()">+ New Project</button>
+      </div>
     </div>
-    ${S.projects.length===0?`
+    ${visible.length===0?`
       <div class="empty-state">
-        <div class="empty-icon">🎬</div>
-        <div class="empty-title">No Projects Yet</div>
-        <div class="empty-desc">Create your first project to start building your cinematic universe.</div>
-        <button class="btn btn-primary" onclick="openProjectModal()">+ Create First Project</button>
+        <div class="empty-icon">${showArchived?'🗄':'🎬'}</div>
+        <div class="empty-title">${showArchived?'No Archived Projects':'No Projects Yet'}</div>
+        <div class="empty-desc">${showArchived?'Projects you archive will show up here.':'Create your first project to start building your cinematic universe.'}</div>
+        ${showArchived?'':'<button class="btn btn-primary" onclick="openProjectModal()">+ Create First Project</button>'}
       </div>
-    `:`<div class="grid2" id="projectsGrid">${S.projects.map(p=>projectCardHTML(p)).join('')}</div>`}
+    `:renderProjectGroups(visible)}
   `;
 }
 
+function renderProjectGroups(projects){
+  const withUniverse={}, standalone=[];
+  projects.forEach(p=>{
+    if(p.universe && p.universe.trim()){
+      (withUniverse[p.universe]=withUniverse[p.universe]||[]).push(p);
+    } else standalone.push(p);
+  });
+  let html='';
+  Object.keys(withUniverse).sort().forEach(u=>{
+    html+=`<div style="font-size:12px;font-weight:700;color:var(--violet);margin:14px 0 8px;display:flex;align-items:center;gap:6px">🌌 ${u} <span class="badge badge-gray">${withUniverse[u].length}</span></div>
+    <div class="grid2">${withUniverse[u].map(p=>projectCardHTML(p)).join('')}</div>`;
+  });
+  if(standalone.length){
+    if(Object.keys(withUniverse).length>0) html+=`<div style="font-size:12px;font-weight:700;color:var(--textm);margin:14px 0 8px">Other Projects</div>`;
+    html+=`<div class="grid2" id="projectsGrid">${standalone.map(p=>projectCardHTML(p)).join('')}</div>`;
+  }
+  return html;
+}
+
+function toggleArchivedView(){
+  S.showArchivedProjects=!S.showArchivedProjects;
+  renderModule("projects");
+}
+
 function projectCardHTML(p){
-  const statusColor={Development:"var(--blue)",Production:"var(--green)","Pre-production":"var(--yellow)",Post:"var(--violet)"}[p.status]||"var(--blue)";
+  const statusColor={Development:"var(--blue)",Production:"var(--green)","Pre-production":"var(--yellow)",Post:"var(--violet)",Complete:"#059669",Released:"#b45309"}[p.status]||"var(--blue)";
   return `
     <div class="project-card${S.activeProject===p.id?' active-project':''}" id="pc-${p.id}">
       <div class="project-card-thumb" style="background:${p.color||'#7c3aed'}">
@@ -887,6 +922,7 @@ function projectCardHTML(p){
       </div>
       <div class="project-card-menu">
         <button class="pc-menu-btn" onclick="event.stopPropagation();editProject('${p.id}')" title="Edit">✏️</button>
+        <button class="pc-menu-btn" onclick="event.stopPropagation();toggleArchiveProject('${p.id}')" title="${p.archived?'Unarchive':'Archive'}">${p.archived?'📂':'🗄'}</button>
         <button class="pc-menu-btn" onclick="event.stopPropagation();deleteProject('${p.id}')" title="Delete">🗑</button>
       </div>
       <div class="project-card-body" onclick="openProject('${p.id}')">
@@ -896,10 +932,20 @@ function projectCardHTML(p){
         <div class="project-card-tags">
           <span class="badge badge-gray">${p.shots||0} SHOTS</span>
           <span class="badge badge-violet">${p.chars||0} CHARS</span>
-          <span class="badge" style="background:rgba(91,141,217,0.12);color:${statusColor}">${p.status||'DEVELOPMENT'}</span>
+          ${(S.episodes.filter(e=>e.projectId===p.id).length)?`<span class="badge badge-gray">${S.episodes.filter(e=>e.projectId===p.id).length} EP</span>`:''}
+          <span class="badge" style="background:rgba(91,141,217,0.12);color:${statusColor}">${(p.status||'DEVELOPMENT').toUpperCase()}</span>
         </div>
       </div>
     </div>`;
+}
+
+function toggleArchiveProject(id){
+  const p=S.projects.find(x=>x.id===id);
+  if(!p)return;
+  p.archived=!p.archived;
+  save("projects");
+  toast(p.archived?"🗄 Project archived":"📂 Project restored","success");
+  renderModule("projects");
 }
 
 function openProject(id){
@@ -922,10 +968,12 @@ function renderProjectWorkspace(p){
   const el=document.getElementById("moduleContent");
   const shots=S.shots.filter(s=>s.projectId===p.id);
   const chars=S.characters.filter(c=>c.projectId===p.id);
+  const episodes=S.episodes.filter(e=>e.projectId===p.id).sort((a,b)=>(a.number||0)-(b.number||0));
   el.innerHTML=`
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="switchMod('projects',document.querySelector('[data-mod=projects]')||null)">← Projects</button>
-      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);flex:1">${p.name}</div>
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);flex:1">${p.name}${p.archived?' <span style="font-size:10px;color:var(--textm);font-family:inherit;font-weight:600">(ARCHIVED)</span>':''}</div>
+      ${p.universe?`<span class="badge badge-violet">🌌 ${p.universe}</span>`:''}
       <span class="badge badge-gray">${p.status}</span>
     </div>
     <div class="grid2" style="margin-bottom:14px">
@@ -944,13 +992,25 @@ function renderProjectWorkspace(p){
       <div class="panel-title">📋 Project Details</div>
       <div class="f-group"><span class="f-label">Genre</span><span style="font-size:13px;color:var(--text)">${p.genre||'—'}</span></div>
       <div class="f-group"><span class="f-label">Description</span><span style="font-size:13px;color:var(--text)">${p.desc||'No description'}</span></div>
-      <div style="display:flex;gap:8px;margin-top:10px">
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="toast('AI Director will generate shots for this project!','success')">🤖 AI Generate Shots</button>
         <button class="btn btn-outline btn-sm" onclick="editProject('${p.id}')">✏️ Edit</button>
         <button class="btn btn-outline btn-sm" onclick="exportProject('${p.id}')">📤 Export JSON</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleArchiveProject('${p.id}')">${p.archived?'📂 Restore':'🗄 Archive'}</button>
         <button class="btn btn-danger btn-sm" onclick="deleteProject('${p.id}')">🗑 Delete</button>
       </div>
     </div>
+    <div class="panel">
+      <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between">
+        <span>📺 Episode Tracker (${episodes.length})</span>
+        <button class="btn btn-outline btn-xs" onclick="addEpisode('${p.id}')">+ Add Episode</button>
+      </div>
+      ${episodes.length===0?`<div style="font-size:12px;color:var(--textm);padding:8px 0">No episodes yet — useful for series/multi-part projects. Skip this if your project is a single piece.</div>`:episodes.map(e=>episodeTileHTML(e)).join('')}
+    </div>
+    ${(episodes.length>0||shots.length>0)?`<div class="panel">
+      <div class="panel-title">📅 Production Timeline</div>
+      ${renderProjectTimeline(p,episodes,shots)}
+    </div>`:''}
     ${shots.length>0?`<div class="panel"><div class="panel-title">🎬 Shots (${shots.length})</div>${shots.map(s=>`
       <div class="shot-tile" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:10px;padding:10px;margin-bottom:7px">
         <div style="width:40px;height:30px;background:var(--lav);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px">🎬</div>
@@ -958,6 +1018,69 @@ function renderProjectWorkspace(p){
         <button class="btn btn-danger btn-xs" onclick="deleteShot('${s.id}')">🗑</button>
       </div>`).join('')}</div>`:''}
   `;
+}
+
+// ── EPISODE TRACKER ──
+const EP_STATUS_COLOR={Planned:"var(--textm)",Scripting:"var(--blue)",Production:"var(--yellow)",Editing:"var(--violet)",Released:"#059669"};
+
+function episodeTileHTML(e){
+  const color=EP_STATUS_COLOR[e.status]||"var(--textm)";
+  return `
+    <div style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:10px;padding:10px;margin-bottom:7px">
+      <div style="width:34px;height:34px;border-radius:8px;background:var(--lav);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--violet)">E${e.number||'?'}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.title||'Untitled Episode'}</div>
+        <div style="font-size:11px;color:${color}">${e.status||'Planned'}</div>
+      </div>
+      <select class="f-select" style="width:auto;padding:4px 8px;font-size:11px" onchange="updateEpisodeStatus('${e.id}',this.value)">
+        ${Object.keys(EP_STATUS_COLOR).map(s=>`<option value="${s}" ${e.status===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+      <button class="btn btn-danger btn-xs" onclick="deleteEpisode('${e.id}')">🗑</button>
+    </div>`;
+}
+
+function addEpisode(projectId){
+  const title=prompt("Episode title:");
+  if(!title)return;
+  const existing=S.episodes.filter(e=>e.projectId===projectId);
+  const number=existing.length?Math.max(...existing.map(e=>e.number||0))+1:1;
+  const ep={id:"ep_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),projectId,title,number,status:"Planned",created:new Date().toISOString()};
+  S.episodes.push(ep);save("episodes");
+  renderProjectWorkspace(S.projects.find(x=>x.id===projectId));
+  toast(`📺 Episode ${number} added: ${title}`,"success");
+}
+
+function updateEpisodeStatus(id,status){
+  const e=S.episodes.find(x=>x.id===id);
+  if(!e)return;
+  e.status=status;save("episodes");
+  toast(`Episode status → ${status}`,"");
+}
+
+function deleteEpisode(id){
+  const e=S.episodes.find(x=>x.id===id);
+  if(!e)return;
+  S.episodes=S.episodes.filter(x=>x.id!==id);
+  save("episodes");
+  renderProjectWorkspace(S.projects.find(x=>x.id===e.projectId));
+  toast("Episode deleted","");
+}
+
+// ── PRODUCTION TIMELINE ──
+function renderProjectTimeline(p,episodes,shots){
+  const events=[
+    ...episodes.map(e=>({date:e.created,label:`E${e.number}: ${e.title}`,status:e.status,color:EP_STATUS_COLOR[e.status]||"var(--textm)",icon:"📺"})),
+    ...shots.map(s=>({date:s.created,label:s.name||'Shot',status:s.type||'Scene',color:"var(--blue)",icon:"🎬"}))
+  ].filter(x=>x.date).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(events.length===0)return `<div style="font-size:12px;color:var(--textm)">No dated events yet.</div>`;
+  return `<div style="position:relative;padding-left:18px;border-left:2px solid var(--border);margin-top:6px">
+    ${events.map(ev=>`
+      <div style="position:relative;padding-bottom:14px">
+        <div style="position:absolute;left:-24px;top:2px;width:10px;height:10px;border-radius:50%;background:${ev.color};border:2px solid var(--panel)"></div>
+        <div style="font-size:11px;color:var(--textm)">${new Date(ev.date).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</div>
+        <div style="font-size:12px;font-weight:600;color:var(--text)">${ev.icon} ${ev.label} <span style="font-weight:400;color:${ev.color}">— ${ev.status}</span></div>
+      </div>`).join('')}
+  </div>`;
 }
 
 function addShot(projectId){
@@ -1000,6 +1123,7 @@ function openProjectModal(editId=null){
       document.getElementById("pmGenre").value=p.genre||"Sci-fi";
       document.getElementById("pmDesc").value=p.desc||"";
       document.getElementById("pmStatus").value=p.status||"Development";
+      document.getElementById("pmUniverse").value=p.universe||"";
       S.thumbColor=p.color||"#7c3aed";
     }
   } else {
@@ -1007,6 +1131,7 @@ function openProjectModal(editId=null){
     document.getElementById("pmGenre").value="Sci-fi";
     document.getElementById("pmDesc").value="";
     document.getElementById("pmStatus").value="Development";
+    document.getElementById("pmUniverse").value="";
     S.thumbColor="#7c3aed";
   }
   // Set color picker
@@ -1032,15 +1157,16 @@ function saveProject(){
     const genre=document.getElementById("pmGenre").value;
     const status=document.getElementById("pmStatus").value;
     const desc=document.getElementById("pmDesc").value;
+    const universe=document.getElementById("pmUniverse").value.trim();
     if(S.editingProjectId){
       const p=S.projects.find(x=>x.id===S.editingProjectId);
       if(p){
-        p.name=name;p.genre=genre;p.status=status;p.desc=desc;p.color=S.thumbColor;
+        p.name=name;p.genre=genre;p.status=status;p.desc=desc;p.universe=universe;p.color=S.thumbColor;
         save("projects");
         toast("✅ Project updated","success");
       }
     } else {
-      const p={id:"proj_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),name,genre,status,desc,color:S.thumbColor,shots:0,chars:0,created:new Date().toISOString()};
+      const p={id:"proj_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),name,genre,status,desc,universe,color:S.thumbColor,shots:0,chars:0,archived:false,created:new Date().toISOString()};
       S.projects.push(p);
       save("projects");
       toast("🎉 Project created!","success");
@@ -1065,7 +1191,8 @@ function exportProject(id){
   if(!p)return;
   const shots=S.shots.filter(s=>s.projectId===id);
   const chars=S.characters.filter(c=>c.projectId===id);
-  const data={project:p,shots,characters:chars,exportedAt:new Date().toISOString()};
+  const episodes=S.episodes.filter(e=>e.projectId===id);
+  const data={project:p,shots,characters:chars,episodes,exportedAt:new Date().toISOString(),formatVersion:2};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");
@@ -1075,12 +1202,58 @@ function exportProject(id){
   toast("📤 Project exported","success");
 }
 
+function handleImportProjectFile(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!data.project||!data.project.name){
+        toast("❌ Invalid project file — no project data found","error");
+        return;
+      }
+      // Re-ID everything so importing doesn't collide with existing data or re-imports of the same file
+      const idMap={};
+      const newProjId="proj_"+Date.now()+"_"+Math.random().toString(36).slice(2,7);
+      idMap[data.project.id]=newProjId;
+      const newProj={...data.project,id:newProjId,name:data.project.name+" (Imported)",archived:false,created:new Date().toISOString()};
+      S.projects.push(newProj);
+
+      (data.shots||[]).forEach(s=>{
+        const newId="shot_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);
+        S.shots.push({...s,id:newId,projectId:newProjId});
+      });
+      (data.characters||[]).forEach(c=>{
+        const newId="char_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);
+        S.characters.push({...c,id:newId,projectId:newProjId});
+      });
+      (data.episodes||[]).forEach(ep=>{
+        const newId="ep_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);
+        S.episodes.push({...ep,id:newId,projectId:newProjId});
+      });
+      newProj.shots=(data.shots||[]).length;
+      newProj.chars=(data.characters||[]).length;
+
+      save("projects");save("shots");save("characters");save("episodes");
+      toast(`✅ Imported "${data.project.name}" (${(data.shots||[]).length} shots, ${(data.characters||[]).length} characters)`,"success");
+      renderModule("projects");
+    }catch(err){
+      console.error("Import error:",err);
+      toast("❌ Couldn't read file — is it a valid project export JSON?","error");
+    }
+    event.target.value="";
+  };
+  reader.readAsText(file);
+}
+
 function deleteProject(id){
   if(!confirm("Delete this project? This cannot be undone."))return;
   S.projects=S.projects.filter(p=>p.id!==id);
   S.shots=S.shots.filter(s=>s.projectId!==id);
   S.characters=S.characters.filter(c=>c.projectId!==id);
-  save("projects");save("shots");save("characters");
+  S.episodes=S.episodes.filter(e=>e.projectId!==id);
+  save("projects");save("shots");save("characters");save("episodes");
   if(S.activeProject===id)S.activeProject=null;
   toast("Project deleted","");
   renderModule("projects");
