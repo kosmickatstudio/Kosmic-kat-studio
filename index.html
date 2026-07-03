@@ -1889,11 +1889,16 @@ const STYLE_PRESETS=[
 ];
 
 function renderImageGen(el){
-  const hasKey=gs("api_falai");
+  const hasFal=!!gs("api_falai");
+  const hasReplicate=!!gs("api_replicate");
+  const hasOpenAI=!!gs("api_openai");
+  const hasKey=hasFal||hasReplicate||hasOpenAI;
+  const activeProviders=[hasFal&&"fal.ai",hasReplicate&&"Replicate",hasOpenAI&&"OpenAI"].filter(Boolean);
   el.innerHTML=`
     <div class="panel">
-      <div class="panel-title">🖼 Image Generation ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}${gs("active_director","")?' <span class="badge badge-violet">🎬 '+(DIRECTORS.find(d=>d.id===gs("active_director",""))||{}).name+'</span>':''}</div>
-      ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add a <b>fal.ai</b> API key in Settings to enable real image generation. Get one free at <a href="https://fal.ai" target="_blank" style="color:var(--vm)">fal.ai</a> — pay-per-use, no subscription.</div>`:''}
+      <div class="panel-title">🖼 Image Generation ${hasKey?`<span class="badge badge-green">ACTIVE — ${activeProviders.join(' + ')}</span>`:'<span class="badge badge-red">NO KEY</span>'}${gs("active_director","")?' <span class="badge badge-violet">🎬 '+(DIRECTORS.find(d=>d.id===gs("active_director",""))||{}).name+'</span>':''}</div>
+      ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add a <b>fal.ai</b>, <b>Replicate</b>, or <b>OpenAI</b> API key in Settings to enable image generation. Configure more than one and generation will automatically fall back if your primary provider fails or runs out of credit.</div>`:''}
+      ${hasKey&&activeProviders.length<2?`<div style="font-size:11px;color:var(--textm);margin-bottom:12px">💡 Add a second provider (Replicate or OpenAI) in Settings for automatic fallback if ${activeProviders[0]} runs out of credit.</div>`:''}
 
       <div class="f-group">
         <label class="f-label" style="display:flex;justify-content:space-between;align-items:center">
@@ -2143,6 +2148,83 @@ function sendToVideoCanvas(imageUrl){
   toast("🎬 Image URL copied — paste it into your video prompt for now. Full image-to-video first-frame wiring is part of the Video Canvas rebuild, not yet built.","");
 }
 
+// ── Provider-specific generation calls (each returns {url, providerLabel} or throws) ──
+async function genViaFal(prompt,negPrompt,model,ratio,useImg2Img){
+  const apiKey=gs("api_falai","");
+  if(!apiKey)throw new Error("NO_KEY");
+  const sizeMap={"16:9":"landscape_16_9","1:1":"square_hd","9:16":"portrait_16_9","4:3":"landscape_4_3","3:4":"portrait_4_3"};
+  let body={prompt};
+  if(negPrompt)body.negative_prompt=negPrompt;
+  if(useImg2Img){
+    body.image_url=S.igRefDataUrl;
+    body.strength=parseFloat(document.getElementById("igStrength").value);
+  } else {
+    body.image_size=sizeMap[ratio]||"landscape_16_9";
+    body.num_images=1;
+  }
+  const response=await fetch(`https://fal.run/${model}`,{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+    body:JSON.stringify(body)
+  });
+  const data=await response.json();
+  if(!response.ok||data.error){
+    const msg=(data.detail&&(Array.isArray(data.detail)?data.detail[0]?.msg:data.detail))||data.error||response.statusText||"Unknown error";
+    throw new Error(msg);
+  }
+  const imgUrl=data.images&&data.images[0]&&data.images[0].url;
+  if(!imgUrl)throw new Error("No image returned from fal.ai");
+  return {url:imgUrl,providerLabel:"fal.ai",costKey:model};
+}
+
+async function genViaReplicate(prompt,ratio){
+  const apiKey=gs("api_replicate","");
+  if(!apiKey)throw new Error("NO_KEY");
+  const aspectMap={"16:9":"16:9","1:1":"1:1","9:16":"9:16","4:3":"4:3","3:4":"3:4"};
+  const response=await fetch("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey,"Prefer":"wait"},
+    body:JSON.stringify({input:{prompt,aspect_ratio:aspectMap[ratio]||"16:9"}})
+  });
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.detail||data.error||response.statusText||"Replicate request failed");
+  if(data.status==="failed")throw new Error(data.error||"Replicate prediction failed");
+  let output=data.output;
+  // Replicate sometimes returns a "starting" state if it exceeds the 60s wait window
+  if(data.status!=="succeeded"&&data.urls&&data.urls.get){
+    let attempts=0;
+    while(attempts<20){
+      await new Promise(r=>setTimeout(r,3000));
+      attempts++;
+      const pollRes=await fetch(data.urls.get,{headers:{"Authorization":"Bearer "+apiKey}});
+      const pollData=await pollRes.json();
+      if(pollData.status==="succeeded"){output=pollData.output;break;}
+      if(pollData.status==="failed")throw new Error(pollData.error||"Replicate prediction failed");
+    }
+  }
+  const imgUrl=Array.isArray(output)?output[0]:output;
+  if(!imgUrl)throw new Error("No image returned from Replicate");
+  return {url:imgUrl,providerLabel:"Replicate (flux-schnell)",costKey:"replicate/flux-schnell"};
+}
+
+async function genViaOpenAI(prompt,ratio){
+  const apiKey=gs("api_openai","");
+  if(!apiKey)throw new Error("NO_KEY");
+  const sizeMap={"16:9":"1536x1024","4:3":"1536x1024","3:4":"1024x1536","9:16":"1024x1536","1:1":"1024x1024"};
+  const response=await fetch("https://api.openai.com/v1/images/generations",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
+    body:JSON.stringify({model:"gpt-image-2",prompt,size:sizeMap[ratio]||"1024x1024",n:1})
+  });
+  const data=await response.json();
+  if(!response.ok)throw new Error((data.error&&data.error.message)||response.statusText||"OpenAI request failed");
+  const item=data.data&&data.data[0];
+  if(!item)throw new Error("No image returned from OpenAI");
+  const imgUrl=item.url||(item.b64_json?`data:image/png;base64,${item.b64_json}`:null);
+  if(!imgUrl)throw new Error("No image returned from OpenAI");
+  return {url:imgUrl,providerLabel:"OpenAI (gpt-image-2)",costKey:"openai/gpt-image-2"};
+}
+
 async function generateImage(){
   const promptEl=document.getElementById("igPrompt");
   const rawPrompt=promptEl.value.trim();
@@ -2153,8 +2235,9 @@ async function generateImage(){
   if(styleVal)prompt+=`, ${styleVal}`;
   if(directorStyle)prompt+=`, ${directorStyle}`;
   const negPrompt=document.getElementById("igNegPrompt").value.trim();
-  const apiKey=gs("api_falai","");
-  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
+
+  const hasAnyKey=gs("api_falai")||gs("api_replicate")||gs("api_openai");
+  if(!hasAnyKey){toast("Add a fal.ai, Replicate, or OpenAI API key in Settings first","error");return;}
 
   const useImg2Img=!!S.igRefDataUrl;
   const model=useImg2Img?"fal-ai/flux/dev/image-to-image":document.getElementById("igModel").value;
@@ -2167,48 +2250,56 @@ async function generateImage(){
   const resultContent=document.getElementById("igResultContent");
   btn.disabled=true;btn.textContent="⏳ Generating…";
   resultPanel.style.display="block";
-  resultContent.innerHTML=`<div style="text-align:center;padding:30px;color:var(--textm);font-size:13px">🎨 Sending to fal.ai (${model})…</div>`;
 
-  const sizeMap={"16:9":"landscape_16_9","1:1":"square_hd","9:16":"portrait_16_9","4:3":"landscape_4_3","3:4":"portrait_4_3"};
+  // Try providers in order: fal.ai (respects chosen model/img2img) -> Replicate -> OpenAI.
+  // Falls through automatically if a provider errors (e.g. out of credit), not just if the key is missing.
+  const attempts=[
+    {label:"fal.ai",run:()=>genViaFal(prompt,negPrompt,model,ratio,useImg2Img)},
+    {label:"Replicate",run:()=>genViaReplicate(prompt,ratio)},
+    {label:"OpenAI",run:()=>genViaOpenAI(prompt,ratio)},
+  ];
 
-  let body={prompt};
-  if(negPrompt)body.negative_prompt=negPrompt;
-  if(useImg2Img){
-    body.image_url=S.igRefDataUrl;
-    body.strength=parseFloat(document.getElementById("igStrength").value);
-  } else {
-    body.image_size=sizeMap[ratio]||"landscape_16_9";
-    body.num_images=1;
-  }
-
-  try{
-    const response=await fetch(`https://fal.run/${model}`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
-      body:JSON.stringify(body)
-    });
-    const data=await response.json();
-    if(!response.ok||data.error){
-      const msg=(data.detail&&(Array.isArray(data.detail)?data.detail[0]?.msg:data.detail))||data.error||response.statusText||"Unknown error";
-      throw new Error(msg);
+  let result=null;
+  const errors=[];
+  for(const attempt of attempts){
+    if(useImg2Img&&attempt.label!=="fal.ai"){
+      resultContent.innerHTML=`<div style="text-align:center;padding:20px;color:var(--textm);font-size:12px">⚠️ ${attempt.label} doesn't support your reference image — skipping rather than silently dropping it. Add/check your fal.ai key to use Image-to-Image, or remove the reference image to allow fallback to other providers.</div>`;
+      errors.push({label:attempt.label,message:"skipped — no image-to-image support"});
+      continue;
     }
-    const imgUrl=data.images&&data.images[0]&&data.images[0].url;
-    if(!imgUrl)throw new Error("No image returned — try a different prompt or model");
-
-    resultContent.innerHTML=`
-      <img src="${imgUrl}" style="width:100%;border-radius:12px;margin-bottom:10px">
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <a href="${imgUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
-        <button class="btn btn-primary btn-sm" onclick="saveImageToGallery('${imgUrl.replace(/'/g,"\\'")}','${prompt.replace(/'/g,"\\'").slice(0,200)}','${projectId}')">💾 Save to Gallery</button>
-        <button class="btn btn-outline btn-sm" onclick="sendToVideoCanvas('${imgUrl.replace(/'/g,"\\'")}')">🎬 Send to Video Canvas</button>
-      </div>`;
-    logCost(model,prompt.slice(0,60));
-    toast("✨ Image generated!","success");
-  }catch(err){
-    console.error("Image gen error:",err);
-    resultContent.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px;background:rgba(239,68,68,0.08);border-radius:8px">❌ ${err.message}</div>`;
-    toast("❌ Generation failed: "+err.message,"error");
+    resultContent.innerHTML=`<div style="text-align:center;padding:30px;color:var(--textm);font-size:13px">🎨 Trying ${attempt.label}…</div>`;
+    try{
+      result=await attempt.run();
+      if(errors.length)toast(`⚠️ Fell back to ${result.providerLabel}`,"");
+      break;
+    }catch(err){
+      if(err.message==="NO_KEY")continue; // no key configured for this provider, skip silently
+      console.warn(`${attempt.label} failed:`,err.message);
+      errors.push({label:attempt.label,message:err.message});
+    }
   }
+
+  if(!result){
+    const detail=errors.length?errors.map(e=>`${e.label}: ${e.message}`).join(" | "):"No API key configured for any image provider";
+    resultContent.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px;background:rgba(239,68,68,0.08);border-radius:8px">❌ All providers failed.<br><span style="font-size:11px;opacity:0.8">${detail}</span></div>`;
+    toast("❌ Generation failed on every configured provider","error");
+    btn.disabled=false;btn.textContent="✨ Generate Image";
+    return;
+  }
+
+  const {url:imgUrl,providerLabel,costKey}=result;
+  resultContent.innerHTML=`
+    <img src="${imgUrl}" style="width:100%;border-radius:12px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <span class="badge badge-gray">via ${providerLabel}</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="${imgUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
+      <button class="btn btn-primary btn-sm" onclick="saveImageToGallery('${imgUrl.replace(/'/g,"\\'")}','${prompt.replace(/'/g,"\\'").slice(0,200)}','${projectId}')">💾 Save to Gallery</button>
+      <button class="btn btn-outline btn-sm" onclick="sendToVideoCanvas('${imgUrl.replace(/'/g,"\\'")}')">🎬 Send to Video Canvas</button>
+    </div>`;
+  logCost(costKey,prompt.slice(0,60));
+  toast(`✨ Image generated via ${providerLabel}!`,"success");
   btn.disabled=false;btn.textContent="✨ Generate Image";
 }
 
