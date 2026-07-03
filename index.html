@@ -2353,12 +2353,28 @@ const VFX_PRESETS=[
   {label:"Sparks",value:"showering sparks"},
   {label:"Debris",value:"flying debris and particles"},
 ];
-// Only maps models where the image-to-video endpoint + field name have been directly
-// verified — other models simply don't support a reference image yet rather than guessing.
+const LENS_PRESETS=[
+  {label:"— Standard lens —",value:""},
+  {label:"Wide Angle (14mm)",value:"wide angle 14mm lens, expansive field of view"},
+  {label:"Standard (35mm)",value:"35mm lens, natural perspective"},
+  {label:"Telephoto (85mm)",value:"85mm telephoto lens, compressed background"},
+  {label:"Macro Close-up",value:"macro lens, extreme close-up detail"},
+  {label:"Shallow DOF / Bokeh",value:"shallow depth of field, creamy bokeh background, subject in sharp focus"},
+  {label:"Deep Focus",value:"deep focus, everything in the frame sharp"},
+  {label:"Anamorphic",value:"anamorphic lens flare, cinematic widescreen look"},
+  {label:"Fisheye",value:"fisheye lens distortion"},
+];
+// Every model here has a directly-verified image-to-video endpoint + field name —
+// nothing in this map is guessed. Kling's schema is NOT consistent across tiers
+// (v3 Pro uses start_image_url, not image_url) so each entry was checked individually
+// rather than assumed from a sibling endpoint.
 const IMAGE_TO_VIDEO_MAP={
   "bytedance/seedance-2.0/fast/text-to-video":{endpoint:"bytedance/seedance-2.0/fast/image-to-video",field:"image_url"},
   "bytedance/seedance-2.0/text-to-video":{endpoint:"bytedance/seedance-2.0/image-to-video",field:"image_url"},
+  "fal-ai/kling-video/v2.1/master/text-to-video":{endpoint:"fal-ai/kling-video/v2.1/master/image-to-video",field:"image_url"},
+  "fal-ai/kling-video/v2.6/pro/text-to-video":{endpoint:"fal-ai/kling-video/v2.6/pro/image-to-video",field:"image_url"},
   "fal-ai/kling-video/v3/standard/text-to-video":{endpoint:"fal-ai/kling-video/v3/standard/image-to-video",field:"image_url"},
+  "fal-ai/veo3.1":{endpoint:"fal-ai/veo3.1/image-to-video",field:"image_url"},
 };
 
 function renderVideoCanvas(el){
@@ -2477,6 +2493,7 @@ function shotCardHTML(s){
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn btn-primary btn-xs" onclick="generateShotVideo('${s.id}')" ${s.status==='generating'?'disabled':''}>${s.status==='ready'?'🔄 Regenerate':'🎬 Generate'}</button>
         <button class="btn btn-outline btn-xs" onclick="openShotEditor('${s.projectId}','${s.id}')">✏️ Edit</button>
+        ${(s.generations&&s.generations.length>1)?`<button class="btn btn-outline btn-xs" onclick="compareShotGenerations('${s.id}')">🆚 Compare (${s.generations.length})</button>`:''}
         ${s.videoUrl?`<button class="btn btn-outline btn-xs" onclick="saveVideoToGallery('${s.videoUrl.replace(/'/g,"\\'")}','${(s.prompt||'').replace(/'/g,"\\'").slice(0,150)}','${s.projectId}')">💾 Gallery</button>`:''}
         <button class="btn btn-danger btn-xs" onclick="deleteShot('${s.id}')">🗑</button>
       </div>
@@ -2510,6 +2527,7 @@ function openShotEditor(projectId,shotId=null){
         <div class="f-group"><label class="f-label">📹 Camera Movement</label><select class="f-select" id="seCameraMove">${CAMERA_MOVES.map(c=>`<option value="${c.value}" ${s?.cameraMove===c.value?'selected':''}>${c.label}</option>`).join('')}</select></div>
         <div class="f-group"><label class="f-label">✨ VFX</label><select class="f-select" id="seVfx">${VFX_PRESETS.map(v=>`<option value="${v.value}" ${s?.vfx===v.value?'selected':''}>${v.label}</option>`).join('')}</select></div>
       </div>
+      <div class="f-group"><label class="f-label">🎥 Lens & Depth of Field</label><select class="f-select" id="seLens">${LENS_PRESETS.map(l=>`<option value="${l.value}" ${s?.lens===l.value?'selected':''}>${l.label}</option>`).join('')}</select></div>
 
       <div class="f-row">
         <div class="f-group"><label class="f-label">Model</label>
@@ -2536,7 +2554,7 @@ function openShotEditor(projectId,shotId=null){
       </div>
 
       <div class="f-group" style="border-top:1px solid var(--border);padding-top:12px">
-        <label class="f-label">🖼 Reference Image <span style="font-weight:400;color:var(--texts)">(Image-to-Video — only supported on Seedance 2.0 / Seedance Fast / Kling 3.0 Standard)</span></label>
+        <label class="f-label">🖼 Reference Image <span style="font-weight:400;color:var(--texts)">(enables Image-to-Video — supported on all 6 models)</span></label>
         <input type="file" accept="image/*" id="seRefFile" style="display:none" onchange="handleShotRefUpload(event)">
         <div style="display:flex;align-items:center;gap:10px">
           <div id="seRefPreview" style="width:56px;height:56px;border-radius:8px;background:var(--lav);display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;flex-shrink:0;cursor:pointer" onclick="document.getElementById('seRefFile').click()">${S.editingShotRefImage?`<img src="${S.editingShotRefImage}" style="width:100%;height:100%;object-fit:cover">`:'📷'}</div>
@@ -2585,12 +2603,13 @@ function saveShotEditor(){
   const characterId=document.getElementById("seCharacter").value||null;
   const cameraMove=document.getElementById("seCameraMove").value;
   const vfx=document.getElementById("seVfx").value;
+  const lens=document.getElementById("seLens").value;
   const model=document.getElementById("seModel").value;
   const duration=document.getElementById("seDuration").value;
   const ratio=document.getElementById("seRatio").value;
   const resolution=document.getElementById("seRes").value;
 
-  const data={name,rawPrompt,characterId,cameraMove,vfx,model,duration,ratio,resolution,refImageDataUrl:S.editingShotRefImage||""};
+  const data={name,rawPrompt,characterId,cameraMove,vfx,lens,model,duration,ratio,resolution,refImageDataUrl:S.editingShotRefImage||""};
 
   if(S.editingShotId){
     const s=S.shots.find(x=>x.id===S.editingShotId);
@@ -2616,9 +2635,50 @@ function buildShotPrompt(s){
   }
   if(s.cameraMove)p+=`, ${s.cameraMove}`;
   if(s.vfx)p+=`, ${s.vfx}`;
+  if(s.lens)p+=`, ${s.lens}`;
   const directorStyle=getActiveDirectorPrompt();
   if(directorStyle)p+=`, ${directorStyle}`;
   return p;
+}
+
+// ── SIDE-BY-SIDE COMPARISON ──
+function compareShotGenerations(shotId){
+  const s=S.shots.find(x=>x.id===shotId);
+  if(!s||!s.generations||s.generations.length<2)return;
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show";
+  overlay.id="compareModal";
+  overlay.innerHTML=`
+    <div class="modal" style="max-width:900px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">🆚 Compare Generations — ${s.name}</div>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('compareModal').remove()">✕ Close</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;max-height:70vh;overflow-y:auto">
+        ${s.generations.map((g,i)=>`
+          <div class="panel" style="padding:10px">
+            <video src="${g.url}" controls style="width:100%;border-radius:8px;aspect-ratio:16/9;margin-bottom:8px"></video>
+            <div style="font-size:10px;color:var(--textm);margin-bottom:4px">${new Date(g.timestamp).toLocaleString()}</div>
+            <div style="font-size:10px;color:var(--textm);margin-bottom:8px">${g.model.split('/').slice(0,2).join('/')} · ${g.duration}s · ${g.resolution||''}</div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-primary btn-xs" style="flex:1" onclick="useThisGeneration('${s.id}',${i})">${s.videoUrl===g.url?'✅ Current':'Use This'}</button>
+              <button class="btn btn-outline btn-xs" onclick="saveVideoToGallery('${g.url.replace(/'/g,"\\'")}','${(g.prompt||'').replace(/'/g,"\\'").slice(0,150)}','${s.projectId}')">💾</button>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function useThisGeneration(shotId,index){
+  const s=S.shots.find(x=>x.id===shotId);
+  if(!s||!s.generations||!s.generations[index])return;
+  s.videoUrl=s.generations[index].url;
+  save("shots");
+  document.getElementById("compareModal")?.remove();
+  const cardEl=document.getElementById("shot-"+shotId);
+  if(cardEl)cardEl.outerHTML=shotCardHTML(s);
+  toast("✅ Set as current generation for this shot","success");
 }
 
 async function generateShotVideo(shotId){
@@ -2632,7 +2692,7 @@ async function generateShotVideo(shotId){
   if(s.refImageDataUrl){
     const i2v=IMAGE_TO_VIDEO_MAP[s.model];
     if(!i2v){
-      toast(`❌ ${s.model.includes('kling')?'This Kling tier':'This model'} doesn't support Image-to-Video yet — try Seedance 2.0, Seedance Fast, or Kling 3.0 Standard, or remove the reference image`,"error");
+      toast(`❌ ${s.model} doesn't support Image-to-Video — this shouldn't happen for a listed model, please report it`,"error");
       return;
     }
     endpoint=i2v.endpoint;
@@ -2692,6 +2752,9 @@ async function generateShotVideo(shotId){
     if(!videoUrl)throw new Error("No video URL in response");
 
     s.status="ready";s.videoUrl=videoUrl;s.prompt=prompt;
+    s.generations=s.generations||[];
+    s.generations.unshift({url:videoUrl,model:endpoint,prompt,duration:s.duration,resolution:s.resolution,timestamp:new Date().toISOString()});
+    if(s.generations.length>8)s.generations=s.generations.slice(0,8); // cap history so localStorage doesn't bloat
     save("shots");
     logCost(endpoint,prompt.slice(0,60));
     toast(`🎬 "${s.name}" generated!`,"success");
