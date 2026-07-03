@@ -771,10 +771,15 @@ function injectLogos(){
 // ── TOAST ──
 let _toastTimer;
 function toast(msg,type="",dur=3400){
-  clearTimeout(_toastTimer);
-  const t=document.getElementById("toast");
-  t.textContent=msg;t.className="toast "+(type||"");t.classList.add("show");
-  _toastTimer=setTimeout(()=>t.classList.remove("show"),dur);
+  try{
+    clearTimeout(_toastTimer);
+    const t=document.getElementById("toast");
+    if(!t){console.warn("toast(): #toast element missing —",msg);return;}
+    t.textContent=msg;t.className="toast "+(type||"");t.classList.add("show");
+    _toastTimer=setTimeout(()=>t.classList.remove("show"),dur);
+  }catch(e){
+    console.warn("toast() failed silently:",e,"— message was:",msg);
+  }
 }
 
 // ── STARS ──
@@ -2851,5 +2856,6 @@ if("serviceWorker" in navigator){
 }
 window.addEventListener("resize",()=>{initStars();});
 </script>
+<div id="toast" class="toast"></div>
 </body>
 </html>
