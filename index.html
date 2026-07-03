@@ -919,7 +919,7 @@ function toggleArchivedView(){
 function projectCardHTML(p){
   const statusColor={Development:"var(--blue)",Production:"var(--green)","Pre-production":"var(--yellow)",Post:"var(--violet)",Complete:"#059669",Released:"#b45309"}[p.status]||"var(--blue)";
   return `
-    <div class="project-card${S.activeProject===p.id?' active-project':''}" id="pc-${p.id}">
+    <div class="project-card${S.activeProject===p.id?' active-project':''}" id="pc-${p.id}" onclick="openProject('${p.id}')" style="cursor:pointer">
       <div class="project-card-thumb" style="background:${p.color||'#7c3aed'}">
         <span style="font-size:40px;opacity:0.6">⚡</span>
       </div>
@@ -928,7 +928,7 @@ function projectCardHTML(p){
         <button class="pc-menu-btn" onclick="event.stopPropagation();toggleArchiveProject('${p.id}')" title="${p.archived?'Unarchive':'Archive'}">${p.archived?'📂':'🗄'}</button>
         <button class="pc-menu-btn" onclick="event.stopPropagation();deleteProject('${p.id}')" title="Delete">🗑</button>
       </div>
-      <div class="project-card-body" onclick="openProject('${p.id}')">
+      <div class="project-card-body">
         <div class="project-card-title">${p.name||'Untitled'}</div>
         <div class="project-card-meta">${p.genre||'—'} · ${p.status||'Development'}</div>
         <div class="project-card-desc">${p.desc||'No description'}</div>
