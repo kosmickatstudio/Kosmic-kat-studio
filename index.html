@@ -2839,6 +2839,15 @@ if("serviceWorker" in navigator){
   window.addEventListener("load",()=>{
     navigator.serviceWorker.register("sw.js").catch(e=>console.warn("SW registration failed:",e));
   });
+  // Auto-heal stale installs: when a new service worker takes control
+  // (i.e. we just deployed an update), do a one-time reload so the page
+  // actually runs the new code instead of a frozen old snapshot.
+  let swRefreshed=false;
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{
+    if(swRefreshed)return;
+    swRefreshed=true;
+    window.location.reload();
+  });
 }
 window.addEventListener("resize",()=>{initStars();});
 </script>
