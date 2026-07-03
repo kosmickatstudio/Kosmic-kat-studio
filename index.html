@@ -726,6 +726,8 @@ const S = {
   editingProjectId: null,
   editingCharId: null,
   editingCharRefImages: [],
+  vcActiveProject: null,
+  pendingFirstFrame: null,
   editingCharRelationships: [],
   pendingRefTag: "Front",
   galleryFilter: "all",
@@ -1119,11 +1121,13 @@ function addShot(projectId){
 function deleteShot(id){
   const shot=S.shots.find(s=>s.id===id);
   if(shot){
+    if(!confirm("Delete this shot? This cannot be undone.")){return;}
     const p=S.projects.find(x=>x.id===shot.projectId);
     if(p)p.shots=Math.max(0,(p.shots||1)-1);
     S.shots=S.shots.filter(s=>s.id!==id);
     save("shots");save("projects");
-    renderProjectWorkspace(p);
+    if(S.mod==="videocanvas"){renderVideoCanvas(document.getElementById("moduleContent"));}
+    else if(p){renderProjectWorkspace(p);}
     toast("Shot deleted","");
   }
 }
@@ -1372,7 +1376,7 @@ function openCharDetail(id){
       <div class="panel-title">🚀 Use This Character</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="copyCharLock('${c.id}')">💉 Copy Lock to Clipboard</button>
-        <button class="btn btn-outline btn-sm" onclick="switchMod('videocanvas',document.querySelector('[data-mod=videocanvas]'))">🎬 Go to Video Canvas</button>
+        <button class="btn btn-outline btn-sm" onclick="goToVideoCanvasFor('${c.projectId||''}')">🎬 Go to Video Canvas</button>
         <button class="btn btn-outline btn-sm" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))">🖼 Go to Image Gen</button>
       </div>
     </div>
@@ -2140,12 +2144,18 @@ function handleBgRemove(event){
   event.target.value="";
 }
 
-// ── SEND TO VIDEO CANVAS (partial hand-off — see toast note) ──
+function goToVideoCanvasFor(projectId){
+  S.vcActiveProject=projectId||null;
+  switchMod('videocanvas',document.querySelector('[data-mod=videocanvas]'));
+}
+
+// ── SEND TO VIDEO CANVAS (now really wired via the storyboard's Image-to-Video support) ──
 function sendToVideoCanvas(imageUrl){
   S.pendingFirstFrame=imageUrl;
-  navigator.clipboard.writeText(imageUrl).catch(()=>{});
-  switchMod('videocanvas',document.querySelector('[data-mod=videocanvas]'));
-  toast("🎬 Image URL copied — paste it into your video prompt for now. Full image-to-video first-frame wiring is part of the Video Canvas rebuild, not yet built.","");
+  const projSel=document.getElementById("igProject");
+  const projectId=projSel?projSel.value:"";
+  goToVideoCanvasFor(projectId);
+  toast(projectId?"🎬 Image ready — add a new shot and it'll be pre-filled as your reference frame":"🎬 Image ready — pick a project, then add a shot to use it as your reference frame","success");
 }
 
 // ── Provider-specific generation calls (each returns {url, providerLabel} or throws) ──
@@ -2312,15 +2322,105 @@ function saveImageToGallery(url,prompt,projectId){
 }
 
 // ── VIDEO CANVAS ──
+// ── VIDEO CANVAS — MOTION & VFX PRESETS (prompt injection, same honest pattern as Image Gen style presets) ──
+const CAMERA_MOVES=[
+  {label:"— No specific movement —",value:""},
+  {label:"Static Shot",value:"static locked-off camera, no movement"},
+  {label:"Push In",value:"slow cinematic push-in toward the subject"},
+  {label:"Pull Back",value:"slow pull-back revealing the wider scene"},
+  {label:"Pan Left",value:"smooth camera pan to the left"},
+  {label:"Pan Right",value:"smooth camera pan to the right"},
+  {label:"Tilt Up",value:"camera tilts upward"},
+  {label:"Tilt Down",value:"camera tilts downward"},
+  {label:"Orbit",value:"camera orbits slowly around the subject"},
+  {label:"Handheld",value:"handheld camera with natural shake, documentary feel"},
+  {label:"Crane Up",value:"camera cranes upward, rising above the scene"},
+  {label:"Dutch Tilt",value:"canted dutch angle, tilted horizon for tension"},
+  {label:"Whip Pan",value:"fast whip pan transition"},
+];
+const VFX_PRESETS=[
+  {label:"— No VFX —",value:""},
+  {label:"Explosion",value:"dramatic explosion with debris and shockwave"},
+  {label:"Fire",value:"realistic fire and embers"},
+  {label:"Lightning",value:"crackling lightning and electric energy"},
+  {label:"Rain",value:"heavy rain falling, wet reflective surfaces"},
+  {label:"Snow",value:"snow falling gently"},
+  {label:"Fog",value:"thick atmospheric fog rolling through the scene"},
+  {label:"Smoke",value:"drifting smoke"},
+  {label:"Glitch",value:"digital glitch distortion effect"},
+  {label:"Portal",value:"glowing energy portal effect"},
+  {label:"Energy Beams",value:"streaking energy beams of light"},
+  {label:"Sparks",value:"showering sparks"},
+  {label:"Debris",value:"flying debris and particles"},
+];
+// Only maps models where the image-to-video endpoint + field name have been directly
+// verified — other models simply don't support a reference image yet rather than guessing.
+const IMAGE_TO_VIDEO_MAP={
+  "bytedance/seedance-2.0/fast/text-to-video":{endpoint:"bytedance/seedance-2.0/fast/image-to-video",field:"image_url"},
+  "bytedance/seedance-2.0/text-to-video":{endpoint:"bytedance/seedance-2.0/image-to-video",field:"image_url"},
+  "fal-ai/kling-video/v3/standard/text-to-video":{endpoint:"fal-ai/kling-video/v3/standard/image-to-video",field:"image_url"},
+};
+
 function renderVideoCanvas(el){
   const hasKey=gs("api_falai");
+  const project=S.vcActiveProject?S.projects.find(p=>p.id===S.vcActiveProject):null;
+
+  if(!project){
+    // No project open — project picker + a standalone quick-generate fallback
+    el.innerHTML=`
+      <div class="panel">
+        <div class="panel-title">🎬 Video Canvas</div>
+        <div style="font-size:12px;color:var(--textm);margin-bottom:12px">Open a project to build a real shot-by-shot storyboard, or generate a single standalone video below.</div>
+        ${S.projects.length?`<div class="f-group"><label class="f-label">Open Project</label><select class="f-select" id="vcProjectPicker" onchange="if(this.value){S.vcActiveProject=this.value;renderVideoCanvas(document.getElementById('moduleContent'));}"><option value="">— Select a project —</option>${S.projects.filter(p=>!p.archived).map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`:`<div style="font-size:12px;color:var(--textm)">No projects yet — <a href="#" onclick="switchMod('projects',document.querySelector('[data-mod=projects]'));return false" style="color:var(--vm)">create one</a> to use the storyboard.</div>`}
+      </div>
+      ${renderQuickGenerateForm(hasKey)}
+      <div class="panel" id="vcResultPanel" style="display:none;margin-top:14px">
+        <div class="panel-title">🎥 Result</div>
+        <div id="vcResultContent"></div>
+      </div>
+      ${S.assets.filter(a=>a.type==='video').length?`
+      <div class="panel" style="margin-top:14px">
+        <div class="panel-title">🎞 Recent Videos</div>
+        <div class="grid2">${S.assets.filter(a=>a.type==='video').slice(-4).reverse().map(a=>`
+          <div class="card" style="padding:6px">
+            <video src="${a.url}" controls style="width:100%;border-radius:8px;aspect-ratio:16/9"></video>
+            <div style="font-size:10px;color:var(--textm);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.prompt||''}</div>
+          </div>`).join('')}</div>
+      </div>`:''}
+    `;
+    return;
+  }
+
+  const shots=S.shots.filter(s=>s.projectId===project.id);
   el.innerHTML=`
     <div class="panel">
-      <div class="panel-title">🎬 Video Generation ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}${gs("active_director","")?' <span class="badge badge-violet">🎬 '+(DIRECTORS.find(d=>d.id===gs("active_director",""))||{}).name+'</span>':''}</div>
-      ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add a <b>fal.ai</b> API key in Settings to enable real video generation. This one key powers Seedance, Kling, and Veo — no separate key needed for each.</div>`:''}
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <button class="btn btn-ghost btn-xs" onclick="S.vcActiveProject=null;renderVideoCanvas(document.getElementById('moduleContent'))">← Change Project</button>
+        <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet);flex:1">🎬 ${project.name} — Storyboard</div>
+        ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}
+      </div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">${shots.length} shot${shots.length!==1?'s':''}${gs("active_director","")?' · 🎬 '+(DIRECTORS.find(d=>d.id===gs("active_director",""))||{}).name+' style active':''}</div>
+      ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:10px">Add a <b>fal.ai</b> API key in Settings to generate. This one key powers Seedance, Kling, and Veo.</div>`:''}
+      <button class="btn btn-primary btn-sm" onclick="openShotEditor('${project.id}')">+ Add Shot</button>
+    </div>
+    ${shots.length===0?`
+      <div class="empty-state">
+        <div class="empty-icon">🎬</div>
+        <div class="empty-title">No Shots Yet</div>
+        <div class="empty-desc">Build your storyboard one shot at a time — each shot gets its own prompt, camera movement, VFX, character lock, and model.</div>
+        <button class="btn btn-primary" onclick="openShotEditor('${project.id}')">+ Add First Shot</button>
+      </div>
+    `:`<div class="grid2" style="margin-top:14px">${shots.map(s=>shotCardHTML(s)).join('')}</div>`}
+  `;
+}
+
+function renderQuickGenerateForm(hasKey){
+  return `
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">⚡ Quick Generate (standalone, not saved to a project's storyboard)</div>
       <div class="f-group">
         <label class="f-label">Prompt</label>
-        <textarea class="f-textarea" id="vcPrompt" placeholder="A galaxy cat leaping through nebula clouds, camera tracking alongside, cinematic lighting…" style="min-height:80px"></textarea>
+        <textarea class="f-textarea" id="vcPrompt" placeholder="A galaxy cat leaping through nebula clouds, camera tracking alongside, cinematic lighting…" style="min-height:70px"></textarea>
       </div>
       <div class="f-row">
         <div class="f-group">
@@ -2336,47 +2436,273 @@ function renderVideoCanvas(el){
         </div>
         <div class="f-group">
           <label class="f-label">Duration</label>
-          <select class="f-select" id="vcDuration">
-            <option value="5">5 seconds</option>
-            <option value="10">10 seconds</option>
-          </select>
+          <select class="f-select" id="vcDuration"><option value="5">5 seconds</option><option value="10">10 seconds</option></select>
         </div>
       </div>
       <div class="f-row">
         <div class="f-group">
           <label class="f-label">Aspect Ratio</label>
-          <select class="f-select" id="vcRatio">
-            <option value="16:9">16:9 Widescreen</option>
-            <option value="9:16">9:16 Vertical</option>
-            <option value="1:1">1:1 Square</option>
-          </select>
+          <select class="f-select" id="vcRatio"><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option></select>
         </div>
         <div class="f-group">
           <label class="f-label">Resolution</label>
-          <select class="f-select" id="vcRes">
-            <option value="720p">720p</option>
-            <option value="1080p">1080p</option>
-          </select>
+          <select class="f-select" id="vcRes"><option value="720p">720p</option><option value="1080p">1080p</option></select>
         </div>
       </div>
-      ${S.projects.length?`<div class="f-group"><label class="f-label">Save to Project</label><select class="f-select" id="vcProject"><option value="">No project</option>${S.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`:''}
       <button class="btn btn-primary btn-full" id="vcGenBtn" ${!hasKey?'disabled':''} onclick="generateVideo()">${hasKey?'🎬 Generate Video':'🔑 Add API Key First'}</button>
       <div style="font-size:10px;color:var(--texts);margin-top:8px;text-align:center">⏱ Video generation takes 60–300 seconds — don't close this tab while waiting</div>
-    </div>
-    <div class="panel" id="vcResultPanel" style="display:none;margin-top:14px">
-      <div class="panel-title">🎥 Result</div>
-      <div id="vcResultContent"></div>
-    </div>
-    ${S.assets.filter(a=>a.type==='video').length?`
-    <div class="panel" style="margin-top:14px">
-      <div class="panel-title">🎞 Recent Videos</div>
-      <div class="grid2" id="vcRecentGrid">${S.assets.filter(a=>a.type==='video').slice(-4).reverse().map(a=>`
-        <div class="card" style="padding:6px">
-          <video src="${a.url}" controls style="width:100%;border-radius:8px;aspect-ratio:16/9"></video>
-          <div style="font-size:10px;color:var(--textm);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.prompt||''}</div>
-        </div>`).join('')}</div>
-    </div>`:''}
-  `;
+    </div>`;
+}
+
+// ── SHOT CARDS ──
+function shotCardHTML(s){
+  const statusBadge={
+    idle:'<span class="badge badge-gray">Not generated</span>',
+    generating:'<span class="badge badge-violet">⏳ Generating…</span>',
+    ready:'<span class="badge badge-green">✅ Ready</span>',
+    error:'<span class="badge badge-red">❌ Failed</span>'
+  }[s.status||'idle'];
+  const char=s.characterId?S.characters.find(c=>c.id===s.characterId):null;
+  return `
+    <div class="card" id="shot-${s.id}" style="padding:10px">
+      ${s.videoUrl?`<video src="${s.videoUrl}" controls style="width:100%;border-radius:8px;aspect-ratio:16/9;margin-bottom:8px"></video>`:`<div style="width:100%;aspect-ratio:16/9;border-radius:8px;background:var(--lav);display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:8px">🎬</div>`}
+      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:3px">${s.name||'Untitled Shot'}</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.prompt||'No prompt set'}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">
+        ${statusBadge}
+        ${char?`<span class="badge badge-violet">🎭 ${char.name}</span>`:''}
+        ${s.cameraMove?`<span class="badge badge-gray">📹 ${s.cameraMove}</span>`:''}
+        ${s.refImageDataUrl?'<span class="badge badge-gray">🖼 Img2Vid</span>':''}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-xs" onclick="generateShotVideo('${s.id}')" ${s.status==='generating'?'disabled':''}>${s.status==='ready'?'🔄 Regenerate':'🎬 Generate'}</button>
+        <button class="btn btn-outline btn-xs" onclick="openShotEditor('${s.projectId}','${s.id}')">✏️ Edit</button>
+        ${s.videoUrl?`<button class="btn btn-outline btn-xs" onclick="saveVideoToGallery('${s.videoUrl.replace(/'/g,"\\'")}','${(s.prompt||'').replace(/'/g,"\\'").slice(0,150)}','${s.projectId}')">💾 Gallery</button>`:''}
+        <button class="btn btn-danger btn-xs" onclick="deleteShot('${s.id}')">🗑</button>
+      </div>
+    </div>`;
+}
+
+// ── SHOT EDITOR MODAL ──
+function openShotEditor(projectId,shotId=null){
+  S.editingShotId=shotId;
+  S.editingShotProjectId=projectId;
+  const s=shotId?S.shots.find(x=>x.id===shotId):null;
+  S.editingShotRefImage=s?(s.refImageDataUrl||""):(S.pendingFirstFrame||"");
+  if(!shotId&&S.pendingFirstFrame){S.pendingFirstFrame=null;} // consume the Image Gen hand-off once
+
+  const chars=S.characters.filter(c=>!c.projectId||c.projectId===projectId);
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show";
+  overlay.id="shotEditorModal";
+  overlay.innerHTML=`
+    <div class="modal project-modal">
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:16px">${shotId?'Edit Shot':'New Shot'}</div>
+
+      <div class="f-group"><label class="f-label">Shot Title</label><input class="f-input" id="seTitle" value="${s?.name?s.name.replace(/"/g,'&quot;'):''}" placeholder="e.g. Opening reveal, Chase sequence…"></div>
+      <div class="f-group"><label class="f-label">Prompt</label><textarea class="f-textarea" id="sePrompt" style="min-height:70px" placeholder="Describe the shot...">${s?.rawPrompt||s?.prompt||''}</textarea></div>
+      <div class="f-group">
+        <label class="f-label">🎭 Character <span style="font-weight:400;color:var(--texts)">(injects their Identity Lock)</span></label>
+        <select class="f-select" id="seCharacter"><option value="">— None —</option>${chars.map(c=>`<option value="${c.id}" ${s?.characterId===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
+      </div>
+
+      <div class="f-row">
+        <div class="f-group"><label class="f-label">📹 Camera Movement</label><select class="f-select" id="seCameraMove">${CAMERA_MOVES.map(c=>`<option value="${c.value}" ${s?.cameraMove===c.value?'selected':''}>${c.label}</option>`).join('')}</select></div>
+        <div class="f-group"><label class="f-label">✨ VFX</label><select class="f-select" id="seVfx">${VFX_PRESETS.map(v=>`<option value="${v.value}" ${s?.vfx===v.value?'selected':''}>${v.label}</option>`).join('')}</select></div>
+      </div>
+
+      <div class="f-row">
+        <div class="f-group"><label class="f-label">Model</label>
+          <select class="f-select" id="seModel">
+            <option value="bytedance/seedance-2.0/fast/text-to-video" ${s?.model==="bytedance/seedance-2.0/fast/text-to-video"?'selected':''}>Seedance 2.0 Fast</option>
+            <option value="bytedance/seedance-2.0/text-to-video" ${s?.model==="bytedance/seedance-2.0/text-to-video"?'selected':''}>Seedance 2.0</option>
+            <option value="fal-ai/kling-video/v2.1/master/text-to-video" ${!s||s?.model==="fal-ai/kling-video/v2.1/master/text-to-video"?'selected':''}>Kling 2.1 Master</option>
+            <option value="fal-ai/kling-video/v2.6/pro/text-to-video" ${s?.model==="fal-ai/kling-video/v2.6/pro/text-to-video"?'selected':''}>Kling 2.6 Pro</option>
+            <option value="fal-ai/kling-video/v3/standard/text-to-video" ${s?.model==="fal-ai/kling-video/v3/standard/text-to-video"?'selected':''}>Kling 3.0 Standard</option>
+            <option value="fal-ai/veo3.1" ${s?.model==="fal-ai/veo3.1"?'selected':''}>Veo 3.1</option>
+          </select>
+        </div>
+        <div class="f-group"><label class="f-label">Duration</label>
+          <select class="f-select" id="seDuration"><option value="5" ${!s||s?.duration==="5"?'selected':''}>5s</option><option value="10" ${s?.duration==="10"?'selected':''}>10s</option></select>
+        </div>
+      </div>
+      <div class="f-row">
+        <div class="f-group"><label class="f-label">Aspect Ratio</label>
+          <select class="f-select" id="seRatio"><option value="16:9" ${!s||s?.ratio==="16:9"?'selected':''}>16:9</option><option value="9:16" ${s?.ratio==="9:16"?'selected':''}>9:16</option><option value="1:1" ${s?.ratio==="1:1"?'selected':''}>1:1</option></select>
+        </div>
+        <div class="f-group"><label class="f-label">Resolution</label>
+          <select class="f-select" id="seRes"><option value="720p" ${!s||s?.resolution==="720p"?'selected':''}>720p</option><option value="1080p" ${s?.resolution==="1080p"?'selected':''}>1080p</option></select>
+        </div>
+      </div>
+
+      <div class="f-group" style="border-top:1px solid var(--border);padding-top:12px">
+        <label class="f-label">🖼 Reference Image <span style="font-weight:400;color:var(--texts)">(Image-to-Video — only supported on Seedance 2.0 / Seedance Fast / Kling 3.0 Standard)</span></label>
+        <input type="file" accept="image/*" id="seRefFile" style="display:none" onchange="handleShotRefUpload(event)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div id="seRefPreview" style="width:56px;height:56px;border-radius:8px;background:var(--lav);display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;flex-shrink:0;cursor:pointer" onclick="document.getElementById('seRefFile').click()">${S.editingShotRefImage?`<img src="${S.editingShotRefImage}" style="width:100%;height:100%;object-fit:cover">`:'📷'}</div>
+          <div style="flex:1">
+            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('seRefFile').click()">Choose Image</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="S.editingShotRefImage='';document.getElementById('seRefPreview').innerHTML='📷'">✕ Remove</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="document.getElementById('shotEditorModal').remove()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveShotEditor()">💾 Save Shot</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function handleShotRefUpload(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const maxDim=1024;
+      let w=img.width,h=img.height;
+      if(w>h&&w>maxDim){h=Math.round(h*(maxDim/w));w=maxDim;}
+      else if(h>maxDim){w=Math.round(w*(maxDim/h));h=maxDim;}
+      const canvas=document.createElement("canvas");
+      canvas.width=w;canvas.height=h;
+      canvas.getContext("2d").drawImage(img,0,0,w,h);
+      S.editingShotRefImage=canvas.toDataURL("image/jpeg",0.88);
+      const preview=document.getElementById("seRefPreview");
+      if(preview)preview.innerHTML=`<img src="${S.editingShotRefImage}" style="width:100%;height:100%;object-fit:cover">`;
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function saveShotEditor(){
+  const name=document.getElementById("seTitle").value.trim()||"Untitled Shot";
+  const rawPrompt=document.getElementById("sePrompt").value.trim();
+  if(!rawPrompt){toast("Enter a prompt for this shot","error");return;}
+  const characterId=document.getElementById("seCharacter").value||null;
+  const cameraMove=document.getElementById("seCameraMove").value;
+  const vfx=document.getElementById("seVfx").value;
+  const model=document.getElementById("seModel").value;
+  const duration=document.getElementById("seDuration").value;
+  const ratio=document.getElementById("seRatio").value;
+  const resolution=document.getElementById("seRes").value;
+
+  const data={name,rawPrompt,characterId,cameraMove,vfx,model,duration,ratio,resolution,refImageDataUrl:S.editingShotRefImage||""};
+
+  if(S.editingShotId){
+    const s=S.shots.find(x=>x.id===S.editingShotId);
+    if(s)Object.assign(s,data);
+  } else {
+    const shot={id:"shot_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),projectId:S.editingShotProjectId,status:"idle",created:new Date().toISOString(),...data};
+    S.shots.push(shot);
+    const p=S.projects.find(x=>x.id===S.editingShotProjectId);
+    if(p){p.shots=(p.shots||0)+1;save("projects");}
+  }
+  save("shots");
+  document.getElementById("shotEditorModal").remove();
+  renderVideoCanvas(document.getElementById("moduleContent"));
+  toast("💾 Shot saved","success");
+}
+
+// ── SHOT GENERATION ──
+function buildShotPrompt(s){
+  let p=s.rawPrompt||"";
+  if(s.characterId){
+    const c=S.characters.find(x=>x.id===s.characterId);
+    if(c&&c.lock)p+=`, ${c.lock}`;
+  }
+  if(s.cameraMove)p+=`, ${s.cameraMove}`;
+  if(s.vfx)p+=`, ${s.vfx}`;
+  const directorStyle=getActiveDirectorPrompt();
+  if(directorStyle)p+=`, ${directorStyle}`;
+  return p;
+}
+
+async function generateShotVideo(shotId){
+  const s=S.shots.find(x=>x.id===shotId);
+  if(!s)return;
+  const apiKey=gs("api_falai","");
+  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
+
+  let endpoint=s.model;
+  let extraBody={};
+  if(s.refImageDataUrl){
+    const i2v=IMAGE_TO_VIDEO_MAP[s.model];
+    if(!i2v){
+      toast(`❌ ${s.model.includes('kling')?'This Kling tier':'This model'} doesn't support Image-to-Video yet — try Seedance 2.0, Seedance Fast, or Kling 3.0 Standard, or remove the reference image`,"error");
+      return;
+    }
+    endpoint=i2v.endpoint;
+    extraBody[i2v.field]=s.refImageDataUrl;
+  }
+
+  const prompt=buildShotPrompt(s);
+  s.status="generating";
+  save("shots");
+  const cardEl=document.getElementById("shot-"+shotId);
+  if(cardEl)cardEl.outerHTML=shotCardHTML(s);
+
+  let body={prompt,aspect_ratio:s.ratio,...extraBody};
+  if(endpoint.startsWith("fal-ai/kling-video")){
+    body.duration=s.duration;body.generate_audio=true;
+  } else if(endpoint==="fal-ai/veo3.1"){
+    body.audio=true;body.resolution=s.resolution==="1080p"?"1080p":"720p";
+  } else {
+    body.duration=s.duration;body.resolution=s.resolution;
+  }
+
+  try{
+    const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+      body:JSON.stringify(body)
+    });
+    const submitData=await submitRes.json();
+    if(!submitRes.ok){
+      const msg=(submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText;
+      throw new Error(msg);
+    }
+    const requestId=submitData.request_id;
+    if(!requestId)throw new Error("No request ID returned from fal.ai");
+    const statusUrl=submitData.status_url||`https://queue.fal.run/${endpoint}/requests/${requestId}/status`;
+    const resultUrl=submitData.response_url||`https://queue.fal.run/${endpoint}/requests/${requestId}`;
+
+    let attempts=0;
+    const maxAttempts=90;
+    let finalData=null;
+    while(attempts<maxAttempts){
+      await new Promise(r=>setTimeout(r,5000));
+      attempts++;
+      const statusRes=await fetch(statusUrl,{headers:{"Authorization":"Key "+apiKey}});
+      const statusData=await statusRes.json();
+      if(statusData.status==="COMPLETED"){
+        const finalRes=await fetch(resultUrl,{headers:{"Authorization":"Key "+apiKey}});
+        finalData=await finalRes.json();
+        break;
+      }
+      if(statusData.status==="ERROR"||statusData.status==="FAILED"){
+        throw new Error(statusData.error||"Generation failed on fal.ai's side");
+      }
+    }
+    if(!finalData)throw new Error("Timed out — it may still complete on fal.ai's dashboard");
+    const videoUrl=finalData.video&&finalData.video.url;
+    if(!videoUrl)throw new Error("No video URL in response");
+
+    s.status="ready";s.videoUrl=videoUrl;s.prompt=prompt;
+    save("shots");
+    logCost(endpoint,prompt.slice(0,60));
+    toast(`🎬 "${s.name}" generated!`,"success");
+  }catch(err){
+    console.error("Shot generation error:",err);
+    s.status="error";
+    save("shots");
+    toast(`❌ "${s.name}" failed: ${err.message}`,"error");
+  }
+  const cardEl2=document.getElementById("shot-"+shotId);
+  if(cardEl2)cardEl2.outerHTML=shotCardHTML(s);
 }
 
 async function generateVideo(){
@@ -2392,8 +2718,6 @@ async function generateVideo(){
   const duration=document.getElementById("vcDuration").value;
   const ratio=document.getElementById("vcRatio").value;
   const res=document.getElementById("vcRes").value;
-  const projSel=document.getElementById("vcProject");
-  const projectId=projSel?projSel.value:"";
 
   const btn=document.getElementById("vcGenBtn");
   const resultPanel=document.getElementById("vcResultPanel");
@@ -2409,13 +2733,11 @@ async function generateVideo(){
     body.audio=true;
     body.resolution=res==="1080p"?"1080p":"720p";
   } else {
-    // Seedance
     body.duration=duration;
     body.resolution=res;
   }
 
   try{
-    // Step 1: Submit to queue
     btn.textContent="⏳ Submitting…";
     resultContent.innerHTML=`<div style="text-align:center;padding:30px;color:var(--textm);font-size:13px">📤 Submitting to ${model.split('/')[0]}…</div>`;
     const submitRes=await fetch(`https://queue.fal.run/${model}`,{
@@ -2433,10 +2755,9 @@ async function generateVideo(){
     const statusUrl=submitData.status_url||`https://queue.fal.run/${model}/requests/${requestId}/status`;
     const resultUrl=submitData.response_url||`https://queue.fal.run/${model}/requests/${requestId}`;
 
-    // Step 2: Poll status
     btn.textContent="⏳ Generating…";
     let attempts=0;
-    const maxAttempts=90; // ~7.5 min at 5s intervals
+    const maxAttempts=90;
     let finalData=null;
     while(attempts<maxAttempts){
       await new Promise(r=>setTimeout(r,5000));
@@ -2462,7 +2783,7 @@ async function generateVideo(){
       <video src="${videoUrl}" controls style="width:100%;border-radius:12px;margin-bottom:10px"></video>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a href="${videoUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
-        <button class="btn btn-primary btn-sm" onclick="saveVideoToGallery('${videoUrl.replace(/'/g,"\\'")}','${prompt.replace(/'/g,"\\'").slice(0,200)}','${projectId}')">💾 Save to Gallery</button>
+        <button class="btn btn-primary btn-sm" onclick="saveVideoToGallery('${videoUrl.replace(/'/g,"\\'")}','${prompt.replace(/'/g,"\\'").slice(0,200)}','')">💾 Save to Gallery</button>
       </div>`;
     logCost(model,prompt.slice(0,60));
     toast("🎬 Video generated!","success");
@@ -2479,7 +2800,7 @@ function saveVideoToGallery(url,prompt,projectId){
   S.assets.push(asset);
   save("assets");
   toast("💾 Saved to Gallery","success");
-  renderVideoCanvas(document.getElementById("moduleContent"));
+  if(document.getElementById("moduleContent"))renderModule("videocanvas");
 }
 
 // ── DIRECTORS ──
