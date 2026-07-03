@@ -2509,6 +2509,8 @@ function openShotEditor(projectId,shotId=null){
   const s=shotId?S.shots.find(x=>x.id===shotId):null;
   S.editingShotRefImage=s?(s.refImageDataUrl||""):(S.pendingFirstFrame||"");
   if(!shotId&&S.pendingFirstFrame){S.pendingFirstFrame=null;} // consume the Image Gen hand-off once
+  const prefillPrompt=(!shotId&&S.pendingShotPrompt)?S.pendingShotPrompt:"";
+  if(!shotId&&S.pendingShotPrompt){S.pendingShotPrompt=null;} // consume the Gallery regenerate hand-off once
 
   const chars=S.characters.filter(c=>!c.projectId||c.projectId===projectId);
   const overlay=document.createElement("div");
@@ -2519,7 +2521,7 @@ function openShotEditor(projectId,shotId=null){
       <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:16px">${shotId?'Edit Shot':'New Shot'}</div>
 
       <div class="f-group"><label class="f-label">Shot Title</label><input class="f-input" id="seTitle" value="${s?.name?s.name.replace(/"/g,'&quot;'):''}" placeholder="e.g. Opening reveal, Chase sequence…"></div>
-      <div class="f-group"><label class="f-label">Prompt</label><textarea class="f-textarea" id="sePrompt" style="min-height:70px" placeholder="Describe the shot...">${s?.rawPrompt||s?.prompt||''}</textarea></div>
+      <div class="f-group"><label class="f-label">Prompt</label><textarea class="f-textarea" id="sePrompt" style="min-height:70px" placeholder="Describe the shot...">${s?.rawPrompt||s?.prompt||prefillPrompt||''}</textarea></div>
       <div class="f-group">
         <label class="f-label">🎭 Character <span style="font-weight:400;color:var(--texts)">(injects their Identity Lock)</span></label>
         <select class="f-select" id="seCharacter"><option value="">— None —</option>${chars.map(c=>`<option value="${c.id}" ${s?.characterId===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
@@ -3534,21 +3536,31 @@ function saveAudioBlobToGallery(url,text){
 function renderAssets(el){
   const uploads=S.uploads||[];
   const filter=S.assetFilter||"all";
-  const filtered=filter==="all"?uploads:uploads.filter(u=>u.kind===filter);
+  const tagFilter=S.assetTagFilter||"";
+  const allTags=[...new Set(uploads.flatMap(u=>u.tags||[]))].sort();
+  let filtered=filter==="all"?uploads:uploads.filter(u=>u.kind===filter);
+  if(tagFilter)filtered=filtered.filter(u=>(u.tags||[]).includes(tagFilter));
   el.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div>
         <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">Asset Library</div>
         <div style="font-size:11px;color:var(--textm);margin-top:2px">${uploads.length} uploaded file${uploads.length!==1?'s':''} — reference images, brand assets, audio beds</div>
       </div>
-      <input type="file" id="assetUploadInput" accept="image/*,audio/*" multiple style="display:none" onchange="handleAssetUpload(event)">
-      <button class="btn btn-primary btn-sm" onclick="document.getElementById('assetUploadInput').click()">+ Upload File</button>
+      <div style="display:flex;gap:6px">
+        <input type="file" id="assetUploadInput" accept="image/*,audio/*" multiple style="display:none" onchange="handleAssetUpload(event)">
+        <button class="btn btn-outline btn-sm" ${filtered.length===0?'disabled':''} onclick="downloadAssetsZip()">📦 Download ZIP</button>
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('assetUploadInput').click()">+ Upload File</button>
+      </div>
     </div>
-    <div style="display:flex;gap:6px;margin-bottom:14px">
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
       <button class="btn ${filter==='all'?'btn-primary':'btn-outline'} btn-xs" onclick="setAssetFilter('all')">All</button>
       <button class="btn ${filter==='image'?'btn-primary':'btn-outline'} btn-xs" onclick="setAssetFilter('image')">🖼 Images</button>
       <button class="btn ${filter==='audio'?'btn-primary':'btn-outline'} btn-xs" onclick="setAssetFilter('audio')">🎵 Audio</button>
     </div>
+    ${allTags.length?`<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn ${!tagFilter?'btn-primary':'btn-outline'} btn-xs" onclick="setAssetTagFilter('')">🏷 All Tags</button>
+      ${allTags.map(t=>`<button class="btn ${tagFilter===t?'btn-primary':'btn-outline'} btn-xs" onclick="setAssetTagFilter('${t.replace(/'/g,"\\'")}')">${t}</button>`).join('')}
+    </div>`:''}
     ${filtered.length===0?`<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-title">No Uploads Yet</div><div class="empty-desc">Upload reference images, brand logos, or audio beds to use across your projects. (For AI-generated content, check the Gallery instead.)</div><button class="btn btn-primary" onclick="document.getElementById('assetUploadInput').click()">+ Upload File</button></div>`
     :`<div class="grid3">${filtered.map(u=>assetCardHTML(u)).join('')}</div>`}
   `;
@@ -3559,19 +3571,73 @@ function setAssetFilter(f){
   renderAssets(document.getElementById("moduleContent"));
 }
 
+function setAssetTagFilter(t){
+  S.assetTagFilter=t;
+  renderAssets(document.getElementById("moduleContent"));
+}
+
 function assetCardHTML(u){
   const media=u.kind==='image'
     ?`<img src="${u.data}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover">`
     :`<div style="background:rgba(61,31,122,0.06);border-radius:8px;padding:16px;display:flex;align-items:center;justify-content:center;font-size:28px">🎵</div><audio src="${u.data}" controls style="width:100%;margin-top:6px;height:32px"></audio>`;
+  const tags=u.tags||[];
   return `
     <div class="card" style="padding:8px">
       ${media}
       <div style="font-size:10px;color:var(--textm);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${u.name}">${u.name}</div>
+      <div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">
+        ${tags.map(t=>`<span class="badge badge-gray" style="font-size:9px;padding:2px 6px">${t} <span style="cursor:pointer" onclick="removeAssetTag('${u.id}','${t.replace(/'/g,"\\'")}')">✕</span></span>`).join('')}
+      </div>
       <div style="display:flex;gap:5px;margin-top:6px">
+        <button class="btn btn-outline btn-xs" style="flex:1" onclick="addAssetTag('${u.id}')">🏷+</button>
         <a href="${u.data}" download="${u.name}" class="btn btn-outline btn-xs" style="flex:1;text-align:center">⬇</a>
         <button class="btn btn-danger btn-xs" onclick="deleteUpload('${u.id}')">🗑</button>
       </div>
     </div>`;
+}
+
+function addAssetTag(id){
+  const tag=prompt("Add a tag (e.g. character name, project, 'universe:fharomorph', 'logo'):");
+  if(!tag||!tag.trim())return;
+  const u=(S.uploads||[]).find(x=>x.id===id);
+  if(!u)return;
+  u.tags=u.tags||[];
+  if(!u.tags.includes(tag.trim()))u.tags.push(tag.trim());
+  save("uploads");
+  renderAssets(document.getElementById("moduleContent"));
+}
+
+function removeAssetTag(id,tag){
+  const u=(S.uploads||[]).find(x=>x.id===id);
+  if(!u)return;
+  u.tags=(u.tags||[]).filter(t=>t!==tag);
+  save("uploads");
+  renderAssets(document.getElementById("moduleContent"));
+}
+
+async function downloadAssetsZip(){
+  const filter=S.assetFilter||"all";
+  const tagFilter=S.assetTagFilter||"";
+  let items=filter==="all"?(S.uploads||[]):(S.uploads||[]).filter(u=>u.kind===filter);
+  if(tagFilter)items=items.filter(u=>(u.tags||[]).includes(tagFilter));
+  if(!items.length){toast("Nothing to download","error");return;}
+  toast(`📦 Building ZIP of ${items.length} file${items.length!==1?'s':''}…`,"");
+  try{
+    const files=items.map((u,i)=>{
+      const ext=u.kind==="image"?"jpg":"mp3";
+      const safeName=(u.name||`file_${i+1}`).replace(/[^a-z0-9._-]/gi,"_");
+      return {name:safeName.includes(".")?safeName:`${safeName}.${ext}`,dataUrl:u.data};
+    });
+    const zipDataUri=buildZipDataUri(files);
+    const a=document.createElement("a");
+    a.href=zipDataUri;
+    a.download=`kosmic_kat_assets_${Date.now()}.zip`;
+    document.body.appendChild(a);a.click();a.remove();
+    toast("📦 ZIP downloaded","success");
+  }catch(err){
+    console.error("ZIP export error:",err);
+    toast("❌ Couldn't build ZIP: "+err.message,"error");
+  }
 }
 
 function handleAssetUpload(event){
@@ -3634,9 +3700,12 @@ function deleteUpload(id){
 // ── GALLERY ──
 function renderGallery(el){
   const filter=S.galleryFilter||"all";
-  const allAssets=[...S.assets].reverse();
-  const filtered=filter==="all"?allAssets:allAssets.filter(a=>a.type===filter);
+  const reviewFilter=S.galleryReviewFilter||"all";
+  let allAssets=[...S.assets].reverse();
+  let filtered=filter==="all"?allAssets:allAssets.filter(a=>a.type===filter);
+  if(reviewFilter!=="all")filtered=filtered.filter(a=>(a.review?.status||"unreviewed")===reviewFilter);
   const counts={all:S.assets.length,image:S.assets.filter(a=>a.type==='image').length,video:S.assets.filter(a=>a.type==='video').length,audio:S.assets.filter(a=>a.type==='audio').length};
+  const compareSelection=S.gallerySelectedForCompare||[];
 
   el.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
@@ -3644,20 +3713,35 @@ function renderGallery(el){
         <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">Gallery</div>
         <div style="font-size:11px;color:var(--textm);margin-top:2px">${S.assets.length} generation${S.assets.length!==1?'s':''} saved</div>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn ${filter==='all'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryFilter('all')">All (${counts.all})</button>
-        <button class="btn ${filter==='image'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryFilter('image')">🖼 Images (${counts.image})</button>
-        <button class="btn ${filter==='video'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryFilter('video')">🎬 Videos (${counts.video})</button>
-        <button class="btn ${filter==='audio'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryFilter('audio')">🎵 Audio (${counts.audio})</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-outline btn-sm" ${filtered.length===0?'disabled':''} onclick="downloadGalleryZip()">📦 ZIP</button>
+        ${compareSelection.length>=2?`<button class="btn btn-primary btn-sm" onclick="compareGalleryAssets()">🆚 Compare (${compareSelection.length})</button>`:''}
       </div>
     </div>
-    ${filtered.length===0?`<div class="empty-state"><div class="empty-icon">🎞</div><div class="empty-title">${filter==='all'?'No Generations Yet':'No '+filter+' saved yet'}</div><div class="empty-desc">Generated images, videos, and voiceovers you save will appear here.</div></div>`
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn ${filter==='all'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryFilter('all')">All (${counts.all})</button>
+      <button class="btn ${filter==='image'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryFilter('image')">🖼 Images (${counts.image})</button>
+      <button class="btn ${filter==='video'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryFilter('video')">🎬 Videos (${counts.video})</button>
+      <button class="btn ${filter==='audio'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryFilter('audio')">🎵 Audio (${counts.audio})</button>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="btn ${reviewFilter==='all'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryReviewFilter('all')">All Statuses</button>
+      <button class="btn ${reviewFilter==='approved'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryReviewFilter('approved')">✅ Approved</button>
+      <button class="btn ${reviewFilter==='rejected'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryReviewFilter('rejected')">❌ Rejected</button>
+      <button class="btn ${reviewFilter==='unreviewed'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryReviewFilter('unreviewed')">⬜ Unreviewed</button>
+    </div>
+    ${filtered.length===0?`<div class="empty-state"><div class="empty-icon">🎞</div><div class="empty-title">${filter==='all'?'No Generations Yet':'Nothing matches this filter'}</div><div class="empty-desc">Generated images, videos, and voiceovers you save will appear here.</div></div>`
     :`<div class="grid3">${filtered.map(a=>galleryCardHTML(a)).join('')}</div>`}
   `;
 }
 
 function setGalleryFilter(f){
   S.galleryFilter=f;
+  renderGallery(document.getElementById("moduleContent"));
+}
+
+function setGalleryReviewFilter(f){
+  S.galleryReviewFilter=f;
   renderGallery(document.getElementById("moduleContent"));
 }
 
@@ -3668,16 +3752,135 @@ function galleryCardHTML(a){
   if(a.type==='image')media=`<img src="${a.url}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover">`;
   else if(a.type==='video')media=`<video src="${a.url}" controls style="width:100%;border-radius:8px;aspect-ratio:16/9"></video>`;
   else media=`<div style="background:rgba(61,31,122,0.06);border-radius:8px;padding:16px;display:flex;align-items:center;justify-content:center;font-size:28px">🎵</div><audio src="${a.url}" controls style="width:100%;margin-top:6px;height:32px"></audio>`;
+  const review=a.review||{status:null,rating:0};
+  const isSelected=(S.gallerySelectedForCompare||[]).includes(a.id);
   return `
-    <div class="card" style="padding:8px">
+    <div class="card" style="padding:8px;${isSelected?'border:2px solid var(--violet)':''}">
       ${media}
       <div style="font-size:10px;color:var(--textm);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(a.prompt||'').replace(/"/g,'&quot;')}">${icon} ${a.prompt||'Untitled'}</div>
       ${proj?`<div style="font-size:9px;color:var(--gold);margin-top:2px">📂 ${proj.name}</div>`:''}
-      <div style="display:flex;gap:5px;margin-top:6px">
-        <a href="${a.url}" ${a.type!=='audio'?'target="_blank"':'download="voiceover.mp3"'} class="btn btn-outline btn-xs" style="flex:1;text-align:center">⬇</a>
+      <div style="display:flex;gap:2px;margin-top:5px">
+        ${[1,2,3,4,5].map(n=>`<span style="cursor:pointer;font-size:12px;color:${review.rating>=n?'var(--gold)':'var(--border)'}" onclick="setAssetRating('${a.id}',${n})">★</span>`).join('')}
+      </div>
+      <div style="display:flex;gap:3px;margin-top:5px">
+        <button class="btn ${review.status==='approved'?'btn-primary':'btn-outline'} btn-xs" style="flex:1;padding:3px" onclick="setAssetReviewStatus('${a.id}','approved')" title="Approve">✅</button>
+        <button class="btn ${review.status==='rejected'?'btn-danger':'btn-outline'} btn-xs" style="flex:1;padding:3px" onclick="setAssetReviewStatus('${a.id}','rejected')" title="Reject">❌</button>
+        <button class="btn btn-outline btn-xs" style="flex:1;padding:3px" onclick="regenerateAsset('${a.id}')" title="Regenerate">🔄</button>
+      </div>
+      <div style="display:flex;gap:3px;margin-top:3px">
+        <button class="btn ${isSelected?'btn-primary':'btn-outline'} btn-xs" style="flex:1" onclick="toggleCompareSelect('${a.id}')">${isSelected?'✓ Selected':'Select'}</button>
+        <a href="${a.url}" ${a.type!=='audio'?'target="_blank"':'download="voiceover.mp3"'} class="btn btn-outline btn-xs">⬇</a>
         <button class="btn btn-danger btn-xs" onclick="deleteAsset('${a.id}')">🗑</button>
       </div>
     </div>`;
+}
+
+function setAssetRating(id,rating){
+  const a=S.assets.find(x=>x.id===id);
+  if(!a)return;
+  a.review=a.review||{};
+  a.review.rating=(a.review.rating===rating)?0:rating; // click same star again to clear
+  save("assets");
+  renderGallery(document.getElementById("moduleContent"));
+}
+
+function setAssetReviewStatus(id,status){
+  const a=S.assets.find(x=>x.id===id);
+  if(!a)return;
+  a.review=a.review||{};
+  a.review.status=(a.review.status===status)?null:status;
+  save("assets");
+  renderGallery(document.getElementById("moduleContent"));
+  toast(a.review.status?`Marked ${a.review.status}`:"Review status cleared","");
+}
+
+function toggleCompareSelect(id){
+  S.gallerySelectedForCompare=S.gallerySelectedForCompare||[];
+  const a=S.assets.find(x=>x.id===id);
+  if(!a)return;
+  const idx=S.gallerySelectedForCompare.indexOf(id);
+  if(idx>=0){
+    S.gallerySelectedForCompare.splice(idx,1);
+  } else {
+    // Keep comparisons meaningful — only compare same media type
+    const existingTypes=S.gallerySelectedForCompare.map(sid=>S.assets.find(x=>x.id===sid)?.type);
+    if(existingTypes.length&&!existingTypes.includes(a.type)){
+      toast("Can only compare items of the same type (image/video/audio)","error");
+      return;
+    }
+    S.gallerySelectedForCompare.push(id);
+  }
+  renderGallery(document.getElementById("moduleContent"));
+}
+
+function compareGalleryAssets(){
+  const ids=S.gallerySelectedForCompare||[];
+  if(ids.length<2)return;
+  const items=ids.map(id=>S.assets.find(a=>a.id===id)).filter(Boolean);
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show";
+  overlay.id="galleryCompareModal";
+  overlay.innerHTML=`
+    <div class="modal" style="max-width:900px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">🆚 Compare</div>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('galleryCompareModal').remove();S.gallerySelectedForCompare=[];renderGallery(document.getElementById('moduleContent'))">✕ Close</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;max-height:70vh;overflow-y:auto">
+        ${items.map(a=>{
+          let media="";
+          if(a.type==='image')media=`<img src="${a.url}" style="width:100%;border-radius:8px">`;
+          else if(a.type==='video')media=`<video src="${a.url}" controls style="width:100%;border-radius:8px"></video>`;
+          else media=`<audio src="${a.url}" controls style="width:100%"></audio>`;
+          return `<div class="panel" style="padding:10px">${media}<div style="font-size:11px;color:var(--textm);margin-top:8px">${a.prompt||'Untitled'}</div></div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+// ── REGENERATE: real hand-off back to the module that made this asset ──
+function regenerateAsset(id){
+  const a=S.assets.find(x=>x.id===id);
+  if(!a)return;
+  if(a.type==="image"){
+    switchMod('imagegen',document.querySelector('[data-mod=imagegen]'));
+    setTimeout(()=>{const el=document.getElementById("igPrompt");if(el)el.value=a.prompt||"";},50);
+    toast("🔄 Prompt loaded in Image Gen — adjust and generate","success");
+  } else if(a.type==="audio"){
+    switchMod('audio',document.querySelector('[data-mod=audio]'));
+    setTimeout(()=>{const el=document.getElementById("audioText");if(el)el.value=a.prompt||"";},50);
+    toast("🔄 Text loaded in Audio Tools — adjust and generate","success");
+  } else if(a.type==="video"){
+    S.pendingShotPrompt=a.prompt||"";
+    goToVideoCanvasFor(a.projectId||"");
+    toast(a.projectId?"🔄 Add a new shot — your prompt will be pre-filled":"🔄 Prompt saved — pick a project, then add a shot to reuse it","success");
+  }
+}
+
+async function downloadGalleryZip(){
+  const filter=S.galleryFilter||"all";
+  const reviewFilter=S.galleryReviewFilter||"all";
+  let items=filter==="all"?[...S.assets]:S.assets.filter(a=>a.type===filter);
+  if(reviewFilter!=="all")items=items.filter(a=>(a.review?.status||"unreviewed")===reviewFilter);
+  if(!items.length){toast("Nothing to download","error");return;}
+  const zippable=items.filter(a=>a.url&&a.url.startsWith("data:"));
+  if(!zippable.length){toast("These items are hosted externally (fal.ai URLs) — use individual ⬇ downloads instead, ZIP only works for locally-saved base64 assets like voiceovers","error");return;}
+  toast(`📦 Building ZIP of ${zippable.length} file${zippable.length!==1?'s':''}…`,"");
+  try{
+    const files=zippable.map((a,i)=>{
+      const ext=a.type==="image"?"jpg":a.type==="video"?"mp4":"mp3";
+      return {name:`${a.type}_${i+1}.${ext}`,dataUrl:a.url};
+    });
+    const zipDataUri=buildZipDataUri(files);
+    const link=document.createElement("a");
+    link.href=zipDataUri;
+    link.download=`kosmic_kat_gallery_${Date.now()}.zip`;
+    document.body.appendChild(link);link.click();link.remove();
+    toast("📦 ZIP downloaded","success");
+  }catch(err){
+    toast("❌ Couldn't build ZIP: "+err.message,"error");
+  }
 }
 
 function deleteAsset(id){
@@ -3691,11 +3894,11 @@ function deleteAsset(id){
 // ── EDITOR ──
 function renderEditor(el){
   const videos=S.assets.filter(a=>a.type==='video');
-  const sequence=S.editorSequence||[];
+  const sequence=normalizeSequence(S.editorSequence||[]);
   el.innerHTML=`
     <div class="panel">
       <div class="panel-title">✂️ Video Sequencer</div>
-      <div style="font-size:12px;color:var(--textm);margin-bottom:14px">Arrange your generated clips into a sequence and preview them back-to-back. For frame-accurate cutting, trimming, and export, use a dedicated editor (CapCut, Premiere, DaVinci) with your downloaded clips — a full browser-based editor isn't reliable enough yet to ship honestly, especially on mobile.</div>
+      <div style="font-size:12px;color:var(--textm);margin-bottom:14px">Arrange your generated clips into a sequence with per-clip trim points and fade transitions, then preview them back-to-back. For frame-accurate cutting and real MP4 export, use a dedicated editor (CapCut, Premiere, DaVinci) with your downloaded clips — a full browser-based export engine isn't reliable enough to ship honestly, especially on mobile.</div>
       ${videos.length===0?`<div class="empty-state"><div class="empty-icon">🎬</div><div class="empty-title">No Videos Yet</div><div class="empty-desc">Generate videos in Video Canvas first, then arrange them here.</div></div>`:`
       <div style="font-size:11px;font-weight:700;color:var(--violet);margin-bottom:8px">AVAILABLE CLIPS</div>
       <div class="grid3" style="margin-bottom:16px">${videos.map(v=>`
@@ -3706,16 +3909,23 @@ function renderEditor(el){
         </div>`).join('')}</div>`}
       ${sequence.length?`
       <div style="font-size:11px;font-weight:700;color:var(--violet);margin-bottom:8px">SEQUENCE (${sequence.length} clip${sequence.length!==1?'s':''})</div>
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">${sequence.map((id,i)=>{
-        const v=S.assets.find(a=>a.id===id);
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px">${sequence.map((item,i)=>{
+        const v=S.assets.find(a=>a.id===item.id);
         if(!v)return'';
-        return `<div style="display:flex;align-items:center;gap:8px;background:rgba(61,31,122,0.04);border-radius:8px;padding:6px">
-          <span style="font-size:11px;font-weight:700;color:var(--gold);width:20px">${i+1}</span>
-          <video src="${v.url}" style="width:60px;height:34px;border-radius:4px;object-fit:cover" muted></video>
-          <span style="flex:1;font-size:11px;color:var(--textm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.prompt||'Untitled'}</span>
-          <button class="pc-menu-btn" onclick="moveSeqItem(${i},-1)" ${i===0?'disabled style="opacity:0.3"':''}>↑</button>
-          <button class="pc-menu-btn" onclick="moveSeqItem(${i},1)" ${i===sequence.length-1?'disabled style="opacity:0.3"':''}>↓</button>
-          <button class="pc-menu-btn" onclick="removeSeqItem(${i})">✕</button>
+        return `<div style="background:rgba(61,31,122,0.04);border-radius:10px;padding:10px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="font-size:11px;font-weight:700;color:var(--gold);width:20px">${i+1}</span>
+            <video src="${v.url}" style="width:60px;height:34px;border-radius:4px;object-fit:cover" muted></video>
+            <span style="flex:1;font-size:11px;color:var(--textm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.prompt||'Untitled'}</span>
+            <button class="pc-menu-btn" onclick="moveSeqItem(${i},-1)" ${i===0?'disabled style="opacity:0.3"':''}>↑</button>
+            <button class="pc-menu-btn" onclick="moveSeqItem(${i},1)" ${i===sequence.length-1?'disabled style="opacity:0.3"':''}>↓</button>
+            <button class="pc-menu-btn" onclick="removeSeqItem(${i})">✕</button>
+          </div>
+          <div class="f-row" style="margin-bottom:0">
+            <div class="f-group" style="margin-bottom:0"><label class="f-label" style="font-size:10px">Trim Start: ${(item.trimStart||0).toFixed(1)}s</label><input type="range" min="0" max="30" step="0.5" value="${item.trimStart||0}" style="width:100%" oninput="updateSeqTrim(${i},'trimStart',this.value)"></div>
+            <div class="f-group" style="margin-bottom:0"><label class="f-label" style="font-size:10px">Trim End: ${item.trimEnd===null?'Full':item.trimEnd.toFixed(1)+'s'}</label><input type="range" min="0" max="30" step="0.5" value="${item.trimEnd===null?30:item.trimEnd}" style="width:100%" oninput="updateSeqTrim(${i},'trimEnd',this.value)"></div>
+          </div>
+          ${i<sequence.length-1?`<div class="f-group" style="margin:8px 0 0"><label class="f-label" style="font-size:10px">Transition to next clip</label><select class="f-select" onchange="updateSeqTransition(${i},this.value)"><option value="cut" ${item.transition==='cut'?'selected':''}>Cut</option><option value="fade" ${item.transition==='fade'?'selected':''}>Fade to Black</option></select></div>`:''}
         </div>`;
       }).join('')}</div>
       <button class="btn btn-primary btn-full" onclick="playSequence()">▶ Preview Sequence</button>
@@ -3725,12 +3935,33 @@ function renderEditor(el){
   `;
 }
 
+// Old sequences stored plain string IDs — normalize to objects with trim/transition metadata
+function normalizeSequence(seq){
+  const normalized=seq.map(item=>typeof item==="string"?{id:item,trimStart:0,trimEnd:null,transition:"cut"}:item);
+  if(JSON.stringify(normalized)!==JSON.stringify(seq)){S.editorSequence=normalized;save("editorSequence");}
+  return normalized;
+}
+
 function addToSequence(assetId){
   if(!S.editorSequence)S.editorSequence=[];
-  S.editorSequence.push(assetId);
+  S.editorSequence=normalizeSequence(S.editorSequence);
+  S.editorSequence.push({id:assetId,trimStart:0,trimEnd:null,transition:"cut"});
   save("editorSequence");
   toast("Added to sequence","success");
   renderEditor(document.getElementById("moduleContent"));
+}
+
+function updateSeqTrim(i,field,value){
+  const seq=normalizeSequence(S.editorSequence);
+  seq[i][field]=parseFloat(value);
+  save("editorSequence");
+  renderEditor(document.getElementById("moduleContent"));
+}
+
+function updateSeqTransition(i,value){
+  const seq=normalizeSequence(S.editorSequence);
+  seq[i].transition=value;
+  save("editorSequence");
 }
 
 function moveSeqItem(i,dir){
@@ -3749,21 +3980,49 @@ function removeSeqItem(i){
 }
 
 function playSequence(){
-  const seq=S.editorSequence||[];
+  const seq=normalizeSequence(S.editorSequence||[]);
   if(!seq.length)return;
   let idx=0;
   const player=document.getElementById("seqPlayer");
-  player.innerHTML=`<video id="seqVideoEl" src="${S.assets.find(a=>a.id===seq[0]).url}" controls autoplay style="width:100%;border-radius:10px"></video><div id="seqStatus" style="font-size:11px;color:var(--textm);margin-top:6px;text-align:center">Playing clip 1 of ${seq.length}</div>`;
+  player.innerHTML=`<video id="seqVideoEl" controls autoplay style="width:100%;border-radius:10px;transition:opacity 0.4s"></video><div id="seqStatus" style="font-size:11px;color:var(--textm);margin-top:6px;text-align:center"></div>`;
   const vidEl=document.getElementById("seqVideoEl");
-  vidEl.onended=()=>{
+  const statusEl=document.getElementById("seqStatus");
+
+  function playClip(i){
+    const item=seq[i];
+    const asset=S.assets.find(a=>a.id===item.id);
+    if(!asset){advance();return;}
+    vidEl.style.opacity="1";
+    vidEl.src=asset.url;
+    statusEl.textContent=`Playing clip ${i+1} of ${seq.length}${item.trimStart||item.trimEnd!==null?' (trimmed)':''}`;
+    vidEl.onloadedmetadata=()=>{
+      if(item.trimStart)vidEl.currentTime=item.trimStart;
+      vidEl.play();
+    };
+    vidEl.ontimeupdate=()=>{
+      const effectiveEnd=item.trimEnd!==null?item.trimEnd:vidEl.duration;
+      if(vidEl.currentTime>=effectiveEnd-0.05){
+        vidEl.ontimeupdate=null;
+        advance(item.transition);
+      }
+    };
+  }
+
+  function advance(transition){
     idx++;
-    if(idx<seq.length){
-      const next=S.assets.find(a=>a.id===seq[idx]);
-      if(next){vidEl.src=next.url;vidEl.play();document.getElementById("seqStatus").textContent=`Playing clip ${idx+1} of ${seq.length}`;}
-    } else {
-      document.getElementById("seqStatus").textContent="Sequence complete";
+    if(idx>=seq.length){
+      statusEl.textContent="Sequence complete";
+      return;
     }
-  };
+    if(transition==="fade"){
+      vidEl.style.opacity="0";
+      setTimeout(()=>playClip(idx),420);
+    } else {
+      playClip(idx);
+    }
+  }
+
+  playClip(0);
 }
 
 // ── UPSCALER ──
