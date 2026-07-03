@@ -1,4 +1,6 @@
-const CACHE_NAME = "kosmic-kat-studio-v1";
+// Network-first service worker — always serves the latest deploy when online,
+// falls back to cache only when offline. Cache version bumps on each deploy-relevant change.
+const CACHE_NAME = "kosmic-kat-studio-v2";
 const ASSETS = [
   "/index.html",
   "/manifest.json",
@@ -23,7 +25,20 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  // Only handle GET requests from our own origin; let everything else
+  // (Firebase auth, fal.ai, ElevenLabs, etc.) go straight to the network.
+  if (event.request.method !== "GET") return;
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((response) => {
+        // Got fresh content — update the cache copy in the background
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        return response;
+      })
+      .catch(() => caches.match(event.request)) // offline → serve cached
   );
 });
