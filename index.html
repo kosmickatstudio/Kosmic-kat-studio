@@ -329,9 +329,7 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
       <div class="h-logo-sub">Universe-Agnostic Studio</div>
     </div>
   </a>
-  <div class="h-center">
-    <input class="cmd-bar" id="cmdBar" placeholder="⌘ Search modules, projects, characters…" autocomplete="off">
-  </div>
+  <div class="h-center"></div>
   <div class="h-right">
     <span class="founder-badge" id="founderBadge" style="display:none">👑 Founder</span>
     <button class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</button>
@@ -2792,19 +2790,6 @@ document.addEventListener("click",e=>{
     closeSettings();
   }
 });
-
-// ── COMMAND BAR ──
-document.getElementById("cmdBar").addEventListener("input",e=>{
-  const q=e.target.value.toLowerCase();
-  if(!q)return;
-  const mods=Object.keys(MOD_TABS);
-  const match=mods.find(m=>m.includes(q));
-  if(match){
-    const btn=document.querySelector(`[data-mod=${match}]`);
-    if(btn){switchMod(match,btn);e.target.value="";}
-  }
-});
-document.getElementById("cmdBar").addEventListener("keydown",e=>{if(e.key==="Escape")e.target.value="";});
 
 // ── INIT ──
 function init(){
