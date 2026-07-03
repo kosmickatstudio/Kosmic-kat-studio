@@ -729,6 +729,7 @@ const S = {
   editingCharId: null,
   editingCharRefImages: [],
   vcActiveProject: null,
+  activityLog: JSON.parse(localStorage.getItem("kk_activity")||"[]"),
   pendingFirstFrame: null,
   editingCharRelationships: [],
   pendingRefTag: "Front",
@@ -740,7 +741,7 @@ const S = {
 };
 
 function save(k){
-  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",settings:"kk_settings"};
+  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",settings:"kk_settings",activityLog:"kk_activity"};
   if(!m[k])return;
   try{
     localStorage.setItem(m[k],JSON.stringify(S[k]));
@@ -761,15 +762,32 @@ const COST_TABLE={
   "fal-ai/flux/schnell":0.003,
   "fal-ai/flux/dev":0.025,
   "fal-ai/flux-pro/v1.1":0.05,
+  "fal-ai/flux/dev/image-to-image":0.025,
+  "fal-ai/ideogram/v3":0.08,
+  "fal-ai/recraft/v3/text-to-image":0.04,
+  "fal-ai/stable-diffusion-v35-large":0.065,
+  "replicate/flux-schnell":0.003,
+  "openai/gpt-image-2":0.04,
+  "fal-ai/imageutils/rembg":0.01,
   "bytedance/seedance-2.0/fast/text-to-video":0.25,
   "bytedance/seedance-2.0/text-to-video":0.50,
+  "bytedance/seedance-2.0/fast/image-to-video":0.25,
+  "bytedance/seedance-2.0/image-to-video":0.50,
   "fal-ai/kling-video/v2.1/master/text-to-video":1.40,
+  "fal-ai/kling-video/v2.1/master/image-to-video":1.40,
   "fal-ai/kling-video/v2.6/pro/text-to-video":0.90,
+  "fal-ai/kling-video/v2.6/pro/image-to-video":0.90,
   "fal-ai/kling-video/v3/standard/text-to-video":0.70,
+  "fal-ai/kling-video/v3/standard/image-to-video":0.70,
   "fal-ai/veo3.1":2.00,
+  "fal-ai/veo3.1/image-to-video":2.00,
   "fal-ai/esrgan":0.01,
   "fal-ai/clarity-upscaler":0.03,
-  "elevenlabs_tts":0.02
+  "elevenlabs_tts":0.02,
+  "stable-audio-3":0.05,
+  "sfx-generator":0.02,
+  "sync-lipsync-v2":3.00,
+  "fal-ai/flux-lora-fast-training":2.00
 };
 
 function logCost(key,note){
@@ -1635,6 +1653,7 @@ async function launchLoraTraining(charId){
     if(!loraUrl)throw new Error("No LoRA file URL in fal.ai's response");
     c.loraStatus={state:"ready",modelUrl:loraUrl,triggerWord,requestId,completedAt:new Date().toISOString()};
     save("characters");
+    logCost("fal-ai/flux-lora-fast-training",`LoRA training: ${c.name}`);
     toast(`🧬 ${c.name}'s LoRA model is ready!`,"success");
   }catch(err){
     console.error("LoRA training error:",err);
@@ -4028,15 +4047,22 @@ function playSequence(){
 // ── UPSCALER ──
 function renderUpscaler(el){
   const hasKey=gs("api_falai");
+  const galleryImages=S.assets.filter(a=>a.type==='image');
   el.innerHTML=`
     <div class="panel">
       <div class="panel-title">⬆️ AI Upscaler ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
       ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add a <b>fal.ai</b> API key in Settings to enable upscaling. Same key as Image/Video Gen.</div>`:''}
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <button class="btn ${(S.upscaleMode||'single')==='single'?'btn-primary':'btn-outline'} btn-sm" onclick="setUpscaleMode('single')">Single</button>
+        <button class="btn ${S.upscaleMode==='batch'?'btn-primary':'btn-outline'} btn-sm" onclick="setUpscaleMode('batch')">Batch</button>
+      </div>
+
+      ${(S.upscaleMode||'single')==='single'?`
       <div class="f-group">
         <label class="f-label">Choose from Gallery</label>
         <select class="f-select" id="upSourceSelect" onchange="onUpSourceChange()">
           <option value="">— Or paste a URL below —</option>
-          ${S.assets.filter(a=>a.type==='image').map(a=>`<option value="${a.url}">🖼 ${(a.prompt||'Untitled').slice(0,40)}</option>`).join('')}
+          ${galleryImages.map(a=>`<option value="${a.url}">🖼 ${(a.prompt||'Untitled').slice(0,40)}</option>`).join('')}
         </select>
       </div>
       <div class="f-group">
@@ -4052,12 +4078,112 @@ function renderUpscaler(el){
       </div>
       <button class="btn btn-primary btn-full" id="upGenBtn" ${!hasKey?'disabled':''} onclick="runUpscale()">${hasKey?'⬆️ Upscale Image':'🔑 Add API Key First'}</button>
       <div style="font-size:10px;color:var(--texts);margin-top:8px">Note: only works on images with a public URL — base64-stored images from Character Bible/Asset uploads can't be upscaled directly. Gallery images from Image Gen work fine since they're already hosted.</div>
+      `:`
+      <div style="font-size:12px;color:var(--textm);margin-bottom:10px">Select multiple Gallery images to upscale in one batch (processed one at a time, results shown as they finish).</div>
+      ${galleryImages.length===0?`<div class="empty-desc">No Gallery images yet — generate some in Image Gen first.</div>`:`
+      <div class="grid3" style="margin-bottom:12px">${galleryImages.map(a=>`
+        <div class="card" style="padding:6px;cursor:pointer;${(S.batchUpscaleSelection||[]).includes(a.id)?'border:2px solid var(--violet)':''}" onclick="toggleBatchUpscaleSelect('${a.id}')">
+          <img src="${a.url}" style="width:100%;border-radius:6px;aspect-ratio:1;object-fit:cover">
+          <div style="font-size:9px;color:var(--textm);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(a.prompt||'Untitled')}</div>
+        </div>`).join('')}</div>
+      <div class="f-group">
+        <label class="f-label">Engine</label>
+        <select class="f-select" id="upEngineBatch">
+          <option value="fal-ai/esrgan">Real-ESRGAN (fast, 4x, general purpose)</option>
+          <option value="fal-ai/clarity-upscaler">Clarity Upscaler (highest fidelity, slower)</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-full" ${!hasKey||!(S.batchUpscaleSelection||[]).length?'disabled':''} onclick="runBatchUpscale()">⬆️ Upscale ${(S.batchUpscaleSelection||[]).length} Selected</button>
+      `}
+      `}
     </div>
     <div class="panel" id="upResultPanel" style="display:none;margin-top:14px">
       <div class="panel-title">✨ Result</div>
       <div id="upResultContent"></div>
     </div>
   `;
+}
+
+function setUpscaleMode(mode){
+  S.upscaleMode=mode;
+  renderUpscaler(document.getElementById("moduleContent"));
+}
+
+function toggleBatchUpscaleSelect(id){
+  S.batchUpscaleSelection=S.batchUpscaleSelection||[];
+  const idx=S.batchUpscaleSelection.indexOf(id);
+  if(idx>=0)S.batchUpscaleSelection.splice(idx,1);
+  else S.batchUpscaleSelection.push(id);
+  renderUpscaler(document.getElementById("moduleContent"));
+}
+
+async function runBatchUpscale(){
+  const ids=S.batchUpscaleSelection||[];
+  if(!ids.length)return;
+  const apiKey=gs("api_falai","");
+  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
+  const engine=document.getElementById("upEngineBatch").value;
+  const resultPanel=document.getElementById("upResultPanel");
+  const resultContent=document.getElementById("upResultContent");
+  resultPanel.style.display="block";
+  resultContent.innerHTML="";
+
+  for(let i=0;i<ids.length;i++){
+    const asset=S.assets.find(a=>a.id===ids[i]);
+    if(!asset)continue;
+    const rowId=`batchUp-${i}`;
+    resultContent.innerHTML+=`<div id="${rowId}" style="padding:10px;background:rgba(61,31,122,0.04);border-radius:8px;margin-bottom:8px;font-size:12px;color:var(--textm)">⏳ (${i+1}/${ids.length}) Upscaling "${(asset.prompt||'Untitled').slice(0,40)}"…</div>`;
+    try{
+      const outUrl=await upscaleImageUrl(asset.url,engine,apiKey);
+      document.getElementById(rowId).innerHTML=`
+        <div style="display:flex;gap:8px;align-items:center">
+          <img src="${outUrl}" style="width:60px;height:60px;border-radius:6px;object-fit:cover">
+          <div style="flex:1;font-size:11px;color:var(--text)">✅ ${(asset.prompt||'Untitled').slice(0,40)}</div>
+          <button class="btn btn-primary btn-xs" onclick="saveUpscaleToGallery('${outUrl.replace(/'/g,"\\'")}')">💾 Save</button>
+        </div>`;
+      logCost(engine,"Batch upscale");
+    }catch(err){
+      document.getElementById(rowId).innerHTML=`<span style="color:var(--red)">❌ Failed: ${(asset.prompt||'Untitled').slice(0,30)} — ${err.message}</span>`;
+    }
+  }
+  toast("✨ Batch upscale complete","success");
+  S.batchUpscaleSelection=[];
+}
+
+// Shared upscale logic used by both single and batch modes
+async function upscaleImageUrl(url,engine,apiKey){
+  const submitRes=await fetch(`https://queue.fal.run/${engine}`,{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+    body:JSON.stringify({image_url:url})
+  });
+  const submitData=await submitRes.json();
+  if(!submitRes.ok){
+    const msg=(submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText;
+    throw new Error(msg);
+  }
+  const requestId=submitData.request_id;
+  if(!requestId)throw new Error("No request ID returned");
+  const statusUrl=submitData.status_url||`https://queue.fal.run/${engine}/requests/${requestId}/status`;
+  const resultUrl=submitData.response_url||`https://queue.fal.run/${engine}/requests/${requestId}`;
+
+  let attempts=0,finalData=null;
+  while(attempts<36){
+    await new Promise(r=>setTimeout(r,5000));
+    attempts++;
+    const statusRes=await fetch(statusUrl,{headers:{"Authorization":"Key "+apiKey}});
+    const statusData=await statusRes.json();
+    if(statusData.status==="COMPLETED"){
+      const finalRes=await fetch(resultUrl,{headers:{"Authorization":"Key "+apiKey}});
+      finalData=await finalRes.json();
+      break;
+    }
+    if(statusData.status==="ERROR"||statusData.status==="FAILED")throw new Error(statusData.error||"Upscale failed");
+  }
+  if(!finalData)throw new Error("Timed out");
+  const outUrl=finalData.image&&finalData.image.url;
+  if(!outUrl)throw new Error("No image URL in response");
+  return outUrl;
 }
 
 function onUpSourceChange(){
@@ -4076,51 +4202,12 @@ async function runUpscale(){
   const btn=document.getElementById("upGenBtn");
   const resultPanel=document.getElementById("upResultPanel");
   const resultContent=document.getElementById("upResultContent");
-  btn.disabled=true;
+  btn.disabled=true;btn.textContent="⏳ Upscaling…";
   resultPanel.style.display="block";
+  resultContent.innerHTML=`<div style="text-align:center;padding:30px;color:var(--textm);font-size:13px">✨ Submitting to ${engine.split('/')[1]}…</div>`;
 
   try{
-    btn.textContent="⏳ Submitting…";
-    resultContent.innerHTML=`<div style="text-align:center;padding:30px;color:var(--textm);font-size:13px">📤 Submitting to ${engine.split('/')[1]}…</div>`;
-    const submitRes=await fetch(`https://queue.fal.run/${engine}`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
-      body:JSON.stringify({image_url:url})
-    });
-    const submitData=await submitRes.json();
-    if(!submitRes.ok){
-      const msg=(submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText;
-      throw new Error(msg);
-    }
-    const requestId=submitData.request_id;
-    if(!requestId)throw new Error("No request ID returned");
-    const statusUrl=submitData.status_url||`https://queue.fal.run/${engine}/requests/${requestId}/status`;
-    const resultUrl=submitData.response_url||`https://queue.fal.run/${engine}/requests/${requestId}`;
-
-    btn.textContent="⏳ Upscaling…";
-    let attempts=0;
-    const maxAttempts=36; // 3 min
-    let finalData=null;
-    while(attempts<maxAttempts){
-      await new Promise(r=>setTimeout(r,5000));
-      attempts++;
-      const statusRes=await fetch(statusUrl,{headers:{"Authorization":"Key "+apiKey}});
-      const statusData=await statusRes.json();
-      resultContent.innerHTML=`<div style="text-align:center;padding:30px;color:var(--textm);font-size:13px">✨ ${statusData.status||'Processing'}… (${attempts*5}s)</div>`;
-      if(statusData.status==="COMPLETED"){
-        const finalRes=await fetch(resultUrl,{headers:{"Authorization":"Key "+apiKey}});
-        finalData=await finalRes.json();
-        break;
-      }
-      if(statusData.status==="ERROR"||statusData.status==="FAILED"){
-        throw new Error(statusData.error||"Upscale failed on fal.ai's side");
-      }
-    }
-    if(!finalData)throw new Error("Timed out — try again");
-
-    const outUrl=finalData.image&&finalData.image.url;
-    if(!outUrl)throw new Error("No image URL in response");
-
+    const outUrl=await upscaleImageUrl(url,engine,apiKey);
     resultContent.innerHTML=`
       <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Before / After</div>
       <div class="grid2" style="margin-bottom:10px">
@@ -4150,19 +4237,31 @@ function saveUpscaleToGallery(url){
 
 // ── COSTS ──
 function renderCosts(el){
-  const total=parseFloat(gs("total_spent","0")).toFixed(2);
+  const total=parseFloat(gs("total_spent","0"));
+  const budgetCap=parseFloat(gs("budget_cap","0"));
   const log=[...(S.costLog||[])].reverse();
-  // Breakdown by model
   const byModel={};
   (S.costLog||[]).forEach(c=>{byModel[c.key]=(byModel[c.key]||0)+c.amt;});
   const modelRows=Object.entries(byModel).sort((a,b)=>b[1]-a[1]);
+
+  // Monthly projection: daily average spend this month, extrapolated to month length
+  const now=new Date();
+  const monthStart=new Date(now.getFullYear(),now.getMonth(),1);
+  const daysElapsed=Math.max(1,Math.ceil((now-monthStart)/86400000));
+  const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  const spentThisMonth=(S.costLog||[]).filter(c=>new Date(c.created||now)>=monthStart).reduce((s,c)=>s+c.amt,0);
+  const dailyAvg=spentThisMonth/daysElapsed;
+  const projectedMonthly=dailyAvg*daysInMonth;
+
+  const overBudget=budgetCap>0&&total>=budgetCap;
+  const nearBudget=budgetCap>0&&total>=budgetCap*0.8&&!overBudget;
 
   el.innerHTML=`
     <div class="panel">
       <div style="background:linear-gradient(135deg,var(--violet),var(--vm));border-radius:12px;padding:16px;color:#fff;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
         <div>
           <div style="font-size:10px;opacity:0.75;letter-spacing:0.06em;margin-bottom:2px">TOTAL SPENT (ESTIMATED)</div>
-          <div style="font-family:'Cinzel',serif;font-size:28px;font-weight:900;color:var(--gold-l)">$${total}</div>
+          <div style="font-family:'Cinzel',serif;font-size:28px;font-weight:900;color:var(--gold-l)">$${total.toFixed(2)}</div>
           <div style="font-size:10px;opacity:0.7;margin-top:2px">${(S.costLog||[]).length} generation${(S.costLog||[]).length!==1?'s':''} tracked</div>
         </div>
         <div style="font-size:32px">💰</div>
@@ -4171,12 +4270,37 @@ function renderCosts(el){
       ${(S.costLog||[]).length?`<button class="btn btn-ghost btn-sm" onclick="resetCostLog()">↺ Reset Cost Log</button>`:''}
     </div>
 
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">🎯 Budget Cap</div>
+      <div class="f-row">
+        <div class="f-group" style="margin-bottom:0"><input class="f-input" type="number" id="budgetCapInput" placeholder="e.g. 50" value="${budgetCap||''}" step="1" min="0"></div>
+        <button class="btn btn-outline btn-sm" onclick="saveBudgetCap()">Set Cap</button>
+      </div>
+      ${budgetCap>0?`
+        <div style="margin-top:10px">
+          <div style="background:rgba(61,31,122,0.08);border-radius:6px;height:10px;overflow:hidden">
+            <div style="background:${overBudget?'var(--red)':nearBudget?'var(--yellow)':'var(--green)'};height:100%;width:${Math.min(100,(total/budgetCap*100))}%"></div>
+          </div>
+          <div style="font-size:11px;color:var(--textm);margin-top:6px">$${total.toFixed(2)} of $${budgetCap.toFixed(2)} (${(total/budgetCap*100).toFixed(0)}%)</div>
+          ${overBudget?`<div style="font-size:12px;color:var(--red);font-weight:700;margin-top:6px">⚠️ Over budget cap</div>`:nearBudget?`<div style="font-size:12px;color:#b45309;font-weight:700;margin-top:6px">⚠️ Approaching budget cap (80%+)</div>`:''}
+        </div>`:`<div style="font-size:11px;color:var(--textm);margin-top:8px">No cap set — you won't get a warning as spend grows.</div>`}
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">📈 Monthly Projection</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Based on this month's daily average so far (${daysElapsed} day${daysElapsed!==1?'s':''} of data) — rough estimate, not a guarantee.</div>
+      <div style="display:flex;gap:16px">
+        <div><div style="font-size:10px;color:var(--textm)">SPENT THIS MONTH</div><div style="font-size:18px;font-weight:700;color:var(--violet)">$${spentThisMonth.toFixed(2)}</div></div>
+        <div><div style="font-size:10px;color:var(--textm)">PROJECTED MONTH TOTAL</div><div style="font-size:18px;font-weight:700;color:var(--gold)">$${projectedMonthly.toFixed(2)}</div></div>
+      </div>
+    </div>
+
     ${modelRows.length?`
     <div class="panel" style="margin-top:14px">
       <div class="panel-title">📊 Spend by Model</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         ${modelRows.map(([key,amt])=>{
-          const pct=total>0?(amt/parseFloat(total)*100):0;
+          const pct=total>0?(amt/total*100):0;
           return `<div>
             <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
               <span style="color:var(--textm)">${key.split('/').slice(-2).join('/')}</span>
@@ -4203,10 +4327,33 @@ function renderCosts(el){
     </div>`:''}
 
     <div class="panel" style="margin-top:14px">
+      <div class="panel-title">💵 Model Cost Reference <span style="font-weight:400;color:var(--texts);font-size:11px">— what this app actually charges per generation</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:11px">
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">FLUX Schnell (image)</span><span style="color:var(--text)">~$0.003</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">FLUX Dev (image)</span><span style="color:var(--text)">~$0.025</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">Seedance 2.0 Fast (video)</span><span style="color:var(--text)">~$0.25</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">Kling 2.1 Master (video)</span><span style="color:var(--text)">~$1.40</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">Kling 3.0 Standard (video)</span><span style="color:var(--text)">~$0.70</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">Veo 3.1 (video)</span><span style="color:var(--text)">~$2.00</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">Music (Stable Audio 3)</span><span style="color:var(--text)">~$0.05</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">SFX</span><span style="color:var(--text)">~$0.02</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">Lipsync</span><span style="color:var(--text)">~$3.00</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">LoRA training</span><span style="color:var(--text)">~$2.00</span></div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
       <div class="panel-title">💳 Payment Processing</div>
       <div style="font-size:12px;color:var(--textm)">Connect Razorpay or Stripe in Settings to manage real billing for clients or team members.</div>
     </div>
   `;
+}
+
+function saveBudgetCap(){
+  const val=parseFloat(document.getElementById("budgetCapInput").value)||0;
+  saveSetting("budget_cap",String(val));
+  toast(val>0?`🎯 Budget cap set to $${val.toFixed(2)}`:"Budget cap cleared","success");
+  renderCosts(document.getElementById("moduleContent"));
 }
 
 function resetCostLog(){
@@ -4229,17 +4376,20 @@ const ROLE_PERMS={
 
 function renderTeam(el){
   const roster=S.team||[];
+  const isFounder=isFounderUser();
   el.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div>
         <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">Team</div>
         <div style="font-size:11px;color:var(--textm);margin-top:2px">${roster.length} member${roster.length!==1?'s':''} on the roster</div>
       </div>
-      <button class="btn btn-primary btn-sm" onclick="openInviteForm()">+ Invite Member</button>
+      ${isFounder?`<button class="btn btn-primary btn-sm" onclick="openInviteForm()">+ Invite Member</button>`:''}
     </div>
 
     <div style="font-size:11px;color:var(--textm);background:rgba(201,151,42,0.08);border:1px solid rgba(201,151,42,0.2);border-radius:8px;padding:10px;margin-bottom:14px">
-      ⚠ This roster is stored locally in your browser as a reference list — it does not yet grant real login access to other people. Real multi-user access requires connecting a backend (Firebase Auth), which isn't wired yet.
+      ${isFounder
+        ?'✅ Real, working now: signing in with Google is real (Firebase Auth), and Founder-only areas (this roster, Settings → API Keys) are actually locked to founder accounts — a non-founder signed-in user genuinely cannot edit these on this device.<br><br>⚠ Still not real: this roster itself is stored locally in this browser only. Adding "Sarah" as Director here does not give Sarah an actual account or actual permissions when she signs in on her own device — it\'s a reference list, not a live permission system. Making that fully real (so invited members get enforced roles wherever they sign in) needs a shared database (Firestore), not just this device\'s storage.'
+        :`🔒 Signed in as ${S.user?S.user.email:'guest'} — Team Manager is Founder-only. You can view the roster below but can't invite or remove members.`}
     </div>
 
     <div class="panel">
@@ -4259,7 +4409,7 @@ function renderTeam(el){
               <div style="font-size:10px;color:var(--textm);margin-top:2px">${ROLE_PERMS[m.role]?.modules||''}</div>
             </div>
             <span class="badge badge-${ROLE_PERMS[m.role]?.color||'gray'}">${m.role}</span>
-            <button class="pc-menu-btn" onclick="removeTeamMember(${i})">🗑</button>
+            ${isFounder?`<button class="pc-menu-btn" onclick="removeTeamMember(${i})">🗑</button>`:''}
           </div>`).join('')}
       </div>
     </div>`:`<div class="empty-state" style="margin-top:14px"><div class="empty-icon">👥</div><div class="empty-title">No Members Invited Yet</div><div class="empty-desc">Add collaborators and assign them a role to track studio permissions.</div></div>`}
@@ -4274,10 +4424,21 @@ function renderTeam(el){
           </div>`).join('')}
       </div>
     </div>
+
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">📋 Activity Log <span style="font-weight:400;color:var(--texts);font-size:11px">— this device only, not shared across team members</span></div>
+      ${(S.activityLog||[]).length?`<div style="display:flex;flex-direction:column;gap:5px;max-height:240px;overflow-y:auto">
+        ${(S.activityLog||[]).map(a=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:5px 8px;background:rgba(61,31,122,0.03);border-radius:6px">
+          <span style="color:var(--text);flex:1">${a.action}</span>
+          <span style="color:var(--textm);flex-shrink:0">${new Date(a.ts).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
+        </div>`).join('')}
+      </div>`:`<div style="font-size:11px;color:var(--textm)">No activity logged yet — actions like inviting members or changing API keys will appear here.</div>`}
+    </div>
   `;
 }
 
 function openInviteForm(){
+  if(!isFounderUser()){toast("Team Manager is Founder-only","error");return;}
   const email=prompt("Email address to invite:");
   if(!email||!email.includes("@")){if(email)toast("Enter a valid email","error");return;}
   const roles=Object.keys(ROLE_PERMS).filter(r=>r!=="Founder");
@@ -4289,14 +4450,18 @@ function openInviteForm(){
   if(S.team.some(m=>m.email===email)){toast("That email is already on the roster","error");return;}
   S.team.push({email,role,invited:new Date().toISOString()});
   save("team");
+  logActivity(`Added ${email} to roster as ${role}`);
   toast(`✅ ${email} added as ${role}`,"success");
   renderTeam(document.getElementById("moduleContent"));
 }
 
 function removeTeamMember(i){
+  if(!isFounderUser()){toast("Team Manager is Founder-only","error");return;}
   if(!confirm("Remove this team member from the roster?"))return;
+  const removed=S.team[i];
   S.team.splice(i,1);
   save("team");
+  if(removed)logActivity(`Removed ${removed.email} from roster`);
   renderTeam(document.getElementById("moduleContent"));
   toast("Member removed","");
 }
@@ -4321,8 +4486,24 @@ function closeSettings(){
   document.getElementById("settingsOverlay").classList.remove("show");
 }
 
+function isFounderUser(){return !!(S.user&&S.user.isFounder);}
+
+// ── ACTIVITY LOG (local, device-scoped — see honesty note in Team Manager) ──
+function logActivity(action){
+  S.activityLog=S.activityLog||[];
+  const who=(S.user&&S.user.email!=="guest")?S.user.email:"local session";
+  S.activityLog.unshift({action,who,ts:new Date().toISOString()});
+  if(S.activityLog.length>50)S.activityLog=S.activityLog.slice(0,50);
+  save("activityLog");
+}
+
 function buildApiKeyFields(){
   const wrap=document.getElementById("apiKeyFields");
+  if(!isFounderUser()){
+    const who=S.user&&S.user.email!=="guest"?`Signed in as ${S.user.email} — ask a founder to manage keys, or sign in with a founder account.`:`Sign in with a founder account to manage API keys.`;
+    wrap.innerHTML=`<div style="font-size:12px;color:var(--textm);background:rgba(201,151,42,0.08);border:1px solid rgba(201,151,42,0.2);border-radius:8px;padding:12px">🔒 API keys are billed to the studio founder and are Founder-only. ${who}</div>`;
+    return;
+  }
   wrap.innerHTML=API_SERVICES.map(svc=>{
     const val=gs("api_"+svc.key,"");
     const active=val.length>3;
@@ -4416,6 +4597,11 @@ function updateUserUI(){
     if(badge)badge.style.display="none";
     if(accInfo)accInfo.textContent="Not signed in";
   }
+  // Founder-gated panels depend on auth state, which resolves asynchronously
+  // after init() — refresh them here so they don't stay stuck on the
+  // "please sign in" state once Firebase actually confirms who's signed in.
+  if(document.getElementById("apiKeyFields"))buildApiKeyFields();
+  if(S.mod==="team")renderModule("team");
 }
 
 // ── AI STUDIO ──
