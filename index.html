@@ -3149,7 +3149,319 @@ function renderAudio(el){
           <audio src="${a.url}" controls style="flex:1;height:32px"></audio>
         </div>`).join('')}</div>
     </div>`:''}
+
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">🎼 Music Generation <span class="badge ${gs('api_falai')?'badge-green':'badge-red'}">${gs('api_falai')?'ACTIVE — fal.ai':'NO KEY'}</span></div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Real instrumental music, up to 6 minutes, via Stable Audio 3.</div>
+      <div class="f-group"><textarea class="f-textarea" id="musicPrompt" placeholder="e.g. Tense cinematic orchestral build, low strings and brass, building to a dramatic climax" style="min-height:60px"></textarea></div>
+      <div class="f-group"><label class="f-label">Duration: <span id="musicDurVal">30</span>s</label><input type="range" id="musicDuration" min="10" max="180" value="30" style="width:100%" oninput="document.getElementById('musicDurVal').textContent=this.value"></div>
+      <button class="btn btn-primary btn-full" ${!gs('api_falai')?'disabled':''} onclick="generateMusic()">🎼 Generate Music</button>
+      <div id="musicResult" style="margin-top:10px"></div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">💥 SFX Generation <span class="badge ${gs('api_falai')?'badge-green':'badge-red'}">${gs('api_falai')?'ACTIVE — fal.ai':'NO KEY'}</span></div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Real sound effects, up to 30 seconds, generated in ~1 second.</div>
+      <div class="f-row">
+        <div class="f-group"><input class="f-input" id="sfxPrompt" placeholder="e.g. glass shattering, explosion, footsteps on gravel"></div>
+        <div class="f-group" style="max-width:100px"><input type="number" class="f-input" id="sfxDuration" value="5" min="1" max="30"></div>
+      </div>
+      <button class="btn btn-primary btn-full" ${!gs('api_falai')?'disabled':''} onclick="generateSFX()">💥 Generate SFX</button>
+      <div id="sfxResult" style="margin-top:10px"></div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">👄 Lipsync Studio <span class="badge ${gs('api_falai')?'badge-green':'badge-red'}">${gs('api_falai')?'ACTIVE — fal.ai':'NO KEY'}</span></div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Sync any audio to an existing video's face — real lip movement, not a filter.</div>
+      <div class="f-group">
+        <label class="f-label">Video file</label>
+        <input type="file" accept="video/*" id="lipsyncVideoFile" style="display:none" onchange="handleLipsyncVideoUpload(event)">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('lipsyncVideoFile').click()">📤 Choose Video</button>
+        <span id="lipsyncVideoName" style="font-size:11px;color:var(--textm);margin-left:8px"></span>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Audio source</label>
+        <select class="f-select" id="lipsyncAudioSource" onchange="toggleLipsyncAudioSource()">
+          <option value="gallery">Use a saved voiceover from Gallery</option>
+          <option value="upload">Upload audio file</option>
+        </select>
+      </div>
+      <div class="f-group" id="lipsyncGallerySelectWrap">
+        <select class="f-select" id="lipsyncGalleryAudio">
+          <option value="">— Select —</option>
+          ${S.assets.filter(a=>a.type==='audio').map((a,i)=>`<option value="${a.url}">${(a.prompt||'Voiceover '+(i+1)).slice(0,50)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="f-group" id="lipsyncUploadWrap" style="display:none">
+        <input type="file" accept="audio/*" id="lipsyncAudioFile" style="display:none" onchange="handleLipsyncAudioUpload(event)">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('lipsyncAudioFile').click()">📤 Choose Audio</button>
+        <span id="lipsyncAudioName" style="font-size:11px;color:var(--textm);margin-left:8px"></span>
+      </div>
+      <button class="btn btn-primary btn-full" ${!gs('api_falai')?'disabled':''} onclick="generateLipsync()">👄 Generate Lipsync</button>
+      <div style="font-size:10px;color:var(--texts);margin-top:6px;text-align:center">⏱ Takes 1-2 minutes — don't close this tab</div>
+      <div id="lipsyncResult" style="margin-top:10px"></div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-title">✂️ Audio Trim & Volume</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Trim and adjust volume on any audio file — runs entirely in your browser, no upload needed.</div>
+      <input type="file" accept="audio/*" id="editAudioFile" style="display:none" onchange="loadAudioForEditing(event)">
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('editAudioFile').click()">📤 Load Audio to Edit</button>
+      <div id="audioEditorPanel" style="margin-top:10px"></div>
+    </div>
   `;
+}
+
+// ── MUSIC GENERATION (fal-ai/stable-audio-3) ──
+async function generateMusic(){
+  const prompt=document.getElementById("musicPrompt").value.trim();
+  if(!prompt){toast("Describe the music you want first","error");return;}
+  const apiKey=gs("api_falai","");
+  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
+  const duration=parseInt(document.getElementById("musicDuration").value);
+  const resultEl=document.getElementById("musicResult");
+  resultEl.innerHTML=`<div style="text-align:center;padding:20px;color:var(--textm);font-size:13px">🎼 Composing…</div>`;
+  try{
+    const res=await fetch("https://fal.run/fal-ai/stable-audio-3/medium/text-to-audio",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+      body:JSON.stringify({prompt,duration,output_format:"mp3"})
+    });
+    const data=await res.json();
+    if(!res.ok)throw new Error((data.detail&&(Array.isArray(data.detail)?data.detail[0]?.msg:data.detail))||data.error||res.statusText);
+    const url=data.audio&&data.audio.url;
+    if(!url)throw new Error("No audio returned");
+    resultEl.innerHTML=`<audio src="${url}" controls style="width:100%;margin-bottom:8px"></audio>
+      <div style="display:flex;gap:8px"><a href="${url}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-primary btn-sm" onclick="saveAudioBlobToGallery('${url.replace(/'/g,"\\'")}','${prompt.replace(/'/g,"\\'").slice(0,150)}')">💾 Save</button></div>`;
+    logCost("stable-audio-3",prompt.slice(0,60));
+    toast("🎼 Music generated!","success");
+  }catch(err){
+    resultEl.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px">❌ ${err.message}</div>`;
+    toast("❌ Music generation failed: "+err.message,"error");
+  }
+}
+
+// ── SFX GENERATION (cassetteai/sound-effects-generator) ──
+async function generateSFX(){
+  const prompt=document.getElementById("sfxPrompt").value.trim();
+  if(!prompt){toast("Describe the sound effect first","error");return;}
+  const apiKey=gs("api_falai","");
+  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
+  const duration=parseInt(document.getElementById("sfxDuration").value)||5;
+  const resultEl=document.getElementById("sfxResult");
+  resultEl.innerHTML=`<div style="text-align:center;padding:20px;color:var(--textm);font-size:13px">💥 Generating…</div>`;
+  try{
+    const res=await fetch("https://fal.run/cassetteai/sound-effects-generator",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+      body:JSON.stringify({prompt,duration})
+    });
+    const data=await res.json();
+    if(!res.ok)throw new Error((data.detail&&(Array.isArray(data.detail)?data.detail[0]?.msg:data.detail))||data.error||res.statusText);
+    const url=data.audio&&data.audio.url;
+    if(!url)throw new Error("No audio returned");
+    resultEl.innerHTML=`<audio src="${url}" controls style="width:100%;margin-bottom:8px"></audio>
+      <div style="display:flex;gap:8px"><a href="${url}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-primary btn-sm" onclick="saveAudioBlobToGallery('${url.replace(/'/g,"\\'")}','SFX: ${prompt.replace(/'/g,"\\'").slice(0,140)}')">💾 Save</button></div>`;
+    logCost("sfx-generator",prompt.slice(0,60));
+    toast("💥 SFX generated!","success");
+  }catch(err){
+    resultEl.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px">❌ ${err.message}</div>`;
+    toast("❌ SFX generation failed: "+err.message,"error");
+  }
+}
+
+// ── LIPSYNC STUDIO (fal-ai/sync-lipsync/v2) ──
+S.lipsyncVideoDataUrl=S.lipsyncVideoDataUrl||"";
+S.lipsyncAudioDataUrl=S.lipsyncAudioDataUrl||"";
+
+function toggleLipsyncAudioSource(){
+  const src=document.getElementById("lipsyncAudioSource").value;
+  document.getElementById("lipsyncGallerySelectWrap").style.display=src==="gallery"?"block":"none";
+  document.getElementById("lipsyncUploadWrap").style.display=src==="upload"?"block":"none";
+}
+
+function handleLipsyncVideoUpload(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  if(file.size>50*1024*1024){toast("Video too large — max 50MB","error");return;}
+  document.getElementById("lipsyncVideoName").textContent=file.name;
+  const reader=new FileReader();
+  reader.onload=e=>{S.lipsyncVideoDataUrl=e.target.result;};
+  reader.readAsDataURL(file);
+}
+
+function handleLipsyncAudioUpload(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  document.getElementById("lipsyncAudioName").textContent=file.name;
+  const reader=new FileReader();
+  reader.onload=e=>{S.lipsyncAudioDataUrl=e.target.result;};
+  reader.readAsDataURL(file);
+}
+
+async function generateLipsync(){
+  if(!S.lipsyncVideoDataUrl){toast("Choose a video first","error");return;}
+  const audioSource=document.getElementById("lipsyncAudioSource").value;
+  const audioUrl=audioSource==="gallery"?document.getElementById("lipsyncGalleryAudio").value:S.lipsyncAudioDataUrl;
+  if(!audioUrl){toast("Choose an audio source first","error");return;}
+  const apiKey=gs("api_falai","");
+  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
+
+  const resultEl=document.getElementById("lipsyncResult");
+  resultEl.innerHTML=`<div style="text-align:center;padding:20px;color:var(--textm);font-size:13px">📤 Submitting…</div>`;
+  try{
+    const submitRes=await fetch("https://queue.fal.run/fal-ai/sync-lipsync/v2",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+      body:JSON.stringify({video_url:S.lipsyncVideoDataUrl,audio_url:audioUrl})
+    });
+    const submitData=await submitRes.json();
+    if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
+    const requestId=submitData.request_id;
+    if(!requestId)throw new Error("No request ID returned");
+    const statusUrl=submitData.status_url||`https://queue.fal.run/fal-ai/sync-lipsync/v2/requests/${requestId}/status`;
+    const resultUrl=submitData.response_url||`https://queue.fal.run/fal-ai/sync-lipsync/v2/requests/${requestId}`;
+
+    let attempts=0,finalData=null;
+    while(attempts<40){
+      await new Promise(r=>setTimeout(r,5000));
+      attempts++;
+      const statusRes=await fetch(statusUrl,{headers:{"Authorization":"Key "+apiKey}});
+      const statusData=await statusRes.json();
+      resultEl.innerHTML=`<div style="text-align:center;padding:20px;color:var(--textm);font-size:13px">👄 ${statusData.status||'Processing'}… (${attempts*5}s)</div>`;
+      if(statusData.status==="COMPLETED"){
+        const finalRes=await fetch(resultUrl,{headers:{"Authorization":"Key "+apiKey}});
+        finalData=await finalRes.json();
+        break;
+      }
+      if(statusData.status==="ERROR"||statusData.status==="FAILED")throw new Error(statusData.error||"Lipsync failed");
+    }
+    if(!finalData)throw new Error("Timed out — check fal.ai dashboard, it may still complete");
+    const videoUrl=finalData.video&&finalData.video.url;
+    if(!videoUrl)throw new Error("No video returned");
+    resultEl.innerHTML=`<video src="${videoUrl}" controls style="width:100%;border-radius:8px;margin-bottom:8px"></video>
+      <div style="display:flex;gap:8px"><a href="${videoUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-primary btn-sm" onclick="saveVideoToGallery('${videoUrl.replace(/'/g,"\\'")}','Lipsync video','')">💾 Save</button></div>`;
+    logCost("sync-lipsync-v2","Lipsync video");
+    toast("👄 Lipsync generated!","success");
+  }catch(err){
+    resultEl.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px">❌ ${err.message}</div>`;
+    toast("❌ Lipsync failed: "+err.message,"error");
+  }
+}
+
+// ── AUDIO TRIM & VOLUME EDITOR (pure client-side, Web Audio API) ──
+S.audioEditBuffer=null;
+S.audioEditCtx=null;
+
+function loadAudioForEditing(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  const panel=document.getElementById("audioEditorPanel");
+  panel.innerHTML=`<div style="text-align:center;padding:16px;color:var(--textm);font-size:13px">⏳ Loading…</div>`;
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    try{
+      const ctx=new (window.AudioContext||window.webkitAudioContext)();
+      S.audioEditCtx=ctx;
+      const buf=await ctx.decodeAudioData(e.target.result);
+      S.audioEditBuffer=buf;
+      const dur=buf.duration;
+      panel.innerHTML=`
+        <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Duration: ${dur.toFixed(1)}s</div>
+        <div class="f-row">
+          <div class="f-group"><label class="f-label">Trim Start: <span id="trimStartVal">0.0</span>s</label><input type="range" id="trimStart" min="0" max="${dur}" step="0.1" value="0" style="width:100%" oninput="document.getElementById('trimStartVal').textContent=parseFloat(this.value).toFixed(1)"></div>
+          <div class="f-group"><label class="f-label">Trim End: <span id="trimEndVal">${dur.toFixed(1)}</span>s</label><input type="range" id="trimEnd" min="0" max="${dur}" step="0.1" value="${dur}" style="width:100%" oninput="document.getElementById('trimEndVal').textContent=parseFloat(this.value).toFixed(1)"></div>
+        </div>
+        <div class="f-group"><label class="f-label">Volume: <span id="volVal">100</span>%</label><input type="range" id="volGain" min="0" max="200" value="100" style="width:100%" oninput="document.getElementById('volVal').textContent=this.value"></div>
+        <div class="f-group"><label class="f-label">Fade In/Out: <span id="fadeVal">0.2</span>s</label><input type="range" id="fadeAmt" min="0" max="3" step="0.1" value="0.2" style="width:100%" oninput="document.getElementById('fadeVal').textContent=this.value"></div>
+        <button class="btn btn-primary btn-full" onclick="processAudioEdit()">✂️ Apply & Export</button>
+        <div id="audioEditResult" style="margin-top:10px"></div>`;
+    }catch(err){
+      panel.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px">❌ Couldn't decode this audio file: ${err.message}</div>`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function processAudioEdit(){
+  const buf=S.audioEditBuffer;
+  if(!buf)return;
+  const start=parseFloat(document.getElementById("trimStart").value);
+  const end=parseFloat(document.getElementById("trimEnd").value);
+  const gain=parseFloat(document.getElementById("volGain").value)/100;
+  const fade=parseFloat(document.getElementById("fadeAmt").value);
+  if(end<=start){toast("Trim end must be after trim start","error");return;}
+
+  const sr=buf.sampleRate;
+  const startSample=Math.floor(start*sr);
+  const endSample=Math.min(Math.floor(end*sr),buf.length);
+  const outLength=endSample-startSample;
+  const ctx=new (window.AudioContext||window.webkitAudioContext)();
+  const outBuf=ctx.createBuffer(buf.numberOfChannels,outLength,sr);
+
+  for(let ch=0;ch<buf.numberOfChannels;ch++){
+    const inData=buf.getChannelData(ch);
+    const outData=outBuf.getChannelData(ch);
+    for(let i=0;i<outLength;i++){
+      let sample=inData[startSample+i]*gain;
+      const t=i/sr;
+      const remaining=(outLength-i)/sr;
+      if(fade>0){
+        if(t<fade)sample*=(t/fade);
+        if(remaining<fade)sample*=(remaining/fade);
+      }
+      outData[i]=Math.max(-1,Math.min(1,sample));
+    }
+  }
+
+  const wavBlob=audioBufferToWav(outBuf);
+  const url=URL.createObjectURL(wavBlob);
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const base64Url=reader.result;
+    document.getElementById("audioEditResult").innerHTML=`
+      <audio src="${url}" controls style="width:100%;margin-bottom:8px"></audio>
+      <div style="display:flex;gap:8px">
+        <a href="${url}" download="edited-audio.wav" class="btn btn-outline btn-sm">⬇ Download</a>
+        <button class="btn btn-primary btn-sm" onclick="saveAudioBlobToGallery('${base64Url}','Edited audio clip')">💾 Save to Gallery</button>
+      </div>`;
+    toast("✂️ Audio processed","success");
+  };
+  reader.readAsDataURL(wavBlob);
+}
+
+// Minimal WAV encoder — converts an AudioBuffer to a real, playable WAV Blob (16-bit PCM)
+function audioBufferToWav(buffer){
+  const numCh=buffer.numberOfChannels;
+  const sr=buffer.sampleRate;
+  const length=buffer.length*numCh*2+44;
+  const arrBuf=new ArrayBuffer(length);
+  const view=new DataView(arrBuf);
+  const writeStr=(offset,str)=>{for(let i=0;i<str.length;i++)view.setUint8(offset+i,str.charCodeAt(i));};
+
+  writeStr(0,"RIFF");
+  view.setUint32(4,length-8,true);
+  writeStr(8,"WAVE");
+  writeStr(12,"fmt ");
+  view.setUint32(16,16,true);
+  view.setUint16(20,1,true);
+  view.setUint16(22,numCh,true);
+  view.setUint32(24,sr,true);
+  view.setUint32(28,sr*numCh*2,true);
+  view.setUint16(32,numCh*2,true);
+  view.setUint16(34,16,true);
+  writeStr(36,"data");
+  view.setUint32(40,buffer.length*numCh*2,true);
+
+  let offset=44;
+  for(let i=0;i<buffer.length;i++){
+    for(let ch=0;ch<numCh;ch++){
+      const sample=Math.max(-1,Math.min(1,buffer.getChannelData(ch)[i]));
+      view.setInt16(offset,sample<0?sample*0x8000:sample*0x7FFF,true);
+      offset+=2;
+    }
+  }
+  return new Blob([arrBuf],{type:"audio/wav"});
 }
 
 function applyCharVoice(){
