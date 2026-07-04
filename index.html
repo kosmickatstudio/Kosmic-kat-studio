@@ -3030,13 +3030,17 @@ const STYLE_LIBRARY=[
   {cat:"Cultural Cinema",name:"Hong Kong Action Cinema",style:"kinetic wire-work choreography, dynamic multi-angle coverage, high-energy practical stunts"},
 ];
 
+// Each Assistant Director is a full-spectrum generalist — distinguished by HOW they
+// approach directing (process/strengths), not locked to one visual genre. The same
+// director should serve horror, comedy, romance, or sci-fi equally; only their
+// approach-based fragment layers on top of whatever genre the shot itself describes.
 const DIRECTORS=[
-  {id:"voss",name:"Director Voss",style:"Dark & Cinematic",cls:"voss",icon:"🎬",prompt:"dark, moody cinematography, high contrast shadows, desaturated color grade, tense atmosphere, slow deliberate camera movements"},
-  {id:"kael",name:"Director Kael",style:"Action & Explosive",cls:"kael",icon:"💥",prompt:"dynamic fast-paced action, explosive energy, quick cuts, dramatic camera shake, high saturation, kinetic motion"},
-  {id:"mira",name:"Director Mira",style:"Soft & Emotional",cls:"mira",icon:"🌙",prompt:"soft natural lighting, warm intimate tones, gentle camera movements, emotional close-ups, dreamy pastel color grade"},
-  {id:"atlas",name:"Director Atlas",style:"Epic & Grand",cls:"atlas",icon:"🏔",prompt:"sweeping epic scale, grand wide shots, golden hour lighting, majestic slow pans, orchestral grandeur, vast landscapes"},
-  {id:"neon",name:"Director Neon",style:"Futuristic & Bold",cls:"neon",icon:"⚡",prompt:"neon-lit cyberpunk aesthetic, bold saturated colors, sharp geometric framing, futuristic atmosphere, electric energy"},
-  {id:"sage",name:"Director Sage",style:"Thoughtful & Precise",cls:"sage",icon:"🌿",prompt:"minimalist precise composition, natural muted tones, static contemplative shots, clean framing, thoughtful pacing"},
+  {id:"voss",name:"Director Voss",style:"Meticulous Continuity",cls:"voss",icon:"🎬",prompt:"meticulous visual continuity, deliberate blocking, patient pacing that builds naturally with the story's own rhythm"},
+  {id:"kael",name:"Director Kael",style:"Kinetic Energy",cls:"kael",icon:"💥",prompt:"kinetic momentum, dynamic camera energy, propulsive pacing that pushes the scene forward"},
+  {id:"mira",name:"Director Mira",style:"Emotional Truth",cls:"mira",icon:"🌙",prompt:"intimate emotional focus, authentic character performance, close attention to unspoken feeling in the scene"},
+  {id:"atlas",name:"Director Atlas",style:"Scale & Spectacle",cls:"atlas",icon:"🏔",prompt:"grand production scale, sweeping visual scope, a sense of scale and consequence appropriate to the story"},
+  {id:"neon",name:"Director Neon",style:"Bold Visual Innovation",cls:"neon",icon:"⚡",prompt:"bold unconventional framing, inventive visual choices, willingness to take a compositional risk"},
+  {id:"sage",name:"Director Sage",style:"Economical Precision",cls:"sage",icon:"🌿",prompt:"clean economical storytelling, precise purposeful framing, nothing in the frame without reason"},
 ];
 
 function getAllDirectors(){
@@ -3044,12 +3048,69 @@ function getAllDirectors(){
   return [...DIRECTORS,...custom];
 }
 
+// ── DIRECTOR HIERARCHY: Showrunner -> Episode Director -> Assistant Director -> Prompt Writer ──
+function renderHierarchyPanel(projectId,activeAssistantId,allDirectors){
+  const project=S.projects.find(p=>p.id===projectId);
+  const showrunnerName=(S.user&&S.user.email!=="guest")?S.user.email:"Not signed in";
+  const roster=S.team||[];
+  const episodeDirectorOptions=[{email:showrunnerName,label:`${showrunnerName} (Showrunner)`},...roster.map(m=>({email:m.email,label:`${m.email} (${m.role})`}))];
+  const currentEpDirector=project?(project.episodeDirector||showrunnerName):showrunnerName;
+  const activeAssistant=allDirectors.find(d=>d.id===activeAssistantId);
+
+  return `<div class="panel">
+    <div class="panel-title">🏛 Director Hierarchy</div>
+    ${S.projects.length>1?`<div class="f-group"><label class="f-label">Project</label><select class="f-select" onchange="setHierarchyProject(this.value)">${S.projects.map(p=>`<option value="${p.id}" ${p.id===projectId?'selected':''}>${p.name}</option>`).join('')}</select></div>`:''}
+    <div style="display:flex;flex-direction:column;gap:2px">
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(201,151,42,0.08);border-radius:8px 8px 0 0">
+        <span style="font-size:18px">👑</span>
+        <div style="flex:1"><div style="font-size:9px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em">Showrunner</div><div style="font-size:12px;font-weight:600;color:var(--text)">${showrunnerName}</div></div>
+      </div>
+      <div style="height:14px;width:1.5px;background:var(--border);margin-left:19px"></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(61,31,122,0.05)">
+        <span style="font-size:18px">🎬</span>
+        <div style="flex:1">
+          <div style="font-size:9px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em">Episode Director ${project?'— '+project.name:''}</div>
+          ${project?`<select class="f-select" style="margin-top:4px;font-size:12px;padding:4px 8px" onchange="setEpisodeDirector('${project.id}',this.value)">
+            ${episodeDirectorOptions.map(o=>`<option value="${o.email}" ${o.email===currentEpDirector?'selected':''}>${o.label}</option>`).join('')}
+          </select>`:`<div style="font-size:12px;color:var(--textm)">No project selected — create one to assign an Episode Director</div>`}
+        </div>
+      </div>
+      <div style="height:14px;width:1.5px;background:var(--border);margin-left:19px"></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(61,31,122,0.05)">
+        <span style="font-size:18px">🎥</span>
+        <div style="flex:1"><div style="font-size:9px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em">Assistant Director</div><div style="font-size:12px;font-weight:600;color:var(--text)">${activeAssistant?activeAssistant.name+' — '+activeAssistant.style:'None selected yet — pick one below'}</div></div>
+      </div>
+      <div style="height:14px;width:1.5px;background:var(--border);margin-left:19px"></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(61,31,122,0.05);border-radius:0 0 8px 8px">
+        <span style="font-size:18px">✍️</span>
+        <div style="flex:1"><div style="font-size:9px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em">Prompt Writer</div><div style="font-size:12px;color:var(--textm)">Automatic — the Assistant Director's approach, the active Character's Identity Lock, and your shot's camera/VFX choices are combined into the final generation prompt</div></div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--textm);margin-top:10px">All 6 Assistant Directors work every genre — they're distinguished by <i>how</i> they direct (pacing, scale, emotional focus), not locked to one visual style. Pick whichever approach fits this shot.</div>
+  </div>`;
+}
+
+function setHierarchyProject(projectId){
+  S.hierarchyProjectId=projectId;
+  renderDirectors(document.getElementById("moduleContent"));
+}
+
+function setEpisodeDirector(projectId,email){
+  const p=S.projects.find(x=>x.id===projectId);
+  if(!p)return;
+  p.episodeDirector=email;
+  save("projects");
+  toast(`🎬 ${email} set as Episode Director for ${p.name}`,"success");
+}
+
 function renderDirectors(el){
   const activeId=gs("active_director","");
   const activeStyleRef=gs("active_style_ref","");
   const cats=[...new Set(STYLE_LIBRARY.map(s=>s.cat))];
   const allDirectors=getAllDirectors();
+  const hierarchyProjectId=S.hierarchyProjectId||(S.projects[0]&&S.projects[0].id)||"";
   el.innerHTML=`
+    ${renderHierarchyPanel(hierarchyProjectId,activeId,allDirectors)}
     <div style="margin-bottom:14px">
       <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">🎥 AI Directors</div>
       <div style="font-size:11px;color:var(--textm);margin-top:2px">${activeId?`Active: ${allDirectors.find(d=>d.id===activeId)?.name||''} — style is auto-injected into AI Director chat and Image/Video prompts`:'Select a director to shape the visual style of every generation'}</div>
