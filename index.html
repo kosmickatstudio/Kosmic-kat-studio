@@ -3271,15 +3271,20 @@ function getAllDirectors(){
 // Director → Promptwriter → 6 Episode Directors
 // ══════════════════════════════════════════════════════
 
-// Real per-model duration support — verified individually, not assumed uniform.
-// Seedance/Kling take a plain number ("5"/"10"); Veo 3.1 requires a string with
-// the unit suffix ("4s"/"6s"/"8s") and does NOT support 5s or 10s at all.
+// Real per-model duration support — verified individually via fal.ai's own docs/schema
+// for every model, not assumed uniform:
+// - Seedance 2.0 (both tiers): confirmed to accept any integer 4-15s
+// - Kling (all 3 tiers): confirmed to accept any integer 3-15s (schema explicitly
+//   enumerates 3,4,5,6,7,8,9,10,11,12,13,14,15 for v3; 2.6/2.1 follow the same
+//   platform-wide Kling range per fal's developer docs)
+// - Veo 3.1: genuinely fixed enum, only 4s/6s/8s, formatted as a string with
+//   the unit suffix — this one is NOT a range, unlike the other two
 const VIDEO_MODEL_DURATIONS={
-  "bytedance/seedance-2.0/fast/text-to-video":{options:[5,10],format:n=>String(n)},
-  "bytedance/seedance-2.0/text-to-video":{options:[5,10],format:n=>String(n)},
-  "fal-ai/kling-video/v2.1/master/text-to-video":{options:[5,10],format:n=>String(n)},
-  "fal-ai/kling-video/v2.6/pro/text-to-video":{options:[5,10],format:n=>String(n)},
-  "fal-ai/kling-video/v3/standard/text-to-video":{options:[5,10],format:n=>String(n)},
+  "bytedance/seedance-2.0/fast/text-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
+  "bytedance/seedance-2.0/text-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
+  "fal-ai/kling-video/v2.1/master/text-to-video":{options:[3,4,5,6,8,10,12,15],format:n=>String(n)},
+  "fal-ai/kling-video/v2.6/pro/text-to-video":{options:[3,4,5,6,8,10,12,15],format:n=>String(n)},
+  "fal-ai/kling-video/v3/standard/text-to-video":{options:[3,4,5,6,8,10,12,15],format:n=>String(n)},
   "fal-ai/veo3.1":{options:[4,6,8],format:n=>`${n}s`},
 };
 
