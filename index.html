@@ -781,6 +781,7 @@ const S = {
   editingCharRefImages: [],
   vcActiveProject: null,
   activityLog: JSON.parse(localStorage.getItem("kk_activity")||"[]"),
+  productions: JSON.parse(localStorage.getItem("kk_productions")||"[]"),
   pendingFirstFrame: null,
   editingCharRelationships: [],
   pendingRefTag: "Front",
@@ -792,7 +793,7 @@ const S = {
 };
 
 function save(k){
-  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",settings:"kk_settings",activityLog:"kk_activity"};
+  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",settings:"kk_settings",activityLog:"kk_activity",productions:"kk_productions"};
   if(!m[k])return;
   try{
     localStorage.setItem(m[k],JSON.stringify(S[k]));
@@ -3244,6 +3245,436 @@ function getAllDirectors(){
   return [...DIRECTORS,...custom];
 }
 
+// ══════════════════════════════════════════════════════
+// PRODUCTION PIPELINE — Showrunner → Director → Assistant
+// Director → Promptwriter → 6 Episode Directors
+// ══════════════════════════════════════════════════════
+
+const CLIP_LENGTHS=[5,10]; // real, fixed clip durations supported by the video models
+
+function renderProductionSection(projectId){
+  const productions=(S.productions||[]).filter(p=>p.projectId===projectId);
+  return `<div class="panel">
+    <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>🎬 Production Pipeline</span>
+      ${projectId?`<button class="btn btn-primary btn-sm" onclick="openProductionWizard('${projectId}')">+ Start New Production</button>`:''}
+    </div>
+    ${!projectId?`<div class="empty-desc">Select a project above to start a production.</div>`:
+      productions.length?`<div style="display:flex;flex-direction:column;gap:8px">${productions.map(p=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(61,31,122,0.04);border-radius:8px;cursor:pointer" onclick="openProductionDetail('${p.id}')">
+          <span style="font-size:18px">${p.status==='complete'?'✅':'🎬'}</span>
+          <div style="flex:1"><div style="font-size:12px;font-weight:700;color:var(--text)">${p.concept.slice(0,50)}</div><div style="font-size:10px;color:var(--textm)">${p.totalDurationRounded}s total · ${p.episodes.filter(e=>e.sceneStatus==='approved').length}/6 episodes done</div></div>
+          <span class="badge badge-gray">${p.status}</span>
+        </div>`).join('')}</div>`
+      :`<div class="empty-desc">No productions yet for this project. Start one to run the full Showrunner → Director → Assistant Director → Promptwriter → 6 Episode Directors pipeline.</div>`}
+  </div>`;
+}
+
+// ── STEP 1: DIRECTOR INTAKE WIZARD ──
+function openProductionWizard(projectId){
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show";
+  overlay.id="prodWizardModal";
+  overlay.innerHTML=`
+    <div class="modal project-modal">
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:6px">🎬 New Production — Director Intake</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Give the Director your idea. He'll ask 5 questions, then hand off to the Assistant Director for budgeting.</div>
+      <div class="f-group"><label class="f-label">Idea / Concept / Character Description</label><textarea class="f-textarea" id="pdConcept" style="min-height:80px" placeholder="Describe anything — a character, a scene, a whole premise…"></textarea></div>
+      <div class="f-group"><label class="f-label">1. Image Model</label><select class="f-select" id="pdImageModel">
+        <option value="fal-ai/flux/schnell">FLUX Schnell</option><option value="fal-ai/flux/dev">FLUX Dev</option><option value="fal-ai/flux-pro/v1.1">FLUX 1.1 Pro</option>
+        <option value="fal-ai/ideogram/v3">Ideogram V3</option><option value="fal-ai/recraft/v3/text-to-image">Recraft V3</option><option value="fal-ai/stable-diffusion-v35-large">Stable Diffusion 3.5</option>
+      </select></div>
+      <div class="f-group"><label class="f-label">2. Video Model</label><select class="f-select" id="pdVideoModel">
+        <option value="bytedance/seedance-2.0/fast/text-to-video">Seedance 2.0 Fast</option><option value="bytedance/seedance-2.0/text-to-video">Seedance 2.0</option>
+        <option value="fal-ai/kling-video/v2.1/master/text-to-video">Kling 2.1 Master</option><option value="fal-ai/kling-video/v2.6/pro/text-to-video">Kling 2.6 Pro</option>
+        <option value="fal-ai/kling-video/v3/standard/text-to-video">Kling 3.0 Standard</option><option value="fal-ai/veo3.1">Veo 3.1</option>
+      </select></div>
+      <div class="f-group"><label class="f-label">3. Video Quality</label><select class="f-select" id="pdQuality"><option value="720p">720p</option><option value="1080p">1080p</option></select></div>
+      <div class="f-group">
+        <label class="f-label">4. Total Duration</label>
+        <div class="f-row">
+          <input class="f-input" type="number" id="pdDuration" placeholder="e.g. 58" min="5" oninput="updateDurationPreview()">
+          <select class="f-select" id="pdClipLen" onchange="updateDurationPreview()">${CLIP_LENGTHS.map(c=>`<option value="${c}">${c}s clips</option>`).join('')}</select>
+        </div>
+        <div id="pdDurationPreview" style="font-size:11px;color:var(--textm);margin-top:6px">Enter a duration to see the real breakdown.</div>
+      </div>
+      <div class="f-group"><label class="f-label">5. Continuity Style</label><select class="f-select" id="pdContinuity">
+        <option value="narrative">Narrative only (shared story/character details across episodes)</option>
+        <option value="visual">Visual chaining (each episode starts from the previous episode's last frame)</option>
+        <option value="both">Both</option>
+      </select></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="document.getElementById('prodWizardModal').remove()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitDirectorIntake('${projectId}')">Next: Assistant Director →</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function roundProductionDuration(requested,clipLen){
+  const unit=clipLen*6; // 6 episodes, whole shots per episode
+  return Math.ceil(requested/unit)*unit;
+}
+
+function updateDurationPreview(){
+  const requested=parseFloat(document.getElementById("pdDuration").value)||0;
+  const clipLen=parseInt(document.getElementById("pdClipLen").value);
+  const preview=document.getElementById("pdDurationPreview");
+  if(!requested){preview.textContent="Enter a duration to see the real breakdown.";return;}
+  const rounded=roundProductionDuration(requested,clipLen);
+  const totalShots=rounded/clipLen;
+  const shotsPerEp=totalShots/6;
+  preview.innerHTML=`Rounded up to <b>${rounded}s</b> — 6 episodes × ${shotsPerEp} shots (${clipLen}s each) = <b>${totalShots} total generations</b>`;
+}
+
+// ── STEP 2: ASSISTANT DIRECTOR — budget + split ──
+function submitDirectorIntake(projectId){
+  const concept=document.getElementById("pdConcept").value.trim();
+  if(!concept){toast("Enter an idea/concept first","error");return;}
+  const requested=parseFloat(document.getElementById("pdDuration").value)||0;
+  if(!requested){toast("Enter a total duration","error");return;}
+  const clipLen=parseInt(document.getElementById("pdClipLen").value);
+  const imageModel=document.getElementById("pdImageModel").value;
+  const videoModel=document.getElementById("pdVideoModel").value;
+  const quality=document.getElementById("pdQuality").value;
+  const continuity=document.getElementById("pdContinuity").value;
+
+  const rounded=roundProductionDuration(requested,clipLen);
+  const totalShots=rounded/clipLen;
+  const shotsPerEp=totalShots/6;
+  const costPerClip=COST_TABLE[videoModel]!==undefined?COST_TABLE[videoModel]:0.5;
+  const costPerImage=COST_TABLE[imageModel]!==undefined?COST_TABLE[imageModel]:0.02;
+  const videoBudget=totalShots*costPerClip;
+  const storyboardBudget=totalShots*costPerImage;
+  const totalBudget=videoBudget+storyboardBudget;
+  const estMinutes=Math.ceil(totalShots*1.5+6*0.5); // rough: ~1.5min/clip gen + 0.5min/episode script
+
+  const draft={projectId,concept,imageModel,videoModel,quality,clipLen,totalDurationRequested:requested,totalDurationRounded:rounded,totalShots,shotsPerEp,continuity};
+
+  const modal=document.getElementById("prodWizardModal");
+  S.pendingProductionDraft=draft;
+  modal.querySelector(".modal").innerHTML=`
+    <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:14px">🎯 Assistant Director — Budget & Split</div>
+    <div style="font-size:12px;color:var(--textm);line-height:1.8;background:rgba(61,31,122,0.05);border-radius:8px;padding:12px;margin-bottom:14px">
+      <b>Total:</b> ${rounded}s across 6 episodes (${(rounded/6)}s each)<br>
+      <b>Shots per episode:</b> ${shotsPerEp} × ${clipLen}s clips = ${totalShots} total video generations<br>
+      <b>Storyboard images:</b> ${totalShots} keyframes<br>
+      <b>Estimated cost:</b> ~$${totalBudget.toFixed(2)} (video ~$${videoBudget.toFixed(2)} + storyboards ~$${storyboardBudget.toFixed(2)})<br>
+      <b>Estimated time:</b> ~${estMinutes} minutes of actual generation (spread across script/storyboard/scene approval stages)<br>
+      <b>Continuity:</b> ${continuity==='narrative'?'Narrative only':continuity==='visual'?'Visual chaining':'Narrative + visual chaining'}
+    </div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Next, the Promptwriter will draft 6 Master Prompts + Character Descriptions — one per episode — based on your concept.</div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="document.getElementById('prodWizardModal').remove()">Cancel</button>
+      <button class="btn btn-primary" id="pdConfirmBtn" onclick="runPromptwriter()">Confirm — Start Promptwriter →</button>
+    </div>`;
+}
+
+// ── STEP 3: PROMPTWRITER — 6 Master Prompts + Character Descriptions ──
+async function runPromptwriter(){
+  const draft=S.pendingProductionDraft;
+  if(!draft){toast("Something went wrong — please restart the wizard","error");return;}
+  const btn=document.getElementById("pdConfirmBtn");
+  const modal=document.getElementById("prodWizardModal");
+  btn.disabled=true;btn.textContent="⏳ Promptwriter working…";
+  modal.querySelector(".modal").insertAdjacentHTML("beforeend",`<div id="pwStatus" style="text-align:center;padding:16px;color:var(--textm);font-size:12px">✍️ Drafting 6 Master Prompts…</div>`);
+
+  const continuityNote=draft.continuity==="narrative"?"All 6 episodes must share consistent characters, setting, and world details — write them as direct narrative continuations of each other.":
+    draft.continuity==="visual"?"Episodes will be visually chained (each starts from the previous episode's last frame) — keep character/setting descriptions consistent so the visual handoff makes sense.":
+    "Episodes share consistent characters/setting/world AND will be visually chained frame-to-frame — keep everything consistent across all 6.";
+
+  try{
+    const reply=await callAiSimple(
+      `Concept: "${draft.concept}"\n\nWrite exactly 6 Master Prompts (one per episode of a 6-part series) and a shared Character Description block. ${continuityNote}\n\nFormat EXACTLY like this, nothing else:\nCHARACTERS: <character description text>\nEPISODE 1: <master prompt text for episode 1>\nEPISODE 2: <master prompt text for episode 2>\nEPISODE 3: <master prompt text for episode 3>\nEPISODE 4: <master prompt text for episode 4>\nEPISODE 5: <master prompt text for episode 5>\nEPISODE 6: <master prompt text for episode 6>`,
+      "You are a professional Promptwriter for an AI video production pipeline. Follow the requested format exactly, one line per field, no markdown, no extra commentary."
+    );
+    const parsed=parsePromptwriterOutput(reply);
+    if(!parsed)throw new Error("Couldn't parse Promptwriter output — try again");
+    createProduction(draft,parsed);
+    logCost(gs("ai_model","claude")+"_promptwriter","Promptwriter: "+draft.concept.slice(0,40));
+    S.pendingProductionDraft=null;
+    document.getElementById("prodWizardModal").remove();
+    toast("✍️ Master Prompts ready — 6 Episode Directors assigned","success");
+  }catch(err){
+    document.getElementById("pwStatus").innerHTML=`<span style="color:var(--red)">❌ ${err.message}</span>`;
+    btn.disabled=false;btn.textContent="Confirm — Start Promptwriter →";
+  }
+}
+
+function parsePromptwriterOutput(text){
+  const charMatch=text.match(/CHARACTERS:\s*([\s\S]*?)(?=EPISODE 1:)/i);
+  const characterDesc=charMatch?charMatch[1].trim():"";
+  const episodes=[];
+  for(let i=1;i<=6;i++){
+    const re=new RegExp(`EPISODE ${i}:\\s*([\\s\\S]*?)(?=EPISODE ${i+1}:|$)`,"i");
+    const m=text.match(re);
+    if(!m)return null;
+    episodes.push(m[1].trim());
+  }
+  return {characterDesc,masterPrompts:episodes};
+}
+
+function createProduction(draft,parsed){
+  const approaches=DIRECTORS; // genre-agnostic approach flavors, kept visible per your call
+  const production={
+    id:"prod_"+Date.now(),
+    ...draft,
+    characterDesc:parsed.characterDesc,
+    status:"active",
+    created:new Date().toISOString(),
+    episodes:parsed.masterPrompts.map((mp,i)=>({
+      index:i+1,
+      approach:approaches[i%approaches.length].name,
+      approachPrompt:approaches[i%approaches.length].prompt,
+      masterPrompt:mp,
+      script:null,scriptStatus:"pending", // pending -> ready -> approved
+      storyboard:[],storyboardStatus:"pending",
+      shots:[],sceneStatus:"pending",
+    }))
+  };
+  S.productions.push(production);
+  save("productions");
+  openProductionDetail(production.id);
+}
+
+// ── PRODUCTION DETAIL VIEW ──
+function openProductionDetail(prodId){
+  const p=S.productions.find(x=>x.id===prodId);
+  if(!p)return;
+  const el=document.getElementById("moduleContent");
+  const allApproved=p.episodes.every(e=>e.sceneStatus==="approved");
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <button class="btn btn-ghost btn-sm" onclick="renderModule('directors')">← Directorial Studio</button>
+      <div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">🎬 ${p.concept.slice(0,60)}</div><div style="font-size:11px;color:var(--textm)">${p.totalDurationRounded}s · ${p.shotsPerEp} shots/episode · ${p.continuity}</div></div>
+      ${allApproved?`<button class="btn btn-primary btn-sm" onclick="finalizeProductionToEditor('${p.id}')">🎞 Finalize to Video Editor</button>`:''}
+    </div>
+    <div class="panel">
+      <div class="panel-title">🎭 Shared Character Description</div>
+      <div style="font-size:12px;color:var(--textm);line-height:1.6">${p.characterDesc||'—'}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      ${p.episodes.map(e=>episodeCardHTML(p,e)).join('')}
+    </div>
+  `;
+}
+
+function episodeCardHTML(p,e){
+  const stageBadge=(status,labels)=>`<span class="badge ${status==='approved'?'badge-green':status==='rejected'?'badge-red':status==='ready'?'badge-violet':'badge-gray'}">${labels[status]||status}</span>`;
+  return `<div class="panel">
+    <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>🎬 Episode ${e.index} <span style="font-weight:400;color:var(--textm);font-size:11px">— ${e.approach}</span></span>
+      ${stageBadge(e.sceneStatus==='approved'?'approved':e.storyboardStatus==='approved'?'storyboard':e.scriptStatus==='approved'?'script':'pending',{approved:'✅ Complete',storyboard:'🖼 Storyboard stage',script:'✍️ Script approved',pending:'⬜ Not started'})}
+    </div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:10px;font-style:italic">"${e.masterPrompt.slice(0,120)}${e.masterPrompt.length>120?'…':''}"</div>
+
+    <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:700;color:var(--violet)">1. SCRIPT</span>${stageBadge(e.scriptStatus,{pending:'Not written',ready:'Awaiting your approval',approved:'✅ Approved',rejected:'❌ Rejected — rewriting'})}
+      </div>
+      ${e.scriptStatus==='pending'?`<button class="btn btn-primary btn-sm" onclick="generateEpisodeScript('${p.id}',${e.index})">✍️ Write Script</button>`:''}
+      ${e.script?`<div style="font-size:11px;color:var(--textm);white-space:pre-wrap;max-height:160px;overflow-y:auto;background:rgba(61,31,122,0.04);border-radius:6px;padding:8px;margin-bottom:6px">${e.script}</div>`:''}
+      ${e.scriptStatus==='ready'?`<div style="display:flex;gap:6px"><button class="btn btn-primary btn-xs" onclick="approveEpisodeStage('${p.id}',${e.index},'script')">✅ Approve</button><button class="btn btn-danger btn-xs" onclick="rejectEpisodeStage('${p.id}',${e.index},'script')">❌ Reject & Rewrite</button></div>`:''}
+    </div>
+
+    ${e.scriptStatus==='approved'?`<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:700;color:var(--violet)">2. STORYBOARD</span>${stageBadge(e.storyboardStatus,{pending:'Not generated',ready:'Awaiting your approval',approved:'✅ Approved',rejected:'❌ Rejected — redoing'})}
+      </div>
+      ${e.storyboardStatus==='pending'?`<button class="btn btn-primary btn-sm" onclick="generateEpisodeStoryboard('${p.id}',${e.index})">🖼 Generate Storyboard</button>`:''}
+      ${e.storyboard.length?`<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:6px">${e.storyboard.map(s=>`<img src="${s.url}" style="width:70px;height:70px;border-radius:6px;object-fit:cover;flex-shrink:0">`).join('')}</div>`:''}
+      ${e.storyboardStatus==='ready'?`<div style="display:flex;gap:6px"><button class="btn btn-primary btn-xs" onclick="approveEpisodeStage('${p.id}',${e.index},'storyboard')">✅ Approve</button><button class="btn btn-danger btn-xs" onclick="rejectEpisodeStage('${p.id}',${e.index},'storyboard')">❌ Reject & Redo</button></div>`:''}
+    </div>`:''}
+
+    ${e.storyboardStatus==='approved'?`<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:700;color:var(--violet)">3. SCENE (VIDEO)</span>${stageBadge(e.sceneStatus,{pending:'Not generated',ready:'Awaiting your approval',approved:'✅ Approved'})}
+      </div>
+      ${e.sceneStatus==='pending'?`<button class="btn btn-primary btn-sm" onclick="generateEpisodeScene('${p.id}',${e.index})">🎬 Generate Scene</button>`:''}
+      ${e.shots.length&&e.shots.some(s=>s.videoUrl)?`<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:6px">${e.shots.filter(s=>s.videoUrl).map(s=>`<video src="${s.videoUrl}" style="width:100px;height:60px;border-radius:6px;object-fit:cover;flex-shrink:0" muted></video>`).join('')}</div>`:''}
+      ${e.sceneStatus==='ready'?`<div style="display:flex;gap:6px"><button class="btn btn-primary btn-xs" onclick="approveEpisodeStage('${p.id}',${e.index},'scene')">✅ Approve</button><button class="btn btn-danger btn-xs" onclick="reshootEpisodeScene('${p.id}',${e.index})">🔄 Reshoot</button></div>`:''}
+    </div>`:''}
+  </div>`;
+}
+
+function getEpisode(p,index){return p.episodes.find(e=>e.index===index);}
+
+function approveEpisodeStage(prodId,epIndex,stage){
+  const p=S.productions.find(x=>x.id===prodId);
+  const e=getEpisode(p,epIndex);
+  if(stage==="script")e.scriptStatus="approved";
+  if(stage==="storyboard")e.storyboardStatus="approved";
+  if(stage==="scene")e.sceneStatus="approved";
+  save("productions");
+  openProductionDetail(prodId);
+  toast(`✅ Episode ${epIndex} ${stage} approved`,"success");
+}
+
+function rejectEpisodeStage(prodId,epIndex,stage){
+  const p=S.productions.find(x=>x.id===prodId);
+  const e=getEpisode(p,epIndex);
+  if(stage==="script"){e.scriptStatus="pending";e.script=null;}
+  if(stage==="storyboard"){e.storyboardStatus="pending";e.storyboard=[];}
+  save("productions");
+  openProductionDetail(prodId);
+  toast(`Episode ${epIndex} ${stage} sent back — other episodes keep moving`,"");
+}
+
+// ── EPISODE SCRIPT (per-episode AI call) ──
+async function generateEpisodeScript(prodId,epIndex){
+  const p=S.productions.find(x=>x.id===prodId);
+  const e=getEpisode(p,epIndex);
+  toast(`✍️ Episode ${epIndex} writing script…`,"");
+  try{
+    const reply=await callAiSimple(
+      `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"\n\nWrite a detailed shooting script broken into exactly ${p.shotsPerEp} shots (each shot will become a ${p.clipLen}-second video clip). For each shot include: camera angle, setting/background, scene time, and precise character movement/action. Format as "SHOT 1: <description>", "SHOT 2: <description>", etc.`,
+      "You are Episode Director for a professional AI video production. Write a precise, filmable shot-by-shot script. No preamble."
+    );
+    e.script=reply;
+    e.scriptStatus="ready";
+    save("productions");
+    logCost(gs("ai_model","claude")+"_episode_script",`Ep${epIndex} script`);
+    openProductionDetail(prodId);
+    toast(`✍️ Episode ${epIndex} script ready for your approval`,"success");
+  }catch(err){
+    toast(`❌ Episode ${epIndex} script failed: ${err.message}`,"error");
+  }
+}
+
+function parseScriptShots(script,count){
+  const shots=[];
+  for(let i=1;i<=count;i++){
+    const re=new RegExp(`SHOT ${i}:\\s*([\\s\\S]*?)(?=SHOT ${i+1}:|$)`,"i");
+    const m=script.match(re);
+    shots.push(m?m[1].trim():script.slice(0,200));
+  }
+  return shots;
+}
+
+// ── EPISODE STORYBOARD (real image gen per shot) ──
+async function generateEpisodeStoryboard(prodId,epIndex){
+  const p=S.productions.find(x=>x.id===prodId);
+  const e=getEpisode(p,epIndex);
+  const shotDescs=parseScriptShots(e.script,p.shotsPerEp);
+  toast(`🖼 Episode ${epIndex} generating ${shotDescs.length} storyboard frames…`,"");
+  e.storyboard=[];
+  for(let i=0;i<shotDescs.length;i++){
+    try{
+      const result=await genViaFal(`${shotDescs[i]}, ${p.characterDesc}`,"",p.imageModel,"16:9",false);
+      e.storyboard.push({shotIndex:i,url:result.url,desc:shotDescs[i]});
+      logCost(p.imageModel,`Ep${epIndex} storyboard shot ${i+1}`);
+    }catch(err){
+      toast(`❌ Storyboard shot ${i+1} failed: ${err.message}`,"error");
+    }
+    save("productions");
+    openProductionDetail(prodId);
+  }
+  e.storyboardStatus=e.storyboard.length?"ready":"pending";
+  save("productions");
+  openProductionDetail(prodId);
+  toast(`🖼 Episode ${epIndex} storyboard ready for your approval`,"success");
+}
+
+// ── EPISODE SCENE (real video gen per shot, with continuity chaining) ──
+async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImageUrl){
+  const apiKey=gs("api_falai","");
+  if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+  let endpoint=model;
+  let body={prompt,aspect_ratio:ratio};
+  if(refImageUrl){
+    const i2v=IMAGE_TO_VIDEO_MAP[model];
+    if(i2v){endpoint=i2v.endpoint;body[i2v.field]=refImageUrl;}
+  }
+  if(endpoint.startsWith("fal-ai/kling-video")){body.duration=String(duration);body.generate_audio=true;}
+  else if(endpoint==="fal-ai/veo3.1"){body.audio=true;body.resolution=quality;}
+  else{body.duration=String(duration);body.resolution=quality;}
+
+  const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
+  const submitData=await submitRes.json();
+  if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
+  const requestId=submitData.request_id;
+  const statusUrl=submitData.status_url||`https://queue.fal.run/${endpoint}/requests/${requestId}/status`;
+  const resultUrl=submitData.response_url||`https://queue.fal.run/${endpoint}/requests/${requestId}`;
+  let attempts=0,finalData=null;
+  while(attempts<60){
+    await new Promise(r=>setTimeout(r,5000));attempts++;
+    const statusRes=await fetch(statusUrl,{headers:{"Authorization":"Key "+apiKey}});
+    const statusData=await statusRes.json();
+    if(statusData.status==="COMPLETED"){const finalRes=await fetch(resultUrl,{headers:{"Authorization":"Key "+apiKey}});finalData=await finalRes.json();break;}
+    if(statusData.status==="ERROR"||statusData.status==="FAILED")throw new Error(statusData.error||"Generation failed");
+  }
+  if(!finalData)throw new Error("Timed out");
+  const videoUrl=finalData.video&&finalData.video.url;
+  if(!videoUrl)throw new Error("No video returned");
+  return videoUrl;
+}
+
+async function generateEpisodeScene(prodId,epIndex){
+  const p=S.productions.find(x=>x.id===prodId);
+  const e=getEpisode(p,epIndex);
+  const useVisualChain=p.continuity==="visual"||p.continuity==="both";
+  toast(`🎬 Episode ${epIndex} generating ${e.storyboard.length} clips…`,"");
+  e.shots=[];
+
+  // Cross-episode chaining: if visual continuity is on and this isn't episode 1,
+  // seed the first shot's reference from the previous episode's last approved frame.
+  let priorLastFrame=null;
+  if(useVisualChain&&epIndex>1){
+    const prevEp=getEpisode(p,epIndex-1);
+    const lastShot=prevEp.shots[prevEp.shots.length-1];
+    if(lastShot&&lastShot.videoUrl)priorLastFrame=prevEp.storyboard[prevEp.storyboard.length-1]?.url||null;
+  }
+
+  for(let i=0;i<e.storyboard.length;i++){
+    const sb=e.storyboard[i];
+    const refImage=i===0?priorLastFrame:(useVisualChain?e.storyboard[i-1].url:null);
+    try{
+      const videoUrl=await runProductionVideoGen(p.videoModel,`${sb.desc}, ${p.characterDesc}`,"16:9",p.clipLen,p.quality,refImage);
+      e.shots.push({shotIndex:i,videoUrl,refImage});
+      logCost(p.videoModel,`Ep${epIndex} scene shot ${i+1}`);
+    }catch(err){
+      toast(`❌ Scene shot ${i+1} failed: ${err.message}`,"error");
+    }
+    save("productions");
+    openProductionDetail(prodId);
+  }
+  e.sceneStatus=e.shots.length?"ready":"pending";
+  save("productions");
+  openProductionDetail(prodId);
+  toast(`🎬 Episode ${epIndex} scene ready for your approval`,"success");
+}
+
+function reshootEpisodeScene(prodId,epIndex){
+  const p=S.productions.find(x=>x.id===prodId);
+  const e=getEpisode(p,epIndex);
+  e.sceneStatus="pending";
+  e.shots=[];
+  save("productions");
+  openProductionDetail(prodId);
+  toast(`🔄 Episode ${epIndex} reshoot queued — script & storyboard kept`,"");
+}
+
+// ── FINALIZE: push all approved clips into Video Editor sequence, in order ──
+function finalizeProductionToEditor(prodId){
+  const p=S.productions.find(x=>x.id===prodId);
+  if(!p.episodes.every(e=>e.sceneStatus==="approved")){toast("All 6 episodes must be approved first","error");return;}
+  if(!confirm(`Add all ${p.totalShots} clips from this production to the Video Editor sequence, in order?`))return;
+  const seq=normalizeSequence(S.editorSequence||[]);
+  p.episodes.sort((a,b)=>a.index-b.index).forEach(e=>{
+    e.shots.forEach(s=>{
+      const asset={id:"asset_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),type:"video",url:s.videoUrl,prompt:`${p.concept} — Ep${e.index}`,projectId:p.projectId,created:new Date().toISOString()};
+      S.assets.push(asset);
+      seq.push({id:asset.id,trimStart:0,trimEnd:null,transition:"cut"});
+    });
+  });
+  S.editorSequence=seq;
+  save("assets");save("editorSequence");
+  p.status="complete";
+  save("productions");
+  toast("🎞 All clips added to Video Editor, in sequence","success");
+  switchMod('editor',document.querySelector('[data-mod=editor]'));
+}
+
 // ── DIRECTOR HIERARCHY: Showrunner -> Episode Director -> Assistant Director -> Prompt Writer ──
 function renderHierarchyPanel(projectId,activeAssistantId,allDirectors){
   const project=S.projects.find(p=>p.id===projectId);
@@ -3307,6 +3738,7 @@ function renderDirectors(el){
   const hierarchyProjectId=S.hierarchyProjectId||(S.projects[0]&&S.projects[0].id)||"";
   el.innerHTML=`
     ${renderHierarchyPanel(hierarchyProjectId,activeId,allDirectors)}
+    ${renderProductionSection(hierarchyProjectId)}
     <div style="margin-bottom:14px">
       <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">🎥 Directorial Studio</div>
       <div style="font-size:11px;color:var(--textm);margin-top:2px">${activeId?`Active: ${allDirectors.find(d=>d.id===activeId)?.name||''} — style is auto-injected into AI Director chat and Image/Video prompts`:'Select a director to shape the visual style of every generation'}</div>
