@@ -378,12 +378,12 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
       </button>
     </div>
     <div class="sidebar-section">
-      <div class="sidebar-label">Direction</div>
+      <div class="sidebar-label">Production House</div>
       <button class="mod-btn" data-mod="directors" onclick="switchMod('directors',this)">
-        <span class="mod-icon">🎥</span><span class="mod-label">Directors</span>
+        <span class="mod-icon">🎥</span><span class="mod-label">Directorial Studio</span>
       </button>
       <button class="mod-btn" data-mod="adstudio" onclick="switchMod('adstudio',this)">
-        <span class="mod-icon">📢</span><span class="mod-label">Ad Studio</span>
+        <span class="mod-icon">📢</span><span class="mod-label">Ads/UGC Studio</span>
         <span class="mod-badge new">NEW</span>
       </button>
     </div>
@@ -3308,7 +3308,7 @@ function renderDirectors(el){
   el.innerHTML=`
     ${renderHierarchyPanel(hierarchyProjectId,activeId,allDirectors)}
     <div style="margin-bottom:14px">
-      <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">🎥 AI Directors</div>
+      <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">🎥 Directorial Studio</div>
       <div style="font-size:11px;color:var(--textm);margin-top:2px">${activeId?`Active: ${allDirectors.find(d=>d.id===activeId)?.name||''} — style is auto-injected into AI Director chat and Image/Video prompts`:'Select a director to shape the visual style of every generation'}</div>
     </div>
     <div class="grid2">${allDirectors.map(d=>`<div class="director-card ${d.cls||''}${activeId===d.id?' selected':''}" onclick="selectDirector('${d.id}',this)">
