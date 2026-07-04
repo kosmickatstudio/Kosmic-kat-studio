@@ -29,6 +29,17 @@
   --red:#EF4444;--green:#10B981;--yellow:#F59E0B;--orange:#F97316;
   --sidebar:220px;--header:60px;
 }
+html[data-theme="dark"]{
+  --pearl:#161022;--pearl2:#1E1730;--lav:#241C38;--lav2:#332750;
+  --gold:#E8C060;--gold-l:#F5D687;--gold-p:#3A2E1A;
+  --violet:#B6A3E8;--vm:#9B7FD4;--vs:#7C5FC0;--vx:#4A3878;
+  --blue:#7BA6E8;--rose:#E599B8;--teal:#4DE8D4;
+  --text:#EDE8F5;--textm:#B0A2D0;--texts:#7A6C98;
+  --border:rgba(182,163,232,0.14);--borderl:rgba(182,163,232,0.08);
+  --sh:0 4px 32px rgba(0,0,0,0.35);
+  --shg:0 2px 20px rgba(232,192,96,0.15);
+  --shv:0 8px 40px rgba(0,0,0,0.5);
+}
 html{scroll-behavior:smooth;overscroll-behavior-y:contain}
 body{font-family:'Inter',sans-serif;background:var(--pearl);color:var(--text);overflow:hidden;height:100vh;display:flex;flex-direction:column;overscroll-behavior-y:contain}
 ::-webkit-scrollbar{width:5px;height:5px}
@@ -418,12 +429,16 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
   <div class="main-content">
     <!-- Display Area -->
     <div class="display-area" id="displayArea">
-      <div class="display-placeholder">
+      <div class="display-placeholder" id="displayPlaceholder">
         <div class="dp-icon">✦</div>
         <div class="dp-text">Display Area — drag videos, ads, brand banners or YouTube here</div>
-        <button class="dp-btn" onclick="toast('Content panel coming soon!','')">+ Add Content</button>
+        <button class="dp-btn" onclick="openDisplayContentModal()">+ Add Content</button>
       </div>
+      <div id="displayContentSlot" style="display:none;width:100%;height:100%"></div>
       <div class="display-controls">
+        <button class="disp-ctrl" id="displayPrevBtn" style="display:none" onclick="cycleDisplay(-1)" title="Previous">◀</button>
+        <button class="disp-ctrl" onclick="openDisplayContentModal()" title="Add Content">+</button>
+        <button class="disp-ctrl" id="displayNextBtn" style="display:none" onclick="cycleDisplay(1)" title="Next">▶</button>
         <button class="disp-ctrl" onclick="toggleDisplay()" title="Expand/Collapse">⤢</button>
         <button class="disp-ctrl" onclick="clearDisplay()" title="Clear">✕</button>
       </div>
@@ -525,8 +540,57 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
     <div class="sp-section-title">Display</div>
     <div class="sp-section-body">
       <div class="toggle-wrap"><label class="toggle-label">Watermark on exports</label><label class="toggle"><input type="checkbox" id="togWatermark" onchange="saveSetting('watermark',this.checked)"><span class="toggle-slider"></span></label></div>
-      <div class="toggle-wrap"><label class="toggle-label">Notifications</label><label class="toggle"><input type="checkbox" id="togNotifs" onchange="saveSetting('notifs',this.checked)"><span class="toggle-slider"></span></label></div>
+      <div class="toggle-wrap"><label class="toggle-label">Notifications</label><label class="toggle"><input type="checkbox" id="togNotifs" onchange="onNotifsToggle(this)"><span class="toggle-slider"></span></label></div>
       <div class="toggle-wrap"><label class="toggle-label">PixVerse Affiliate</label><label class="toggle"><input type="checkbox" id="togPixverse" onchange="saveSetting('pixverse',this.checked)"><span class="toggle-slider"></span></label></div>
+      <div class="f-group" style="margin-top:8px"><label class="f-label">PixVerse Affiliate Link <span style="font-weight:400;color:var(--texts)">(your impact.com link — powers the quick-insert banner in Display Area)</span></label><input class="f-input" id="pixverseLink" placeholder="https://pixverse.pxf.io/..." onchange="saveSetting('pixverse_link',this.value)"></div>
+    </div>
+  </div>
+
+  <!-- Theme -->
+  <div class="sp-section">
+    <div class="sp-section-title">Theme</div>
+    <div class="sp-section-body">
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-outline btn-sm theme-btn" data-val="light" onclick="setTheme('light',this)">☀️ Light</button>
+        <button class="btn btn-outline btn-sm theme-btn" data-val="dark" onclick="setTheme('dark',this)">🌙 Dark</button>
+        <button class="btn btn-outline btn-sm theme-btn" data-val="auto" onclick="setTheme('auto',this)">🔄 Auto</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Backup -->
+  <div class="sp-section">
+    <div class="sp-section-title">Backup</div>
+    <div class="sp-section-body">
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Export everything (projects, characters, settings, team roster) as one file, or restore from a previous export. API keys are excluded from export for security.</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-outline btn-sm" style="flex:1" onclick="exportAllSettings()">📤 Export All</button>
+        <button class="btn btn-outline btn-sm" style="flex:1" onclick="document.getElementById('importAllFile').click()">📥 Import</button>
+      </div>
+      <input type="file" id="importAllFile" accept="application/json" style="display:none" onchange="importAllSettings(event)">
+    </div>
+  </div>
+
+  <!-- Registries -->
+  <div class="sp-section">
+    <div class="sp-section-title">Custom Directors</div>
+    <div class="sp-section-body">
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Add your own director presets — they'll appear in the Directors module alongside the 6 built-in ones.</div>
+      <div id="customDirectorsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+      <div class="f-group"><input class="f-input" id="cdName" placeholder="Name (e.g. 'Neo-Noir Voss')"></div>
+      <div class="f-group"><input class="f-input" id="cdPrompt" placeholder="Style prompt fragment"></div>
+      <button class="btn btn-outline btn-sm btn-full" onclick="addCustomDirector()">+ Add Director</button>
+    </div>
+  </div>
+
+  <div class="sp-section">
+    <div class="sp-section-title">Custom Image Models</div>
+    <div class="sp-section-body">
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Add any fal.ai text-to-image model by its endpoint slug — appears in Image Gen's model dropdown.</div>
+      <div id="customModelsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+      <div class="f-group"><input class="f-input" id="cmLabel" placeholder="Display name (e.g. 'Playground v3')"></div>
+      <div class="f-group"><input class="f-input" id="cmEndpoint" placeholder="fal.ai endpoint (e.g. fal-ai/playground-v3)"></div>
+      <button class="btn btn-outline btn-sm btn-full" onclick="addCustomModel()">+ Add Model</button>
     </div>
   </div>
 
@@ -1655,6 +1719,7 @@ async function launchLoraTraining(charId){
     save("characters");
     logCost("fal-ai/flux-lora-fast-training",`LoRA training: ${c.name}`);
     toast(`🧬 ${c.name}'s LoRA model is ready!`,"success");
+    notifyIfEnabled("LoRA training complete 🧬",`${c.name}'s custom model is ready`);
   }catch(err){
     console.error("LoRA training error:",err);
     c.loraStatus={state:"error",error:err.message};
@@ -1921,7 +1986,7 @@ function renderImageGen(el){
   const activeProviders=[hasFal&&"fal.ai",hasReplicate&&"Replicate",hasOpenAI&&"OpenAI"].filter(Boolean);
   el.innerHTML=`
     <div class="panel">
-      <div class="panel-title">🖼 Image Generation ${hasKey?`<span class="badge badge-green">ACTIVE — ${activeProviders.join(' + ')}</span>`:'<span class="badge badge-red">NO KEY</span>'}${gs("active_director","")?' <span class="badge badge-violet">🎬 '+(DIRECTORS.find(d=>d.id===gs("active_director",""))||{}).name+'</span>':''}</div>
+      <div class="panel-title">🖼 Image Generation ${hasKey?`<span class="badge badge-green">ACTIVE — ${activeProviders.join(' + ')}</span>`:'<span class="badge badge-red">NO KEY</span>'}${gs("active_director","")?' <span class="badge badge-violet">🎬 '+(getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name+'</span>':''}</div>
       ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add a <b>fal.ai</b>, <b>Replicate</b>, or <b>OpenAI</b> API key in Settings to enable image generation. Configure more than one and generation will automatically fall back if your primary provider fails or runs out of credit.</div>`:''}
       ${hasKey&&activeProviders.length<2?`<div style="font-size:11px;color:var(--textm);margin-bottom:12px">💡 Add a second provider (Replicate or OpenAI) in Settings for automatic fallback if ${activeProviders[0]} runs out of credit.</div>`:''}
 
@@ -1953,6 +2018,7 @@ function renderImageGen(el){
             <option value="fal-ai/ideogram/v3">Ideogram V3 (best for text/logos)</option>
             <option value="fal-ai/recraft/v3/text-to-image">Recraft V3 (vector art, brand style)</option>
             <option value="fal-ai/stable-diffusion-v35-large">Stable Diffusion 3.5 Large</option>
+            ${(gs("custom_image_models",[])||[]).map(m=>`<option value="${m.endpoint}">${m.label} (custom)</option>`).join('')}
           </select>
         </div>
       </div>
@@ -2334,12 +2400,53 @@ async function generateImage(){
   btn.disabled=false;btn.textContent="✨ Generate Image";
 }
 
-function saveImageToGallery(url,prompt,projectId){
-  const asset={id:"asset_"+Date.now(),type:"image",url,prompt,projectId:projectId||null,created:new Date().toISOString()};
+async function saveImageToGallery(url,prompt,projectId){
+  const wantsWatermark=gs("watermark",false)===true||gs("watermark",false)==="true";
+  let finalUrl=url;
+  if(wantsWatermark){
+    try{
+      finalUrl=await applyWatermark(url);
+    }catch(err){
+      console.warn("Watermark failed (likely a CORS-protected image host):",err);
+      toast("⚠️ Saved without watermark — this provider's images can't be watermarked in-browser (CORS)","");
+    }
+  }
+  const asset={id:"asset_"+Date.now(),type:"image",url:finalUrl,prompt,projectId:projectId||null,created:new Date().toISOString()};
   S.assets.push(asset);
   save("assets");
   toast("💾 Saved to Gallery","success");
   renderImageGen(document.getElementById("moduleContent"));
+}
+
+// Real canvas-based text watermark. Some providers' CDNs don't set permissive
+// CORS headers, which taints the canvas and blocks toDataURL — caught by the
+// caller rather than silently failing or pretending it worked.
+function applyWatermark(imgUrl){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.crossOrigin="anonymous";
+    img.onload=()=>{
+      try{
+        const canvas=document.createElement("canvas");
+        canvas.width=img.width;canvas.height=img.height;
+        const ctx=canvas.getContext("2d");
+        ctx.drawImage(img,0,0);
+        const fontSize=Math.max(16,Math.round(img.width*0.025));
+        ctx.font=`700 ${fontSize}px Inter, sans-serif`;
+        ctx.textAlign="right";
+        ctx.textBaseline="bottom";
+        const text="Kosmic Kat AI Studio";
+        const pad=fontSize*0.8;
+        ctx.fillStyle="rgba(0,0,0,0.35)";
+        ctx.fillText(text,img.width-pad+1,img.height-pad+1);
+        ctx.fillStyle="rgba(255,255,255,0.85)";
+        ctx.fillText(text,img.width-pad,img.height-pad);
+        resolve(canvas.toDataURL("image/jpeg",0.92));
+      }catch(err){reject(err);}
+    };
+    img.onerror=()=>reject(new Error("Couldn't load image for watermarking"));
+    img.src=imgUrl;
+  });
 }
 
 // ── VIDEO CANVAS ──
@@ -2436,7 +2543,7 @@ function renderVideoCanvas(el){
         <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet);flex:1">🎬 ${project.name} — Storyboard</div>
         ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}
       </div>
-      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">${shots.length} shot${shots.length!==1?'s':''}${gs("active_director","")?' · 🎬 '+(DIRECTORS.find(d=>d.id===gs("active_director",""))||{}).name+' style active':''}</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">${shots.length} shot${shots.length!==1?'s':''}${gs("active_director","")?' · 🎬 '+(getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name+' style active':''}</div>
       ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:10px">Add a <b>fal.ai</b> API key in Settings to generate. This one key powers Seedance, Kling, and Veo.</div>`:''}
       <button class="btn btn-primary btn-sm" onclick="openShotEditor('${project.id}')">+ Add Shot</button>
     </div>
@@ -2781,6 +2888,7 @@ async function generateShotVideo(shotId){
     save("shots");
     logCost(endpoint,prompt.slice(0,60));
     toast(`🎬 "${s.name}" generated!`,"success");
+    notifyIfEnabled("Video ready 🎬",`"${s.name}" finished generating`);
   }catch(err){
     console.error("Shot generation error:",err);
     s.status="error";
@@ -2932,22 +3040,28 @@ const DIRECTORS=[
   {id:"sage",name:"Director Sage",style:"Thoughtful & Precise",cls:"sage",icon:"🌿",prompt:"minimalist precise composition, natural muted tones, static contemplative shots, clean framing, thoughtful pacing"},
 ];
 
+function getAllDirectors(){
+  const custom=gs("custom_directors",[])||[];
+  return [...DIRECTORS,...custom];
+}
+
 function renderDirectors(el){
   const activeId=gs("active_director","");
   const activeStyleRef=gs("active_style_ref","");
   const cats=[...new Set(STYLE_LIBRARY.map(s=>s.cat))];
+  const allDirectors=getAllDirectors();
   el.innerHTML=`
     <div style="margin-bottom:14px">
       <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">🎥 AI Directors</div>
-      <div style="font-size:11px;color:var(--textm);margin-top:2px">${activeId?`Active: ${DIRECTORS.find(d=>d.id===activeId)?.name||''} — style is auto-injected into AI Director chat and Image/Video prompts`:'Select a director to shape the visual style of every generation'}</div>
+      <div style="font-size:11px;color:var(--textm);margin-top:2px">${activeId?`Active: ${allDirectors.find(d=>d.id===activeId)?.name||''} — style is auto-injected into AI Director chat and Image/Video prompts`:'Select a director to shape the visual style of every generation'}</div>
     </div>
-    <div class="grid2">${DIRECTORS.map(d=>`<div class="director-card ${d.cls}${activeId===d.id?' selected':''}" onclick="selectDirector('${d.id}',this)">
-      <div style="font-size:24px;margin-bottom:8px">${d.icon}</div>
-      <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet)">${d.name}</div>
-      <div style="font-size:11px;color:var(--textm);margin-top:4px">${d.style}</div>
+    <div class="grid2">${allDirectors.map(d=>`<div class="director-card ${d.cls||''}${activeId===d.id?' selected':''}" onclick="selectDirector('${d.id}',this)">
+      <div style="font-size:24px;margin-bottom:8px">${d.icon||'🎬'}</div>
+      <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet)">${d.name}${d.custom?' <span class="badge badge-gray" style="font-size:9px">custom</span>':''}</div>
+      <div style="font-size:11px;color:var(--textm);margin-top:4px">${d.style||d.prompt}</div>
       ${activeId===d.id?'<div style="margin-top:6px"><span class="badge badge-green">✓ Active</span></div>':''}
     </div>`).join('')}</div>
-    ${activeId?`<div class="panel" style="margin-top:14px"><div class="panel-title">🎨 Style Signature</div><div style="font-size:12px;color:var(--textm);line-height:1.6;font-family:monospace;background:rgba(61,31,122,0.05);border-radius:8px;padding:10px">${DIRECTORS.find(d=>d.id===activeId)?.prompt||''}</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="clearDirector()">✕ Clear Selection</button></div>`:''}
+    ${activeId?`<div class="panel" style="margin-top:14px"><div class="panel-title">🎨 Style Signature</div><div style="font-size:12px;color:var(--textm);line-height:1.6;font-family:monospace;background:rgba(61,31,122,0.05);border-radius:8px;padding:10px">${allDirectors.find(d=>d.id===activeId)?.prompt||''}</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="clearDirector()">✕ Clear Selection</button></div>`:''}
 
     <div class="panel" style="margin-top:14px">
       <div class="panel-title">📚 Style Intelligence <span style="font-weight:400;color:var(--texts);font-size:11px">— layer a real director/animator/composer reference on top</span></div>
@@ -3030,7 +3144,7 @@ function getActiveDirectorPrompt(){
   const parts=[];
   const dirId=gs("active_director","");
   if(dirId){
-    const d=DIRECTORS.find(x=>x.id===dirId);
+    const d=getAllDirectors().find(x=>x.id===dirId);
     if(d)parts.push(d.prompt);
   }
   const styleRefName=gs("active_style_ref","");
@@ -3044,10 +3158,13 @@ function getActiveDirectorPrompt(){
 // ── AD STUDIO ──
 function renderAdStudio(el){
   const hasAiKey=gs("api_anthropic")||gs("api_groq")||gs("api_deepseek")||gs("api_openai");
+  const products=gs("product_library",[])||[];
   el.innerHTML=`
     <div class="panel">
       <div class="panel-title">📢 Ad Brief Generator ${hasAiKey?'<span class="badge badge-green">ACTIVE</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
       ${!hasAiKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add an AI Director key (Anthropic/Groq/DeepSeek/OpenAI) in Settings — same one powering AI Director chat.</div>`:''}
+      <div style="font-size:11px;color:var(--textm);background:rgba(201,151,42,0.08);border:1px solid rgba(201,151,42,0.2);border-radius:8px;padding:8px;margin-bottom:12px">💡 No "paste a URL and get a full ad" here — browsers block fetching arbitrary websites cross-origin (CORS), so that would fail silently for most real sites. Paste the product details below instead — same result, actually works.</div>
+      ${products.length?`<div class="f-group"><label class="f-label">Load from Product Library</label><select class="f-select" id="productLibSelect" onchange="loadLibraryProduct()"><option value="">— Select saved product —</option>${products.map((p,i)=>`<option value="${i}">${p.name}</option>`).join('')}</select></div>`:''}
       <div class="f-group">
         <label class="f-label">Product / Service</label>
         <input class="f-input" id="adProduct" placeholder="e.g. Kosmic Kat AI Studio, a cinematic video toolkit">
@@ -3056,6 +3173,7 @@ function renderAdStudio(el){
         <label class="f-label">Key selling point</label>
         <textarea class="f-textarea" id="adUSP" placeholder="What makes this worth talking about? e.g. Generate full cinematic scenes from a single prompt, no editing skills needed." style="min-height:60px"></textarea>
       </div>
+      <button class="btn btn-outline btn-sm btn-full" style="margin-bottom:10px" onclick="saveLibraryProduct()">💾 Save to Product Library</button>
       <div class="f-row">
         <div class="f-group">
           <label class="f-label">Ad Format</label>
@@ -3069,28 +3187,104 @@ function renderAdStudio(el){
         <div class="f-group">
           <label class="f-label">Platform</label>
           <select class="f-select" id="adPlatform">
-            <option>TikTok / Reels / Shorts</option>
-            <option>Meta Feed (Instagram/Facebook)</option>
-            <option>YouTube Pre-roll</option>
-            <option>LinkedIn</option>
+            <option value="9:16">TikTok / Reels / Shorts (9:16)</option>
+            <option value="1:1">Meta Feed — Instagram/Facebook (1:1)</option>
+            <option value="16:9">YouTube Pre-roll (16:9)</option>
+            <option value="1:1">LinkedIn (1:1)</option>
           </select>
         </div>
       </div>
       <button class="btn btn-primary btn-full" id="adGenBtn" ${!hasAiKey?'disabled':''} onclick="generateAdBrief()">${hasAiKey?'✨ Generate Ad Brief + Hooks':'🔑 Add API Key First'}</button>
+      <button class="btn btn-outline btn-full" style="margin-top:8px" id="adVariantBtn" ${!hasAiKey?'disabled':''} onclick="generateAdVariants()">🎲 Generate 10 Hook Variants</button>
     </div>
     <div class="panel" id="adResultPanel" style="display:none;margin-top:14px">
       <div class="panel-title">📋 Result</div>
       <div id="adResultContent" style="font-size:13px;color:var(--textm);line-height:1.7;white-space:pre-wrap"></div>
     </div>
+    <div class="panel" id="adVariantPanel" style="display:none;margin-top:14px">
+      <div class="panel-title">🎲 Hook Variants</div>
+      <div id="adVariantContent" style="font-size:13px;color:var(--textm);line-height:1.7;white-space:pre-wrap"></div>
+    </div>
     <div class="panel" style="margin-top:14px">
-      <div class="panel-title">🎬 Next Step</div>
-      <div style="font-size:12px;color:var(--textm)">Take the generated hook and shot ideas into <b>Video Canvas</b> or <b>Image Gen</b> to actually produce the ad creative.</div>
-      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-        <button class="btn btn-outline btn-sm" onclick="switchMod('videocanvas',document.querySelector('[data-mod=videocanvas]'))">🎬 Video Canvas</button>
-        <button class="btn btn-outline btn-sm" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))">🖼 Image Gen</button>
+      <div class="panel-title">🎬 Produce This Ad <span style="font-weight:400;color:var(--texts);font-size:11px">— jumps over with the right aspect ratio for your selected platform</span></div>
+      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="produceAdIn('videocanvas')">🎬 Video Canvas</button>
+        <button class="btn btn-outline btn-sm" onclick="produceAdIn('imagegen')">🖼 Image Gen</button>
       </div>
     </div>
   `;
+}
+
+// ── PRODUCT LIBRARY ──
+function saveLibraryProduct(){
+  const name=document.getElementById("adProduct").value.trim();
+  const usp=document.getElementById("adUSP").value.trim();
+  if(!name){toast("Enter a product name first","error");return;}
+  const products=gs("product_library",[])||[];
+  const existing=products.findIndex(p=>p.name===name);
+  if(existing>=0)products[existing]={name,usp};
+  else products.push({name,usp});
+  saveSetting("product_library",products);
+  toast(`💾 "${name}" saved to Product Library`,"success");
+  renderAdStudio(document.getElementById("moduleContent"));
+}
+
+function loadLibraryProduct(){
+  const idx=document.getElementById("productLibSelect").value;
+  if(idx==="")return;
+  const products=gs("product_library",[])||[];
+  const p=products[parseInt(idx)];
+  if(!p)return;
+  document.getElementById("adProduct").value=p.name;
+  document.getElementById("adUSP").value=p.usp||"";
+  toast(`📚 Loaded "${p.name}"`,"success");
+}
+
+// ── AD VARIANT GENERATOR ──
+async function generateAdVariants(){
+  const product=document.getElementById("adProduct").value.trim();
+  const usp=document.getElementById("adUSP").value.trim();
+  if(!product||!usp){toast("Fill in product and selling point first","error");return;}
+  const btn=document.getElementById("adVariantBtn");
+  const panel=document.getElementById("adVariantPanel");
+  const content=document.getElementById("adVariantContent");
+  btn.disabled=true;btn.textContent="⏳ Generating…";
+  panel.style.display="block";
+  content.textContent="Writing 10 distinct hook variants…";
+  try{
+    const reply=await callAiSimple(
+      `Product: ${product}\nSelling point: ${usp}\n\nWrite exactly 10 short-form video ad hooks (opening lines, first 3 seconds). Each must use a genuinely different angle — curiosity, bold claim, question, pattern interrupt, social proof, problem-first, humor, controversy, direct offer, and story-open. Number them 1-10. One line each, no explanations.`,
+      "You are a direct-response ad copywriter. Output only the numbered list, nothing else."
+    );
+    content.textContent=reply;
+    logCost(gs("ai_model","claude")+"_ad_variants","Ad variants: "+product.slice(0,40));
+    toast("🎲 10 hook variants generated","success");
+  }catch(err){
+    content.innerHTML=`<div style="color:var(--red)">❌ ${err.message}</div>`;
+    toast("❌ Generation failed: "+err.message,"error");
+  }
+  btn.disabled=false;btn.textContent="🎲 Generate 10 Hook Variants";
+}
+
+// ── PRODUCE HAND-OFF (platform-aware aspect ratio) ──
+function produceAdIn(mod){
+  const platformSel=document.getElementById("adPlatform");
+  const ratio=platformSel?platformSel.value:"9:16";
+  const product=document.getElementById("adProduct").value.trim();
+  if(mod==="imagegen"){
+    switchMod('imagegen',document.querySelector('[data-mod=imagegen]'));
+    setTimeout(()=>{
+      const ratioEl=document.getElementById("igRatio");
+      const promptEl=document.getElementById("igPrompt");
+      if(ratioEl)ratioEl.value=ratio;
+      if(promptEl&&product)promptEl.value=`Product hero shot for ${product}, `;
+    },50);
+    toast(`🖼 Image Gen ready — aspect ratio set to ${ratio}`,"success");
+  } else {
+    S.pendingShotPrompt=product?`Ad hero shot for ${product}`:"";
+    goToVideoCanvasFor("");
+    toast(`🎬 Pick a project, add a shot — set its aspect ratio to ${ratio} for this platform`,"success");
+  }
 }
 
 async function generateAdBrief(){
@@ -3098,7 +3292,8 @@ async function generateAdBrief(){
   const usp=document.getElementById("adUSP").value.trim();
   if(!product||!usp){toast("Fill in product and selling point first","error");return;}
   const format=document.getElementById("adFormat").value;
-  const platform=document.getElementById("adPlatform").value;
+  const platformSel=document.getElementById("adPlatform");
+  const platform=platformSel.options[platformSel.selectedIndex].text;
 
   const btn=document.getElementById("adGenBtn");
   const resultPanel=document.getElementById("adResultPanel");
@@ -3364,6 +3559,7 @@ async function generateLipsync(){
       <div style="display:flex;gap:8px"><a href="${videoUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-primary btn-sm" onclick="saveVideoToGallery('${videoUrl.replace(/'/g,"\\'")}','Lipsync video','')">💾 Save</button></div>`;
     logCost("sync-lipsync-v2","Lipsync video");
     toast("👄 Lipsync generated!","success");
+    notifyIfEnabled("Lipsync ready 👄","Your lipsync video finished generating");
   }catch(err){
     resultEl.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px">❌ ${err.message}</div>`;
     toast("❌ Lipsync failed: "+err.message,"error");
@@ -4471,15 +4667,326 @@ function toggleDisplay(){
   const a=document.getElementById("displayArea");
   a.classList.toggle("expanded");
 }
+
 function clearDisplay(){
-  const ph=document.querySelector(".display-placeholder");
-  if(ph)ph.style.display="flex";
+  S.displayItems=[];
+  S.displayIndex=0;
+  saveSetting("display_items",[]);
+  renderDisplayCurrent();
+}
+
+// ── DISPLAY AREA — real content system ──
+S.displayItems=S.displayItems||gs("display_items",[])||[];
+S.displayIndex=S.displayIndex||0;
+
+function openDisplayContentModal(){
+  const hasAffiliateLink=!!gs("pixverse_link","");
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show";
+  overlay.id="displayContentModal";
+  overlay.innerHTML=`
+    <div class="modal">
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:14px">+ Add Display Content</div>
+      <div class="f-group">
+        <label class="f-label">Type</label>
+        <select class="f-select" id="dcType" onchange="updateDisplayContentFields()">
+          <option value="image">Image URL</option>
+          <option value="video">Video URL (MP4)</option>
+          <option value="youtube">YouTube URL</option>
+          <option value="html">Custom HTML Embed</option>
+        </select>
+      </div>
+      <div class="f-group" id="dcUrlWrap">
+        <label class="f-label">URL</label>
+        <input class="f-input" id="dcUrl" placeholder="https://…">
+      </div>
+      <div class="f-group" id="dcHtmlWrap" style="display:none">
+        <label class="f-label">HTML</label>
+        <textarea class="f-textarea" id="dcHtml" style="min-height:80px" placeholder="<div>Your ad embed HTML…</div>"></textarea>
+      </div>
+      ${hasAffiliateLink?`<button class="btn btn-outline btn-sm btn-full" style="margin-bottom:10px" onclick="insertPixverseBanner()">⚡ Quick-Insert PixVerse Affiliate Banner</button>`:''}
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('displayContentModal').remove()">Cancel</button>
+        <button class="btn btn-primary" onclick="addDisplayContent()">+ Add</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function updateDisplayContentFields(){
+  const type=document.getElementById("dcType").value;
+  document.getElementById("dcUrlWrap").style.display=type==="html"?"none":"block";
+  document.getElementById("dcHtmlWrap").style.display=type==="html"?"block":"none";
+}
+
+function addDisplayContent(){
+  const type=document.getElementById("dcType").value;
+  let item={id:"disp_"+Date.now(),type};
+  if(type==="html"){
+    const html=document.getElementById("dcHtml").value.trim();
+    if(!html){toast("Paste some HTML first","error");return;}
+    item.html=html;
+  } else {
+    const url=document.getElementById("dcUrl").value.trim();
+    if(!url){toast("Enter a URL first","error");return;}
+    if(type==="youtube"){
+      const idMatch=url.match(/(?:youtu\.be\/|watch\?v=|embed\/)([a-zA-Z0-9_-]{11})/);
+      if(!idMatch){toast("Couldn't parse a YouTube video ID from that URL","error");return;}
+      item.youtubeId=idMatch[1];
+    } else {
+      item.url=url;
+    }
+  }
+  S.displayItems.push(item);
+  saveSetting("display_items",S.displayItems);
+  S.displayIndex=S.displayItems.length-1;
+  document.getElementById("displayContentModal").remove();
+  renderDisplayCurrent();
+  toast("✅ Added to Display Area","success");
+}
+
+function insertPixverseBanner(){
+  const link=gs("pixverse_link","");
+  if(!link){toast("Add your PixVerse affiliate link in Settings first","error");return;}
+  const item={id:"disp_"+Date.now(),type:"html",html:`<a href="${link}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;text-decoration:none;font-family:'Cinzel',serif;font-weight:700;font-size:16px;border-radius:12px">⚡ Try PixVerse — AI Video Generation</a>`};
+  S.displayItems.push(item);
+  saveSetting("display_items",S.displayItems);
+  S.displayIndex=S.displayItems.length-1;
+  document.getElementById("displayContentModal")?.remove();
+  renderDisplayCurrent();
+  toast("✅ PixVerse banner added","success");
+}
+
+function renderDisplayCurrent(){
+  const placeholder=document.getElementById("displayPlaceholder");
+  const slot=document.getElementById("displayContentSlot");
+  const prevBtn=document.getElementById("displayPrevBtn");
+  const nextBtn=document.getElementById("displayNextBtn");
+  if(!slot)return; // not on a page with the display area
+  const items=S.displayItems||[];
+  if(!items.length){
+    placeholder.style.display="flex";
+    slot.style.display="none";
+    prevBtn.style.display="none";nextBtn.style.display="none";
+    return;
+  }
+  placeholder.style.display="none";
+  slot.style.display="block";
+  if(items.length>1){prevBtn.style.display="inline-flex";nextBtn.style.display="inline-flex";}
+  else{prevBtn.style.display="none";nextBtn.style.display="none";}
+
+  const item=items[S.displayIndex%items.length];
+  if(item.type==="image"){
+    slot.innerHTML=`<img src="${item.url}" style="width:100%;height:100%;object-fit:contain;border-radius:12px">`;
+  } else if(item.type==="video"){
+    slot.innerHTML=`<video src="${item.url}" controls autoplay muted loop style="width:100%;height:100%;object-fit:contain;border-radius:12px"></video>`;
+  } else if(item.type==="youtube"){
+    slot.innerHTML=`<iframe src="https://www.youtube.com/embed/${item.youtubeId}" style="width:100%;height:100%;border:none;border-radius:12px" allow="autoplay;encrypted-media" allowfullscreen></iframe>`;
+  } else if(item.type==="html"){
+    slot.innerHTML=item.html;
+  }
+}
+
+function cycleDisplay(dir){
+  const items=S.displayItems||[];
+  if(!items.length)return;
+  S.displayIndex=(S.displayIndex+dir+items.length)%items.length;
+  renderDisplayCurrent();
 }
 
 // ── SETTINGS ──
 function openSettings(){
   document.getElementById("settingsPanel").classList.add("open");
   document.getElementById("settingsOverlay").classList.add("show");
+  syncSettingsPanel();
+}
+
+function syncSettingsPanel(){
+  const wm=document.getElementById("togWatermark");
+  const nf=document.getElementById("togNotifs");
+  const pv=document.getElementById("togPixverse");
+  const pvLink=document.getElementById("pixverseLink");
+  if(wm)wm.checked=gs("watermark",false)===true||gs("watermark",false)==="true";
+  if(nf)nf.checked=gs("notifs",false)===true||gs("notifs",false)==="true";
+  if(pv)pv.checked=gs("pixverse",false)===true||gs("pixverse",false)==="true";
+  if(pvLink)pvLink.value=gs("pixverse_link","");
+  const theme=gs("theme","auto");
+  document.querySelectorAll(".theme-btn").forEach(b=>{
+    b.classList.toggle("btn-primary",b.dataset.val===theme);
+    b.classList.toggle("btn-outline",b.dataset.val!==theme);
+  });
+  renderCustomDirectorsList();
+  renderCustomModelsList();
+}
+
+// ── CUSTOM DIRECTOR REGISTRY ──
+function renderCustomDirectorsList(){
+  const wrap=document.getElementById("customDirectorsList");
+  if(!wrap)return;
+  const custom=gs("custom_directors",[])||[];
+  wrap.innerHTML=custom.length?custom.map((d,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;font-size:11px;background:rgba(61,31,122,0.04);border-radius:6px;padding:6px 8px">
+      <span style="flex:1;color:var(--text)">${d.name}</span>
+      <button class="pc-menu-btn" onclick="removeCustomDirector(${i})">🗑</button>
+    </div>`).join(''):`<div style="font-size:11px;color:var(--textm)">No custom directors yet.</div>`;
+}
+
+function addCustomDirector(){
+  const name=document.getElementById("cdName").value.trim();
+  const prompt=document.getElementById("cdPrompt").value.trim();
+  if(!name||!prompt){toast("Enter both a name and a style prompt","error");return;}
+  const custom=gs("custom_directors",[])||[];
+  custom.push({id:"custom_dir_"+Date.now(),name,prompt,style:prompt,icon:"🎬",custom:true});
+  saveSetting("custom_directors",custom);
+  document.getElementById("cdName").value="";
+  document.getElementById("cdPrompt").value="";
+  renderCustomDirectorsList();
+  toast(`✅ "${name}" added to Directors`,"success");
+}
+
+function removeCustomDirector(i){
+  const custom=gs("custom_directors",[])||[];
+  custom.splice(i,1);
+  saveSetting("custom_directors",custom);
+  renderCustomDirectorsList();
+}
+
+// ── CUSTOM MODEL REGISTRY (Image Gen) ──
+function renderCustomModelsList(){
+  const wrap=document.getElementById("customModelsList");
+  if(!wrap)return;
+  const custom=gs("custom_image_models",[])||[];
+  wrap.innerHTML=custom.length?custom.map((m,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;font-size:11px;background:rgba(61,31,122,0.04);border-radius:6px;padding:6px 8px">
+      <span style="flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.label} <span style="color:var(--textm)">(${m.endpoint})</span></span>
+      <button class="pc-menu-btn" onclick="removeCustomModel(${i})">🗑</button>
+    </div>`).join(''):`<div style="font-size:11px;color:var(--textm)">No custom models yet.</div>`;
+}
+
+function addCustomModel(){
+  const label=document.getElementById("cmLabel").value.trim();
+  const endpoint=document.getElementById("cmEndpoint").value.trim();
+  if(!label||!endpoint){toast("Enter both a display name and an endpoint slug","error");return;}
+  const custom=gs("custom_image_models",[])||[];
+  custom.push({label,endpoint});
+  saveSetting("custom_image_models",custom);
+  document.getElementById("cmLabel").value="";
+  document.getElementById("cmEndpoint").value="";
+  renderCustomModelsList();
+  toast(`✅ "${label}" added to Image Gen models`,"success");
+}
+
+function removeCustomModel(i){
+  const custom=gs("custom_image_models",[])||[];
+  custom.splice(i,1);
+  saveSetting("custom_image_models",custom);
+  renderCustomModelsList();
+}
+
+// ── THEME ──
+function applyTheme(theme){
+  if(theme==="dark"){
+    document.documentElement.setAttribute("data-theme","dark");
+  } else if(theme==="light"){
+    document.documentElement.removeAttribute("data-theme");
+  } else { // auto
+    const prefersDark=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if(prefersDark)document.documentElement.setAttribute("data-theme","dark");
+    else document.documentElement.removeAttribute("data-theme");
+  }
+}
+
+function setTheme(theme,btn){
+  saveSetting("theme",theme);
+  applyTheme(theme);
+  document.querySelectorAll(".theme-btn").forEach(b=>{
+    b.classList.toggle("btn-primary",b===btn);
+    b.classList.toggle("btn-outline",b!==btn);
+  });
+}
+
+// ── FULL BACKUP (excludes API keys for security) ──
+function exportAllSettings(){
+  const safeSettings={...S.settings};
+  Object.keys(safeSettings).forEach(k=>{if(k.startsWith("api_"))delete safeSettings[k];});
+  const data={
+    exportedAt:new Date().toISOString(),
+    formatVersion:1,
+    settings:safeSettings,
+    projects:S.projects,
+    characters:S.characters,
+    shots:S.shots,
+    episodes:S.episodes,
+    team:S.team,
+    activityLog:S.activityLog
+  };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download=`kosmic_kat_full_backup_${Date.now()}.json`;
+  document.body.appendChild(a);a.click();a.remove();
+  URL.revokeObjectURL(url);
+  toast("📤 Full backup exported (API keys excluded for security)","success");
+}
+
+function importAllSettings(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  if(!confirm("Importing will REPLACE your current projects, characters, shots, episodes, team roster, and settings (except API keys) with the backup file's contents. This cannot be undone. Continue?")){
+    event.target.value="";return;
+  }
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!data.formatVersion){toast("❌ This doesn't look like a Kosmic Kat backup file","error");return;}
+      const preservedKeys={};
+      Object.keys(S.settings).forEach(k=>{if(k.startsWith("api_"))preservedKeys[k]=S.settings[k];});
+      S.settings={...(data.settings||{}),...preservedKeys};
+      S.projects=data.projects||[];
+      S.characters=data.characters||[];
+      S.shots=data.shots||[];
+      S.episodes=data.episodes||[];
+      S.team=data.team||[];
+      S.activityLog=data.activityLog||[];
+      save("settings");save("projects");save("characters");save("shots");save("episodes");save("team");save("activityLog");
+      toast("✅ Backup restored — reloading…","success");
+      setTimeout(()=>window.location.reload(),1200);
+    }catch(err){
+      console.error("Import error:",err);
+      toast("❌ Couldn't read that file: "+err.message,"error");
+    }
+    event.target.value="";
+  };
+  reader.readAsText(file);
+}
+
+function onNotifsToggle(el){
+  if(el.checked){
+    if(!("Notification" in window)){
+      toast("This browser doesn't support notifications","error");
+      el.checked=false;saveSetting("notifs",false);return;
+    }
+    Notification.requestPermission().then(perm=>{
+      if(perm==="granted"){
+        saveSetting("notifs",true);
+        new Notification("Kosmic Kat AI Studio",{body:"Notifications enabled — you'll be alerted when long generations finish.",icon:LOGO_SRC});
+      } else {
+        toast("Notification permission denied by browser — enable it in your browser's site settings","error");
+        el.checked=false;saveSetting("notifs",false);
+      }
+    });
+  } else {
+    saveSetting("notifs",false);
+  }
+}
+
+function notifyIfEnabled(title,body){
+  if(gs("notifs",false)!==true&&gs("notifs",false)!=="true")return;
+  if(!("Notification" in window)||Notification.permission!=="granted")return;
+  // Only notify if the tab isn't currently focused — no need to interrupt active use
+  if(document.visibilityState==="visible")return;
+  try{new Notification(title,{body,icon:LOGO_SRC});}catch(e){console.warn("Notification failed:",e);}
 }
 function closeSettings(){
   document.getElementById("settingsPanel").classList.remove("open");
@@ -4793,6 +5300,8 @@ function init(){
   const model=gs("ai_model","claude");
   const sel=document.getElementById("aiModelSelect");
   if(sel)sel.value=model;
+  applyTheme(gs("theme","auto"));
+  renderDisplayCurrent();
 
   // Restore user — real Firebase session, not a localStorage guess
   fbAuth.onAuthStateChanged(user=>{
