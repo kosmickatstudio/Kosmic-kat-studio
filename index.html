@@ -1088,9 +1088,11 @@ async function homeQuickGenerate(){
       const apiKey=gs("api_falai","");
       if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
       const model=gs("default_video_model","bytedance/seedance-2.0/fast/text-to-video");
+      const durationConfig=VIDEO_MODEL_DURATIONS[model]||{options:[5],format:n=>String(n)};
+      const shortestDuration=durationConfig.format(durationConfig.options[0]);
       const submitRes=await fetch(`https://queue.fal.run/${model}`,{
         method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
-        body:JSON.stringify({prompt:fullPrompt,aspect_ratio:ratio,duration:"5",resolution:"720p"})
+        body:JSON.stringify({prompt:fullPrompt,aspect_ratio:ratio,duration:shortestDuration,resolution:"720p"})
       });
       const submitData=await submitRes.json();
       if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
@@ -2728,6 +2730,7 @@ function renderVideoCanvas(el){
           </div>`).join('')}</div>
       </div>`:''}
     `;
+    updateVcDurationOptions();
     return;
   }
 
@@ -2754,6 +2757,13 @@ function renderVideoCanvas(el){
   `;
 }
 
+function updateVcDurationOptions(){
+  const model=document.getElementById("vcModel").value;
+  const config=VIDEO_MODEL_DURATIONS[model];
+  const sel=document.getElementById("vcDuration");
+  if(sel)sel.innerHTML=config.options.map(c=>`<option value="${c}">${c} seconds</option>`).join('');
+}
+
 function renderQuickGenerateForm(hasKey){
   return `
     <div class="panel" style="margin-top:14px">
@@ -2765,7 +2775,7 @@ function renderQuickGenerateForm(hasKey){
       <div class="f-row">
         <div class="f-group">
           <label class="f-label">Model</label>
-          <select class="f-select" id="vcModel">
+          <select class="f-select" id="vcModel" onchange="updateVcDurationOptions()">
             <option value="bytedance/seedance-2.0/fast/text-to-video">Seedance 2.0 Fast (cheap, quick)</option>
             <option value="bytedance/seedance-2.0/text-to-video">Seedance 2.0 (higher quality)</option>
             <option value="fal-ai/kling-video/v2.1/master/text-to-video">Kling 2.1 Master (cinematic)</option>
@@ -2776,7 +2786,7 @@ function renderQuickGenerateForm(hasKey){
         </div>
         <div class="f-group">
           <label class="f-label">Duration</label>
-          <select class="f-select" id="vcDuration"><option value="5">5 seconds</option><option value="10">10 seconds</option></select>
+          <select class="f-select" id="vcDuration"></select>
         </div>
       </div>
       <div class="f-row">
@@ -2857,7 +2867,7 @@ function openShotEditor(projectId,shotId=null){
 
       <div class="f-row">
         <div class="f-group"><label class="f-label">Model</label>
-          <select class="f-select" id="seModel">
+          <select class="f-select" id="seModel" onchange="updateShotDurationOptions()">
             <option value="bytedance/seedance-2.0/fast/text-to-video" ${s?.model==="bytedance/seedance-2.0/fast/text-to-video"?'selected':''}>Seedance 2.0 Fast</option>
             <option value="bytedance/seedance-2.0/text-to-video" ${s?.model==="bytedance/seedance-2.0/text-to-video"?'selected':''}>Seedance 2.0</option>
             <option value="fal-ai/kling-video/v2.1/master/text-to-video" ${!s||s?.model==="fal-ai/kling-video/v2.1/master/text-to-video"?'selected':''}>Kling 2.1 Master</option>
@@ -2867,7 +2877,7 @@ function openShotEditor(projectId,shotId=null){
           </select>
         </div>
         <div class="f-group"><label class="f-label">Duration</label>
-          <select class="f-select" id="seDuration"><option value="5" ${!s||s?.duration==="5"?'selected':''}>5s</option><option value="10" ${s?.duration==="10"?'selected':''}>10s</option></select>
+          <select class="f-select" id="seDuration"></select>
         </div>
       </div>
       <div class="f-row">
@@ -2897,9 +2907,15 @@ function openShotEditor(projectId,shotId=null){
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  updateShotDurationOptions(s?s.duration:null);
 }
 
-function handleShotRefUpload(event){
+function updateShotDurationOptions(preselectDuration){
+  const model=document.getElementById("seModel").value;
+  const config=VIDEO_MODEL_DURATIONS[model];
+  const sel=document.getElementById("seDuration");
+  sel.innerHTML=config.options.map(c=>`<option value="${c}" ${String(preselectDuration)===String(c)?'selected':''}>${c}s</option>`).join('');
+}function handleShotRefUpload(event){
   const file=event.target.files[0];
   if(!file)return;
   const reader=new FileReader();
@@ -3032,12 +3048,14 @@ async function generateShotVideo(shotId){
   if(cardEl)cardEl.outerHTML=shotCardHTML(s);
 
   let body={prompt,aspect_ratio:s.ratio,...extraBody};
+  const durationConfig=VIDEO_MODEL_DURATIONS[s.model];
+  const formattedDuration=durationConfig?durationConfig.format(s.duration):s.duration;
   if(endpoint.startsWith("fal-ai/kling-video")){
-    body.duration=s.duration;body.generate_audio=true;
+    body.duration=formattedDuration;body.generate_audio=true;
   } else if(endpoint==="fal-ai/veo3.1"){
-    body.audio=true;body.resolution=s.resolution==="1080p"?"1080p":"720p";
+    body.duration=formattedDuration;body.audio=true;body.resolution=s.resolution==="1080p"?"1080p":"720p";
   } else {
-    body.duration=s.duration;body.resolution=s.resolution;
+    body.duration=formattedDuration;body.resolution=s.resolution;
   }
 
   try{
@@ -3116,14 +3134,17 @@ async function generateVideo(){
   resultPanel.style.display="block";
 
   let body={prompt,aspect_ratio:ratio};
+  const durationConfig=VIDEO_MODEL_DURATIONS[model];
+  const formattedDuration=durationConfig?durationConfig.format(duration):duration;
   if(model.startsWith("fal-ai/kling-video")){
-    body.duration=duration;
+    body.duration=formattedDuration;
     body.generate_audio=true;
   } else if(model==="fal-ai/veo3.1"){
+    body.duration=formattedDuration;
     body.audio=true;
     body.resolution=res==="1080p"?"1080p":"720p";
   } else {
-    body.duration=duration;
+    body.duration=formattedDuration;
     body.resolution=res;
   }
 
@@ -3250,7 +3271,17 @@ function getAllDirectors(){
 // Director → Promptwriter → 6 Episode Directors
 // ══════════════════════════════════════════════════════
 
-const CLIP_LENGTHS=[5,10]; // real, fixed clip durations supported by the video models
+// Real per-model duration support — verified individually, not assumed uniform.
+// Seedance/Kling take a plain number ("5"/"10"); Veo 3.1 requires a string with
+// the unit suffix ("4s"/"6s"/"8s") and does NOT support 5s or 10s at all.
+const VIDEO_MODEL_DURATIONS={
+  "bytedance/seedance-2.0/fast/text-to-video":{options:[5,10],format:n=>String(n)},
+  "bytedance/seedance-2.0/text-to-video":{options:[5,10],format:n=>String(n)},
+  "fal-ai/kling-video/v2.1/master/text-to-video":{options:[5,10],format:n=>String(n)},
+  "fal-ai/kling-video/v2.6/pro/text-to-video":{options:[5,10],format:n=>String(n)},
+  "fal-ai/kling-video/v3/standard/text-to-video":{options:[5,10],format:n=>String(n)},
+  "fal-ai/veo3.1":{options:[4,6,8],format:n=>`${n}s`},
+};
 
 function renderProductionSection(projectId){
   const productions=(S.productions||[]).filter(p=>p.projectId===projectId);
@@ -3284,7 +3315,7 @@ function openProductionWizard(projectId){
         <option value="fal-ai/flux/schnell">FLUX Schnell</option><option value="fal-ai/flux/dev">FLUX Dev</option><option value="fal-ai/flux-pro/v1.1">FLUX 1.1 Pro</option>
         <option value="fal-ai/ideogram/v3">Ideogram V3</option><option value="fal-ai/recraft/v3/text-to-image">Recraft V3</option><option value="fal-ai/stable-diffusion-v35-large">Stable Diffusion 3.5</option>
       </select></div>
-      <div class="f-group"><label class="f-label">2. Video Model</label><select class="f-select" id="pdVideoModel">
+      <div class="f-group"><label class="f-label">2. Video Model</label><select class="f-select" id="pdVideoModel" onchange="updateClipLenOptions()">
         <option value="bytedance/seedance-2.0/fast/text-to-video">Seedance 2.0 Fast</option><option value="bytedance/seedance-2.0/text-to-video">Seedance 2.0</option>
         <option value="fal-ai/kling-video/v2.1/master/text-to-video">Kling 2.1 Master</option><option value="fal-ai/kling-video/v2.6/pro/text-to-video">Kling 2.6 Pro</option>
         <option value="fal-ai/kling-video/v3/standard/text-to-video">Kling 3.0 Standard</option><option value="fal-ai/veo3.1">Veo 3.1</option>
@@ -3293,8 +3324,8 @@ function openProductionWizard(projectId){
       <div class="f-group">
         <label class="f-label">4. Total Duration</label>
         <div class="f-row">
-          <input class="f-input" type="number" id="pdDuration" placeholder="e.g. 58" min="5" oninput="updateDurationPreview()">
-          <select class="f-select" id="pdClipLen" onchange="updateDurationPreview()">${CLIP_LENGTHS.map(c=>`<option value="${c}">${c}s clips</option>`).join('')}</select>
+          <input class="f-input" type="number" id="pdDuration" placeholder="e.g. 58" min="4" oninput="updateDurationPreview()">
+          <select class="f-select" id="pdClipLen" onchange="updateDurationPreview()"></select>
         </div>
         <div id="pdDurationPreview" style="font-size:11px;color:var(--textm);margin-top:6px">Enter a duration to see the real breakdown.</div>
       </div>
@@ -3309,6 +3340,15 @@ function openProductionWizard(projectId){
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  updateClipLenOptions();
+}
+
+function updateClipLenOptions(){
+  const model=document.getElementById("pdVideoModel").value;
+  const config=VIDEO_MODEL_DURATIONS[model];
+  const sel=document.getElementById("pdClipLen");
+  sel.innerHTML=config.options.map(c=>`<option value="${c}">${c}s clips</option>`).join('');
+  updateDurationPreview();
 }
 
 function roundProductionDuration(requested,clipLen){
@@ -3585,9 +3625,11 @@ async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImag
     const i2v=IMAGE_TO_VIDEO_MAP[model];
     if(i2v){endpoint=i2v.endpoint;body[i2v.field]=refImageUrl;}
   }
-  if(endpoint.startsWith("fal-ai/kling-video")){body.duration=String(duration);body.generate_audio=true;}
-  else if(endpoint==="fal-ai/veo3.1"){body.audio=true;body.resolution=quality;}
-  else{body.duration=String(duration);body.resolution=quality;}
+  const durationConfig=VIDEO_MODEL_DURATIONS[model];
+  const formattedDuration=durationConfig?durationConfig.format(duration):String(duration);
+  if(endpoint.startsWith("fal-ai/kling-video")){body.duration=formattedDuration;body.generate_audio=true;}
+  else if(endpoint==="fal-ai/veo3.1"){body.duration=formattedDuration;body.audio=true;body.resolution=quality;}
+  else{body.duration=formattedDuration;body.resolution=quality;}
 
   const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
   const submitData=await submitRes.json();
