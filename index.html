@@ -18,6 +18,7 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --pearl:#FAF8F5;--pearl2:#F3EFF8;--lav:#EDE7F9;--lav2:#D8CCF5;
+  --surface:#FFFFFF;--surface2:#FCFAFF;
   --gold:#C9972A;--gold-l:#E8C060;--gold-p:#FBF0D5;
   --violet:#3D1F7A;--vm:#6240B0;--vs:#9B7FD4;--vx:#C4B5FD;
   --blue:#5B8DD9;--rose:#D4789A;--teal:#2DD4BF;
@@ -29,16 +30,23 @@
   --red:#EF4444;--green:#10B981;--yellow:#F59E0B;--orange:#F97316;
   --sidebar:220px;--header:60px;
 }
+/* Dark mode is its own creative direction — a cosmic nebula palette matching
+   the Kosmic Kat brand, not an inverted/filtered version of the light theme.
+   Deep indigo-black surfaces with violet undertones, warm gold and magenta-violet
+   accents that actually glow against the dark, and every real surface (panels,
+   cards, modals, the settings drawer) genuinely changes color, not just the page
+   background. */
 html[data-theme="dark"]{
-  --pearl:#161022;--pearl2:#1E1730;--lav:#241C38;--lav2:#332750;
-  --gold:#E8C060;--gold-l:#F5D687;--gold-p:#3A2E1A;
-  --violet:#B6A3E8;--vm:#9B7FD4;--vs:#7C5FC0;--vx:#4A3878;
-  --blue:#7BA6E8;--rose:#E599B8;--teal:#4DE8D4;
-  --text:#EDE8F5;--textm:#B0A2D0;--texts:#7A6C98;
-  --border:rgba(182,163,232,0.14);--borderl:rgba(182,163,232,0.08);
-  --sh:0 4px 32px rgba(0,0,0,0.35);
-  --shg:0 2px 20px rgba(232,192,96,0.15);
-  --shv:0 8px 40px rgba(0,0,0,0.5);
+  --pearl:#0D0A16;--pearl2:#161022;--lav:#1E1830;--lav2:#2B2148;
+  --surface:#191324;--surface2:#211A32;
+  --gold:#F0C674;--gold-l:#F9DC9A;--gold-p:#2E2411;
+  --violet:#C3AEFA;--vm:#A688F0;--vs:#8563DE;--vx:#4A3878;
+  --blue:#7FB0F5;--rose:#F0A0C4;--teal:#5EEAD4;
+  --text:#F1ECFB;--textm:#B4A6D6;--texts:#7C6E9C;
+  --border:rgba(195,174,250,0.16);--borderl:rgba(195,174,250,0.09);
+  --sh:0 4px 28px rgba(0,0,0,0.55);
+  --shg:0 2px 24px rgba(240,198,116,0.20);
+  --shv:0 10px 44px rgba(163,110,240,0.22);
 }
 html{scroll-behavior:smooth;overscroll-behavior-y:contain}
 body{font-family:'Inter',sans-serif;background:var(--pearl);color:var(--text);overflow:hidden;height:100vh;display:flex;flex-direction:column;overscroll-behavior-y:contain}
@@ -58,9 +66,10 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
 .h-logo-sub{font-size:9px;color:var(--texts);letter-spacing:0.1em;text-transform:uppercase;font-weight:500}
 .h-center{flex:1;display:flex;justify-content:center;align-items:center;padding:0 20px}
 .cmd-bar{width:100%;max-width:560px;background:var(--lav);border:1.5px solid var(--border);border-radius:24px;padding:8px 18px;font-size:13px;color:var(--text);font-family:'Inter',sans-serif;outline:none;transition:all 0.2s}
-.cmd-bar:focus{border-color:var(--vs);background:#fff;box-shadow:0 0 0 3px rgba(155,127,212,0.12)}
+.cmd-bar:focus{border-color:var(--vs);background:var(--surface);box-shadow:0 0 0 3px rgba(155,127,212,0.12)}
 .cmd-bar::placeholder{color:var(--texts)}
 .h-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.h-right-top,.h-right-bottom{display:flex;align-items:center;gap:8px}
 .h-settings{background:transparent;border:1.5px solid var(--border);color:var(--textm);width:36px;height:36px;border-radius:10px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all 0.2s}
 .h-settings:hover{background:var(--lav);border-color:var(--vs);color:var(--violet)}
 .sign-in-btn{background:linear-gradient(135deg,var(--violet),var(--vm));color:#fff;border:none;padding:7px 16px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.04em;transition:all 0.2s;white-space:nowrap}
@@ -101,21 +110,21 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
 .dp-btn{background:var(--violet);color:#fff;border:none;padding:6px 16px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:0.04em}
 .display-controls{position:absolute;top:8px;right:8px;display:flex;gap:5px}
 .disp-ctrl{background:rgba(255,255,255,0.85);border:1px solid var(--border);color:var(--textm);width:24px;height:24px;border-radius:6px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center}
-.disp-ctrl:hover{background:#fff;color:var(--violet)}
+.disp-ctrl:hover{background:var(--surface);color:var(--violet)}
 .module-area{flex:1;overflow:hidden;display:flex;flex-direction:column}
 .module-tabs{display:flex;align-items:center;padding:0 16px;gap:4px;border-bottom:1px solid var(--border);background:rgba(250,248,245,0.98);overflow-x:auto;flex-shrink:0;height:40px}
 .module-tabs::-webkit-scrollbar{height:0}
 .module-content{flex:1;overflow-y:auto;padding:18px}
 
 /* ── PANELS / FORMS / BUTTONS ── */
-.panel{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px}
 .panel-title{font-family:'Cinzel',serif;font-size:12px;font-weight:700;color:var(--violet);margin-bottom:12px;display:flex;align-items:center;gap:7px}
 .f-label{font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--texts);margin-bottom:5px;display:block}
 .f-input{width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:'Inter',sans-serif;color:var(--text);background:var(--pearl);outline:none;transition:border-color 0.2s}
-.f-input:focus{border-color:var(--vs);background:#fff}
+.f-input:focus{border-color:var(--vs);background:var(--surface)}
 .f-select{width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:'Inter',sans-serif;color:var(--text);background:var(--pearl);outline:none;cursor:pointer}
 .f-textarea{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:'Inter',sans-serif;color:var(--text);background:var(--pearl);outline:none;resize:vertical;min-height:80px;line-height:1.5;transition:border-color 0.2s}
-.f-textarea:focus{border-color:var(--vs);background:#fff}
+.f-textarea:focus{border-color:var(--vs);background:var(--surface)}
 .f-group{margin-bottom:11px}
 .f-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .f-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
@@ -166,17 +175,17 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
 /* ── INNER TABS ── */
 .inner-tabs{display:flex;gap:2px;background:var(--lav);padding:3px;border-radius:10px;margin-bottom:14px}
 .inner-tab{flex:1;padding:6px;border:none;background:transparent;font-size:11px;font-weight:600;color:var(--textm);cursor:pointer;border-radius:8px;transition:all 0.15s;text-align:center}
-.inner-tab.active{background:#fff;color:var(--violet);box-shadow:0 1px 4px rgba(61,31,122,0.1)}
+.inner-tab.active{background:var(--surface);color:var(--violet);box-shadow:0 1px 4px rgba(61,31,122,0.1)}
 
 /* ── GRIDS / CARDS ── */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-.card{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:14px;transition:all 0.2s;cursor:pointer}
+.card{background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:14px;transition:all 0.2s;cursor:pointer}
 .card:hover{border-color:var(--vs);box-shadow:var(--sh);transform:translateY(-2px)}
 .card.selected{border-color:var(--violet);background:rgba(61,31,122,0.04)}
 
 /* ── PROJECT CARDS ── */
-.project-card{background:#fff;border:1.5px solid var(--border);border-radius:14px;overflow:hidden;cursor:pointer;transition:all 0.22s;position:relative}
+.project-card{background:var(--surface);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;cursor:pointer;transition:all 0.22s;position:relative}
 .project-card:hover{border-color:var(--vs);box-shadow:var(--sh);transform:translateY(-3px)}
 .project-card.active-project{border-color:var(--violet);box-shadow:0 0 0 2px rgba(61,31,122,0.1)}
 .project-card-thumb{height:120px;display:flex;align-items:center;justify-content:center;font-size:36px;position:relative}
@@ -188,10 +197,10 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
 .project-card-menu{position:absolute;top:8px;right:8px;display:flex;gap:4px;opacity:0;transition:opacity 0.2s}
 .project-card:hover .project-card-menu{opacity:1}
 .pc-menu-btn{background:rgba(255,255,255,0.9);border:1px solid var(--border);color:var(--textm);width:24px;height:24px;border-radius:6px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
-.pc-menu-btn:hover{background:#fff;color:var(--violet)}
+.pc-menu-btn:hover{background:var(--surface);color:var(--violet)}
 
 /* ── AI STUDIO PANEL ── */
-.ai-studio-panel{border-top:1px solid var(--border);background:#fff;flex-shrink:0;display:flex;flex-direction:column;transition:height 0.3s}
+.ai-studio-panel{border-top:1px solid var(--border);background:var(--surface);flex-shrink:0;display:flex;flex-direction:column;transition:height 0.3s}
 .ai-studio-panel.collapsed{height:44px}
 .ai-studio-panel.open{height:300px}
 .ai-studio-header{display:flex;align-items:center;gap:10px;padding:0 14px;height:44px;cursor:pointer;border-bottom:1px solid var(--borderl);flex-shrink:0;user-select:none}
@@ -203,7 +212,7 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
 .ai-output .ai-msg.assistant{color:var(--text)}
 .ai-input-row{display:flex;gap:8px;align-items:flex-end}
 .ai-prompt{flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:12px;font-family:'Inter',sans-serif;color:var(--text);background:var(--pearl);outline:none;resize:none;height:36px;max-height:80px;overflow-y:auto;transition:border-color 0.2s;line-height:1.5}
-.ai-prompt:focus{border-color:var(--vs);background:#fff}
+.ai-prompt:focus{border-color:var(--vs);background:var(--surface)}
 .ai-actions{display:flex;gap:5px;flex-shrink:0}
 .ai-send{background:linear-gradient(135deg,var(--violet),var(--vm));color:#fff;border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all 0.2s}
 .ai-send:hover{opacity:0.9;transform:translateY(-1px)}
@@ -212,9 +221,9 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
 .ai-tool-btn:hover{background:var(--lav);color:var(--violet);border-color:var(--vs)}
 
 /* ── SETTINGS PANEL ── */
-.settings-panel{position:fixed;top:0;right:0;bottom:0;width:340px;background:#fff;border-left:1px solid var(--border);z-index:100;transform:translateX(100%);transition:transform 0.3s;overflow-y:auto;box-shadow:-8px 0 40px rgba(61,31,122,0.12)}
+.settings-panel{position:fixed;top:0;right:0;bottom:0;width:340px;background:var(--surface);border-left:1px solid var(--border);z-index:100;transform:translateX(100%);transition:transform 0.3s;overflow-y:auto;box-shadow:-8px 0 40px rgba(61,31,122,0.12)}
 .settings-panel.open{transform:translateX(0)}
-.sp-header{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;z-index:2}
+.sp-header{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--surface);z-index:2}
 .sp-title{font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)}
 .sp-section{padding:14px 20px;border-bottom:1px solid var(--borderl)}
 .sp-section-title{font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--texts);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
@@ -224,7 +233,7 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
 .api-key-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .api-key-label{font-size:11px;color:var(--textm);width:100px;flex-shrink:0;font-weight:500}
 .api-key-input{flex:1;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:monospace;color:var(--text);background:var(--pearl);outline:none;transition:all 0.2s}
-.api-key-input:focus{border-color:var(--vs);background:#fff}
+.api-key-input:focus{border-color:var(--vs);background:var(--surface)}
 .api-key-input.has-key{border-color:rgba(16,185,129,0.3);background:rgba(16,185,129,0.03)}
 .api-status{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .api-status.active{background:var(--green);box-shadow:0 0 4px rgba(16,185,129,0.5)}
@@ -235,22 +244,22 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
 /* ── MODAL ── */
 .modal-overlay{position:fixed;inset:0;background:rgba(30,18,48,0.65);backdrop-filter:blur(8px);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 0.3s}
 .modal-overlay.show{opacity:1;pointer-events:all}
-.modal{background:#fff;border-radius:24px;padding:36px;width:380px;max-width:90vw;box-shadow:0 24px 80px rgba(61,31,122,0.3);transform:scale(0.95);transition:transform 0.3s;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;position:relative}
+.modal{background:var(--surface);border-radius:24px;padding:36px;width:380px;max-width:90vw;box-shadow:0 24px 80px rgba(61,31,122,0.3);transform:scale(0.95);transition:transform 0.3s;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;position:relative}
 .modal-overlay.show .modal{transform:scale(1)}
-.auth-btn{width:100%;padding:12px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid var(--border);background:#fff;color:var(--text);display:flex;align-items:center;justify-content:center;gap:10px;transition:all 0.2s;margin-bottom:10px}
+.auth-btn{width:100%;padding:12px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);color:var(--text);display:flex;align-items:center;justify-content:center;gap:10px;transition:all 0.2s;margin-bottom:10px}
 .auth-btn:hover{border-color:var(--vs);background:var(--lav);color:var(--violet)}
 .modal-logo-wrap{width:60px;height:60px;border-radius:50%;background:#fff;border:2px solid var(--lav2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;box-shadow:0 4px 16px rgba(61,31,122,0.12)}
 .modal-logo-wrap img{width:54px;height:54px;object-fit:contain;border-radius:50%}
 
 /* ── PROJECT MODAL ── */
 .project-modal{width:480px;max-width:94vw}
-.project-workspace{background:#fff;border-radius:14px;border:1px solid var(--border);overflow:hidden}
+.project-workspace{background:var(--surface);border-radius:14px;border:1px solid var(--border);overflow:hidden}
 .pw-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,var(--lav),var(--pearl2))}
 .pw-back{background:transparent;border:none;color:var(--textm);cursor:pointer;font-size:18px;padding:2px 6px;border-radius:6px;transition:all 0.15s}
 .pw-back:hover{background:var(--lav2);color:var(--violet)}
 .pw-title{font-family:'Cinzel',serif;font-size:14px;font-weight:700;color:var(--violet);flex:1}
 .pw-stats{display:flex;gap:10px}
-.pw-stat{font-size:10px;font-weight:700;color:var(--textm);background:#fff;padding:3px 8px;border-radius:6px;border:1px solid var(--border)}
+.pw-stat{font-size:10px;font-weight:700;color:var(--textm);background:var(--surface);padding:3px 8px;border-radius:6px;border:1px solid var(--border)}
 
 /* ── TOAST ── */
 .toast{position:fixed;bottom:22px;right:22px;background:var(--violet);color:#fff;padding:11px 18px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:var(--shv);transform:translateY(80px);opacity:0;transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1);z-index:999;display:flex;align-items:center;gap:8px;max-width:340px}
@@ -285,7 +294,10 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
 /* ── MOBILE ── */
 @media(max-width:768px){
   :root{--sidebar:0px}
-  .sidebar{position:fixed;left:0;top:60px;bottom:0;z-index:80;width:260px;transform:translateX(-100%);box-shadow:4px 0 24px rgba(61,31,122,0.18)}
+  header{height:auto;min-height:var(--header);flex-wrap:nowrap;padding:8px 12px}
+  .h-right{flex-direction:column;align-items:flex-end;gap:5px}
+  .h-right-top,.h-right-bottom{gap:6px}
+  .sidebar{position:fixed;left:0;top:96px;bottom:0;z-index:80;width:260px;transform:translateX(-100%);box-shadow:4px 0 24px rgba(61,31,122,0.18)}
   .sidebar.mobile-open{transform:translateX(0)}
   .sidebar-overlay.show{display:block}
   .hamburger{display:flex}
@@ -297,7 +309,6 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
   .f-row,.f-row3{grid-template-columns:1fr}
   .settings-panel{width:100%;max-width:100%}
   .ai-studio-panel.open{height:260px}
-  .founder-badge{display:none}
 }
 </style>
 <!-- Firebase Auth -->
@@ -333,7 +344,7 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
 
 <!-- HEADER -->
 <header>
-  <a class="h-logo" href="#">
+  <a class="h-logo" href="#" ondblclick="location.reload();return false">
     <div class="h-logo-img-wrap"><img id="logo-img" src="" alt="KK"></div>
     <div>
       <div class="h-logo-text">KOSMIC KAT <span>AI</span></div>
@@ -342,10 +353,14 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
   </a>
   <div class="h-center"></div>
   <div class="h-right">
-    <span class="founder-badge" id="founderBadge" style="display:none">👑 Founder</span>
-    <button class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</button>
-    <button class="h-settings" onclick="openSettings()" title="Settings">⚙️</button>
-    <button class="sign-in-btn" id="signInBtn" onclick="openAuth()">Sign In</button>
+    <div class="h-right-top">
+      <span class="founder-badge" id="founderBadge" style="display:none">👑 Founder</span>
+      <button class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</button>
+    </div>
+    <div class="h-right-bottom">
+      <button class="h-settings" onclick="openSettings()" title="Settings">⚙️</button>
+      <button class="sign-in-btn" id="signInBtn" onclick="openAuth()">Sign In</button>
+    </div>
   </div>
 </header>
 
@@ -6373,7 +6388,7 @@ function authWithGoogle(){
   fbAuth.signInWithPopup(provider)
     .then(result=>{
       const email=result.user.email;
-      S.user={email,provider:"google",uid:result.user.uid,photo:result.user.photoURL,isFounder:FOUNDERS.includes(email)};
+      S.user={email,provider:"google",uid:result.user.uid,name:result.user.displayName||"",photo:result.user.photoURL,isFounder:FOUNDERS.includes(email)};
       updateUserUI();
       closeAuth();
       toast(`✅ Signed in as ${email}`,"success");
@@ -6400,8 +6415,8 @@ function updateUserUI(){
   const badge=document.getElementById("founderBadge");
   const accInfo=document.getElementById("spAccountInfo");
   if(S.user&&S.user.email!=="guest"){
-    btn.textContent=S.user.email.split("@")[0];
-    if(accInfo)accInfo.textContent=`Signed in as ${S.user.email}`;
+    btn.textContent=S.user.name||S.user.email.split("@")[0];
+    if(accInfo)accInfo.textContent=`Signed in as ${S.user.name?S.user.name+" ("+S.user.email+")":S.user.email}`;
     if(S.user.isFounder){badge.style.display="inline";btn.textContent="👑 "+btn.textContent;}
   } else {
     btn.textContent="Sign In";
@@ -6604,7 +6619,7 @@ function init(){
   // Restore user — real Firebase session, not a localStorage guess
   fbAuth.onAuthStateChanged(user=>{
     if(user){
-      S.user={email:user.email,provider:"google",uid:user.uid,photo:user.photoURL,isFounder:FOUNDERS.includes(user.email)};
+      S.user={email:user.email,provider:"google",uid:user.uid,name:user.displayName||"",photo:user.photoURL,isFounder:FOUNDERS.includes(user.email)};
     } else if(S.user&&S.user.provider!=="guest"){
       S.user=null;
     }
