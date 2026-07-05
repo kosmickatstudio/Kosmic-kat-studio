@@ -1100,7 +1100,7 @@ function renderHome(el){
     </div>
 
     <div class="panel">
-      <div class="panel-title">🖼 Image Models <span class="badge ${hasFal||hasReplicate||hasOpenAI?'badge-green':'badge-red'}">${hasFal||hasReplicate||hasOpenAI?'READY':'NO KEY'}</span></div>
+      <div class="panel-title">🖼 Image Models <span class="badge ${hasFal||hasReplicate||hasOpenAI||gs("api_gemini")?'badge-green':'badge-red'}">${hasFal||hasReplicate||hasOpenAI||gs("api_gemini")?'READY':'NO KEY'}</span></div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${[
           {id:"fal-ai/flux/schnell",label:"FLUX Schnell",ready:hasFal},
@@ -1109,13 +1109,19 @@ function renderHome(el){
           {id:"fal-ai/ideogram/v3",label:"Ideogram V3",ready:hasFal},
           {id:"fal-ai/recraft/v3/text-to-image",label:"Recraft V3",ready:hasFal},
           {id:"fal-ai/stable-diffusion-v35-large",label:"Stable Diffusion 3.5",ready:hasFal},
+          {id:"fal-ai/flux-2",label:"FLUX.2 Dev",ready:hasFal},
+          {id:"fal-ai/flux-2-pro",label:"FLUX.2 Pro",ready:hasFal},
+          {id:"fal-ai/flux-2/flash",label:"FLUX.2 Flash",ready:hasFal},
+          {id:"gemini-3.1-flash-image",label:"Nano Banana 2",ready:!!gs("api_gemini")},
+          {id:"gemini-3-pro-image",label:"Nano Banana Pro",ready:!!gs("api_gemini")},
+          {id:"gpt-image-2",label:"GPT Image 2",ready:hasOpenAI},
         ].map(m=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 8px;background:rgba(61,31,122,0.03);border-radius:6px">
           <span style="width:8px;height:8px;border-radius:50%;background:${m.ready?'var(--green)':'var(--border)'};flex-shrink:0"></span>
           <span style="flex:1;color:var(--text)">${m.label}</span>
           ${defaultImageModel===m.id?'<span class="badge badge-violet">Default</span>':`<button class="btn btn-outline btn-xs" onclick="setDefaultModel('image','${m.id}')">Set Default</button>`}
         </div>`).join('')}
       </div>
-      <div style="font-size:10px;color:var(--textm);margin-top:8px">Replicate + OpenAI also active as automatic fallback if configured — see Image Gen.</div>
+      <div style="font-size:10px;color:var(--textm);margin-top:8px">FLUX.2 Flash Edit (multi-reference) not shown here — pick it directly in Image's Settings.</div>
     </div>
 
     <div class="panel">
@@ -1169,10 +1175,15 @@ async function homeQuickGenerate(){
   try{
     if(type==="image"){
       const model=gs("default_image_model","fal-ai/flux/schnell");
-      const result=await genViaFal(fullPrompt,"",model,ratio,false);
+      const cap=IMAGE_MODEL_CAPABILITIES[model]||{};
+      let result;
+      if(cap.provider==="gemini")result=await genViaGemini(fullPrompt,ratio,model);
+      else if(cap.provider==="flux-edit")throw new Error("FLUX.2 Flash Edit needs reference images — pick a different default for Home Quick Generate, or use it directly in Image.");
+      else if(model==="gpt-image-2"){const batch=await genViaOpenAIBatch(fullPrompt,ratio,1);result={url:batch.urls[0],providerLabel:batch.providerLabel,costKey:batch.costKey};}
+      else result=await genViaFal(fullPrompt,"",model,ratio,false);
       resultEl.innerHTML=`<img src="${result.url}" style="width:100%;border-radius:10px;margin-bottom:8px">
         <div style="display:flex;gap:8px"><a href="${result.url}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-primary btn-sm" onclick="saveImageToGallery('${result.url.replace(/'/g,"\\'")}','${fullPrompt.replace(/'/g,"\\'").slice(0,150)}','')">💾 Save</button><button class="btn btn-outline btn-sm" onclick="saveImageToGalleryThenCollect('${result.url.replace(/'/g,"\\'")}','${fullPrompt.replace(/'/g,"\\'").slice(0,150)}','')">📁</button></div>`;
-      logCost(model,fullPrompt.slice(0,60));
+      logCost(result.costKey||model,fullPrompt.slice(0,60));
     } else {
       const apiKey=gs("api_falai","");
       if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
@@ -4021,7 +4032,9 @@ function openProductionWizard(projectId){
       <div class="f-group"><label class="f-label">1. Image Model</label><select class="f-select" id="pdImageModel">
         <option value="fal-ai/flux/schnell">FLUX Schnell</option><option value="fal-ai/flux/dev">FLUX Dev</option><option value="fal-ai/flux-pro/v1.1">FLUX 1.1 Pro</option>
         <option value="fal-ai/ideogram/v3">Ideogram V3</option><option value="fal-ai/recraft/v3/text-to-image">Recraft V3</option><option value="fal-ai/stable-diffusion-v35-large">Stable Diffusion 3.5</option>
-        <option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image (Nano Banana 2)</option>
+        <option value="fal-ai/flux-2">FLUX.2 Dev</option><option value="fal-ai/flux-2-pro">FLUX.2 Pro</option><option value="fal-ai/flux-2/flash">FLUX.2 Flash</option>
+        <option value="gemini-3.1-flash-image">Nano Banana 2 (Gemini 3.1 Flash Image)</option>
+        <option value="gemini-3-pro-image">Nano Banana Pro (Gemini 3 Pro Image)</option>
         <option value="gpt-image-2">OpenAI GPT Image 2</option>
       </select></div>
       <div class="f-group"><label class="f-label">2. Video Model</label><select class="f-select" id="pdVideoModel" onchange="updateClipLenOptions()">
@@ -4629,8 +4642,8 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
         S.igRefDataUrl=p.refImages[0].dataUrl;
         result=await genViaFal(`${shotDescs[i]}, ${p.characterDesc}`,"","fal-ai/flux/dev/image-to-image",p.aspectRatio,true);
         S.igRefDataUrl="";
-      } else if(p.imageModel==="gemini-3.1-flash-image"){
-        result=await genViaGemini(`${shotDescs[i]}, ${p.characterDesc}`,p.aspectRatio);
+      } else if(p.imageModel.startsWith("gemini-")){
+        result=await genViaGemini(`${shotDescs[i]}, ${p.characterDesc}`,p.aspectRatio,p.imageModel);
       } else if(p.imageModel==="gpt-image-2"){
         result=await genViaOpenAI(`${shotDescs[i]}, ${p.characterDesc}`,p.aspectRatio);
       } else {
