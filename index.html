@@ -949,7 +949,7 @@ const MOD_TABS = {
   productionstudio:["Overview"],
   projects:["Overview","Shots","Characters","Assets","Notes"],
   characters:["All","Create","Import"],
-  imagegen:["Generate","Gallery","Settings"],
+  imagegen:["Generate","Gallery"],
   videocanvas:["Canvas","Timeline","Export"],
   directors:["All Directors","Active"],
   adstudio:["Create Ad","Templates","Analytics"],
@@ -1001,13 +1001,8 @@ function handleTabSwitch(mod,name){
     renderModule("assets");
   }
   if(mod==="imagegen"){
-    if(name==="Gallery"){switchMod('gallery',document.querySelector('[data-mod=gallery]'));return;}
-    const panel=document.getElementById("igSettingsPanel");
-    if(name==="Settings"&&panel){panel.style.display="block";}
-    if(name==="Generate"){
-      if(panel)panel.style.display="none";
-      document.getElementById("igChatInput")?.focus();
-    }
+    if(name==="Gallery"){showIgGalleryView();return;}
+    if(name==="Generate"){showIgChatView();}
   }
 }
 
@@ -2422,13 +2417,17 @@ function renderImageGen(el){
           <div style="font-size:10px;color:var(--textm);margin-top:1px">${hasKey?`<span style="color:var(--green);font-weight:700">●</span> ${activeProviders.join(' + ')}`:'<span style="color:var(--red);font-weight:700">●</span> No key configured'}${gs("active_director","")?' · 🎬 '+(getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name:''}</div>
         </div>
         <div style="display:flex;gap:6px">
-          <button class="ig-icon-btn" onclick="toggleIgSettings()" title="Settings">⚙</button>
-          <button class="ig-icon-btn" onclick="switchMod('gallery',document.querySelector('[data-mod=gallery]'))" title="Gallery">🖼</button>
+          <button class="ig-icon-btn" onclick="clearIgChatConfirm()" title="Clear Chat">🗑</button>
         </div>
       </div>
+      <div id="igGalleryView" style="display:none"></div>
 
       <div id="igSettingsPanel" style="display:none;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--pearl2)">
         ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:10px">Add a <b>fal.ai</b>, <b>Replicate</b>, <b>OpenAI</b>, or <b>Gemini</b> API key in Settings to enable generation.</div>`:''}
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+          <button type="button" class="btn btn-outline btn-sm" style="flex:1" onclick="magicPrompt()">🪄 Magic Prompt</button>
+          <button type="button" class="btn btn-outline btn-sm" style="flex:1" onclick="openPromptLibrary()">📚 Prompt Library</button>
+        </div>
         <div class="f-row">
           <div class="f-group"><label class="f-label">Style Preset</label><select class="f-select" id="igStyle">${STYLE_PRESETS.map(s=>`<option value="${s.value.replace(/"/g,'&quot;')}">${s.label}</option>`).join('')}</select></div>
           <div class="f-group"><label class="f-label">Aspect Ratio</label><select class="f-select" id="igRatio"><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="9:16">9:16</option><option value="4:3">4:3</option><option value="3:4">3:4</option></select></div>
@@ -2498,8 +2497,6 @@ function renderImageGen(el){
       <div class="ig-chat-inputbar">
         <button class="ig-icon-btn" onclick="toggleIgSettings()" title="Settings">⚙</button>
         <textarea class="ig-chat-textarea" id="igChatInput" rows="1" placeholder="${hasKey?'Describe the image you want…':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleIgChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
-        <button class="ig-icon-btn" onclick="openPromptLibrary()" title="Prompt Library">📚</button>
-        <button class="ig-icon-btn" onclick="magicPrompt()" title="Magic Prompt (enhances what you've typed)">🪄</button>
         <button class="ig-send-btn" id="igSendBtn" ${!hasKey?'disabled':''} onclick="sendIgChatPrompt()" title="Generate">➤</button>
       </div>
     </div>
@@ -2514,6 +2511,59 @@ function renderImageGen(el){
   `;
   updateIgModelUI();
   renderIgChatThread();
+}
+
+// ── INLINE GALLERY VIEW — shows images generated in this chat, no navigation away ──
+function showIgGalleryView(){
+  const thread=document.getElementById("igChatThread");
+  const galleryView=document.getElementById("igGalleryView");
+  const inputBar=document.querySelector(".ig-chat-inputbar");
+  if(!galleryView)return;
+  const images=[];
+  S.igChatHistory.forEach(msg=>{
+    if(msg.role!=="assistant")return;
+    if(msg.type==="image")images.push({url:msg.content,prompt:msg.meta?.prompt||"",projectId:msg.meta?.projectId||""});
+    if(msg.type==="images")msg.content.forEach(u=>images.push({url:u,prompt:msg.meta?.prompt||"",projectId:msg.meta?.projectId||""}));
+  });
+  images.reverse();
+  galleryView.innerHTML=`
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:12px;font-weight:700;color:var(--violet)">🖼 ${images.length} image${images.length!==1?'s':''} from this chat</div>
+      <button class="btn btn-ghost btn-xs" onclick="showIgChatView()">← Back to Chat</button>
+    </div>
+    <div style="padding:14px;max-height:52vh;overflow-y:auto">
+      ${images.length===0?`<div class="empty-desc">No images generated yet — go back and describe something.</div>`
+      :`<div class="grid3">${images.map(img=>`
+        <div class="card" style="padding:6px">
+          <img src="${img.url}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover;cursor:pointer" onclick="window.open('${img.url}','_blank')">
+          <div style="display:flex;gap:3px;margin-top:4px">
+            <button class="btn btn-primary btn-xs" style="flex:1" onclick="saveImageToGallery('${img.url.replace(/'/g,"\\'")}','${img.prompt.replace(/'/g,"\\'").slice(0,150)}','${img.projectId}')">💾</button>
+            <button class="btn btn-outline btn-xs" style="flex:1" onclick="saveImageToGalleryThenCollect('${img.url.replace(/'/g,"\\'")}','${img.prompt.replace(/'/g,"\\'").slice(0,150)}','${img.projectId}')">📁</button>
+          </div>
+        </div>`).join('')}</div>`}
+    </div>`;
+  thread.style.display="none";
+  galleryView.style.display="block";
+  if(inputBar)inputBar.style.display="none";
+}
+
+function showIgChatView(){
+  const thread=document.getElementById("igChatThread");
+  const galleryView=document.getElementById("igGalleryView");
+  const inputBar=document.querySelector(".ig-chat-inputbar");
+  if(thread)thread.style.display="flex";
+  if(galleryView)galleryView.style.display="none";
+  if(inputBar)inputBar.style.display="flex";
+  document.querySelectorAll("#moduleTabs .inner-tab").forEach(t=>t.classList.toggle("active",t.textContent==="Generate"));
+}
+
+function clearIgChatConfirm(){
+  if(!S.igChatHistory.length){toast("Chat is already empty","");return;}
+  if(!confirm("Clear this entire chat? This deletes the conversation history — anything not saved to Gallery/Collections will be gone."))return;
+  S.igChatHistory=[];
+  save("igChatHistory");
+  renderIgChatThread();
+  toast("🗑 Chat cleared","success");
 }
 
 function toggleIgSettings(){
