@@ -803,6 +803,7 @@ const S = {
   vcActiveProject: null,
   activityLog: JSON.parse(localStorage.getItem("kk_activity")||"[]"),
   productions: JSON.parse(localStorage.getItem("kk_productions")||"[]"),
+  collections: JSON.parse(localStorage.getItem("kk_collections")||"[]"),
   pendingFirstFrame: null,
   editingCharRelationships: [],
   pendingRefTag: "Front",
@@ -814,7 +815,7 @@ const S = {
 };
 
 function save(k){
-  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",settings:"kk_settings",activityLog:"kk_activity",productions:"kk_productions"};
+  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",settings:"kk_settings",activityLog:"kk_activity",productions:"kk_productions",collections:"kk_collections"};
   if(!m[k])return;
   try{
     localStorage.setItem(m[k],JSON.stringify(S[k]));
@@ -953,7 +954,8 @@ function switchMod(mod,btn){
 function renderTabs(mod){
   const tabs=MOD_TABS[mod]||["Overview"];
   const el=document.getElementById("moduleTabs");
-  const activeTab=mod==="projects"?(S.projectsTab||"Overview"):tabs[0];
+  const assetViewLabels={all:"All Assets",upload:"Upload",collections:"Collections"};
+  const activeTab=mod==="projects"?(S.projectsTab||"Overview"):mod==="assets"?assetViewLabels[S.assetLibraryView||"all"]:tabs[0];
   el.innerHTML=tabs.map(t=>`<button class="inner-tab${t===activeTab?' active':''}" onclick="switchTab(this,'${t}')">${t}</button>`).join('');
 }
 
@@ -968,6 +970,12 @@ function handleTabSwitch(mod,name){
     if(name==="Assets"){switchMod('assets',document.querySelector('[data-mod=assets]'));return;}
     S.projectsTab=name;
     renderModule("projects");
+  }
+  if(mod==="assets"){
+    const viewMap={"All Assets":"all","Upload":"upload","Collections":"collections"};
+    S.assetLibraryView=viewMap[name]||"all";
+    if(S.assetLibraryView==="upload")document.getElementById("assetUploadInput")?.click();
+    renderModule("assets");
   }
 }
 
@@ -1118,7 +1126,7 @@ async function homeQuickGenerate(){
       const model=gs("default_image_model","fal-ai/flux/schnell");
       const result=await genViaFal(fullPrompt,"",model,ratio,false);
       resultEl.innerHTML=`<img src="${result.url}" style="width:100%;border-radius:10px;margin-bottom:8px">
-        <div style="display:flex;gap:8px"><a href="${result.url}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-primary btn-sm" onclick="saveImageToGallery('${result.url.replace(/'/g,"\\'")}','${fullPrompt.replace(/'/g,"\\'").slice(0,150)}','')">💾 Save</button></div>`;
+        <div style="display:flex;gap:8px"><a href="${result.url}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-primary btn-sm" onclick="saveImageToGallery('${result.url.replace(/'/g,"\\'")}','${fullPrompt.replace(/'/g,"\\'").slice(0,150)}','')">💾 Save</button><button class="btn btn-outline btn-sm" onclick="saveImageToGalleryThenCollect('${result.url.replace(/'/g,"\\'")}','${fullPrompt.replace(/'/g,"\\'").slice(0,150)}','')">📁</button></div>`;
       logCost(model,fullPrompt.slice(0,60));
     } else {
       const apiKey=gs("api_falai","");
@@ -2589,6 +2597,7 @@ function handleBgRemove(event){
           <div style="display:flex;gap:8px;margin-top:8px">
             <a href="${outUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
             <button class="btn btn-primary btn-sm" onclick="saveImageToGallery('${outUrl.replace(/'/g,"\\'")}','Background removed','')">💾 Save to Gallery</button>
+            <button class="btn btn-outline btn-sm" onclick="saveImageToGalleryThenCollect('${outUrl.replace(/'/g,"\\'")}','Background removed','')">📁</button>
           </div>`;
         toast("🧹 Background removed","success");
       }catch(err){
@@ -2784,6 +2793,7 @@ async function generateImage(){
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <a href="${imgUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
       <button class="btn btn-primary btn-sm" onclick="saveImageToGallery('${imgUrl.replace(/'/g,"\\'")}','${prompt.replace(/'/g,"\\'").slice(0,200)}','${projectId}')">💾 Save to Gallery</button>
+      <button class="btn btn-outline btn-sm" onclick="saveImageToGalleryThenCollect('${imgUrl.replace(/'/g,"\\'")}','${prompt.replace(/'/g,"\\'").slice(0,200)}','${projectId}')">📁</button>
       <button class="btn btn-outline btn-sm" onclick="sendToVideoCanvas('${imgUrl.replace(/'/g,"\\'")}')">🎬 Send to Video Canvas</button>
     </div>`;
   logCost(costKey,prompt.slice(0,60));
@@ -2807,6 +2817,12 @@ async function saveImageToGallery(url,prompt,projectId){
   save("assets");
   toast("💾 Saved to Gallery","success");
   renderImageGen(document.getElementById("moduleContent"));
+  return asset;
+}
+
+async function saveImageToGalleryThenCollect(url,prompt,projectId){
+  const asset=await saveImageToGallery(url,prompt,projectId);
+  if(asset)openCollectionPicker("asset",asset.id);
 }
 
 // Real canvas-based text watermark. Some providers' CDNs don't set permissive
@@ -5110,6 +5126,10 @@ function saveAudioBlobToGallery(url,text){
 
 // ── ASSETS ──
 function renderAssets(el){
+  if((S.assetLibraryView||"all")==="collections"){
+    renderCollectionsView(el);
+    return;
+  }
   const uploads=S.uploads||[];
   const filter=S.assetFilter||"all";
   const tagFilter=S.assetTagFilter||"";
@@ -5152,13 +5172,173 @@ function setAssetTagFilter(t){
   renderAssets(document.getElementById("moduleContent"));
 }
 
+// ══════════════════════════════════════════════════════
+// COLLECTIONS — real, not decorative. Organizes both uploaded
+// reference files AND generated content (images/video/audio)
+// from any module, since everything generated funnels into
+// Gallery (S.assets) regardless of which module made it.
+// ══════════════════════════════════════════════════════
+
+function getCollectionItem(type,id){
+  if(type==="upload")return (S.uploads||[]).find(x=>x.id===id);
+  return (S.assets||[]).find(x=>x.id===id);
+}
+
+function renderCollectionsView(el){
+  const collections=S.collections||[];
+  const activeId=S.activeCollectionId;
+  const active=activeId?collections.find(c=>c.id===activeId):null;
+
+  if(active){
+    el.innerHTML=`
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <button class="btn btn-ghost btn-sm" onclick="S.activeCollectionId=null;renderModule('assets')">← Collections</button>
+        <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);flex:1">📁 ${active.name}</div>
+        <button class="btn btn-outline btn-xs" onclick="renameCollectionPrompt('${active.id}')">✏️</button>
+        <button class="btn btn-danger btn-xs" onclick="deleteCollectionConfirm('${active.id}')">🗑</button>
+      </div>
+      ${active.items.length===0?`<div class="empty-state"><div class="empty-icon">📁</div><div class="empty-title">Empty Collection</div><div class="empty-desc">Add items from Asset Library or Gallery using the 📁 button on any item.</div></div>`
+      :`<div class="grid3">${active.items.map(item=>{
+        const obj=getCollectionItem(item.type,item.id);
+        if(!obj)return'';
+        const url=item.type==="upload"?obj.data:obj.url;
+        const label=item.type==="upload"?obj.name:(obj.prompt||"Untitled");
+        const media=(item.type==="upload"?obj.kind:obj.type)==="image"?`<img src="${url}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover">`
+          :(item.type==="upload"?obj.kind:obj.type)==="video"?`<video src="${url}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover" muted></video>`
+          :`<div style="background:rgba(61,31,122,0.06);border-radius:8px;padding:20px;text-align:center;font-size:24px">🎵</div>`;
+        return `<div class="card" style="padding:8px">
+          ${media}
+          <div style="font-size:10px;color:var(--textm);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</div>
+          <button class="btn btn-outline btn-xs btn-full" style="margin-top:6px" onclick="removeItemFromCollection('${active.id}','${item.type}','${item.id}')">✕ Remove</button>
+        </div>`;
+      }).join('')}</div>`}
+    `;
+    return;
+  }
+
+  el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div>
+        <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">📁 Collections</div>
+        <div style="font-size:11px;color:var(--textm);margin-top:2px">${collections.length} collection${collections.length!==1?'s':''} — organizes uploads and generated content from every module</div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="createCollectionPrompt()">+ New</button>
+    </div>
+    ${collections.length===0?`<div class="empty-state"><div class="empty-icon">📁</div><div class="empty-title">No Collections Yet</div><div class="empty-desc">Create one, then add items to it from Asset Library, Gallery, or right after generating something in Image Gen, Video Canvas, Home, and more.</div><button class="btn btn-primary" onclick="createCollectionPrompt()">+ Create First Collection</button></div>`
+    :`<div class="grid2">${collections.map(c=>{
+      const firstItem=c.items[0];
+      const firstObj=firstItem?getCollectionItem(firstItem.type,firstItem.id):null;
+      const thumbUrl=firstObj?(firstItem.type==="upload"?firstObj.data:firstObj.url):null;
+      return `<div class="card" style="cursor:pointer" onclick="S.activeCollectionId='${c.id}';renderModule('assets')">
+        ${thumbUrl&&(firstItem.type==="upload"?firstObj.kind:firstObj.type)!=="audio"?`<img src="${thumbUrl}" style="width:100%;border-radius:8px;aspect-ratio:16/9;object-fit:cover;margin-bottom:8px">`:`<div style="width:100%;aspect-ratio:16/9;background:var(--lav);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:8px">📁</div>`}
+        <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet)">${c.name}</div>
+        <div style="font-size:11px;color:var(--textm);margin-top:2px">${c.items.length} item${c.items.length!==1?'s':''}</div>
+      </div>`;
+    }).join('')}</div>`}
+  `;
+}
+
+function createCollectionPrompt(){
+  const name=prompt("Name this collection:");
+  if(!name||!name.trim())return;
+  const collection={id:"col_"+Date.now(),name:name.trim(),created:new Date().toISOString(),items:[]};
+  S.collections.push(collection);
+  save("collections");
+  toast(`📁 "${name}" created`,"success");
+  renderModule("assets");
+}
+
+function renameCollectionPrompt(id){
+  const c=S.collections.find(x=>x.id===id);
+  if(!c)return;
+  const name=prompt("Rename collection:",c.name);
+  if(!name||!name.trim())return;
+  c.name=name.trim();
+  save("collections");
+  renderModule("assets");
+}
+
+function deleteCollectionConfirm(id){
+  if(!confirm("Delete this collection? Items inside it (uploads/gallery assets) are NOT deleted, only the collection itself."))return;
+  S.collections=S.collections.filter(c=>c.id!==id);
+  S.activeCollectionId=null;
+  save("collections");
+  renderModule("assets");
+  toast("Collection deleted","");
+}
+
+function removeItemFromCollection(collectionId,type,itemId){
+  const c=S.collections.find(x=>x.id===collectionId);
+  if(!c)return;
+  c.items=c.items.filter(i=>!(i.type===type&&i.id===itemId));
+  save("collections");
+  renderModule("assets");
+}
+
+// ── CROSS-MODULE PICKER — called from Asset Library, Gallery, and generation
+// result panels across Image Gen, Video Canvas, Home, Audio Tools, Upscaler ──
+function openCollectionPicker(type,itemId){
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show";
+  overlay.id="collectionPickerModal";
+  const renderList=()=>(S.collections||[]).map(c=>{
+    const inCollection=c.items.some(i=>i.type===type&&i.id===itemId);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+      <span style="flex:1;font-size:12px;color:var(--text)">📁 ${c.name} <span style="color:var(--textm)">(${c.items.length})</span></span>
+      <button class="btn ${inCollection?'btn-primary':'btn-outline'} btn-xs" onclick="toggleCollectionMembership('${c.id}','${type}','${itemId}')">${inCollection?'✓ Added':'+ Add'}</button>
+    </div>`;
+  }).join('')||`<div class="empty-desc">No collections yet — create one below.</div>`;
+
+  overlay.innerHTML=`
+    <div class="modal" style="position:relative">
+      <button onclick="document.getElementById('collectionPickerModal').remove()" aria-label="Close" style="position:absolute;top:14px;right:14px;width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--red);font-size:12px;cursor:pointer;z-index:5">✕</button>
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:14px">📁 Add to Collection</div>
+      <div id="collectionPickerList" style="max-height:260px;overflow-y:auto;margin-bottom:12px">${renderList()}</div>
+      <div style="display:flex;gap:6px">
+        <input class="f-input" id="newCollectionInlineName" placeholder="New collection name…">
+        <button class="btn btn-primary btn-sm" onclick="createCollectionInline('${type}','${itemId}')">+ Create & Add</button>
+      </div>
+      <div style="text-align:right;margin-top:12px"><button class="btn btn-ghost btn-sm" onclick="document.getElementById('collectionPickerModal').remove()">Done</button></div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function toggleCollectionMembership(collectionId,type,itemId){
+  const c=S.collections.find(x=>x.id===collectionId);
+  if(!c)return;
+  const idx=c.items.findIndex(i=>i.type===type&&i.id===itemId);
+  if(idx>=0)c.items.splice(idx,1);
+  else c.items.push({type,id:itemId});
+  save("collections");
+  document.getElementById("collectionPickerList").innerHTML=(S.collections||[]).map(col=>{
+    const inCollection=col.items.some(i=>i.type===type&&i.id===itemId);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+      <span style="flex:1;font-size:12px;color:var(--text)">📁 ${col.name} <span style="color:var(--textm)">(${col.items.length})</span></span>
+      <button class="btn ${inCollection?'btn-primary':'btn-outline'} btn-xs" onclick="toggleCollectionMembership('${col.id}','${type}','${itemId}')">${inCollection?'✓ Added':'+ Add'}</button>
+    </div>`;
+  }).join('');
+  toast(idx>=0?"Removed from collection":"Added to collection","success");
+}
+
+function createCollectionInline(type,itemId){
+  const nameInput=document.getElementById("newCollectionInlineName");
+  const name=nameInput.value.trim();
+  if(!name){toast("Enter a collection name first","error");return;}
+  const collection={id:"col_"+Date.now(),name,created:new Date().toISOString(),items:[{type,id:itemId}]};
+  S.collections.push(collection);
+  save("collections");
+  document.getElementById("collectionPickerModal").remove();
+  toast(`📁 "${name}" created and item added`,"success");
+}
+
 function assetCardHTML(u){
   const media=u.kind==='image'
     ?`<img src="${u.data}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover">`
     :`<div style="background:rgba(61,31,122,0.06);border-radius:8px;padding:16px;display:flex;align-items:center;justify-content:center;font-size:28px">🎵</div><audio src="${u.data}" controls style="width:100%;margin-top:6px;height:32px"></audio>`;
   const tags=u.tags||[];
   return `
-    <div class="card" style="padding:8px">
+    <div class="card" style="padding:8px;position:relative">
+      <button onclick="deleteUpload('${u.id}')" title="Delete" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;border:none;background:rgba(0,0,0,0.55);color:#fff;font-size:11px;cursor:pointer;z-index:2;display:flex;align-items:center;justify-content:center">✕</button>
       ${media}
       <div style="font-size:10px;color:var(--textm);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${u.name}">${u.name}</div>
       <div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">
@@ -5166,8 +5346,8 @@ function assetCardHTML(u){
       </div>
       <div style="display:flex;gap:5px;margin-top:6px">
         <button class="btn btn-outline btn-xs" style="flex:1" onclick="addAssetTag('${u.id}')">🏷+</button>
+        <button class="btn btn-outline btn-xs" style="flex:1" onclick="openCollectionPicker('upload','${u.id}')">📁</button>
         <a href="${u.data}" download="${u.name}" class="btn btn-outline btn-xs" style="flex:1;text-align:center">⬇</a>
-        <button class="btn btn-danger btn-xs" onclick="deleteUpload('${u.id}')">🗑</button>
       </div>
     </div>`;
 }
@@ -5345,6 +5525,7 @@ function galleryCardHTML(a){
       </div>
       <div style="display:flex;gap:3px;margin-top:3px">
         <button class="btn ${isSelected?'btn-primary':'btn-outline'} btn-xs" style="flex:1" onclick="toggleCompareSelect('${a.id}')">${isSelected?'✓ Selected':'Select'}</button>
+        <button class="btn btn-outline btn-xs" onclick="openCollectionPicker('asset','${a.id}')" title="Add to Collection">📁</button>
         <a href="${a.url}" ${a.type!=='audio'?'target="_blank"':'download="voiceover.mp3"'} class="btn btn-outline btn-xs">⬇</a>
         <button class="btn btn-danger btn-xs" onclick="deleteAsset('${a.id}')">🗑</button>
       </div>
