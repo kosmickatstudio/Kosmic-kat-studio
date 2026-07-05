@@ -235,7 +235,7 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
 /* ── MODAL ── */
 .modal-overlay{position:fixed;inset:0;background:rgba(30,18,48,0.65);backdrop-filter:blur(8px);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 0.3s}
 .modal-overlay.show{opacity:1;pointer-events:all}
-.modal{background:#fff;border-radius:24px;padding:36px;width:380px;max-width:90vw;box-shadow:0 24px 80px rgba(61,31,122,0.3);transform:scale(0.95);transition:transform 0.3s;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.modal{background:#fff;border-radius:24px;padding:36px;width:380px;max-width:90vw;box-shadow:0 24px 80px rgba(61,31,122,0.3);transform:scale(0.95);transition:transform 0.3s;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;position:relative}
 .modal-overlay.show .modal{transform:scale(1)}
 .auth-btn{width:100%;padding:12px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid var(--border);background:#fff;color:var(--text);display:flex;align-items:center;justify-content:center;gap:10px;transition:all 0.2s;margin-bottom:10px}
 .auth-btn:hover{border-color:var(--vs);background:var(--lav);color:var(--violet)}
@@ -379,6 +379,12 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
       </button>
     </div>
     <div class="sidebar-section">
+      <div class="sidebar-label">Production Studio</div>
+      <button class="mod-btn" data-mod="productionstudio" onclick="switchMod('productionstudio',this)">
+        <span class="mod-icon">🎞</span><span class="mod-label">Our Production Pipeline</span>
+      </button>
+    </div>
+    <div class="sidebar-section">
       <div class="sidebar-label">Production House</div>
       <button class="mod-btn" data-mod="directors" onclick="switchMod('directors',this)">
         <span class="mod-icon">🎥</span><span class="mod-label">Directorial Studio</span>
@@ -491,6 +497,7 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
     <div class="sp-section-body">
       <select class="f-select" id="aiModelSelect" onchange="saveSetting('ai_model',this.value);updateAiModelLabel()">
         <option value="claude">Claude (Anthropic) — Best Quality</option>
+        <option value="gemini">Google Gemini — Vision-capable, cheap</option>
         <option value="groq">Groq Llama 3.3 — Free & Fast</option>
         <option value="deepseek">DeepSeek V3 — Ultra Cheap</option>
         <option value="openai">OpenAI GPT-4o</option>
@@ -746,6 +753,7 @@ const FOUNDERS = ["kosmic735@gmail.com","khansohailpathan360@gmail.com","sohaily
 
 const API_SERVICES = [
   {key:"anthropic", label:"Anthropic", ph:"sk-ant-…", mod:"claude"},
+  {key:"gemini", label:"Google Gemini", ph:"AI…", mod:"gemini"},
   {key:"groq", label:"Groq", ph:"gsk_…", mod:"groq"},
   {key:"deepseek", label:"DeepSeek", ph:"sk-…", mod:"deepseek"},
   {key:"openai", label:"OpenAI", ph:"sk-…", mod:"openai"},
@@ -900,6 +908,7 @@ function closeSidebar(){
 // ── SWITCH MODULE ──
 const MOD_TABS = {
   home:["Overview"],
+  productionstudio:["Overview"],
   projects:["Overview","Shots","Characters","Assets","Notes"],
   characters:["All","Create","Import"],
   imagegen:["Generate","Gallery","Settings"],
@@ -954,6 +963,7 @@ function renderModule(mod){
   el.innerHTML='';
   const fn={
     home:renderHome,
+    productionstudio:renderProductionStudio,
     projects:renderProjects,
     characters:renderCharacters,
     imagegen:renderImageGen,
@@ -3438,6 +3448,36 @@ const VIDEO_MODEL_DURATIONS={
   "fal-ai/veo3.1":{options:[4,6,8],format:n=>`${n}s`},
 };
 
+// ── PRODUCTION STUDIO (own top-level module, not nested in Directorial Studio) ──
+function renderProductionStudio(el){
+  const projects=S.projects.filter(p=>!p.archived);
+  const activeProject=S.psActiveProject?S.projects.find(p=>p.id===S.psActiveProject):null;
+
+  if(!activeProject){
+    el.innerHTML=`
+      <div style="margin-bottom:14px">
+        <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">🎞 Our Production Pipeline</div>
+        <div style="font-size:11px;color:var(--textm);margin-top:2px">Showrunner → Director → Assistant Director → Promptwriter → 6 Episode Directors</div>
+      </div>
+      ${projects.length?`<div class="f-group"><label class="f-label">Open Project</label><select class="f-select" onchange="if(this.value){S.psActiveProject=this.value;renderModule('productionstudio');}"><option value="">— Select a project —</option>${projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`:''}
+      <div class="panel" style="text-align:center;cursor:pointer;padding:40px 20px" onclick="switchMod('projects',document.querySelector('[data-mod=projects]'))">
+        <div style="font-size:32px;margin-bottom:10px">🗂</div>
+        <div style="font-size:14px;font-weight:700;color:var(--violet);text-decoration:underline">Select Or Create Project to Start production</div>
+        <div style="font-size:11px;color:var(--textm);margin-top:8px">Click anywhere in this box to go to Projects</div>
+      </div>
+    `;
+    return;
+  }
+
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <button class="btn btn-ghost btn-sm" onclick="S.psActiveProject=null;renderModule('productionstudio')">← Change Project</button>
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">🎞 ${activeProject.name}</div>
+    </div>
+    ${renderProductionSection(activeProject.id)}
+  `;
+}
+
 function renderProductionSection(projectId){
   const productions=(S.productions||[]).filter(p=>p.projectId===projectId);
   return `<div class="panel">
@@ -3457,6 +3497,41 @@ function renderProductionSection(projectId){
 }
 
 // ── STEP 1: DIRECTOR INTAKE WIZARD ──
+function wizardHeaderControls(){
+  return `<div style="position:absolute;top:14px;right:14px;display:flex;gap:6px;z-index:5">
+    <button type="button" onclick="minimizeProductionWizard()" title="Minimize" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);font-size:13px;cursor:pointer">🗕</button>
+    <button type="button" onclick="cancelProductionWizard()" title="Cancel" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--red);font-size:12px;cursor:pointer">✕</button>
+  </div>`;
+}
+
+function minimizeProductionWizard(){
+  const overlay=document.getElementById("prodWizardModal");
+  if(!overlay)return;
+  overlay.style.display="none";
+  if(!document.getElementById("prodWizardRestorePill")){
+    const pill=document.createElement("button");
+    pill.id="prodWizardRestorePill";
+    pill.textContent="🎬 Resume Production Setup";
+    pill.onclick=restoreProductionWizard;
+    pill.style.cssText="position:fixed;bottom:70px;right:16px;z-index:200;background:var(--violet);color:#fff;border:none;border-radius:24px;padding:10px 16px;font-size:12px;font-weight:700;box-shadow:var(--shv);cursor:pointer";
+    document.body.appendChild(pill);
+  }
+}
+
+function restoreProductionWizard(){
+  const overlay=document.getElementById("prodWizardModal");
+  if(overlay)overlay.style.display="flex";
+  document.getElementById("prodWizardRestorePill")?.remove();
+}
+
+function cancelProductionWizard(){
+  if(!confirm("Are you sure you want to cancel? Your progress on this production setup will be lost."))return;
+  document.getElementById("prodWizardModal")?.remove();
+  document.getElementById("prodWizardRestorePill")?.remove();
+  S.pendingProductionDraft=null;
+  S.pdRefImages=[];
+}
+
 function openProductionWizard(projectId){
   S.pdRefImages=[]; // reset reference image selection for this new wizard session
   const libraryImages=(S.uploads||[]).filter(u=>u.kind==="image");
@@ -3465,11 +3540,23 @@ function openProductionWizard(projectId){
   overlay.id="prodWizardModal";
   overlay.innerHTML=`
     <div class="modal project-modal">
+      ${wizardHeaderControls()}
       <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:6px">🎬 New Production — Director Intake</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Give the Director your idea. He'll ask a few questions, then hand off to the Assistant Director for budgeting.</div>
       <div class="f-group"><label class="f-label">Idea / Concept / Character Description</label><textarea class="f-textarea" id="pdConcept" style="min-height:80px" placeholder="Describe anything — a character, a scene, a whole premise…"></textarea></div>
 
       <div class="f-group">
+        <label class="f-label">Select Brain <span style="font-weight:400;color:var(--texts)">(powers Director, Promptwriter, and all 6 episode scripts for this production)</span></label>
+        <select class="f-select" id="pdBrain" onchange="updatePdImageUploadAvailability()">
+          <option value="claude">Claude (Anthropic) — Best Quality, supports images</option>
+          <option value="gemini">Google Gemini — Cheap, supports images</option>
+          <option value="openai">OpenAI GPT-4o — supports images</option>
+          <option value="groq">Groq Llama 3.3 — Free, text only</option>
+          <option value="deepseek">DeepSeek V3 — Ultra Cheap, text only</option>
+        </select>
+      </div>
+
+      <div class="f-group" id="pdRefImagesWrap">
         <label class="f-label">Reference Images <span style="font-weight:400;color:var(--texts)">(optional, up to 9 — Director will review these before writing prompts)</span></label>
         <input type="file" accept="image/*" multiple id="pdRefUpload" style="display:none" onchange="handlePdRefUpload(event)">
         <div style="display:flex;gap:6px;margin-bottom:8px">
@@ -3478,6 +3565,7 @@ function openProductionWizard(projectId){
         </div>
         <div id="pdRefPreview" style="display:flex;gap:6px;flex-wrap:wrap"></div>
       </div>
+      <div id="pdRefImagesDisabledNote" style="display:none;font-size:11px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:10px;margin-bottom:14px">🔒 Reference image upload needs Claude, Gemini, or OpenAI as the brain — Groq and DeepSeek don't support image input. Switch brains above to enable it.</div>
 
       <div class="f-group"><label class="f-label">1. Image Model</label><select class="f-select" id="pdImageModel">
         <option value="fal-ai/flux/schnell">FLUX Schnell</option><option value="fal-ai/flux/dev">FLUX Dev</option><option value="fal-ai/flux-pro/v1.1">FLUX 1.1 Pro</option>
@@ -3506,12 +3594,27 @@ function openProductionWizard(projectId){
         <option value="both">Both</option>
       </select></div>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
-        <button class="btn btn-ghost" onclick="document.getElementById('prodWizardModal').remove()">Cancel</button>
+        <button class="btn btn-ghost" onclick="cancelProductionWizard()">Cancel</button>
         <button class="btn btn-primary" onclick="submitDirectorIntake('${projectId}')">Next: Director Review →</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  document.getElementById("pdBrain").value=gs("ai_model","claude");
+  updatePdImageUploadAvailability();
   updateClipLenOptions();
+}
+
+function updatePdImageUploadAvailability(){
+  const brain=document.getElementById("pdBrain").value;
+  const capable=isBrainVisionCapable(brain);
+  const wrap=document.getElementById("pdRefImagesWrap");
+  const note=document.getElementById("pdRefImagesDisabledNote");
+  if(wrap)wrap.style.display=capable?"block":"none";
+  if(note)note.style.display=capable?"none":"block";
+  if(!capable){
+    S.pdRefImages=[]; // clear selection — these images can't be reviewed by a text-only brain
+    renderPdRefPreview();
+  }
 }
 
 function updateClipLenOptions(){
@@ -3612,7 +3715,7 @@ function updateDurationPreview(){
 }
 
 // ── STEP 2: ASSISTANT DIRECTOR — budget + split ──
-const TEXT_AI_COST_ESTIMATE={claude:0.005,groq:0,deepseek:0.002,openai:0.003}; // rough per-call estimate, for budget honesty
+const TEXT_AI_COST_ESTIMATE={claude:0.005,gemini:0.002,groq:0,deepseek:0.002,openai:0.003}; // rough per-call estimate, for budget honesty
 
 function submitDirectorIntake(projectId){
   const concept=document.getElementById("pdConcept").value.trim();
@@ -3625,13 +3728,14 @@ function submitDirectorIntake(projectId){
   const quality=document.getElementById("pdQuality").value;
   const aspectRatio=document.getElementById("pdAspectRatio").value;
   const continuity=document.getElementById("pdContinuity").value;
+  const brainModel=document.getElementById("pdBrain").value;
   const refImages=[...S.pdRefImages];
 
   const rounded=roundProductionDuration(requested,clipLen);
   const totalShots=rounded/clipLen;
   const shotsPerEp=totalShots/6;
 
-  const draft={projectId,concept,imageModel,videoModel,quality,aspectRatio,clipLen,totalDurationRequested:requested,totalDurationRounded:rounded,totalShots,shotsPerEp,continuity,refImages,reviewedCharacterDesc:""};
+  const draft={projectId,concept,imageModel,videoModel,quality,aspectRatio,clipLen,totalDurationRequested:requested,totalDurationRounded:rounded,totalShots,shotsPerEp,continuity,brainModel,refImages,reviewedCharacterDesc:""};
   S.pendingProductionDraft=draft;
 
   if(refImages.length){
@@ -3645,41 +3749,44 @@ function submitDirectorIntake(projectId){
 async function renderDirectorReviewStep(){
   const draft=S.pendingProductionDraft;
   const modal=document.getElementById("prodWizardModal");
-  const visionProvider=getVisionCapableKey();
+  const brainLabel={claude:"Claude",gemini:"Gemini",openai:"GPT-4o"}[draft.brainModel]||draft.brainModel;
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",openai:"api_openai"};
+  const hasKeyForBrain=isBrainVisionCapable(draft.brainModel)&&!!gs(apiKeyMap[draft.brainModel],"");
   modal.querySelector(".modal").innerHTML=`
-    <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:10px">🔍 Director Review</div>
+    ${wizardHeaderControls()}<div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:10px">🔍 Director Review</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${draft.refImages.map(r=>`<img src="${r.dataUrl}" style="width:60px;height:60px;border-radius:6px;object-fit:cover">`).join('')}</div>
-    <div id="reviewStatus" style="font-size:12px;color:var(--textm);padding:16px;text-align:center">${visionProvider?`⏳ Reviewing ${draft.refImages.length} image${draft.refImages.length!==1?'s':''} with ${visionProvider==='claude'?'Claude':'GPT-4o'}…`:''}</div>
-    ${!visionProvider?`
-      <div style="font-size:12px;color:var(--red);background:rgba(239,68,68,0.08);border-radius:8px;padding:12px;margin-bottom:14px">Image review needs a Claude or OpenAI API key — Groq and DeepSeek don't support image input. Add one in Settings, or skip review below and proceed with these images unreviewed (they'll still be used as visual references, just not AI-analyzed).</div>
+    <div id="reviewStatus" style="font-size:12px;color:var(--textm);padding:16px;text-align:center">${hasKeyForBrain?`⏳ Reviewing ${draft.refImages.length} image${draft.refImages.length!==1?'s':''} with ${brainLabel}…`:''}</div>
+    ${!hasKeyForBrain?`
+      <div style="font-size:12px;color:var(--red);background:rgba(239,68,68,0.08);border-radius:8px;padding:12px;margin-bottom:14px">${draft.brainModel} needs a valid API key in Settings to review images. Add one, or skip review below and proceed with these images unreviewed (they'll still be used as visual references, just not AI-analyzed).</div>
       <div style="display:flex;gap:10px;justify-content:flex-end">
-        <button class="btn btn-ghost" onclick="document.getElementById('prodWizardModal').remove()">Cancel</button>
+        <button class="btn btn-ghost" onclick="cancelProductionWizard()">Cancel</button>
         <button class="btn btn-outline" onclick="skipDirectorReview()">Skip Review — Proceed with Images →</button>
       </div>
     `:''}
   `;
-  if(!visionProvider)return;
+  if(!hasKeyForBrain)return;
 
   try{
     const reply=await callAiVision(
       draft.refImages,
       `Concept: "${draft.concept}"\n\nReview these reference images for a video production. Write a detailed visual description covering: character appearance (face, build, clothing, distinguishing features), art style, color palette, and setting/mood — everything a director would need to keep every shot visually consistent with these images. Be specific and concrete, not vague.`,
-      "You are the Director for an AI video production pipeline, reviewing reference material before writing prompts. Be precise and concrete."
+      "You are the Director for an AI video production pipeline, reviewing reference material before writing prompts. Be precise and concrete.",
+      draft.brainModel
     );
     draft.reviewedCharacterDesc=reply;
     modal.querySelector(".modal").innerHTML=`
-      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:10px">🔍 Director Review</div>
+      ${wizardHeaderControls()}<div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:10px">🔍 Director Review</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${draft.refImages.map(r=>`<img src="${r.dataUrl}" style="width:60px;height:60px;border-radius:6px;object-fit:cover">`).join('')}</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:6px">Director's review — edit if needed, this feeds every episode's prompts:</div>
       <textarea class="f-textarea" id="reviewedDescText" style="min-height:120px">${reply}</textarea>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
-        <button class="btn btn-ghost" onclick="document.getElementById('prodWizardModal').remove()">Cancel</button>
+        <button class="btn btn-ghost" onclick="cancelProductionWizard()">Cancel</button>
         <button class="btn btn-primary" onclick="confirmDirectorReview()">Next: Assistant Director →</button>
       </div>`;
   }catch(err){
     document.getElementById("reviewStatus").innerHTML=`<span style="color:var(--red)">❌ ${err.message}</span>`;
     modal.querySelector(".modal").insertAdjacentHTML("beforeend",`<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:10px">
-      <button class="btn btn-ghost" onclick="document.getElementById('prodWizardModal').remove()">Cancel</button>
+      <button class="btn btn-ghost" onclick="cancelProductionWizard()">Cancel</button>
       <button class="btn btn-outline" onclick="skipDirectorReview()">Skip Review — Proceed Anyway →</button>
     </div>`);
   }
@@ -3703,7 +3810,7 @@ function renderAssistantDirectorStep(){
   const costPerImage=COST_TABLE[imageModel]!==undefined?COST_TABLE[imageModel]:0.02;
   const videoBudget=totalShots*costPerClip;
   const storyboardBudget=totalShots*costPerImage;
-  const textModel=gs("ai_model","claude");
+  const textModel=draft.brainModel||gs("ai_model","claude");
   const textCostPerCall=TEXT_AI_COST_ESTIMATE[textModel]!==undefined?TEXT_AI_COST_ESTIMATE[textModel]:0.005;
   const textBudget=7*textCostPerCall; // 1 Promptwriter call + 6 episode script calls
   const totalBudget=videoBudget+storyboardBudget+textBudget;
@@ -3711,7 +3818,7 @@ function renderAssistantDirectorStep(){
 
   const modal=document.getElementById("prodWizardModal");
   modal.querySelector(".modal").innerHTML=`
-    <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:14px">🎯 Assistant Director — Budget & Split</div>
+    ${wizardHeaderControls()}<div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:14px">🎯 Assistant Director — Budget & Split</div>
     <div style="font-size:12px;color:var(--textm);line-height:1.8;background:rgba(61,31,122,0.05);border-radius:8px;padding:12px;margin-bottom:14px">
       <b>Total:</b> ${draft.totalDurationRounded}s across 6 episodes (${(draft.totalDurationRounded/6)}s each) at ${draft.aspectRatio}<br>
       <b>Shots per episode:</b> ${draft.shotsPerEp} × ${draft.clipLen}s clips = ${draft.totalShots} total video generations<br>
@@ -3723,26 +3830,34 @@ function renderAssistantDirectorStep(){
     </div>
     <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Next, the Promptwriter will draft 6 Master Prompts + Character Descriptions — one per episode — based on your concept${draft.refImages.length?' and the Director\'s image review':''}.</div>
     <div style="display:flex;gap:10px;justify-content:flex-end">
-      <button class="btn btn-ghost" onclick="document.getElementById('prodWizardModal').remove()">Cancel</button>
+      <button class="btn btn-ghost" onclick="cancelProductionWizard()">Cancel</button>
       <button class="btn btn-primary" id="pdConfirmBtn" onclick="runPromptwriter()">Confirm — Start Promptwriter →</button>
     </div>`;
 }
 
 // ── STEP 3: PROMPTWRITER — 6 Master Prompts + Character Descriptions ──
-// ── VISION AI CALL — only Claude and OpenAI's wired models actually support image input.
-// Groq's llama-3.3-70b and DeepSeek's deepseek-chat are text-only, verified against
-// what's already wired in callAiSimple — no vision fallback exists for those two.
+// ── VISION AI CALL — only Claude, OpenAI, and Gemini's wired models actually
+// support image input. Groq's llama-3.3-70b and DeepSeek's deepseek-chat are
+// text-only, verified against what's already wired in callAiSimple.
+function isBrainVisionCapable(model){
+  return model==="claude"||model==="openai"||model==="gemini";
+}
+
 function getVisionCapableKey(){
   if(gs("api_anthropic"))return "claude";
+  if(gs("api_gemini"))return "gemini";
   if(gs("api_openai"))return "openai";
   return null;
 }
 
-async function callAiVision(images,userPrompt,systemPrompt){
-  const provider=getVisionCapableKey();
-  if(!provider)throw new Error("Image review needs a Claude or OpenAI API key — Groq and DeepSeek don't support image input. Add one in Settings, or skip review and proceed with images unreviewed.");
+async function callAiVision(images,userPrompt,systemPrompt,modelOverride){
+  const provider=modelOverride||getVisionCapableKey();
+  if(!provider||!isBrainVisionCapable(provider))throw new Error("Image review needs Claude, Gemini, or OpenAI — Groq and DeepSeek don't support image input.");
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",openai:"api_openai"};
+  const apiKey=gs(apiKeyMap[provider],"");
+  if(!apiKey)throw new Error(`Add a ${provider==="claude"?"Claude":provider==="gemini"?"Gemini":"OpenAI"} API key in Settings first`);
+
   if(provider==="claude"){
-    const apiKey=gs("api_anthropic");
     const content=[
       ...images.map(img=>({type:"image",source:{type:"base64",media_type:"image/jpeg",data:img.dataUrl.split(",")[1]}})),
       {type:"text",text:userPrompt}
@@ -3755,8 +3870,20 @@ async function callAiVision(images,userPrompt,systemPrompt){
     const data=await response.json();
     if(data.error)throw new Error(data.error.message);
     return data.content[0].text;
+  } else if(provider==="gemini"){
+    const parts=[
+      {text:userPrompt},
+      ...images.map(img=>({inline_data:{mime_type:"image/jpeg",data:img.dataUrl.split(",")[1]}}))
+    ];
+    const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+      body:JSON.stringify({system_instruction:{parts:[{text:systemPrompt}]},contents:[{parts}]})
+    });
+    const data=await response.json();
+    if(data.error)throw new Error(data.error.message);
+    return data.candidates[0].content.parts[0].text;
   } else {
-    const apiKey=gs("api_openai");
     const content=[
       {type:"text",text:userPrompt},
       ...images.map(img=>({type:"image_url",image_url:{url:img.dataUrl}}))
@@ -3788,12 +3915,13 @@ async function runPromptwriter(){
   try{
     const reply=await callAiSimple(
       `Concept: "${draft.concept}"\n\nWrite exactly 6 Master Prompts (one per episode of a 6-part series) and a shared Character Description block. ${continuityNote}${reviewNote}\n\nFormat EXACTLY like this, nothing else:\nCHARACTERS: <character description text>\nEPISODE 1: <master prompt text for episode 1>\nEPISODE 2: <master prompt text for episode 2>\nEPISODE 3: <master prompt text for episode 3>\nEPISODE 4: <master prompt text for episode 4>\nEPISODE 5: <master prompt text for episode 5>\nEPISODE 6: <master prompt text for episode 6>`,
-      "You are a professional Promptwriter for an AI video production pipeline. Follow the requested format exactly, one line per field, no markdown, no extra commentary."
+      "You are a professional Promptwriter for an AI video production pipeline. Follow the requested format exactly, one line per field, no markdown, no extra commentary.",
+      draft.brainModel
     );
     const parsed=parsePromptwriterOutput(reply);
     if(!parsed)throw new Error("Couldn't parse Promptwriter output — try again");
     createProduction(draft,parsed);
-    logCost(gs("ai_model","claude")+"_promptwriter","Promptwriter: "+draft.concept.slice(0,40));
+    logCost(draft.brainModel+"_promptwriter","Promptwriter: "+draft.concept.slice(0,40));
     S.pendingProductionDraft=null;
     document.getElementById("prodWizardModal").remove();
     toast("✍️ Master Prompts ready — 6 Episode Directors assigned","success");
@@ -3965,13 +4093,14 @@ async function generateEpisodeScript(prodId,epIndex){
   try{
     const reply=await callAiSimple(
       `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"\n\nWrite a detailed shooting script broken into exactly ${p.shotsPerEp} shots (each shot will become a ${p.clipLen}-second video clip). For each shot include: camera angle, setting/background, scene time, and precise character movement/action. Format EXACTLY as "SHOT 1: <description>", "SHOT 2: <description>", etc. — this exact format is required for the storyboard step to work.${feedbackNote}`,
-      "You are Episode Director for a professional AI video production. Write a precise, filmable shot-by-shot script. No preamble."
+      "You are Episode Director for a professional AI video production. Write a precise, filmable shot-by-shot script. No preamble.",
+      p.brainModel
     );
     e.script=reply;
     e.scriptStatus="ready";
     e.scriptRejectionFeedback=null;
     save("productions");
-    logCost(gs("ai_model","claude")+"_episode_script",`Ep${epIndex} script`);
+    logCost((p.brainModel||"claude")+"_episode_script",`Ep${epIndex} script`);
     openProductionDetail(prodId);
     toast(`✍️ Episode ${epIndex} script ready for your approval`,"success");
   }catch(err){
@@ -4234,7 +4363,6 @@ function renderDirectors(el){
   const hierarchyProjectId=S.hierarchyProjectId||(S.projects[0]&&S.projects[0].id)||"";
   el.innerHTML=`
     ${renderHierarchyPanel(hierarchyProjectId,activeId,allDirectors)}
-    ${renderProductionSection(hierarchyProjectId)}
     <div style="margin-bottom:14px">
       <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">🎥 Directorial Studio</div>
       <div style="font-size:11px;color:var(--textm);margin-top:2px">${activeId?`Active: ${allDirectors.find(d=>d.id===activeId)?.name||''} — style is auto-injected into AI Director chat and Image/Video prompts`:'Select a director to shape the visual style of every generation'}</div>
@@ -6288,11 +6416,11 @@ function aiKeyDown(e){
   e.target.style.height=Math.min(e.target.scrollHeight,80)+"px";
 }
 
-async function callAiSimple(userPrompt,systemPrompt){
-  const model=gs("ai_model","claude");
-  const apiKeyMap={claude:"api_anthropic",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai"};
+async function callAiSimple(userPrompt,systemPrompt,modelOverride){
+  const model=modelOverride||gs("ai_model","claude");
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai"};
   const apiKey=gs(apiKeyMap[model],"");
-  if(!apiKey)throw new Error("Add an AI brain API key (Anthropic/Groq/DeepSeek/OpenAI) in Settings first");
+  if(!apiKey)throw new Error("Add an AI brain API key (Anthropic/Gemini/Groq/DeepSeek/OpenAI) in Settings first");
   if(model==="claude"){
     const response=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
@@ -6302,6 +6430,15 @@ async function callAiSimple(userPrompt,systemPrompt){
     const data=await response.json();
     if(data.error)throw new Error(data.error.message);
     return data.content[0].text;
+  } else if(model==="gemini"){
+    const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+      body:JSON.stringify({system_instruction:{parts:[{text:systemPrompt}]},contents:[{parts:[{text:userPrompt}]}]})
+    });
+    const data=await response.json();
+    if(data.error)throw new Error(data.error.message);
+    return data.candidates[0].content.parts[0].text;
   } else {
     const endpoints={groq:"https://api.groq.com/openai/v1/chat/completions",deepseek:"https://api.deepseek.com/v1/chat/completions",openai:"https://api.openai.com/v1/chat/completions"};
     const modelIds={groq:"llama-3.3-70b-versatile",deepseek:"deepseek-chat",openai:"gpt-4o-mini"};
