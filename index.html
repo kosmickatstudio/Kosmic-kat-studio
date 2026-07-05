@@ -918,6 +918,7 @@ function switchMod(mod,btn){
   closeSidebar();
   S.mod=mod;
   if(mod!=="projects")S.activeProject=null;
+  if(mod==="projects")S.projectsTab="Overview";
   document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
   if(btn)btn.classList.add("active");
   renderTabs(mod);
@@ -928,12 +929,22 @@ function switchMod(mod,btn){
 function renderTabs(mod){
   const tabs=MOD_TABS[mod]||["Overview"];
   const el=document.getElementById("moduleTabs");
-  el.innerHTML=tabs.map((t,i)=>`<button class="inner-tab${i===0?' active':''}" onclick="switchTab(this,'${t}')">${t}</button>`).join('');
+  const activeTab=mod==="projects"?(S.projectsTab||"Overview"):tabs[0];
+  el.innerHTML=tabs.map(t=>`<button class="inner-tab${t===activeTab?' active':''}" onclick="switchTab(this,'${t}')">${t}</button>`).join('');
 }
 
 function switchTab(el,name){
   el.closest(".module-tabs").querySelectorAll(".inner-tab").forEach(t=>t.classList.remove("active"));
   el.classList.add("active");
+  handleTabSwitch(S.mod,name);
+}
+
+function handleTabSwitch(mod,name){
+  if(mod==="projects"){
+    if(name==="Assets"){switchMod('assets',document.querySelector('[data-mod=assets]'));return;}
+    S.projectsTab=name;
+    renderModule("projects");
+  }
 }
 
 // ── RENDER MODULES ──
@@ -1170,6 +1181,10 @@ function cycleHomeDisplay(dir){
 
 // ── PROJECTS ──
 function renderProjects(el){
+  const tab=S.projectsTab||"Overview";
+  if(tab==="Shots"){renderProjectsShotsTab(el);return;}
+  if(tab==="Characters"){renderProjectsCharactersTab(el);return;}
+  if(tab==="Notes"){renderProjectsNotesTab(el);return;}
   const showArchived = S.showArchivedProjects||false;
   const visible = S.projects.filter(p=>!!p.archived===showArchived);
   el.innerHTML=`
@@ -1193,6 +1208,69 @@ function renderProjects(el){
       </div>
     `:renderProjectGroups(visible)}
   `;
+}
+
+// ── PROJECTS TABS: real aggregate views ──
+function renderProjectsShotsTab(el){
+  const allShots=S.shots.map(s=>({...s,projName:(S.projects.find(p=>p.id===s.projectId)||{}).name||"No project"}));
+  const grouped={};
+  allShots.forEach(s=>{(grouped[s.projName]=grouped[s.projName]||[]).push(s);});
+  el.innerHTML=`
+    <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet);margin-bottom:4px">All Shots</div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:16px">${allShots.length} shot${allShots.length!==1?'s':''} across every project</div>
+    ${allShots.length===0?`<div class="empty-state"><div class="empty-icon">🎬</div><div class="empty-title">No Shots Yet</div><div class="empty-desc">Open a project and add shots, or build them in Video Canvas.</div></div>`
+    :Object.entries(grouped).map(([projName,shots])=>`
+      <div style="font-size:12px;font-weight:700;color:var(--violet);margin:14px 0 8px">📂 ${projName} <span class="badge badge-gray">${shots.length}</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px">${shots.map(s=>`
+        <div style="display:flex;align-items:center;gap:10px;background:rgba(61,31,122,0.03);border-radius:8px;padding:8px 10px">
+          <span style="font-size:16px">🎬</span>
+          <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name||'Untitled Shot'}</div><div style="font-size:10px;color:var(--textm)">${s.prompt?s.prompt.slice(0,60):(s.rawPrompt||'').slice(0,60)}</div></div>
+          <span class="badge ${s.status==='ready'?'badge-green':s.status==='error'?'badge-red':'badge-gray'}">${s.status||'idle'}</span>
+        </div>`).join('')}</div>
+    `).join('')}
+  `;
+}
+
+function renderProjectsCharactersTab(el){
+  const allChars=S.characters.map(c=>({...c,projName:c.projectId?(S.projects.find(p=>p.id===c.projectId)||{}).name||"No project":"No project"}));
+  const grouped={};
+  allChars.forEach(c=>{(grouped[c.projName]=grouped[c.projName]||[]).push(c);});
+  el.innerHTML=`
+    <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet);margin-bottom:4px">All Characters</div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:16px">${allChars.length} character${allChars.length!==1?'s':''} across every project</div>
+    ${allChars.length===0?`<div class="empty-state"><div class="empty-icon">🎭</div><div class="empty-title">No Characters Yet</div><div class="empty-desc">Create characters in Character Bible.</div><button class="btn btn-primary" onclick="switchMod('characters',document.querySelector('[data-mod=characters]'))">🎭 Go to Character Bible</button></div>`
+    :Object.entries(grouped).map(([projName,chars])=>`
+      <div style="font-size:12px;font-weight:700;color:var(--violet);margin:14px 0 8px">📂 ${projName} <span class="badge badge-gray">${chars.length}</span></div>
+      <div class="grid2">${chars.map(c=>`
+        <div class="card" style="padding:8px;cursor:pointer" onclick="switchMod('characters',document.querySelector('[data-mod=characters]'));setTimeout(()=>openCharDetail('${c.id}'),50)">
+          <div style="font-size:24px;text-align:center;margin-bottom:4px">${c.refImg?`<img src="${c.refImg}" style="width:40px;height:40px;border-radius:8px;object-fit:cover">`:'🎭'}</div>
+          <div style="font-size:12px;font-weight:700;color:var(--violet);text-align:center">${c.name}</div>
+          <div style="font-size:10px;color:var(--gold);text-align:center">${c.role||'Character'}</div>
+        </div>`).join('')}</div>
+    `).join('')}
+  `;
+}
+
+function renderProjectsNotesTab(el){
+  el.innerHTML=`
+    <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet);margin-bottom:4px">Project Notes</div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:16px">Freeform notes per project — saved automatically as you type.</div>
+    ${S.projects.length===0?`<div class="empty-state"><div class="empty-icon">📝</div><div class="empty-title">No Projects Yet</div></div>`
+    :S.projects.map(p=>`
+      <div class="panel">
+        <div class="panel-title">📂 ${p.name}</div>
+        <textarea class="f-textarea" style="min-height:70px" placeholder="Notes for this project…" onblur="saveProjectNote('${p.id}',this.value)">${p.notes||''}</textarea>
+      </div>
+    `).join('')}
+  `;
+}
+
+function saveProjectNote(projectId,text){
+  const p=S.projects.find(x=>x.id===projectId);
+  if(!p)return;
+  p.notes=text;
+  save("projects");
+  toast("📝 Note saved","");
 }
 
 function renderProjectGroups(projects){
