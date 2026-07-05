@@ -1377,12 +1377,25 @@ function renderProjectWorkspace(p){
       <div class="f-group"><span class="f-label">Genre</span><span style="font-size:13px;color:var(--text)">${p.genre||'—'}</span></div>
       <div class="f-group"><span class="f-label">Description</span><span style="font-size:13px;color:var(--text)">${p.desc||'No description'}</span></div>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" onclick="toast('AI Director will generate shots for this project!','success')">🤖 AI Generate Shots</button>
+        <button class="btn btn-primary btn-sm" id="aiGenShotsBtn" onclick="aiGenerateShots('${p.id}')">🤖 AI Generate Shots</button>
         <button class="btn btn-outline btn-sm" onclick="editProject('${p.id}')">✏️ Edit</button>
-        <button class="btn btn-outline btn-sm" onclick="exportProject('${p.id}')">📤 Export JSON</button>
         <button class="btn btn-outline btn-sm" onclick="toggleArchiveProject('${p.id}')">${p.archived?'📂 Restore':'🗄 Archive'}</button>
         <button class="btn btn-danger btn-sm" onclick="deleteProject('${p.id}')">🗑 Delete</button>
       </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">🖼 Reference Image</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Stored only in this browser (this device) — never uploaded to any server. Any image format your browser can open is accepted.</div>
+      ${p.refImage?`
+        <div style="max-width:220px">
+          <img src="${p.refImage}" alt="Reference" style="width:100%;border-radius:10px;border:1.5px solid var(--border);display:block" onerror="this.style.display='none';var fb=document.getElementById('refImgFallback');if(fb)fb.style.display='block'">
+          <div id="refImgFallback" style="display:none;padding:14px;border:1.5px dashed var(--border);border-radius:10px;font-size:11px;color:var(--textm);text-align:center">📄 ${(p.refImageName||'image').replace(/</g,'&lt;')}<br>This browser can't preview this file type, but it's saved.</div>
+          <label class="btn btn-outline btn-xs" style="cursor:pointer;display:inline-block;margin-top:8px">🔄 Replace<input type="file" accept="image/*" style="display:none" onchange="uploadProjectRefImage('${p.id}',event)"></label>
+          <button class="btn btn-danger btn-xs" style="margin-top:8px" onclick="removeProjectRefImage('${p.id}')">🗑 Remove</button>
+        </div>
+      `:`
+        <label class="btn btn-outline btn-sm" style="cursor:pointer;display:inline-block">📎 Upload Reference Image<input type="file" accept="image/*" style="display:none" onchange="uploadProjectRefImage('${p.id}',event)"></label>
+      `}
     </div>
     <div class="panel">
       <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between">
@@ -1497,6 +1510,79 @@ function addCharacter(projectId){
   setTimeout(()=>{document.getElementById("cmProject").value=projectId;},50);
 }
 
+// ── AI GENERATE SHOTS (real) ──
+async function aiGenerateShots(projectId){
+  const p=S.projects.find(x=>x.id===projectId);
+  if(!p)return;
+  const model=gs("ai_model","claude");
+  const apiKeyMap={claude:"api_anthropic",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai"};
+  if(!gs(apiKeyMap[model],"")){toast("Add an AI brain API key (Anthropic/Groq/DeepSeek/OpenAI) in Settings first","error");return;}
+
+  const btn=document.getElementById("aiGenShotsBtn");
+  const originalLabel=btn?btn.textContent:"";
+  if(btn){btn.disabled=true;btn.textContent="🤖 Generating…";}
+
+  try{
+    const systemPrompt=`You are a cinematic Director breaking a project down into a shot list. Reply with ONLY a JSON array — no markdown fences, no commentary, no explanation. Each item must be: {"name": a short shot description (max 12 words), "type": one of "Establishing","Action","Dialogue","Close-up","Reaction","Transition"}. Generate 4 to 8 shots that tell this project's story in order.`;
+    const userPrompt=`Project: ${p.name}\nGenre: ${p.genre||'unspecified'}\nUniverse: ${p.universe||'none'}\nDescription: ${p.desc||'No description provided.'}`;
+    const raw=await callAiSimple(userPrompt,systemPrompt);
+    const jsonMatch=raw.match(/\[[\s\S]*\]/);
+    if(!jsonMatch)throw new Error("AI didn't return a recognizable shot list — try again");
+    const list=JSON.parse(jsonMatch[0]);
+    if(!Array.isArray(list)||list.length===0)throw new Error("AI returned an empty list");
+
+    list.forEach(item=>{
+      const shot={id:"shot_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),projectId,name:String(item.name||"Untitled shot").slice(0,120),type:item.type||"Scene",created:new Date().toISOString()};
+      S.shots.push(shot);
+    });
+    p.shots=(p.shots||0)+list.length;
+    save("shots");save("projects");
+    renderProjectWorkspace(p);
+    toast(`🎬 ${list.length} shots generated`,"success");
+  }catch(err){
+    console.error("aiGenerateShots error:",err);
+    toast("❌ "+err.message,"error");
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=originalLabel||"🤖 AI Generate Shots";}
+  }
+}
+
+// ── PROJECT REFERENCE IMAGE (local-only, any image format) ──
+function uploadProjectRefImage(projectId,event){
+  const file=event.target.files[0];
+  if(!file)return;
+  if(!file.type.startsWith("image/")){
+    toast("❌ That file isn't an image","error");
+    event.target.value="";
+    return;
+  }
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const p=S.projects.find(x=>x.id===projectId);
+    if(!p)return;
+    // Stored as a base64 data URL directly on the project object, saved to
+    // this browser's localStorage only — never sent to any server.
+    p.refImage=e.target.result;
+    p.refImageName=file.name;
+    save("projects");
+    renderProjectWorkspace(p);
+    toast("🖼 Reference image added","success");
+  };
+  reader.onerror=()=>toast("❌ Couldn't read that file","error");
+  reader.readAsDataURL(file);
+  event.target.value="";
+}
+
+function removeProjectRefImage(projectId){
+  const p=S.projects.find(x=>x.id===projectId);
+  if(!p)return;
+  delete p.refImage;
+  delete p.refImageName;
+  save("projects");
+  renderProjectWorkspace(p);
+  toast("Reference image removed","");
+}
+
 // ── PROJECT MODAL ──
 function openProjectModal(editId=null){
   S.editingProjectId=editId;
@@ -1571,22 +1657,6 @@ function saveProject(){
 }
 
 function editProject(id){openProjectModal(id);}
-
-function exportProject(id){
-  const p=S.projects.find(x=>x.id===id);
-  if(!p)return;
-  const shots=S.shots.filter(s=>s.projectId===id);
-  const chars=S.characters.filter(c=>c.projectId===id);
-  const episodes=S.episodes.filter(e=>e.projectId===id);
-  const data={project:p,shots,characters:chars,episodes,exportedAt:new Date().toISOString(),formatVersion:2};
-  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");
-  a.href=url;a.download=`${p.name.replace(/[^a-z0-9]/gi,'_')}_export.json`;
-  document.body.appendChild(a);a.click();a.remove();
-  URL.revokeObjectURL(url);
-  toast("📤 Project exported","success");
-}
 
 function handleImportProjectFile(event){
   const file=event.target.files[0];
