@@ -1049,6 +1049,37 @@ function renderModule(mod){
   else el.innerHTML=`<div class="empty-state"><div class="empty-icon">🔧</div><div class="empty-title">Coming Soon</div><div class="empty-desc">This module is being built.</div></div>`;
 }
 
+// ── THEMED BANNERS — original CSS gradients (not hotlinked photos), so no
+// copyright/hosting risk and no extra load time. Each themed to its model/agent.
+const MODEL_BANNERS={
+  "fal-ai/flux/schnell":"linear-gradient(135deg,#0EA5E9,#D946EF)",
+  "fal-ai/flux/dev":"linear-gradient(135deg,#0F2E1F,#10B981)",
+  "fal-ai/flux-pro/v1.1":"linear-gradient(135deg,#312E81,#7C3AED)",
+  "fal-ai/ideogram/v3":"linear-gradient(135deg,#78350F,#D97706)",
+  "fal-ai/recraft/v3/text-to-image":"linear-gradient(135deg,#BE185D,#8B5CF6)",
+  "fal-ai/stable-diffusion-v35-large":"linear-gradient(135deg,#1E3A8A,#3B82F6)",
+  "fal-ai/flux-2":"linear-gradient(135deg,#134E4A,#0D9488)",
+  "fal-ai/flux-2-pro":"linear-gradient(135deg,#581C87,#DB2777)",
+  "fal-ai/flux-2/flash":"linear-gradient(135deg,#B45309,#FBBF24)",
+  "gemini-3.1-flash-image":"linear-gradient(135deg,#65A30D,#FDE047)",
+  "gemini-3-pro-image":"linear-gradient(135deg,#4D7C0F,#EAB308)",
+  "gpt-image-2":"linear-gradient(135deg,#0F172A,#0D9488)",
+  "bytedance/seedance-2.0/fast/text-to-video":"linear-gradient(135deg,#14532D,#4ADE80)",
+  "bytedance/seedance-2.0/text-to-video":"linear-gradient(135deg,#052E16,#16A34A)",
+  "fal-ai/kling-video/v2.1/master/text-to-video":"linear-gradient(135deg,#1E1B2E,#6D28D9)",
+  "fal-ai/kling-video/v2.6/pro/text-to-video":"linear-gradient(135deg,#18181B,#52525B)",
+  "fal-ai/kling-video/v3/standard/text-to-video":"linear-gradient(135deg,#1E293B,#475569)",
+  "fal-ai/veo3.1":"linear-gradient(135deg,#1E1B4B,#4338CA)",
+};
+const DIRECTOR_BANNERS={
+  voss:"linear-gradient(135deg,#27272A,#52525B)",
+  kael:"linear-gradient(135deg,#7C2D12,#EA580C)",
+  mira:"linear-gradient(135deg,#1E3A5F,#60A5FA)",
+  atlas:"linear-gradient(135deg,#44403C,#CA8A04)",
+  neon:"linear-gradient(135deg,#701A75,#22D3EE)",
+  sage:"linear-gradient(135deg,#365314,#65A30D)",
+};
+
 // ── HOME ──
 function renderHome(el){
   const hasFal=!!gs("api_falai");
@@ -1088,19 +1119,23 @@ function renderHome(el){
     </div>
 
     <div class="panel">
-      <div class="panel-title">🤖 Agents</div>
+      <div class="panel-title">◆ Agents</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Pick an Assistant Director's approach for your next generation, or talk through an idea with your AI Director.</div>
       <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px">
-        ${allDirectors.map(d=>`<div onclick="selectDirectorQuick('${d.id}')" style="flex-shrink:0;width:90px;text-align:center;cursor:pointer;padding:8px 6px;border-radius:10px;border:1.5px solid ${activeDirId===d.id?'var(--violet)':'var(--border)'};background:${activeDirId===d.id?'rgba(61,31,122,0.06)':'transparent'}">
-          <div style="font-size:20px">${d.icon||'🎬'}</div>
-          <div style="font-size:10px;font-weight:700;color:var(--text);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${d.name.replace('Director ','')}</div>
-        </div>`).join('')}
+        ${allDirectors.map(d=>{
+          const bg=DIRECTOR_BANNERS[d.id]||"linear-gradient(135deg,#3D1F7A,#6240B0)";
+          return `<div onclick="selectDirectorQuick('${d.id}')" style="flex-shrink:0;width:92px;height:78px;text-align:center;cursor:pointer;border-radius:12px;border:1.5px solid ${activeDirId===d.id?'var(--violet)':'transparent'};background:${bg};position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <div style="position:absolute;inset:0;background:rgba(10,5,20,0.38)"></div>
+          <div style="position:relative;font-size:18px;color:#fff">${d.icon||'●'}</div>
+          <div style="position:relative;font-size:10px;font-weight:700;color:#fff;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px;text-shadow:0 1px 3px rgba(0,0,0,0.5)">${d.name.replace('Director ','')}</div>
+          ${activeDirId===d.id?'<div style="position:relative;margin-top:2px"><span class="badge badge-green" style="font-size:8px">✓</span></div>':''}
+        </div>`;}).join('')}
       </div>
-      <button class="btn btn-outline btn-full" onclick="toggleAiPanel()">💬 Open AI Director Chat</button>
+      <button class="btn btn-outline btn-full" onclick="toggleAiPanel()">Open AI Director Chat</button>
     </div>
 
     <div class="panel">
-      <div class="panel-title">🖼 Image Models <span class="badge ${hasFal||hasReplicate||hasOpenAI||gs("api_gemini")?'badge-green':'badge-red'}">${hasFal||hasReplicate||hasOpenAI||gs("api_gemini")?'READY':'NO KEY'}</span></div>
+      <div class="panel-title">▭ Image Models <span class="badge ${hasFal||hasReplicate||hasOpenAI||gs("api_gemini")?'badge-green':'badge-red'}">${hasFal||hasReplicate||hasOpenAI||gs("api_gemini")?'READY':'NO KEY'}</span></div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${[
           {id:"fal-ai/flux/schnell",label:"FLUX Schnell",ready:hasFal},
@@ -1115,17 +1150,18 @@ function renderHome(el){
           {id:"gemini-3.1-flash-image",label:"Nano Banana 2",ready:!!gs("api_gemini")},
           {id:"gemini-3-pro-image",label:"Nano Banana Pro",ready:!!gs("api_gemini")},
           {id:"gpt-image-2",label:"GPT Image 2",ready:hasOpenAI},
-        ].map(m=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 8px;background:rgba(61,31,122,0.03);border-radius:6px">
-          <span style="width:8px;height:8px;border-radius:50%;background:${m.ready?'var(--green)':'var(--border)'};flex-shrink:0"></span>
-          <span style="flex:1;color:var(--text)">${m.label}</span>
-          ${defaultImageModel===m.id?'<span class="badge badge-violet">Default</span>':`<button class="btn btn-outline btn-xs" onclick="setDefaultModel('image','${m.id}')">Set Default</button>`}
+        ].map(m=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:10px 10px;border-radius:8px;background:${MODEL_BANNERS[m.id]||'linear-gradient(135deg,#2A2140,#3D1F7A)'};position:relative;overflow:hidden;min-height:20px">
+          <div style="position:absolute;inset:0;background:rgba(10,5,20,0.42)"></div>
+          <span style="position:relative;width:8px;height:8px;border-radius:50%;background:${m.ready?'var(--green)':'rgba(255,255,255,0.4)'};flex-shrink:0"></span>
+          <span style="position:relative;flex:1;color:#fff;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.5)">${m.label}</span>
+          <span style="position:relative">${defaultImageModel===m.id?'<span class="badge badge-violet">Default</span>':`<button class="btn btn-outline btn-xs" style="background:rgba(255,255,255,0.9)" onclick="setDefaultModel('image','${m.id}')">Set Default</button>`}</span>
         </div>`).join('')}
       </div>
       <div style="font-size:10px;color:var(--textm);margin-top:8px">FLUX.2 Flash Edit (multi-reference) not shown here — pick it directly in Image's Settings.</div>
     </div>
 
     <div class="panel">
-      <div class="panel-title">🎬 Video Models <span class="badge ${hasFal?'badge-green':'badge-red'}">${hasFal?'READY':'NO KEY'}</span></div>
+      <div class="panel-title">▶ Video Models <span class="badge ${hasFal?'badge-green':'badge-red'}">${hasFal?'READY':'NO KEY'}</span></div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${[
           {id:"bytedance/seedance-2.0/fast/text-to-video",label:"Seedance 2.0 Fast"},
@@ -1134,10 +1170,11 @@ function renderHome(el){
           {id:"fal-ai/kling-video/v2.6/pro/text-to-video",label:"Kling 2.6 Pro"},
           {id:"fal-ai/kling-video/v3/standard/text-to-video",label:"Kling 3.0 Standard"},
           {id:"fal-ai/veo3.1",label:"Veo 3.1"},
-        ].map(m=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 8px;background:rgba(61,31,122,0.03);border-radius:6px">
-          <span style="width:8px;height:8px;border-radius:50%;background:${hasFal?'var(--green)':'var(--border)'};flex-shrink:0"></span>
-          <span style="flex:1;color:var(--text)">${m.label}</span>
-          ${defaultVideoModel===m.id?'<span class="badge badge-violet">Default</span>':`<button class="btn btn-outline btn-xs" onclick="setDefaultModel('video','${m.id}')">Set Default</button>`}
+        ].map(m=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:10px 10px;border-radius:8px;background:${MODEL_BANNERS[m.id]||'linear-gradient(135deg,#1A2E1F,#2D5A3D)'};position:relative;overflow:hidden;min-height:20px">
+          <div style="position:absolute;inset:0;background:rgba(10,5,20,0.42)"></div>
+          <span style="position:relative;width:8px;height:8px;border-radius:50%;background:${hasFal?'var(--green)':'rgba(255,255,255,0.4)'};flex-shrink:0"></span>
+          <span style="position:relative;flex:1;color:#fff;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.5)">${m.label}</span>
+          <span style="position:relative">${defaultVideoModel===m.id?'<span class="badge badge-violet">Default</span>':`<button class="btn btn-outline btn-xs" style="background:rgba(255,255,255,0.9)" onclick="setDefaultModel('video','${m.id}')">Set Default</button>`}</span>
         </div>`).join('')}
       </div>
     </div>
@@ -3869,12 +3906,12 @@ const STYLE_LIBRARY=[
 // director should serve horror, comedy, romance, or sci-fi equally; only their
 // approach-based fragment layers on top of whatever genre the shot itself describes.
 const DIRECTORS=[
-  {id:"voss",name:"Director Voss",style:"Meticulous Continuity",cls:"voss",icon:"🎬",prompt:"meticulous visual continuity, deliberate blocking, patient pacing that builds naturally with the story's own rhythm"},
-  {id:"kael",name:"Director Kael",style:"Kinetic Energy",cls:"kael",icon:"💥",prompt:"kinetic momentum, dynamic camera energy, propulsive pacing that pushes the scene forward"},
-  {id:"mira",name:"Director Mira",style:"Emotional Truth",cls:"mira",icon:"🌙",prompt:"intimate emotional focus, authentic character performance, close attention to unspoken feeling in the scene"},
-  {id:"atlas",name:"Director Atlas",style:"Scale & Spectacle",cls:"atlas",icon:"🏔",prompt:"grand production scale, sweeping visual scope, a sense of scale and consequence appropriate to the story"},
-  {id:"neon",name:"Director Neon",style:"Bold Visual Innovation",cls:"neon",icon:"⚡",prompt:"bold unconventional framing, inventive visual choices, willingness to take a compositional risk"},
-  {id:"sage",name:"Director Sage",style:"Economical Precision",cls:"sage",icon:"🌿",prompt:"clean economical storytelling, precise purposeful framing, nothing in the frame without reason"},
+  {id:"voss",name:"Director Voss",style:"Meticulous Continuity",cls:"voss",icon:"●",prompt:"meticulous visual continuity, deliberate blocking, patient pacing that builds naturally with the story's own rhythm"},
+  {id:"kael",name:"Director Kael",style:"Kinetic Energy",cls:"kael",icon:"▲",prompt:"kinetic momentum, dynamic camera energy, propulsive pacing that pushes the scene forward"},
+  {id:"mira",name:"Director Mira",style:"Emotional Truth",cls:"mira",icon:"☾",prompt:"intimate emotional focus, authentic character performance, close attention to unspoken feeling in the scene"},
+  {id:"atlas",name:"Director Atlas",style:"Scale & Spectacle",cls:"atlas",icon:"◆",prompt:"grand production scale, sweeping visual scope, a sense of scale and consequence appropriate to the story"},
+  {id:"neon",name:"Director Neon",style:"Bold Visual Innovation",cls:"neon",icon:"◈",prompt:"bold unconventional framing, inventive visual choices, willingness to take a compositional risk"},
+  {id:"sage",name:"Director Sage",style:"Economical Precision",cls:"sage",icon:"❖",prompt:"clean economical storytelling, precise purposeful framing, nothing in the frame without reason"},
 ];
 
 function getAllDirectors(){
