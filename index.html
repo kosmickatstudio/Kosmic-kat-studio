@@ -385,7 +385,7 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
         <span class="mod-icon">🎭</span><span class="mod-label">Characters</span>
       </button>
       <button class="mod-btn" data-mod="imagegen" onclick="switchMod('imagegen',this)">
-        <span class="mod-icon">🖼</span><span class="mod-label">Image Gen</span>
+        <span class="mod-icon">🖼</span><span class="mod-label">Image</span>
         <span class="mod-badge-api">● ON</span>
       </button>
       <button class="mod-btn" data-mod="videocanvas" onclick="switchMod('videocanvas',this)">
@@ -842,7 +842,12 @@ const COST_TABLE={
   "fal-ai/stable-diffusion-v35-large":0.065,
   "replicate/flux-schnell":0.003,
   "openai/gpt-image-2":0.04,
-  "gemini-3.1-flash-image":0.02,
+  "gemini-3.1-flash-image":0.08, // Nano Banana 2 — corrected from an earlier guess (0.02) with verified pricing
+  "gemini-3-pro-image":0.15, // Nano Banana Pro — verified
+  "fal-ai/flux-2":0.012,
+  "fal-ai/flux-2-pro":0.03,
+  "fal-ai/flux-2/flash":0.01,
+  "fal-ai/flux-2/flash/edit":0.01,
   "gpt-image-2":0.04,
   "fal-ai/imageutils/rembg":0.01,
   "bytedance/seedance-2.0/fast/text-to-video":0.25,
@@ -2357,6 +2362,25 @@ const STYLE_PRESETS=[
   {label:"Grunge/Sketchy",value:"gritty sketchy grunge illustration, rough pencil linework"},
 ];
 
+// ── IMAGE MODEL CAPABILITIES — drives which tools/fields actually show up
+// per model, since not every model supports the same features. Verified
+// each capability against real docs rather than assuming uniform support.
+const IMAGE_MODEL_CAPABILITIES={
+  "fal-ai/flux/schnell":{},
+  "fal-ai/flux/dev":{},
+  "fal-ai/flux-pro/v1.1":{},
+  "fal-ai/ideogram/v3":{},
+  "fal-ai/recraft/v3/text-to-image":{},
+  "fal-ai/stable-diffusion-v35-large":{},
+  "fal-ai/flux-2":{},
+  "fal-ai/flux-2-pro":{},
+  "fal-ai/flux-2/flash":{},
+  "fal-ai/flux-2/flash/edit":{multiRef:true,maxRef:4,provider:"flux-edit"},
+  "gemini-3-pro-image":{multiRef:true,maxRef:4,provider:"gemini"},
+  "gemini-3.1-flash-image":{multiRef:true,maxRef:4,provider:"gemini"},
+  "gpt-image-2":{batch:true,provider:"openai"},
+};
+
 function renderImageGen(el){
   const hasFal=!!gs("api_falai");
   const hasReplicate=!!gs("api_replicate");
@@ -2365,7 +2389,7 @@ function renderImageGen(el){
   const activeProviders=[hasFal&&"fal.ai",hasReplicate&&"Replicate",hasOpenAI&&"OpenAI"].filter(Boolean);
   el.innerHTML=`
     <div class="panel">
-      <div class="panel-title">🖼 Image Generation ${hasKey?`<span class="badge badge-green">ACTIVE — ${activeProviders.join(' + ')}</span>`:'<span class="badge badge-red">NO KEY</span>'}${gs("active_director","")?' <span class="badge badge-violet">🎬 '+(getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name+'</span>':''}</div>
+      <div class="panel-title">🖼 Image ${hasKey?`<span class="badge badge-green">ACTIVE — ${activeProviders.join(' + ')}</span>`:'<span class="badge badge-red">NO KEY</span>'}${gs("active_director","")?' <span class="badge badge-violet">🎬 '+(getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name+'</span>':''}</div>
       ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add a <b>fal.ai</b>, <b>Replicate</b>, or <b>OpenAI</b> API key in Settings to enable image generation. Configure more than one and generation will automatically fall back if your primary provider fails or runs out of credit.</div>`:''}
       ${hasKey&&activeProviders.length<2?`<div style="font-size:11px;color:var(--textm);margin-bottom:12px">💡 Add a second provider (Replicate or OpenAI) in Settings for automatic fallback if ${activeProviders[0]} runs out of credit.</div>`:''}
 
@@ -2390,15 +2414,31 @@ function renderImageGen(el){
         </div>
         <div class="f-group">
           <label class="f-label">Model</label>
-          <select class="f-select" id="igModel">
-            <option value="fal-ai/flux/schnell">FLUX Schnell (Fast, ~2s)</option>
-            <option value="fal-ai/flux/dev">FLUX Dev (Best Quality)</option>
-            <option value="fal-ai/flux-pro/v1.1">FLUX 1.1 Pro (Premium)</option>
-            <option value="fal-ai/ideogram/v3">Ideogram V3 (best for text/logos)</option>
-            <option value="fal-ai/recraft/v3/text-to-image">Recraft V3 (vector art, brand style)</option>
-            <option value="fal-ai/stable-diffusion-v35-large">Stable Diffusion 3.5 Large</option>
+          <select class="f-select" id="igModel" onchange="updateIgModelUI()">
+            <optgroup label="Fast / Standard">
+              <option value="fal-ai/flux/schnell">FLUX Schnell (Fast, ~2s)</option>
+              <option value="fal-ai/flux/dev">FLUX Dev (Best Quality)</option>
+              <option value="fal-ai/flux-pro/v1.1">FLUX 1.1 Pro (Premium)</option>
+              <option value="fal-ai/ideogram/v3">Ideogram V3 (best for text/logos)</option>
+              <option value="fal-ai/recraft/v3/text-to-image">Recraft V3 (vector art, brand style)</option>
+              <option value="fal-ai/stable-diffusion-v35-large">Stable Diffusion 3.5 Large</option>
+            </optgroup>
+            <optgroup label="FLUX.2 (Black Forest Labs, new)">
+              <option value="fal-ai/flux-2">FLUX.2 Dev (open-weight)</option>
+              <option value="fal-ai/flux-2-pro">FLUX.2 Pro (top quality)</option>
+              <option value="fal-ai/flux-2/flash">FLUX.2 Flash (sub-second)</option>
+              <option value="fal-ai/flux-2/flash/edit">FLUX.2 Flash Edit (multi-reference, up to 4 images)</option>
+            </optgroup>
+            <optgroup label="Nano Banana (Google Gemini)">
+              <option value="gemini-3.1-flash-image">Nano Banana 2 (fast, multi-reference)</option>
+              <option value="gemini-3-pro-image">Nano Banana Pro (best reasoning, text-in-image)</option>
+            </optgroup>
+            <optgroup label="OpenAI">
+              <option value="gpt-image-2">GPT Image 2 (batch up to 8)</option>
+            </optgroup>
             ${(gs("custom_image_models",[])||[]).map(m=>`<option value="${m.endpoint}">${m.label} (custom)</option>`).join('')}
           </select>
+          <div id="igModelNote" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
         </div>
       </div>
       <div class="f-row">
@@ -2415,7 +2455,7 @@ function renderImageGen(el){
         ${S.projects.length?`<div class="f-group"><label class="f-label">Save to Project</label><select class="f-select" id="igProject"><option value="">No project</option>${S.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`:''}
       </div>
 
-      <div class="f-group" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+      <div class="f-group" id="igSingleRefWrap" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
         <label class="f-label">🖼 Reference Image <span style="font-weight:400;color:var(--texts)">(optional — enables Image-to-Image via FLUX Dev)</span></label>
         <input type="file" accept="image/*" id="igRefFile" style="display:none" onchange="handleIgRefUpload(event)">
         <div style="display:flex;align-items:center;gap:10px">
@@ -2429,6 +2469,18 @@ function renderImageGen(el){
           <label class="f-label">Transformation Strength: <span id="igStrengthVal">0.75</span></label>
           <input type="range" id="igStrength" min="0.1" max="1" step="0.05" value="0.75" style="width:100%" oninput="document.getElementById('igStrengthVal').textContent=this.value">
         </div>
+      </div>
+
+      <div class="f-group" id="igMultiRefWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+        <label class="f-label">🖼 Reference Images <span style="font-weight:400;color:var(--texts)" id="igMultiRefLabel">(up to 4 — multi-reference editing)</span></label>
+        <input type="file" accept="image/*" multiple id="igMultiRefFile" style="display:none" onchange="handleIgMultiRefUpload(event)">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px" id="igMultiRefPreview"></div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('igMultiRefFile').click()">📤 Add Reference Images</button>
+      </div>
+
+      <div class="f-group" id="igBatchWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+        <label class="f-label">Batch Count <span style="font-weight:400;color:var(--texts)">(GPT Image 2 can generate up to 8 at once)</span></label>
+        <select class="f-select" id="igBatchCount"><option value="1">1 image</option><option value="2">2 images</option><option value="4">4 images</option><option value="8">8 images</option></select>
       </div>
 
       <button class="btn btn-primary btn-full" id="igGenBtn" ${!hasKey?'disabled':''} onclick="generateImage()">${hasKey?'✨ Generate Image':'🔑 Add API Key First'}</button>
@@ -2455,9 +2507,85 @@ function renderImageGen(el){
         </div>`).join('')}</div>
     </div>`:''}
   `;
+  updateIgModelUI();
 }
 
 // ── IMAGE-TO-IMAGE reference handling ──
+S.igMultiRefImages=S.igMultiRefImages||[];
+
+function updateIgModelUI(){
+  const model=document.getElementById("igModel").value;
+  const cap=IMAGE_MODEL_CAPABILITIES[model]||{};
+  const singleWrap=document.getElementById("igSingleRefWrap");
+  const multiWrap=document.getElementById("igMultiRefWrap");
+  const batchWrap=document.getElementById("igBatchWrap");
+  const note=document.getElementById("igModelNote");
+
+  if(cap.multiRef){
+    singleWrap.style.display="none";
+    multiWrap.style.display="block";
+    batchWrap.style.display="none";
+    document.getElementById("igMultiRefLabel").textContent=`(up to ${cap.maxRef} — multi-reference editing)`;
+    note.textContent=cap.provider==="gemini"?"Grounded, reasoning-driven editing — preserves everything you don't ask to change.":"Combines up to 4 reference images into one coherent output.";
+  } else if(cap.batch){
+    singleWrap.style.display="block";
+    multiWrap.style.display="none";
+    batchWrap.style.display="block";
+    note.textContent="Native 'Thinking'/'Instant' mode toggle not yet wired — couldn't verify the exact API parameter, so it's deferred rather than guessed at.";
+  } else {
+    singleWrap.style.display="block";
+    multiWrap.style.display="none";
+    batchWrap.style.display="none";
+    note.textContent="";
+  }
+}
+
+function handleIgMultiRefUpload(event){
+  const files=Array.from(event.target.files||[]);
+  if(!files.length)return;
+  const model=document.getElementById("igModel").value;
+  const cap=IMAGE_MODEL_CAPABILITIES[model]||{};
+  const maxRef=cap.maxRef||4;
+  if(S.igMultiRefImages.length+files.length>maxRef){toast(`Max ${maxRef} reference images for this model`,"error");event.target.value="";return;}
+  files.forEach(file=>{
+    if(!file.type.startsWith("image/"))return;
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        const maxDim=1024;
+        let w=img.width,h=img.height;
+        if(w>h&&w>maxDim){h=Math.round(h*(maxDim/w));w=maxDim;}
+        else if(h>maxDim){w=Math.round(w*(maxDim/h));h=maxDim;}
+        const canvas=document.createElement("canvas");
+        canvas.width=w;canvas.height=h;
+        canvas.getContext("2d").drawImage(img,0,0,w,h);
+        S.igMultiRefImages.push(canvas.toDataURL("image/jpeg",0.88));
+        renderIgMultiRefPreview();
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  event.target.value="";
+}
+
+function renderIgMultiRefPreview(){
+  const wrap=document.getElementById("igMultiRefPreview");
+  if(!wrap)return;
+  wrap.innerHTML=S.igMultiRefImages.map((url,i)=>`
+    <div style="position:relative;width:60px">
+      <img src="${url}" style="width:60px;height:60px;border-radius:8px;object-fit:cover">
+      <button type="button" onclick="removeIgMultiRefImage(${i})" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;cursor:pointer;line-height:1">✕</button>
+    </div>`).join('');
+}
+
+function removeIgMultiRefImage(i){
+  S.igMultiRefImages.splice(i,1);
+  renderIgMultiRefPreview();
+}
+
+
 S.igRefDataUrl=S.igRefDataUrl||"";
 function handleIgRefUpload(event){
   const file=event.target.files[0];
@@ -2685,23 +2813,68 @@ async function genViaReplicate(prompt,ratio){
   return {url:imgUrl,providerLabel:"Replicate (flux-schnell)",costKey:"replicate/flux-schnell"};
 }
 
-async function genViaGemini(prompt,ratio){
+async function genViaGemini(prompt,ratio,modelId,refImages){
   const apiKey=gs("api_gemini","");
   if(!apiKey)throw new Error("NO_KEY");
-  const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent`,{
+  const model=modelId||"gemini-3.1-flash-image";
+  const parts=[{text:prompt}];
+  if(refImages&&refImages.length){
+    refImages.forEach(dataUrl=>parts.push({inline_data:{mime_type:"image/jpeg",data:dataUrl.split(",")[1]}}));
+  }
+  const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
     method:"POST",
     headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
-    body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{imageConfig:{aspectRatio:ratio||"1:1"}}})
+    body:JSON.stringify({contents:[{parts}],generationConfig:{imageConfig:{aspectRatio:ratio||"1:1"}}})
   });
   const data=await response.json();
   if(data.error)throw new Error(data.error.message);
-  const parts=data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts;
-  if(!parts)throw new Error("No image returned from Gemini");
-  const imgPart=parts.find(p=>p.inlineData||p.inline_data);
+  const resParts=data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts;
+  if(!resParts)throw new Error("No image returned from Gemini");
+  const imgPart=resParts.find(p=>p.inlineData||p.inline_data);
   const inline=imgPart&&(imgPart.inlineData||imgPart.inline_data);
   if(!inline)throw new Error("No image returned from Gemini");
   const mimeType=inline.mimeType||inline.mime_type||"image/png";
-  return {url:`data:${mimeType};base64,${inline.data}`,providerLabel:"Gemini 3.1 Flash Image",costKey:"gemini-3.1-flash-image"};
+  const label=model==="gemini-3-pro-image"?"Nano Banana Pro":"Nano Banana 2";
+  return {url:`data:${mimeType};base64,${inline.data}`,providerLabel:label,costKey:model};
+}
+
+// FLUX.2 Flash Edit — real multi-reference editing, verified endpoint. Accepts
+// an array of reference images (image_urls) rather than a single image.
+async function genViaFluxEdit(prompt,refImages,ratio){
+  const apiKey=gs("api_falai","");
+  if(!apiKey)throw new Error("NO_KEY");
+  const response=await fetch("https://fal.run/fal-ai/flux-2/flash/edit",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+    body:JSON.stringify({prompt,image_urls:refImages,aspect_ratio:ratio||"1:1"})
+  });
+  const data=await response.json();
+  if(!response.ok||data.error){
+    const msg=(data.detail&&(Array.isArray(data.detail)?data.detail[0]?.msg:data.detail))||data.error||response.statusText;
+    throw new Error(msg);
+  }
+  const imgUrl=data.images&&data.images[0]&&data.images[0].url;
+  if(!imgUrl)throw new Error("No image returned from FLUX.2 Flash Edit");
+  return {url:imgUrl,providerLabel:"FLUX.2 Flash Edit",costKey:"fal-ai/flux-2/flash/edit"};
+}
+
+// Real batch generation for GPT Image 2 — same verified endpoint as genViaOpenAI,
+// just requesting multiple images via the 'n' parameter.
+async function genViaOpenAIBatch(prompt,ratio,count){
+  const apiKey=gs("api_openai","");
+  if(!apiKey)throw new Error("Add an OpenAI API key in Settings first");
+  const sizeMap={"16:9":"1536x1024","4:3":"1536x1024","3:4":"1024x1536","9:16":"1024x1536","1:1":"1024x1024"};
+  const response=await fetch("https://api.openai.com/v1/images/generations",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
+    body:JSON.stringify({model:"gpt-image-2",prompt,size:sizeMap[ratio]||"1024x1024",n:Math.min(8,Math.max(1,count||1))})
+  });
+  const data=await response.json();
+  if(!response.ok)throw new Error((data.error&&data.error.message)||response.statusText||"OpenAI request failed");
+  if(!data.data||!data.data.length)throw new Error("No images returned from OpenAI");
+  const urls=data.data.map(item=>item.url||(item.b64_json?`data:image/png;base64,${item.b64_json}`:null)).filter(Boolean);
+  if(!urls.length)throw new Error("No images returned from OpenAI");
+  return {urls,providerLabel:"OpenAI (gpt-image-2)",costKey:"gpt-image-2"};
 }
 
 async function genViaOpenAI(prompt,ratio){
@@ -2732,15 +2905,11 @@ async function generateImage(){
   if(styleVal)prompt+=`, ${styleVal}`;
   if(directorStyle)prompt+=`, ${directorStyle}`;
   const negPrompt=document.getElementById("igNegPrompt").value.trim();
-
-  const hasAnyKey=gs("api_falai")||gs("api_replicate")||gs("api_openai");
-  if(!hasAnyKey){toast("Add a fal.ai, Replicate, or OpenAI API key in Settings first","error");return;}
-
-  const useImg2Img=!!S.igRefDataUrl;
-  const model=useImg2Img?"fal-ai/flux/dev/image-to-image":document.getElementById("igModel").value;
   const ratio=document.getElementById("igRatio").value;
   const projSel=document.getElementById("igProject");
   const projectId=projSel?projSel.value:"";
+  const selectedModel=document.getElementById("igModel").value;
+  const cap=IMAGE_MODEL_CAPABILITIES[selectedModel]||{};
 
   const btn=document.getElementById("igGenBtn");
   const resultPanel=document.getElementById("igResultPanel");
@@ -2748,8 +2917,55 @@ async function generateImage(){
   btn.disabled=true;btn.textContent="⏳ Generating…";
   resultPanel.style.display="block";
 
-  // Try providers in order: fal.ai (respects chosen model/img2img) -> Replicate -> OpenAI.
-  // Falls through automatically if a provider errors (e.g. out of credit), not just if the key is missing.
+  // Multi-reference and batch models have their own dedicated paths — they're
+  // a deliberate choice (multi-image editing, or an explicit batch request),
+  // not a "just get me an image any way possible" fallback situation.
+  if(cap.multiRef){
+    if(!S.igMultiRefImages.length){
+      resultContent.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px">❌ This model needs at least 1 reference image — add one above.</div>`;
+      btn.disabled=false;btn.textContent="✨ Generate Image";
+      return;
+    }
+    resultContent.innerHTML=`<div style="text-align:center;padding:30px;color:var(--textm);font-size:13px">🎨 Generating with ${S.igMultiRefImages.length} reference image${S.igMultiRefImages.length!==1?'s':''}…</div>`;
+    try{
+      const result=cap.provider==="gemini"
+        ?await genViaGemini(prompt,ratio,selectedModel,S.igMultiRefImages)
+        :await genViaFluxEdit(prompt,S.igMultiRefImages,ratio);
+      renderIgResult(result,prompt,projectId,resultContent);
+    }catch(err){
+      resultContent.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px;background:rgba(239,68,68,0.08);border-radius:8px">❌ ${err.message}</div>`;
+      toast("❌ Generation failed: "+err.message,"error");
+    }
+    btn.disabled=false;btn.textContent="✨ Generate Image";
+    return;
+  }
+
+  if(cap.batch){
+    const count=parseInt(document.getElementById("igBatchCount").value)||1;
+    resultContent.innerHTML=`<div style="text-align:center;padding:30px;color:var(--textm);font-size:13px">🎨 Generating ${count} image${count!==1?'s':''}…</div>`;
+    try{
+      const {urls,providerLabel,costKey}=await genViaOpenAIBatch(prompt,ratio,count);
+      resultContent.innerHTML=`
+        <div class="grid2" style="margin-bottom:10px">${urls.map(u=>`<img src="${u}" style="width:100%;border-radius:10px">`).join('')}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span class="badge badge-gray">via ${providerLabel} (${urls.length} images)</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${urls.map((u,i)=>`<button class="btn btn-outline btn-xs" onclick="saveImageToGallery('${u.replace(/'/g,"\\'")}','${prompt.replace(/'/g,"\\'").slice(0,150)}','${projectId}')">💾 Save #${i+1}</button>`).join('')}</div>`;
+      logCost(costKey,prompt.slice(0,60)+` (×${urls.length})`);
+      toast(`✨ ${urls.length} images generated via ${providerLabel}!`,"success");
+    }catch(err){
+      resultContent.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px;background:rgba(239,68,68,0.08);border-radius:8px">❌ ${err.message}</div>`;
+      toast("❌ Generation failed: "+err.message,"error");
+    }
+    btn.disabled=false;btn.textContent="✨ Generate Image";
+    return;
+  }
+
+  // Standard models: existing verified fallback chain, unchanged.
+  const hasAnyKey=gs("api_falai")||gs("api_replicate")||gs("api_openai");
+  if(!hasAnyKey){toast("Add a fal.ai, Replicate, or OpenAI API key in Settings first","error");btn.disabled=false;btn.textContent="✨ Generate Image";return;}
+
+  const useImg2Img=!!S.igRefDataUrl;
+  const model=useImg2Img?"fal-ai/flux/dev/image-to-image":selectedModel;
+
   const attempts=[
     {label:"fal.ai",run:()=>genViaFal(prompt,negPrompt,model,ratio,useImg2Img)},
     {label:"Replicate",run:()=>genViaReplicate(prompt,ratio)},
@@ -2784,6 +3000,11 @@ async function generateImage(){
     return;
   }
 
+  renderIgResult(result,prompt,projectId,resultContent);
+  btn.disabled=false;btn.textContent="✨ Generate Image";
+}
+
+function renderIgResult(result,prompt,projectId,resultContent){
   const {url:imgUrl,providerLabel,costKey}=result;
   resultContent.innerHTML=`
     <img src="${imgUrl}" style="width:100%;border-radius:12px;margin-bottom:10px">
@@ -2798,7 +3019,6 @@ async function generateImage(){
     </div>`;
   logCost(costKey,prompt.slice(0,60));
   toast(`✨ Image generated via ${providerLabel}!`,"success");
-  btn.disabled=false;btn.textContent="✨ Generate Image";
 }
 
 async function saveImageToGallery(url,prompt,projectId){
