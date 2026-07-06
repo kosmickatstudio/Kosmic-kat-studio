@@ -1029,7 +1029,7 @@ const MOD_TABS = {
   projects:["Overview","Shots","Characters","Assets","Notes"],
   characters:["All","Create","Import"],
   imagegen:["Generate","Gallery"],
-  videocanvas:["Canvas","Timeline","Export"],
+  videocanvas:["Generate","Gallery"],
   directors:["All Directors","Active"],
   adstudio:["Create Ad","Templates","Analytics"],
   audio:["Generate","Voice Clone","Library"],
@@ -1088,6 +1088,10 @@ function handleTabSwitch(mod,name){
   if(mod==="imagegen"){
     if(name==="Gallery"){showIgGalleryView();return;}
     if(name==="Generate"){showIgChatView();}
+  }
+  if(mod==="videocanvas"){
+    if(name==="Gallery"){showVcGalleryView();return;}
+    if(name==="Generate"){showVcChatView();}
   }
 }
 
@@ -2706,6 +2710,47 @@ function showIgChatView(){
   document.querySelectorAll("#moduleTabs .inner-tab").forEach(t=>t.classList.toggle("active",t.textContent==="Generate"));
 }
 
+// ── VIDEO INLINE GALLERY VIEW — real, mirrors Image's exact pattern ──
+function showVcGalleryView(){
+  const thread=document.getElementById("vcChatThread");
+  const galleryView=document.getElementById("vcGalleryView");
+  const inputBar=document.querySelector(".ig-chat-inputbar");
+  if(!galleryView)return;
+  const videos=[];
+  S.vcChatHistory.forEach(msg=>{
+    if(msg.role!=="assistant"||msg.type!=="video")return;
+    videos.push({url:msg.content,prompt:msg.meta?.prompt||"",providerLabel:msg.meta?.providerLabel||""});
+  });
+  videos.reverse();
+  galleryView.innerHTML=`
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:12px;font-weight:700;color:var(--violet)">🎬 ${videos.length} video${videos.length!==1?'s':''} from this chat</div>
+      <button class="btn btn-ghost btn-xs" onclick="showVcChatView()">← Back to Chat</button>
+    </div>
+    <div style="padding:14px;max-height:52vh;overflow-y:auto">
+      ${videos.length===0?`<div class="empty-desc">No videos generated yet — go back and describe something.</div>`
+      :`<div class="grid2">${videos.map(v=>`
+        <div class="card" style="padding:6px">
+          <video src="${v.url}" style="width:100%;border-radius:8px;aspect-ratio:16/9;object-fit:cover" muted controls></video>
+          <div style="font-size:10px;color:var(--textm);margin:4px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.providerLabel}</div>
+          <button class="btn btn-primary btn-xs btn-full" onclick="saveVideoToGallery('${v.url.replace(/'/g,"\\'")}','${v.prompt.replace(/'/g,"\\'").slice(0,200)}','')">💾 Save</button>
+        </div>`).join('')}</div>`}
+    </div>`;
+  thread.style.display="none";
+  galleryView.style.display="block";
+  if(inputBar)inputBar.style.display="none";
+}
+
+function showVcChatView(){
+  const thread=document.getElementById("vcChatThread");
+  const galleryView=document.getElementById("vcGalleryView");
+  const inputBar=document.querySelector(".ig-chat-inputbar");
+  if(thread)thread.style.display="flex";
+  if(galleryView)galleryView.style.display="none";
+  if(inputBar)inputBar.style.display="flex";
+  document.querySelectorAll("#moduleTabs .inner-tab").forEach(t=>t.classList.toggle("active",t.textContent==="Generate"));
+}
+
 async function clearIgChatConfirm(){
   if(!S.igChatHistory.length){toast("Chat is already empty","");return;}
   if(!(await showConfirmDialog("Clear this entire chat? This deletes the conversation history — anything not saved to Gallery/Collections will be gone.",{danger:true,okLabel:"Clear Chat"})))return;
@@ -2940,8 +2985,10 @@ function clearIgRef(){
 }
 
 // ── MAGIC PROMPT (LLM-based enhancement) ──
-async function magicPrompt(){
-  const el=document.getElementById("igChatInput");
+async function magicPrompt(targetId,mediaType){
+  targetId=targetId||"igChatInput";
+  mediaType=mediaType||"image";
+  const el=document.getElementById(targetId);
   const rough=el.value.trim();
   if(!rough){toast("Type a rough idea first","error");return;}
   const model=gs("ai_model","claude");
@@ -2950,8 +2997,8 @@ async function magicPrompt(){
   toast("🪄 Enhancing prompt…","");
   try{
     const enhanced=await callAiSimple(
-      `Rewrite this rough image idea into a single detailed, vivid text-to-image prompt (one paragraph, no preamble, no quotes around it): "${rough}"`,
-      "You are a prompt engineer for AI image generation. Output ONLY the improved prompt text, nothing else."
+      `Rewrite this rough ${mediaType} idea into a single detailed, vivid text-to-${mediaType} prompt (one paragraph, no preamble, no quotes around it): "${rough}"`,
+      `You are a prompt engineer for AI ${mediaType} generation. Output ONLY the improved prompt text, nothing else.`
     );
     if(enhanced&&enhanced.trim()){
       el.value=enhanced.trim().replace(/^["']|["']$/g,'');
@@ -2962,6 +3009,10 @@ async function magicPrompt(){
   }catch(err){
     toast("❌ Magic Prompt failed: "+err.message,"error");
   }
+}
+
+function vcMagicPrompt(){
+  return magicPrompt("vcChatInput","video");
 }
 
 // ── PROMPT LIBRARY ──
@@ -3532,7 +3583,13 @@ function renderVideoCanvas(el){
         </div>
         <div id="vcGalleryView" style="display:none"></div>
 
-        <div id="vcSettingsPanel" style="display:none;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--pearl2)">
+        <div id="vcSettingsPanel" class="ig-settings-sheet">
+          <div class="ig-sheet-handle"></div>
+          <div class="ig-sheet-header">
+            <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">⚙ Settings</div>
+            <button class="ig-icon-btn" onclick="toggleVcSettings()" title="Close">✕</button>
+          </div>
+          <div style="padding:14px 16px">
           ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:10px">Add a <b>fal.ai</b> API key in Settings — this one key powers Seedance, Kling, and Veo.</div>`:''}
           <div class="f-group">
             <label class="f-label">Model</label>
@@ -3611,6 +3668,7 @@ function renderVideoCanvas(el){
             <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcMultiAudioFile').click()">📤 Add Audio</button>
           </div>
           <div id="vcTagHint" style="display:none;font-size:10px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px;margin-top:6px"></div>
+          </div>
         </div>
 
         <div class="ig-chat-thread" id="vcChatThread"></div>
@@ -3622,6 +3680,7 @@ function renderVideoCanvas(el){
             <textarea class="ig-input-textarea-v2" id="vcChatInput" rows="1" placeholder="${hasKey?'Describe the video you want…':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleVcChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
             <div class="ig-input-toolbar">
               <button class="ig-tool-btn" onclick="toggleVcSettings()" title="Settings">⚙</button>
+              <button class="ig-tool-btn" onclick="vcMagicPrompt()" title="Magic Prompt">🪄</button>
               <button class="ig-tool-btn" id="vcVoiceBtn" onclick="toggleVcVoiceInput()" title="Voice Message">🎤</button>
               <button class="ig-send-round" id="vcSendBtn" ${!hasKey?'disabled':''} onclick="sendVcChatPrompt()" title="Generate">➤</button>
             </div>
@@ -4086,7 +4145,8 @@ function updateVcModelUI(){
   } else tagHint.style.display="none";
 
   if(cap.multiRef||cap.multiImage){
-    document.getElementById("vcMultiImageLabel").textContent=`Reference Images (up to ${cap.maxImages})`;
+    const modelLabel=model.includes("kling")?"Kling":model.includes("seedance")?"Seedance":model.includes("veo")?"Veo":"this model";
+    document.getElementById("vcMultiImageLabel").textContent=`Reference Images for ${modelLabel} (up to ${cap.maxImages})`;
   }
   const note=document.getElementById("vcModelNote");
   if(cap.provider==="seedance-ref")note.textContent="Real multi-modal: combine images, video, and audio references in one generation.";
@@ -4153,7 +4213,9 @@ function toggleVcSettings(){
   const panel=document.getElementById("vcSettingsPanel");
   const backdrop=document.getElementById("vcSettingsBackdrop");
   if(!panel)return;
-  panel.style.display=panel.style.display==="none"?"block":"none";
+  const opening=!panel.classList.contains("open");
+  panel.classList.toggle("open",opening);
+  if(backdrop)backdrop.classList.toggle("show",opening);
 }
 
 function handleVcChatKeydown(e){
