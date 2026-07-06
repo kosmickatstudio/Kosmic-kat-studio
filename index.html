@@ -4066,6 +4066,12 @@ function updateVcModelUI(){
 
   document.getElementById("vcNegPromptWrap").style.display=cap.negPrompt?"block":"none";
   document.getElementById("vcMultiImageWrap").style.display=(cap.multiRef||cap.multiImage)?"block":"none";
+  if((cap.multiRef||cap.multiImage)&&cap.maxImages&&S.vcMultiImages.length>cap.maxImages){
+    const removed=S.vcMultiImages.length-cap.maxImages;
+    S.vcMultiImages=S.vcMultiImages.slice(0,cap.maxImages);
+    renderVcMultiPreview("vcMultiImagePreview",S.vcMultiImages,false);
+    toast(`This model only supports ${cap.maxImages} reference images — removed the last ${removed}`,"error");
+  }
   document.getElementById("vcMotionBrushWrap").style.display=(cap.multiImage&&S.vcMultiImages.length>0)?"block":"none";
   document.getElementById("vcMultiShotWrap").style.display=cap.multiImage?"block":"none";
   document.getElementById("vcVoiceWrap").style.display=cap.multiImage?"block":"none";
