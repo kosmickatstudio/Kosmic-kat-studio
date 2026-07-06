@@ -2653,8 +2653,8 @@ function showIgGalleryView(){
   const images=[];
   S.igChatHistory.forEach(msg=>{
     if(msg.role!=="assistant")return;
-    if(msg.type==="image")images.push({url:msg.content,prompt:msg.meta?.prompt||"",projectId:msg.meta?.projectId||""});
-    if(msg.type==="images")msg.content.forEach(u=>images.push({url:u,prompt:msg.meta?.prompt||"",projectId:msg.meta?.projectId||""}));
+    if(msg.type==="image")images.push({url:msg.content,prompt:msg.meta?.prompt||"",projectId:msg.meta?.projectId||"",assetId:msg.meta?.assetId||null});
+    if(msg.type==="images")msg.content.forEach((u,i)=>images.push({url:u,prompt:msg.meta?.prompt||"",projectId:msg.meta?.projectId||"",assetId:(msg.meta?.assetIds||[])[i]||null}));
   });
   images.reverse();
   galleryView.innerHTML=`
@@ -2667,10 +2667,7 @@ function showIgGalleryView(){
       :`<div class="grid3">${images.map(img=>`
         <div class="card" style="padding:6px">
           <img src="${img.url}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover;cursor:pointer" onclick="window.open('${img.url}','_blank')">
-          <div style="display:flex;gap:3px;margin-top:4px">
-            <button class="btn btn-primary btn-xs" style="flex:1" onclick="saveImageToGallery('${img.url.replace(/'/g,"\\'")}','${img.prompt.replace(/'/g,"\\'").slice(0,150)}','${img.projectId}')">💾</button>
-            <button class="btn btn-outline btn-xs" style="flex:1" onclick="saveImageToGalleryThenCollect('${img.url.replace(/'/g,"\\'")}','${img.prompt.replace(/'/g,"\\'").slice(0,150)}','${img.projectId}')">📁</button>
-          </div>
+          ${img.assetId?`<button class="btn btn-outline btn-xs btn-full" style="margin-top:4px" onclick="openCollectionPicker('asset','${img.assetId}')">📁 Collection</button>`:''}
         </div>`).join('')}</div>`}
     </div>`;
   thread.style.display="none";
@@ -2697,7 +2694,7 @@ function showVcGalleryView(){
   const videos=[];
   S.vcChatHistory.forEach(msg=>{
     if(msg.role!=="assistant"||msg.type!=="video")return;
-    videos.push({url:msg.content,prompt:msg.meta?.prompt||"",providerLabel:msg.meta?.providerLabel||""});
+    videos.push({url:msg.content,prompt:msg.meta?.prompt||"",providerLabel:msg.meta?.providerLabel||"",assetId:msg.meta?.assetId||null});
   });
   videos.reverse();
   galleryView.innerHTML=`
@@ -2711,7 +2708,7 @@ function showVcGalleryView(){
         <div class="card" style="padding:6px">
           <video src="${v.url}" style="width:100%;border-radius:8px;aspect-ratio:16/9;object-fit:cover" muted controls></video>
           <div style="font-size:10px;color:var(--textm);margin:4px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.providerLabel}</div>
-          <button class="btn btn-primary btn-xs btn-full" onclick="saveVideoToGallery('${v.url.replace(/'/g,"\\'")}','${v.prompt.replace(/'/g,"\\'").slice(0,200)}','')">💾 Save</button>
+          ${v.assetId?`<button class="btn btn-outline btn-xs btn-full" onclick="openCollectionPicker('asset','${v.assetId}')">📁 Collection</button>`:''}
         </div>`).join('')}</div>`}
     </div>`;
   thread.style.display="none";
@@ -2801,18 +2798,17 @@ function renderIgChatThread(){
     if(msg.type==="error")return `<div class="ig-bubble-assistant" style="color:var(--red)">❌ ${msg.content}</div>`;
     if(msg.type==="image")return `<div class="ig-bubble-assistant">
         <img src="${msg.content}" style="width:100%;max-width:320px;border-radius:12px;display:block;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span class="badge badge-gray">via ${msg.meta.providerLabel}</span></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span class="badge badge-gray">via ${msg.meta.providerLabel}</span><span class="badge badge-green">✓ Saved</span></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <a href="${msg.content}" target="_blank" class="btn btn-outline btn-xs">⬇</a>
-          <button class="btn btn-primary btn-xs" onclick="saveImageToGallery('${msg.content.replace(/'/g,"\\'")}','${(msg.meta.prompt||'').replace(/'/g,"\\'").slice(0,200)}','${msg.meta.projectId||''}')">💾 Save</button>
-          <button class="btn btn-outline btn-xs" onclick="saveImageToGalleryThenCollect('${msg.content.replace(/'/g,"\\'")}','${(msg.meta.prompt||'').replace(/'/g,"\\'").slice(0,200)}','${msg.meta.projectId||''}')">📁</button>
+          ${msg.meta.assetId?`<button class="btn btn-outline btn-xs" onclick="openCollectionPicker('asset','${msg.meta.assetId}')">📁 Collection</button>`:''}
           <button class="btn btn-outline btn-xs" onclick="sendToVideoCanvas('${msg.content.replace(/'/g,"\\'")}')">🎬</button>
         </div>
       </div>`;
     if(msg.type==="images")return `<div class="ig-bubble-assistant" style="max-width:95%">
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:8px">${msg.content.map(u=>`<img src="${u}" style="width:100%;border-radius:8px">`).join('')}</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span class="badge badge-gray">via ${msg.meta.providerLabel} (${msg.content.length})</span></div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">${msg.content.map((u,i)=>`<button class="btn btn-outline btn-xs" onclick="saveImageToGallery('${u.replace(/'/g,"\\'")}','${(msg.meta.prompt||'').replace(/'/g,"\\'").slice(0,150)}','${msg.meta.projectId||''}')">💾 #${i+1}</button>`).join('')}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span class="badge badge-gray">via ${msg.meta.providerLabel} (${msg.content.length})</span><span class="badge badge-green">✓ Saved</span></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${(msg.meta.assetIds||[]).map((id,i)=>`<button class="btn btn-outline btn-xs" onclick="openCollectionPicker('asset','${id}')">📁 #${i+1}</button>`).join('')}</div>
       </div>`;
     return '';
   }).join('');
@@ -3069,14 +3065,15 @@ function handleBgRemove(event){
         if(!res.ok)throw new Error(data.detail?.[0]?.msg||data.error||res.statusText);
         const outUrl=(data.image&&data.image.url)||(data.images&&data.images[0]&&data.images[0].url);
         if(!outUrl)throw new Error("No image returned");
+        const savedAsset=await createImageAsset(outUrl,"Background removed","");
         resultEl.innerHTML=`
           <img src="${outUrl}" style="width:100%;max-width:300px;border-radius:8px;background:repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 50% / 16px 16px">
+          <div style="font-size:11px;color:var(--green);margin-top:6px">✓ Saved to Gallery automatically</div>
           <div style="display:flex;gap:8px;margin-top:8px">
             <a href="${outUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
-            <button class="btn btn-primary btn-sm" onclick="saveImageToGallery('${outUrl.replace(/'/g,"\\'")}','Background removed','')">💾 Save to Gallery</button>
-            <button class="btn btn-outline btn-sm" onclick="saveImageToGalleryThenCollect('${outUrl.replace(/'/g,"\\'")}','Background removed','')">📁</button>
+            <button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAsset.id}')">📁 Add to Collection</button>
           </div>`;
-        toast("🧹 Background removed","success");
+        toast("🧹 Background removed — saved to Gallery","success");
       }catch(err){
         resultEl.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px;background:rgba(239,68,68,0.08);border-radius:8px">❌ ${err.message}</div>`;
         toast("❌ Background removal failed: "+err.message,"error");
@@ -3281,7 +3278,8 @@ async function sendIgChatPrompt(){
       const result=cap.provider==="gemini"
         ?await genViaGemini(prompt,ratio,selectedModel,S.igMultiRefImages)
         :await genViaFluxEdit(prompt,S.igMultiRefImages,ratio);
-      replaceIgLoadingBubble(loadingId,{role:"assistant",type:"image",content:result.url,meta:{providerLabel:result.providerLabel,prompt,projectId}});
+      const savedAsset=await createImageAsset(result.url,prompt,projectId);
+      replaceIgLoadingBubble(loadingId,{role:"assistant",type:"image",content:result.url,meta:{providerLabel:result.providerLabel,prompt,projectId,assetId:savedAsset.id}});
       logCost(result.costKey,prompt.slice(0,60));
     }catch(err){
       replaceIgLoadingBubble(loadingId,{role:"assistant",type:"error",content:err.message});
@@ -3296,7 +3294,8 @@ async function sendIgChatPrompt(){
     pushIgChatMessage({id:loadingId,role:"assistant",type:"loading",content:`Generating ${count} image${count!==1?'s':''}…`});
     try{
       const {urls,providerLabel,costKey}=await genViaOpenAIBatch(prompt,ratio,count);
-      replaceIgLoadingBubble(loadingId,{role:"assistant",type:"images",content:urls,meta:{providerLabel,prompt,projectId}});
+      const savedAssets=await Promise.all(urls.map(u=>createImageAsset(u,prompt,projectId)));
+      replaceIgLoadingBubble(loadingId,{role:"assistant",type:"images",content:urls,meta:{providerLabel,prompt,projectId,assetIds:savedAssets.map(a=>a.id)}});
       logCost(costKey,prompt.slice(0,60)+` (×${urls.length})`);
       toast(`✨ ${urls.length} images generated via ${providerLabel}!`,"success");
     }catch(err){
@@ -3353,9 +3352,10 @@ async function sendIgChatPrompt(){
     return;
   }
 
-  replaceIgLoadingBubble(loadingId,{role:"assistant",type:"image",content:result.url,meta:{providerLabel:result.providerLabel,prompt,projectId}});
+  const savedAssetStd=await createImageAsset(result.url,prompt,projectId);
+  replaceIgLoadingBubble(loadingId,{role:"assistant",type:"image",content:result.url,meta:{providerLabel:result.providerLabel,prompt,projectId,assetId:savedAssetStd.id}});
   logCost(result.costKey,prompt.slice(0,60));
-  toast(`✨ Image generated via ${result.providerLabel}!`,"success");
+  toast(`✨ Image generated via ${result.providerLabel} — saved to Gallery!`,"success");
   sendBtn.disabled=false;
 }
 
@@ -3367,7 +3367,7 @@ function replaceIgLoadingBubble(loadingId,newMsg){
   renderIgChatThread();
 }
 
-async function saveImageToGallery(url,prompt,projectId){
+async function createImageAsset(url,prompt,projectId){
   const wantsWatermark=gs("watermark",false)===true||gs("watermark",false)==="true";
   let finalUrl=url;
   if(wantsWatermark){
@@ -3381,15 +3381,16 @@ async function saveImageToGallery(url,prompt,projectId){
   const asset={id:"asset_"+Date.now(),type:"image",url:finalUrl,prompt,projectId:projectId||null,created:new Date().toISOString()};
   S.assets.push(asset);
   save("assets");
+  return asset;
+}
+
+async function saveImageToGallery(url,prompt,projectId){
+  const asset=await createImageAsset(url,prompt,projectId);
   toast("💾 Saved to Gallery","success");
   renderImageGen(document.getElementById("moduleContent"));
   return asset;
 }
 
-async function saveImageToGalleryThenCollect(url,prompt,projectId){
-  const asset=await saveImageToGallery(url,prompt,projectId);
-  if(asset)openCollectionPicker("asset",asset.id);
-}
 
 // Real canvas-based text watermark. Some providers' CDNs don't set permissive
 // CORS headers, which taints the canvas and blocks toDataURL — caught by the
@@ -4167,14 +4168,27 @@ function refreshMotionBrushVisibility(){
 function renderVcMultiPreview(previewId,arr,isAudio){
   const wrap=document.getElementById(previewId);
   if(!wrap)return;
+  const tagPrefix=previewId==="vcMultiImagePreview"?"Image":previewId==="vcMultiVideoPreview"?"Video":"Audio";
   if(isAudio){
-    wrap.innerHTML=arr.map((a,i)=>`<div style="display:flex;align-items:center;gap:6px;font-size:11px;background:var(--lav);border-radius:6px;padding:4px 8px"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🎵 ${a.name}</span><span style="cursor:pointer;color:var(--red)" onclick="removeVcMultiItem('${previewId}',${i})">✕</span></div>`).join('');
+    wrap.innerHTML=arr.map((a,i)=>`<div style="display:flex;align-items:center;gap:6px;font-size:11px;background:var(--lav);border-radius:6px;padding:6px 8px">
+      <span style="font-weight:700;color:var(--violet);flex-shrink:0">@${tagPrefix}${i+1}</span>
+      <input value="${(a.name||'').replace(/"/g,'&quot;')}" oninput="renameVcMultiItem('${previewId}',${i},this.value)" style="flex:1;border:none;background:transparent;font-size:11px;color:var(--textm);min-width:0" placeholder="Name this clip…">
+      <span style="cursor:pointer;color:var(--red);flex-shrink:0" onclick="removeVcMultiItem('${previewId}',${i})">✕</span>
+    </div>`).join('');
   } else {
-    wrap.innerHTML=arr.map((a,i)=>`<div style="position:relative;width:56px">
-      ${a.dataUrl.startsWith("data:video")?`<video src="${a.dataUrl}" style="width:56px;height:56px;border-radius:8px;object-fit:cover"></video>`:`<img src="${a.dataUrl}" style="width:56px;height:56px;border-radius:8px;object-fit:cover">`}
+    wrap.innerHTML=arr.map((a,i)=>`<div style="position:relative;width:70px">
+      ${a.dataUrl.startsWith("data:video")?`<video src="${a.dataUrl}" style="width:70px;height:70px;border-radius:8px;object-fit:cover"></video>`:`<img src="${a.dataUrl}" style="width:70px;height:70px;border-radius:8px;object-fit:cover">`}
+      <div style="position:absolute;bottom:2px;left:2px;right:2px;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;font-size:8px;font-weight:700;color:#fff;text-align:center">@${tagPrefix}${i+1}</div>
       <button onclick="removeVcMultiItem('${previewId}',${i})" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;cursor:pointer;line-height:1">✕</button>
+      <input value="${(a.name||'').replace(/"/g,'&quot;')}" oninput="renameVcMultiItem('${previewId}',${i},this.value)" placeholder="Rename…" style="width:70px;border:1px solid var(--border);border-radius:5px;font-size:9px;padding:2px 4px;margin-top:3px;color:var(--textm)">
     </div>`).join('');
   }
+}
+
+function renameVcMultiItem(previewId,i,newName){
+  const map={vcMultiImagePreview:S.vcMultiImages,vcMultiVideoPreview:S.vcMultiVideos,vcMultiAudioPreview:S.vcMultiAudios};
+  const arr=map[previewId];
+  if(arr&&arr[i])arr[i].name=newName;
 }
 
 function removeVcMultiItem(previewId,i){
@@ -4250,10 +4264,11 @@ function renderVcChatThread(){
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
           <span class="badge badge-gray">via ${msg.meta.providerLabel}</span>
           ${isVeo?`<span class="badge badge-gray">~${totalDur}s total</span>`:''}
+          <span class="badge badge-green">✓ Saved</span>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <a href="${msg.content}" target="_blank" class="btn btn-outline btn-xs">⬇</a>
-          <button class="btn btn-primary btn-xs" onclick="saveVideoToGallery('${msg.content.replace(/'/g,"\\'")}','${(msg.meta.prompt||'').replace(/'/g,"\\'").slice(0,200)}','')">💾 Save</button>
+          ${msg.meta.assetId?`<button class="btn btn-outline btn-xs" onclick="openCollectionPicker('asset','${msg.meta.assetId}')">📁 Collection</button>`:''}
           ${isVeo?`<button class="btn btn-outline btn-xs" onclick="extendVeoVideo('${msg.id||''}')">⏩ Extend</button>`:''}
           ${isKling?`<button class="btn btn-outline btn-xs" onclick="openLipSyncDialog('${msg.id||''}')">👄 Lip Sync</button>`:''}
         </div>
@@ -4369,7 +4384,8 @@ async function runLipSync(msgId){
     const submitData=await submitRes.json();
     if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
     const videoUrl=await pollFalVideoResult(endpoint,submitData,apiKey);
-    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:"Kling Lip-Sync",prompt:msg.meta.prompt}});
+    const savedAssetLs=createVideoAsset(videoUrl,msg.meta.prompt,"");
+    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:"Kling Lip-Sync",prompt:msg.meta.prompt,assetId:savedAssetLs.id}});
     logCost(endpoint,"Lip-sync");
     toast("✨ Lip-synced video ready!","success");
   }catch(err){
@@ -4405,7 +4421,8 @@ async function extendVeoVideo(msgId){
     const submitData=await submitRes.json();
     if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
     const videoUrl=await pollFalVideoResult(model,submitData,apiKey);
-    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:msg.meta.providerLabel,prompt:continuation,totalDuration:currentTotal+7}});
+    const savedAssetExt=createVideoAsset(videoUrl,continuation,"");
+    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:msg.meta.providerLabel,prompt:continuation,totalDuration:currentTotal+7,assetId:savedAssetExt.id}});
     logCost(model,"Extend: "+continuation.slice(0,50));
     toast("✨ Video extended!","success");
   }catch(err){
@@ -4449,7 +4466,9 @@ async function sendVcMultiShotPrompt(){
     const submitData=await submitRes.json();
     if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
     const videoUrl=await pollFalVideoResult(model,submitData,apiKey);
-    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:"Kling Multi-Shot",prompt:validShots.map(s=>s.prompt).join(" → ")}});
+    const multiShotPromptJoined=validShots.map(s=>s.prompt).join(" → ");
+    const savedAssetMs=createVideoAsset(videoUrl,multiShotPromptJoined,"");
+    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:"Kling Multi-Shot",prompt:multiShotPromptJoined,assetId:savedAssetMs.id}});
     logCost(model,`Multi-shot (${validShots.length} shots)`);
     toast(`✨ ${validShots.length}-shot video generated!`,"success");
   }catch(err){
@@ -4534,7 +4553,8 @@ async function sendVcChatPrompt(){
       videoUrl=await pollFalVideoResult(model,submitData,apiKey);
       providerLabel=model.includes("kling")?"Kling":model.includes("veo")?"Veo 3.1":"Seedance 2.0";costKey=model;
     }
-    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel,prompt,totalDuration:parseInt(duration,10)}});
+    const savedAssetVc=createVideoAsset(videoUrl,prompt,"");
+    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel,prompt,totalDuration:parseInt(duration,10),assetId:savedAssetVc.id}});
     logCost(costKey,prompt.slice(0,60));
     toast(`✨ Video generated via ${providerLabel}!`,"success");
   }catch(err){
@@ -4854,12 +4874,18 @@ async function generateShotVideo(shotId){
 }
 
 
-function saveVideoToGallery(url,prompt,projectId){
+function createVideoAsset(url,prompt,projectId){
   const asset={id:"asset_"+Date.now(),type:"video",url,prompt,projectId:projectId||null,created:new Date().toISOString()};
   S.assets.push(asset);
   save("assets");
+  return asset;
+}
+
+function saveVideoToGallery(url,prompt,projectId){
+  const asset=createVideoAsset(url,prompt,projectId);
   toast("💾 Saved to Gallery","success");
   if(document.getElementById("moduleContent"))renderModule("videocanvas");
+  return asset;
 }
 
 // ── DIRECTORS ──
@@ -6268,10 +6294,12 @@ async function generateMusic(){
     if(!res.ok)throw new Error((data.detail&&(Array.isArray(data.detail)?data.detail[0]?.msg:data.detail))||data.error||res.statusText);
     const url=data.audio&&data.audio.url;
     if(!url)throw new Error("No audio returned");
+    const savedAssetMusic=createAudioAsset(url,prompt);
     resultEl.innerHTML=`<audio src="${url}" controls style="width:100%;margin-bottom:8px"></audio>
-      <div style="display:flex;gap:8px"><a href="${url}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-primary btn-sm" onclick="saveAudioBlobToGallery('${url.replace(/'/g,"\\'")}','${prompt.replace(/'/g,"\\'").slice(0,150)}')">💾 Save</button></div>`;
+      <div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Saved to Gallery automatically</div>
+      <div style="display:flex;gap:8px"><a href="${url}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAssetMusic.id}')">📁 Add to Collection</button></div>`;
     logCost("stable-audio-3",prompt.slice(0,60));
-    toast("🎼 Music generated!","success");
+    toast("🎼 Music generated — saved to Gallery!","success");
   }catch(err){
     resultEl.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px">❌ ${err.message}</div>`;
     toast("❌ Music generation failed: "+err.message,"error");
@@ -6297,10 +6325,12 @@ async function generateSFX(){
     if(!res.ok)throw new Error((data.detail&&(Array.isArray(data.detail)?data.detail[0]?.msg:data.detail))||data.error||res.statusText);
     const url=data.audio&&data.audio.url;
     if(!url)throw new Error("No audio returned");
+    const savedAssetSfx=createAudioAsset(url,"SFX: "+prompt);
     resultEl.innerHTML=`<audio src="${url}" controls style="width:100%;margin-bottom:8px"></audio>
-      <div style="display:flex;gap:8px"><a href="${url}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-primary btn-sm" onclick="saveAudioBlobToGallery('${url.replace(/'/g,"\\'")}','SFX: ${prompt.replace(/'/g,"\\'").slice(0,140)}')">💾 Save</button></div>`;
+      <div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Saved to Gallery automatically</div>
+      <div style="display:flex;gap:8px"><a href="${url}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAssetSfx.id}')">📁 Add to Collection</button></div>`;
     logCost("sfx-generator",prompt.slice(0,60));
-    toast("💥 SFX generated!","success");
+    toast("💥 SFX generated — saved to Gallery!","success");
   }catch(err){
     resultEl.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px">❌ ${err.message}</div>`;
     toast("❌ SFX generation failed: "+err.message,"error");
@@ -6376,10 +6406,12 @@ async function generateLipsync(){
     if(!finalData)throw new Error("Timed out — check fal.ai dashboard, it may still complete");
     const videoUrl=finalData.video&&finalData.video.url;
     if(!videoUrl)throw new Error("No video returned");
+    const savedAssetLip=createVideoAsset(videoUrl,"Lipsync video","");
     resultEl.innerHTML=`<video src="${videoUrl}" controls style="width:100%;border-radius:8px;margin-bottom:8px"></video>
-      <div style="display:flex;gap:8px"><a href="${videoUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-primary btn-sm" onclick="saveVideoToGallery('${videoUrl.replace(/'/g,"\\'")}','Lipsync video','')">💾 Save</button></div>`;
+      <div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Saved to Gallery automatically</div>
+      <div style="display:flex;gap:8px"><a href="${videoUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAssetLip.id}')">📁 Add to Collection</button></div>`;
     logCost("sync-lipsync-v2","Lipsync video");
-    toast("👄 Lipsync generated!","success");
+    toast("👄 Lipsync generated — saved to Gallery!","success");
     notifyIfEnabled("Lipsync ready 👄","Your lipsync video finished generating");
   }catch(err){
     resultEl.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px">❌ ${err.message}</div>`;
@@ -6457,11 +6489,13 @@ function processAudioEdit(){
   const reader=new FileReader();
   reader.onload=()=>{
     const base64Url=reader.result;
+    const savedAssetEdit=createAudioAsset(base64Url,"Edited audio clip");
     document.getElementById("audioEditResult").innerHTML=`
       <audio src="${url}" controls style="width:100%;margin-bottom:8px"></audio>
+      <div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Saved to Gallery automatically</div>
       <div style="display:flex;gap:8px">
         <a href="${url}" download="edited-audio.wav" class="btn btn-outline btn-sm">⬇ Download</a>
-        <button class="btn btn-primary btn-sm" onclick="saveAudioBlobToGallery('${base64Url}','Edited audio clip')">💾 Save to Gallery</button>
+        <button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAssetEdit.id}')">📁 Add to Collection</button>
       </div>`;
     toast("✂️ Audio processed","success");
   };
@@ -6544,14 +6578,16 @@ async function generateAudio(){
       reader.onerror=reject;
       reader.readAsDataURL(blob);
     });
+    const savedAssetTts=createAudioAsset(base64Url,text);
     resultContent.innerHTML=`
       <audio src="${audioUrl}" controls style="width:100%;margin-bottom:10px"></audio>
+      <div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Saved to Gallery automatically</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a href="${audioUrl}" download="voiceover.mp3" class="btn btn-outline btn-sm">⬇ Download</a>
-        <button class="btn btn-primary btn-sm" onclick="saveAudioBlobToGallery('${base64Url}','${text.replace(/'/g,"\\'").slice(0,200)}')">💾 Save to Gallery</button>
+        <button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAssetTts.id}')">📁 Add to Collection</button>
       </div>`;
     logCost("elevenlabs_tts",text.slice(0,60));
-    toast("🎵 Voice generated!","success");
+    toast("🎵 Voice generated — saved to Gallery!","success");
   }catch(err){
     console.error("Audio gen error:",err);
     resultContent.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px;background:rgba(239,68,68,0.08);border-radius:8px">❌ ${err.message}</div>`;
@@ -6560,12 +6596,18 @@ async function generateAudio(){
   btn.disabled=false;btn.textContent="🎵 Generate Voice";
 }
 
-function saveAudioBlobToGallery(url,text){
+function createAudioAsset(url,text){
   const asset={id:"asset_"+Date.now(),type:"audio",url,prompt:text,created:new Date().toISOString()};
   S.assets.push(asset);
   save("assets");
+  return asset;
+}
+
+function saveAudioBlobToGallery(url,text){
+  const asset=createAudioAsset(url,text);
   toast("💾 Saved to Gallery","success");
   renderAudio(document.getElementById("moduleContent"));
+  return asset;
 }
 
 // ── ASSETS ──
@@ -7317,11 +7359,12 @@ async function runBatchUpscale(){
     resultContent.innerHTML+=`<div id="${rowId}" style="padding:10px;background:rgba(61,31,122,0.04);border-radius:8px;margin-bottom:8px;font-size:12px;color:var(--textm)">⏳ (${i+1}/${ids.length}) Upscaling "${(asset.prompt||'Untitled').slice(0,40)}"…</div>`;
     try{
       const outUrl=await upscaleImageUrl(asset.url,engine,apiKey);
+      const savedUpAsset=saveUpscaleToGallery(outUrl,true);
       document.getElementById(rowId).innerHTML=`
         <div style="display:flex;gap:8px;align-items:center">
           <img src="${outUrl}" style="width:60px;height:60px;border-radius:6px;object-fit:cover">
-          <div style="flex:1;font-size:11px;color:var(--text)">✅ ${(asset.prompt||'Untitled').slice(0,40)}</div>
-          <button class="btn btn-primary btn-xs" onclick="saveUpscaleToGallery('${outUrl.replace(/'/g,"\\'")}')">💾 Save</button>
+          <div style="flex:1;font-size:11px;color:var(--text)">✅ ${(asset.prompt||'Untitled').slice(0,40)} — saved</div>
+          <button class="btn btn-outline btn-xs" onclick="openCollectionPicker('asset','${savedUpAsset.id}')">📁</button>
         </div>`;
       logCost(engine,"Batch upscale");
     }catch(err){
@@ -7390,18 +7433,20 @@ async function runUpscale(){
 
   try{
     const outUrl=await upscaleImageUrl(url,engine,apiKey);
+    const savedUpscaleAsset=saveUpscaleToGallery(outUrl,true);
     resultContent.innerHTML=`
       <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Before / After</div>
       <div class="grid2" style="margin-bottom:10px">
         <div><img src="${url}" style="width:100%;border-radius:8px"><div style="font-size:10px;color:var(--texts);text-align:center;margin-top:4px">Original</div></div>
         <div><img src="${outUrl}" style="width:100%;border-radius:8px"><div style="font-size:10px;color:var(--texts);text-align:center;margin-top:4px">Upscaled</div></div>
       </div>
+      <div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Saved to Gallery automatically</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a href="${outUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
-        <button class="btn btn-primary btn-sm" onclick="saveUpscaleToGallery('${outUrl.replace(/'/g,"\\'")}')">💾 Save to Gallery</button>
+        <button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedUpscaleAsset.id}')">📁 Add to Collection</button>
       </div>`;
     logCost(engine,"Upscale");
-    toast("✨ Upscaled!","success");
+    toast("✨ Upscaled — saved to Gallery!","success");
   }catch(err){
     console.error("Upscale error:",err);
     resultContent.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px;background:rgba(239,68,68,0.08);border-radius:8px">❌ ${err.message}</div>`;
@@ -7410,11 +7455,12 @@ async function runUpscale(){
   btn.disabled=false;btn.textContent="⬆️ Upscale Image";
 }
 
-function saveUpscaleToGallery(url){
+function saveUpscaleToGallery(url,silent){
   const asset={id:"asset_"+Date.now(),type:"image",url,prompt:"Upscaled image",created:new Date().toISOString()};
   S.assets.push(asset);
   save("assets");
-  toast("💾 Saved to Gallery","success");
+  if(!silent)toast("💾 Saved to Gallery","success");
+  return asset;
 }
 
 // ── COSTS ──
