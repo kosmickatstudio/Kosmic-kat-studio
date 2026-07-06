@@ -135,7 +135,7 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
 .ig-send-btn:active{transform:scale(0.92)}
 .ig-icon-btn{width:36px;height:36px;border-radius:50%;border:1.5px solid var(--border);background:var(--pearl);color:var(--textm);font-size:15px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
 .ig-empty-chat{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:var(--texts);padding:20px}
-.ig-input-shell{background:var(--pearl);border:1.5px solid var(--border);border-radius:22px;padding:8px 10px 6px;transition:border-color 0.2s;width:100%;box-sizing:border-box}
+.ig-input-shell{background:var(--pearl);border:1.5px solid var(--border);border-radius:22px;padding:8px 10px 6px;transition:border-color 0.2s;width:100%;box-sizing:border-box;position:relative}
 .ig-input-shell:focus-within{border-color:var(--vs)}
 .ig-input-textarea-v2{width:100%;border:none;background:transparent;resize:none;font-size:13px;font-family:inherit;color:var(--text);max-height:100px;min-height:32px;padding:2px 4px;display:block}
 .ig-input-textarea-v2:focus{outline:none}
@@ -2834,7 +2834,7 @@ function renderIgChatThread(){
         <img src="${msg.content}" style="width:100%;max-width:320px;border-radius:12px;display:block;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span class="badge badge-gray">via ${msg.meta.providerLabel}</span><span class="badge badge-green">✓ Saved</span></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <a href="${msg.content}" target="_blank" class="btn btn-outline btn-xs">⬇</a>
+          <button class="btn btn-outline btn-xs" onclick="downloadWithName('${msg.content.replace(/'/g,"\\'")}','KosmicKat_${sanitizeFilenamePart(msg.meta.prompt)}.png')">⬇</button>
           ${msg.meta.assetId?`<button class="btn btn-outline btn-xs" onclick="openCollectionPicker('asset','${msg.meta.assetId}')">📁 Collection</button>`:''}
           <button class="btn btn-outline btn-xs" onclick="sendToVideoCanvas('${msg.content.replace(/'/g,"\\'")}')">🎬</button>
         </div>
@@ -3543,6 +3543,36 @@ async function genViaVeoReference(prompt,ratio,duration,imageUrls){
 
 // Shared queue-polling logic, extracted so the new reference-to-video paths
 // don't duplicate the same poll loop already proven in runProductionVideoGen.
+// ── DOWNLOAD WITH A REAL CUSTOM FILENAME ──
+// Browsers ignore the `download` attribute's suggested filename for
+// cross-origin URLs (a deliberate security restriction) — fal.media's
+// results are cross-origin, so a plain <a download="..."> silently falls
+// back to the server's own filename. The real, well-established fix:
+// fetch the resource as a blob (blob: URLs count as same-origin for
+// download purposes), then trigger the download from that.
+async function downloadWithName(url,filename){
+  try{
+    const response=await fetch(url);
+    if(!response.ok)throw new Error("Fetch failed");
+    const blob=await response.blob();
+    const blobUrl=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=blobUrl;
+    a.download=filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(blobUrl),1000);
+  }catch(err){
+    console.warn("Custom-named download failed, opening directly instead:",err);
+    window.open(url,"_blank");
+  }
+}
+
+function sanitizeFilenamePart(text){
+  return (text||"").trim().replace(/[^a-zA-Z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,40)||"media";
+}
+
 async function pollFalVideoResult(model,submitData,apiKey){
   const requestId=submitData.request_id;
   const statusUrl=submitData.status_url||`https://queue.fal.run/${model}/requests/${requestId}/status`;
@@ -3690,7 +3720,8 @@ function renderVideoCanvas(el){
 
         <div class="ig-chat-inputbar">
           <div class="ig-input-shell">
-            <textarea class="ig-input-textarea-v2" id="vcChatInput" rows="1" placeholder="${hasKey?'Describe the video you want…':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleVcChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
+            <textarea class="ig-input-textarea-v2" id="vcChatInput" rows="1" placeholder="${hasKey?'Describe the video you want…':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleVcChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px';checkVcTagAutocomplete()" onblur="setTimeout(hideVcTagAutocomplete,150)"></textarea>
+            <div id="vcTagAutocomplete" style="display:none;position:absolute;bottom:100%;left:0;right:0;margin-bottom:6px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shv);max-height:160px;overflow-y:auto;z-index:10"></div>
             <div class="ig-input-toolbar">
               <button class="ig-tool-btn" onclick="toggleVcSettings()" title="Settings">⚙</button>
               <button class="ig-tool-btn" onclick="vcMagicPrompt()" title="Magic Prompt">🪄</button>
@@ -4210,11 +4241,13 @@ function renderVcMultiPreview(previewId,arr,isAudio){
       <span style="cursor:pointer;color:var(--red);flex-shrink:0" onclick="removeVcMultiItem('${previewId}',${i})">✕</span>
     </div>`).join('');
   } else {
-    wrap.innerHTML=arr.map((a,i)=>`<div style="position:relative;width:70px">
-      ${a.dataUrl.startsWith("data:video")?`<video src="${a.dataUrl}" style="width:70px;height:70px;border-radius:8px;object-fit:cover"></video>`:`<img src="${a.dataUrl}" style="width:70px;height:70px;border-radius:8px;object-fit:cover">`}
-      <div style="position:absolute;bottom:2px;left:2px;right:2px;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;font-size:8px;font-weight:700;color:#fff;text-align:center">@${tagPrefix}${i+1}</div>
-      <button onclick="removeVcMultiItem('${previewId}',${i})" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;cursor:pointer;line-height:1">✕</button>
-      <input value="${(a.name||'').replace(/"/g,'&quot;')}" oninput="renameVcMultiItem('${previewId}',${i},this.value)" placeholder="Rename…" style="width:70px;border:1px solid var(--border);border-radius:5px;font-size:9px;padding:2px 4px;margin-top:3px;color:var(--textm)">
+    wrap.innerHTML=arr.map((a,i)=>`<div style="width:70px">
+      <div style="position:relative;width:70px;height:70px">
+        ${a.dataUrl.startsWith("data:video")?`<video src="${a.dataUrl}" style="width:70px;height:70px;border-radius:8px;object-fit:cover"></video>`:`<img src="${a.dataUrl}" style="width:70px;height:70px;border-radius:8px;object-fit:cover">`}
+        <div style="position:absolute;bottom:2px;left:2px;right:2px;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;font-size:8px;font-weight:700;color:#fff;text-align:center;pointer-events:none">@${tagPrefix}${i+1}</div>
+        <button onclick="removeVcMultiItem('${previewId}',${i})" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;cursor:pointer;line-height:1">✕</button>
+      </div>
+      <input value="${(a.name||'').replace(/"/g,'&quot;')}" oninput="renameVcMultiItem('${previewId}',${i},this.value)" placeholder="Rename…" style="width:70px;border:1px solid var(--border);border-radius:5px;font-size:9px;padding:2px 4px;margin-top:3px;color:var(--textm);box-sizing:border-box">
     </div>`).join('');
   }
 }
@@ -4244,8 +4277,55 @@ function toggleVcSettings(){
   if(backdrop)backdrop.classList.toggle("show",opening);
 }
 
+function getVcAvailableTags(){
+  const tags=[];
+  S.vcMultiImages.forEach((_,i)=>tags.push("Image"+(i+1)));
+  S.vcMultiVideos.forEach((_,i)=>tags.push("Video"+(i+1)));
+  S.vcMultiAudios.forEach((_,i)=>tags.push("Audio"+(i+1)));
+  return tags;
+}
+
+function checkVcTagAutocomplete(){
+  const input=document.getElementById("vcChatInput");
+  const dropdown=document.getElementById("vcTagAutocomplete");
+  if(!input||!dropdown)return;
+  const cursor=input.selectionStart;
+  const textBeforeCursor=input.value.slice(0,cursor);
+  const match=textBeforeCursor.match(/@(\w*)$/);
+  if(!match){hideVcTagAutocomplete();return;}
+  const partial=match[1].toLowerCase();
+  const allTags=getVcAvailableTags();
+  const matches=allTags.filter(t=>t.toLowerCase().startsWith(partial));
+  if(!matches.length){hideVcTagAutocomplete();return;}
+  dropdown.innerHTML=matches.map(t=>`<div onclick="insertVcTag('${t}')" style="padding:8px 12px;font-size:12px;font-weight:700;color:var(--violet);cursor:pointer;border-bottom:1px solid var(--borderl)">@${t}</div>`).join('');
+  dropdown.style.display="block";
+}
+
+function hideVcTagAutocomplete(){
+  const dropdown=document.getElementById("vcTagAutocomplete");
+  if(dropdown)dropdown.style.display="none";
+}
+
+function insertVcTag(tag){
+  const input=document.getElementById("vcChatInput");
+  const cursor=input.selectionStart;
+  const textBeforeCursor=input.value.slice(0,cursor);
+  const textAfterCursor=input.value.slice(cursor);
+  const newBefore=textBeforeCursor.replace(/@(\w*)$/,`@${tag} `);
+  input.value=newBefore+textAfterCursor;
+  const newCursorPos=newBefore.length;
+  input.focus();
+  input.setSelectionRange(newCursorPos,newCursorPos);
+  hideVcTagAutocomplete();
+}
+
 function handleVcChatKeydown(e){
-  if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendVcChatPrompt();}
+  const dropdown=document.getElementById("vcTagAutocomplete");
+  if(e.key==="Enter"&&!e.shiftKey){
+    e.preventDefault();
+    if(dropdown&&dropdown.style.display==="block"){hideVcTagAutocomplete();return;}
+    sendVcChatPrompt();
+  }
 }
 
 function toggleVcVoiceInput(){
@@ -4301,7 +4381,7 @@ function renderVcChatThread(){
           <span class="badge badge-green">✓ Saved</span>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <a href="${msg.content}" target="_blank" class="btn btn-outline btn-xs">⬇</a>
+          <button class="btn btn-outline btn-xs" onclick="downloadWithName('${msg.content.replace(/'/g,"\\'")}','KosmicKat_${sanitizeFilenamePart(msg.meta.prompt)}.mp4')">⬇</button>
           ${msg.meta.assetId?`<button class="btn btn-outline btn-xs" onclick="openCollectionPicker('asset','${msg.meta.assetId}')">📁 Collection</button>`:''}
           ${isVeo?`<button class="btn btn-outline btn-xs" onclick="extendVeoVideo('${msg.id||''}')">⏩ Extend</button>`:''}
           ${isKling?`<button class="btn btn-outline btn-xs" onclick="openLipSyncDialog('${msg.id||''}')">👄 Lip Sync</button>`:''}
