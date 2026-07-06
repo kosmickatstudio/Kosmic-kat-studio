@@ -4021,14 +4021,22 @@ function renderVcChatThread(){
     if(msg.role==="user")return `<div class="ig-bubble-user">${msg.content}</div>`;
     if(msg.type==="loading")return `<div class="ig-bubble-loading" id="${msg.id}"><span class="ig-dot"></span><span class="ig-dot"></span><span class="ig-dot"></span>&nbsp;${msg.content}</div>`;
     if(msg.type==="error")return `<div class="ig-bubble-assistant" style="color:var(--red)">❌ ${msg.content}</div>`;
-    if(msg.type==="video")return `<div class="ig-bubble-assistant">
+    if(msg.type==="video"){
+      const isVeo=(msg.meta.providerLabel||"").includes("Veo");
+      const totalDur=msg.meta.totalDuration||8;
+      return `<div class="ig-bubble-assistant">
         <video src="${msg.content}" controls style="width:100%;max-width:320px;border-radius:12px;display:block;margin-bottom:8px"></video>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span class="badge badge-gray">via ${msg.meta.providerLabel}</span></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+          <span class="badge badge-gray">via ${msg.meta.providerLabel}</span>
+          ${isVeo?`<span class="badge badge-gray">~${totalDur}s total</span>`:''}
+        </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <a href="${msg.content}" target="_blank" class="btn btn-outline btn-xs">⬇</a>
           <button class="btn btn-primary btn-xs" onclick="saveVideoToGallery('${msg.content.replace(/'/g,"\\'")}','${(msg.meta.prompt||'').replace(/'/g,"\\'").slice(0,200)}','')">💾 Save</button>
+          ${isVeo?`<button class="btn btn-outline btn-xs" onclick="extendVeoVideo('${msg.id||''}')">⏩ Extend</button>`:''}
         </div>
       </div>`;
+    }
     return '';
   }).join('');
   thread.scrollTop=thread.scrollHeight;
@@ -4047,6 +4055,48 @@ function replaceVcLoadingBubble(loadingId,newMsg){
   else S.vcChatHistory.push(newMsg);
   saveSetting("vc_chat_history",S.vcChatHistory);
   renderVcChatThread();
+}
+
+// ── VEO 3.1 EXTEND-VIDEO — real endpoint, verified. Takes an already-hosted
+// video URL (never base64 — this only ever operates on prior generation
+// results, so no upload-payload risk like the multi-reference paths have).
+// fal.ai's own current page states "up to 30 seconds" total — noting this
+// since it differs from an earlier ~148s figure that may be outdated.
+async function extendVeoVideo(msgId){
+  const msg=S.vcChatHistory.find(m=>m.id===msgId);
+  if(!msg){toast("Couldn't find that video — try regenerating","error");return;}
+  const continuation=await showPromptDialog("Describe how the scene should continue, keeping the same style and motion.","",{title:"Extend This Video",okLabel:"Extend",multiline:true});
+  if(!continuation||!continuation.trim())return;
+
+  const currentTotal=msg.meta.totalDuration||8;
+  if(currentTotal>=30){
+    const proceed=await showConfirmDialog(`This video is already ~${currentTotal}s — fal.ai's Veo 3.1 extend-video is documented as supporting up to ~30 seconds total. Extending further may fail or produce unreliable results. Try anyway?`,{danger:true,okLabel:"Try Anyway"});
+    if(!proceed)return;
+  }
+
+  const isFast=(msg.meta.providerLabel||"").includes("Fast");
+  const model=isFast?"fal-ai/veo3.1/fast/extend-video":"fal-ai/veo3.1/extend-video";
+  const loadingId="vcLoading_"+Date.now();
+  pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Extending video…"});
+  const sendBtn=document.getElementById("vcSendBtn");
+  if(sendBtn)sendBtn.disabled=true;
+
+  try{
+    const apiKey=gs("api_falai","");
+    if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+    const body={prompt:continuation,video_url:msg.content};
+    const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
+    const submitData=await submitRes.json();
+    if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
+    const videoUrl=await pollFalVideoResult(model,submitData,apiKey);
+    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:msg.meta.providerLabel,prompt:continuation,totalDuration:currentTotal+7}});
+    logCost(model,"Extend: "+continuation.slice(0,50));
+    toast("✨ Video extended!","success");
+  }catch(err){
+    replaceVcLoadingBubble(loadingId,{role:"assistant",type:"error",content:err.message});
+    toast("❌ "+err.message,"error");
+  }
+  if(sendBtn)sendBtn.disabled=false;
 }
 
 async function sendVcMultiShotPrompt(){
@@ -4082,7 +4132,7 @@ async function sendVcMultiShotPrompt(){
     const submitData=await submitRes.json();
     if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
     const videoUrl=await pollFalVideoResult(model,submitData,apiKey);
-    replaceVcLoadingBubble(loadingId,{role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:"Kling Multi-Shot",prompt:validShots.map(s=>s.prompt).join(" → ")}});
+    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:"Kling Multi-Shot",prompt:validShots.map(s=>s.prompt).join(" → ")}});
     logCost(model,`Multi-shot (${validShots.length} shots)`);
     toast(`✨ ${validShots.length}-shot video generated!`,"success");
   }catch(err){
@@ -4166,7 +4216,7 @@ async function sendVcChatPrompt(){
       videoUrl=await pollFalVideoResult(model,submitData,apiKey);
       providerLabel=model.includes("kling")?"Kling":model.includes("veo")?"Veo 3.1":"Seedance 2.0";costKey=model;
     }
-    replaceVcLoadingBubble(loadingId,{role:"assistant",type:"video",content:videoUrl,meta:{providerLabel,prompt}});
+    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel,prompt,totalDuration:parseInt(duration,10)}});
     logCost(costKey,prompt.slice(0,60));
     toast(`✨ Video generated via ${providerLabel}!`,"success");
   }catch(err){
