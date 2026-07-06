@@ -2557,6 +2557,8 @@ function renderImageGen(el){
 
       <div class="ig-chat-thread" id="igChatThread"></div>
 
+      <div id="igAttachmentBar" style="display:none;padding:6px 14px;border-top:1px solid var(--border);background:var(--pearl2);font-size:11px;color:var(--textm);align-items:center;gap:8px"></div>
+
       <div class="ig-chat-inputbar">
         <div class="ig-input-shell">
           <textarea class="ig-input-textarea-v2" id="igChatInput" rows="1" placeholder="${hasKey?'Describe the image you want…':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleIgChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
@@ -2656,6 +2658,7 @@ function renderImageGen(el){
     </div>
   `;
   updateIgModelUI();
+  updateIgAttachmentBar();
   renderIgChatThread();
 }
 
@@ -2856,6 +2859,7 @@ function handleIgMultiRefUpload(event){
         canvas.getContext("2d").drawImage(img,0,0,w,h);
         S.igMultiRefImages.push(canvas.toDataURL("image/jpeg",0.88));
         renderIgMultiRefPreview();
+        updateIgAttachmentBar();
       };
       img.src=e.target.result;
     };
@@ -2877,8 +2881,28 @@ function renderIgMultiRefPreview(){
 function removeIgMultiRefImage(i){
   S.igMultiRefImages.splice(i,1);
   renderIgMultiRefPreview();
+  updateIgAttachmentBar();
 }
 
+function clearAllIgMultiRef(){
+  S.igMultiRefImages=[];
+  renderIgMultiRefPreview();
+  updateIgAttachmentBar();
+}
+
+function updateIgAttachmentBar(){
+  const bar=document.getElementById("igAttachmentBar");
+  if(!bar)return;
+  const hasSingle=!!S.igRefDataUrl;
+  const hasMulti=S.igMultiRefImages&&S.igMultiRefImages.length>0;
+  if(!hasSingle&&!hasMulti){bar.style.display="none";bar.innerHTML="";return;}
+  bar.style.display="flex";
+  if(hasSingle){
+    bar.innerHTML=`<img src="${S.igRefDataUrl}" style="width:22px;height:22px;border-radius:4px;object-fit:cover">📎 Reference image attached — every generation will use Image-to-Image via FLUX Dev until removed<button onclick="clearIgRef()" style="margin-left:auto;border:none;background:none;color:var(--red);cursor:pointer;font-weight:700">✕ Remove</button>`;
+  } else {
+    bar.innerHTML=`📎 ${S.igMultiRefImages.length} reference image${S.igMultiRefImages.length!==1?'s':''} attached<button onclick="clearAllIgMultiRef()" style="margin-left:auto;border:none;background:none;color:var(--red);cursor:pointer;font-weight:700">✕ Clear All</button>`;
+  }
+}
 
 S.igRefDataUrl=S.igRefDataUrl||"";
 function handleIgRefUpload(event){
@@ -2900,6 +2924,7 @@ function handleIgRefUpload(event){
       document.getElementById("igRefPreview").innerHTML=`<img src="${S.igRefDataUrl}" style="width:100%;height:100%;object-fit:cover">`;
       document.getElementById("igRefClearBtn").style.display="inline-block";
       document.getElementById("igStrengthWrap").style.display="block";
+      updateIgAttachmentBar();
       toast("📷 Reference image ready — generation will use Image-to-Image (FLUX Dev)","success");
     };
     img.src=e.target.result;
@@ -2911,6 +2936,7 @@ function clearIgRef(){
   document.getElementById("igRefPreview").innerHTML="📷";
   document.getElementById("igRefClearBtn").style.display="none";
   document.getElementById("igStrengthWrap").style.display="none";
+  updateIgAttachmentBar();
 }
 
 // ── MAGIC PROMPT (LLM-based enhancement) ──
@@ -3589,6 +3615,8 @@ function renderVideoCanvas(el){
 
         <div class="ig-chat-thread" id="vcChatThread"></div>
 
+        <div id="vcAttachmentBar" style="display:none;padding:6px 14px;border-top:1px solid var(--border);background:var(--pearl2);font-size:11px;color:var(--textm);flex-direction:column;gap:4px"></div>
+
         <div class="ig-chat-inputbar">
           <div class="ig-input-shell">
             <textarea class="ig-input-textarea-v2" id="vcChatInput" rows="1" placeholder="${hasKey?'Describe the video you want…':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleVcChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
@@ -3604,6 +3632,7 @@ function renderVideoCanvas(el){
       <div class="ig-settings-backdrop" id="vcSettingsBackdrop" onclick="toggleVcSettings()"></div>
     `;
     updateVcModelUI();
+    updateVcAttachmentBar();
     renderVcChatThread();
     return;
   }
@@ -3827,6 +3856,7 @@ function saveMotionBrush(){
   if(statusEl)statusEl.textContent=`✓ Set — ${S.vcMotionBrush.trajectories.length} path points${S.vcMotionBrush.staticMaskUrl?', static area included':''}`;
   const clearBtn=document.getElementById("vcMotionBrushClearBtn");
   if(clearBtn)clearBtn.style.display="inline-flex";
+  updateVcAttachmentBar();
   toast("🖌 Motion Brush set","success");
 }
 
@@ -3836,6 +3866,7 @@ function clearMotionBrush(){
   if(statusEl)statusEl.textContent="Not set — uses the first reference image above as the base.";
   const clearBtn=document.getElementById("vcMotionBrushClearBtn");
   if(clearBtn)clearBtn.style.display="none";
+  updateVcAttachmentBar();
 }
 
 // ── KLING MULTI-SHOT STORYBOARD — real multi_prompt/shot_type schema ──
@@ -3854,6 +3885,7 @@ function toggleMultiShotMode(){
     inputEl.disabled=!gs("api_falai");
     inputEl.placeholder="Describe the video you want…";
   }
+  updateVcAttachmentBar();
 }
 
 function renderVcShotList(){
@@ -3991,6 +4023,7 @@ function updateVoiceHint(){
     hint.style.display="block";
     hint.textContent=`Reference in your prompt with ${S.klingSelectedVoices.map((_,i)=>`<<<voice_${i+1}>>>`).join(' and ')} — e.g. "<<<voice_1>>> says: welcome home."`;
   } else hint.style.display="none";
+  updateVcAttachmentBar();
 }
 
 function deleteKlingVoice(id){
@@ -3998,6 +4031,31 @@ function deleteKlingVoice(id){
   S.klingSelectedVoices=S.klingSelectedVoices.filter(vid=>vid!==id);
   saveSetting("kling_voices",S.klingVoices);
   renderVcVoiceList();
+}
+
+function updateVcAttachmentBar(){
+  const bar=document.getElementById("vcAttachmentBar");
+  if(!bar)return;
+  const rows=[];
+  if(S.vcMultiImages&&S.vcMultiImages.length)rows.push(`📎 ${S.vcMultiImages.length} reference image${S.vcMultiImages.length!==1?'s':''} <button onclick="clearAllVcMulti('vcMultiImagePreview')" style="border:none;background:none;color:var(--red);cursor:pointer;font-weight:700;margin-left:6px">✕ Clear</button>`);
+  if(S.vcMultiVideos&&S.vcMultiVideos.length)rows.push(`📎 ${S.vcMultiVideos.length} reference video${S.vcMultiVideos.length!==1?'s':''} <button onclick="clearAllVcMulti('vcMultiVideoPreview')" style="border:none;background:none;color:var(--red);cursor:pointer;font-weight:700;margin-left:6px">✕ Clear</button>`);
+  if(S.vcMultiAudios&&S.vcMultiAudios.length)rows.push(`📎 ${S.vcMultiAudios.length} reference audio file${S.vcMultiAudios.length!==1?'s':''} <button onclick="clearAllVcMulti('vcMultiAudioPreview')" style="border:none;background:none;color:var(--red);cursor:pointer;font-weight:700;margin-left:6px">✕ Clear</button>`);
+  if(S.vcMotionBrush)rows.push(`🖌 Motion Brush set — ${S.vcMotionBrush.trajectories.length} path points <button onclick="clearMotionBrush()" style="border:none;background:none;color:var(--red);cursor:pointer;font-weight:700;margin-left:6px">✕ Clear</button>`);
+  if(S.klingSelectedVoices&&S.klingSelectedVoices.length)rows.push(`🎙️ ${S.klingSelectedVoices.length} voice${S.klingSelectedVoices.length!==1?'s':''} selected — use ${S.klingSelectedVoices.map((_,i)=>`<<<voice_${i+1}>>>`).join(' / ')} in your prompt`);
+  const multiShotOn=document.getElementById("vcMultiShotToggle")?.checked;
+  if(multiShotOn)rows.push(`🎬 Multi-shot mode ON — the text box above is disabled, build shots in ⚙ Settings`);
+
+  if(!rows.length){bar.style.display="none";bar.innerHTML="";return;}
+  bar.style.display="flex";
+  bar.innerHTML=rows.map(r=>`<div>${r}</div>`).join('');
+}
+
+function clearAllVcMulti(previewId){
+  const map={vcMultiImagePreview:"vcMultiImages",vcMultiVideoPreview:"vcMultiVideos",vcMultiAudioPreview:"vcMultiAudios"};
+  S[map[previewId]]=[];
+  renderVcMultiPreview(previewId,S[map[previewId]],previewId==="vcMultiAudioPreview");
+  if(previewId==="vcMultiImagePreview")refreshMotionBrushVisibility();
+  updateVcAttachmentBar();
 }
 
 function updateVcModelUI(){
@@ -4029,6 +4087,7 @@ function updateVcModelUI(){
   else if(cap.provider==="veo-ref")note.textContent="Real reference-based generation — keeps a character/product/object consistent across the shot.";
   else if(cap.multiImage)note.textContent="Up to 4 images for multi-image generation, plus negative prompt support.";
   else note.textContent="";
+  updateVcAttachmentBar();
 }
 
 function handleVcMultiImageUpload(event){handleVcMultiUpload(event,S.vcMultiImages,"vcMultiImagePreview",VIDEO_MODEL_CAPABILITIES[document.getElementById("vcModel").value]?.maxImages||4);}
@@ -4058,6 +4117,7 @@ function refreshMotionBrushVisibility(){
   const cap=VIDEO_MODEL_CAPABILITIES[modelEl.value]||{};
   wrap.style.display=(cap.multiImage&&S.vcMultiImages.length>0)?"block":"none";
   if(!S.vcMultiImages.length)clearMotionBrush();
+  updateVcAttachmentBar();
 }
 
 function renderVcMultiPreview(previewId,arr,isAudio){
@@ -4079,6 +4139,7 @@ function removeVcMultiItem(previewId,i){
   arr.splice(i,1);
   renderVcMultiPreview(previewId,arr,previewId==="vcMultiAudioPreview");
   if(previewId==="vcMultiImagePreview")refreshMotionBrushVisibility();
+  updateVcAttachmentBar();
 }
 
 
