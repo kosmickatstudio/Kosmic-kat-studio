@@ -382,15 +382,15 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
   <a class="h-logo" href="#" ondblclick="location.reload();return false">
     <div class="h-logo-img-wrap"><img id="logo-img" src="" alt="KK"></div>
     <div>
-      <div class="h-logo-text">KOSMIC KAT <span>AI</span></div>
-      <div class="h-logo-sub">Universe-Agnostic Studio</div>
+      <div class="h-logo-text">KosmicKat</div>
+      <div class="h-logo-sub" style="color:var(--gold);text-transform:none;letter-spacing:0.06em">Ai Architecture</div>
     </div>
   </a>
+  <button class="hamburger" id="hamburger" onclick="toggleSidebar()" style="flex-shrink:0">☰</button>
   <div class="h-center"></div>
   <div class="h-right">
     <div class="h-right-top">
       <span class="founder-badge" id="founderBadge" style="display:none">👑 Founder</span>
-      <button class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</button>
     </div>
     <div class="h-right-bottom">
       <button class="h-settings" onclick="openSettings()" title="Settings">⚙️</button>
@@ -525,6 +525,27 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
   <div class="sp-header">
     <span class="sp-title">⚙️ Settings</span>
     <button class="btn btn-ghost btn-sm" onclick="closeSettings()">✕</button>
+  </div>
+
+  <!-- Profile -->
+  <div class="sp-section" id="profileSection">
+    <div class="sp-section-title">Profile</div>
+    <div class="sp-section-body">
+      <div id="spProfileSignedOut" style="display:none;font-size:12px;color:var(--textm)">Sign in to set up your profile.</div>
+      <div id="spProfileSignedIn" style="display:none">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <img id="spProfilePhoto" src="" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid var(--lav2)">
+          <div style="flex:1">
+            <div id="spProfileEmail" style="font-size:11px;color:var(--textm)"></div>
+            <div id="spProfileFounderBadge" style="display:none"><span class="badge badge-gold" style="margin-top:2px">👑 Founder</span></div>
+          </div>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Display Name</label>
+          <input class="f-input" id="spDisplayNameInput" placeholder="How you'd like to be shown in the app" oninput="saveSetting('preferred_name',this.value);updateUserUI()">
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- API Keys Section -->
@@ -1179,14 +1200,10 @@ function renderHome(el){
     </div>
 
     <div class="panel">
-      <div class="panel-title">⚡ Quick Generate</div>
-      <div class="f-group"><textarea class="f-textarea" id="homePrompt" placeholder="Describe anything — image or video…" style="min-height:60px"></textarea></div>
-      <div class="f-row">
-        <div class="f-group"><select class="f-select" id="homeType"><option value="image">🖼 Image</option><option value="video">🎬 Video</option></select></div>
-        <div class="f-group"><select class="f-select" id="homeRatio"><option value="1:1">1:1</option><option value="16:9">16:9</option><option value="9:16">9:16</option></select></div>
-      </div>
-      <button class="btn btn-primary btn-full" id="homeGenBtn" onclick="homeQuickGenerate()">✨ Generate</button>
-      <div id="homeGenResult" style="margin-top:10px"></div>
+      <div class="panel-title">🤖 Ask Your Agent</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Talk through an idea, ask for help, or give a direction — opens straight into your AI Director chat.</div>
+      <div class="f-group"><textarea class="f-textarea" id="homeAgentInput" placeholder="What do you need help with?" style="min-height:60px" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendHomeAgentPrompt();}"></textarea></div>
+      <button class="btn btn-primary btn-full" onclick="sendHomeAgentPrompt()">➤ Send to Agent</button>
     </div>
 
     <div class="panel">
@@ -1254,6 +1271,18 @@ function renderHome(el){
   attachHomeSwipeHandlers();
 }
 
+function sendHomeAgentPrompt(){
+  const inputEl=document.getElementById("homeAgentInput");
+  const msg=inputEl.value.trim();
+  if(!msg){toast("Type something for your agent first","error");return;}
+  if(!_aiPanelOpen)toggleAiPanel();
+  const aiPromptEl=document.getElementById("aiPrompt");
+  aiPromptEl.value=msg;
+  inputEl.value="";
+  sendAiPrompt();
+  aiPromptEl.scrollIntoView({behavior:"smooth",block:"center"});
+}
+
 function selectDirectorQuick(id){
   const current=gs("active_director","");
   saveSetting("active_director",current===id?"":id);
@@ -1267,69 +1296,6 @@ function setDefaultModel(kind,id){
   toast("✅ Default "+kind+" model updated","success");
 }
 
-// ── HOME QUICK GENERATE ──
-async function homeQuickGenerate(){
-  const prompt=document.getElementById("homePrompt").value.trim();
-  if(!prompt){toast("Enter a prompt first","error");return;}
-  const type=document.getElementById("homeType").value;
-  const ratio=document.getElementById("homeRatio").value;
-  const btn=document.getElementById("homeGenBtn");
-  const resultEl=document.getElementById("homeGenResult");
-  const directorStyle=getActiveDirectorPrompt();
-  const fullPrompt=directorStyle?`${prompt}, ${directorStyle}`:prompt;
-  btn.disabled=true;btn.textContent="⏳ Generating…";
-  resultEl.innerHTML=`<div style="text-align:center;padding:20px;color:var(--textm);font-size:13px">✨ Working…</div>`;
-
-  try{
-    if(type==="image"){
-      const model=gs("default_image_model","fal-ai/flux/schnell");
-      const cap=IMAGE_MODEL_CAPABILITIES[model]||{};
-      let result;
-      if(cap.provider==="gemini")result=await genViaGemini(fullPrompt,ratio,model);
-      else if(cap.provider==="flux-edit")throw new Error("FLUX.2 Flash Edit needs reference images — pick a different default for Home Quick Generate, or use it directly in Image.");
-      else if(model==="gpt-image-2"){const batch=await genViaOpenAIBatch(fullPrompt,ratio,1);result={url:batch.urls[0],providerLabel:batch.providerLabel,costKey:batch.costKey};}
-      else result=await genViaFal(fullPrompt,"",model,ratio,false);
-      resultEl.innerHTML=`<img src="${result.url}" style="width:100%;border-radius:10px;margin-bottom:8px">
-        <div style="display:flex;gap:8px"><a href="${result.url}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-primary btn-sm" onclick="saveImageToGallery('${result.url.replace(/'/g,"\\'")}','${fullPrompt.replace(/'/g,"\\'").slice(0,150)}','')">💾 Save</button><button class="btn btn-outline btn-sm" onclick="saveImageToGalleryThenCollect('${result.url.replace(/'/g,"\\'")}','${fullPrompt.replace(/'/g,"\\'").slice(0,150)}','')">📁</button></div>`;
-      logCost(result.costKey||model,fullPrompt.slice(0,60));
-    } else {
-      const apiKey=gs("api_falai","");
-      if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
-      const model=gs("default_video_model","bytedance/seedance-2.0/fast/text-to-video");
-      const durationConfig=VIDEO_MODEL_DURATIONS[model]||{options:[5],format:n=>String(n)};
-      const shortestDuration=durationConfig.format(durationConfig.options[0]);
-      const submitRes=await fetch(`https://queue.fal.run/${model}`,{
-        method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
-        body:JSON.stringify({prompt:fullPrompt,aspect_ratio:ratio,duration:shortestDuration,resolution:"720p"})
-      });
-      const submitData=await submitRes.json();
-      if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
-      const requestId=submitData.request_id;
-      const statusUrl=submitData.status_url||`https://queue.fal.run/${model}/requests/${requestId}/status`;
-      const resultUrl=submitData.response_url||`https://queue.fal.run/${model}/requests/${requestId}`;
-      let attempts=0,finalData=null;
-      while(attempts<60){
-        await new Promise(r=>setTimeout(r,5000));attempts++;
-        const statusRes=await fetch(statusUrl,{headers:{"Authorization":"Key "+apiKey}});
-        const statusData=await statusRes.json();
-        resultEl.innerHTML=`<div style="text-align:center;padding:20px;color:var(--textm);font-size:13px">🎬 ${statusData.status||'Processing'}… (${attempts*5}s)</div>`;
-        if(statusData.status==="COMPLETED"){const finalRes=await fetch(resultUrl,{headers:{"Authorization":"Key "+apiKey}});finalData=await finalRes.json();break;}
-        if(statusData.status==="ERROR"||statusData.status==="FAILED")throw new Error(statusData.error||"Generation failed");
-      }
-      if(!finalData)throw new Error("Timed out — try again");
-      const videoUrl=finalData.video&&finalData.video.url;
-      if(!videoUrl)throw new Error("No video returned");
-      resultEl.innerHTML=`<video src="${videoUrl}" controls style="width:100%;border-radius:10px;margin-bottom:8px"></video>
-        <div style="display:flex;gap:8px"><a href="${videoUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-primary btn-sm" onclick="saveVideoToGallery('${videoUrl.replace(/'/g,"\\'")}','${fullPrompt.replace(/'/g,"\\'").slice(0,150)}','')">💾 Save</button></div>`;
-      logCost(model,fullPrompt.slice(0,60));
-    }
-    toast("✨ Generated!","success");
-  }catch(err){
-    resultEl.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px;background:rgba(239,68,68,0.08);border-radius:8px">❌ ${err.message}</div>`;
-    toast("❌ "+err.message,"error");
-  }
-  btn.disabled=false;btn.textContent="✨ Generate";
-}
 
 // ── HOME SWIPEABLE CAROUSEL ──
 function renderHomeCarousel(){
@@ -7714,13 +7680,21 @@ function openDisplayContentModal(){
       <div class="f-group">
         <label class="f-label">Type</label>
         <select class="f-select" id="dcType" onchange="updateDisplayContentFields()">
+          <option value="upload">📤 Upload from Device</option>
           <option value="image">Image URL</option>
           <option value="video">Video URL (MP4)</option>
           <option value="youtube">YouTube URL</option>
           <option value="html">Custom HTML Embed</option>
         </select>
       </div>
-      <div class="f-group" id="dcUrlWrap">
+      <div class="f-group" id="dcUploadWrap">
+        <input type="file" accept="image/*,video/*" id="dcUploadFile" style="display:none" onchange="handleDisplayUpload(event)">
+        <div onclick="document.getElementById('dcUploadFile').click()" style="border:2px dashed var(--border);border-radius:14px;padding:20px 10px;text-align:center;cursor:pointer;background:rgba(61,31,122,0.02)">
+          <div style="font-size:24px">📤</div>
+          <div style="font-size:12px;font-weight:600;color:var(--violet);margin-top:6px" id="dcUploadLabel">Browse your device's photos & videos</div>
+        </div>
+      </div>
+      <div class="f-group" id="dcUrlWrap" style="display:none">
         <label class="f-label">URL</label>
         <input class="f-input" id="dcUrl" placeholder="https://…">
       </div>
@@ -7739,14 +7713,34 @@ function openDisplayContentModal(){
 
 function updateDisplayContentFields(){
   const type=document.getElementById("dcType").value;
-  document.getElementById("dcUrlWrap").style.display=type==="html"?"none":"block";
+  document.getElementById("dcUploadWrap").style.display=type==="upload"?"block":"none";
+  document.getElementById("dcUrlWrap").style.display=(type==="html"||type==="upload")?"none":"block";
   document.getElementById("dcHtmlWrap").style.display=type==="html"?"block":"none";
+}
+
+S.dcUploadedDataUrl=null;
+S.dcUploadedType=null;
+function handleDisplayUpload(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    S.dcUploadedDataUrl=e.target.result;
+    S.dcUploadedType=file.type.startsWith("video/")?"video":"image";
+    document.getElementById("dcUploadLabel").textContent="✓ "+file.name;
+  };
+  reader.readAsDataURL(file);
 }
 
 function addDisplayContent(){
   const type=document.getElementById("dcType").value;
   let item={id:"disp_"+Date.now(),type};
-  if(type==="html"){
+  if(type==="upload"){
+    if(!S.dcUploadedDataUrl){toast("Choose a file from your device first","error");return;}
+    item.type=S.dcUploadedType;
+    item.url=S.dcUploadedDataUrl;
+    S.dcUploadedDataUrl=null;S.dcUploadedType=null;
+  } else if(type==="html"){
     const html=document.getElementById("dcHtml").value.trim();
     if(!html){toast("Paste some HTML first","error");return;}
     item.html=html;
@@ -8082,14 +8076,32 @@ function updateUserUI(){
   const btn=document.getElementById("signInBtn");
   const badge=document.getElementById("founderBadge");
   const accInfo=document.getElementById("spAccountInfo");
+  const preferredName=gs("preferred_name","");
   if(S.user&&S.user.email!=="guest"){
-    btn.textContent=S.user.name||S.user.email.split("@")[0];
-    if(accInfo)accInfo.textContent=`Signed in as ${S.user.name?S.user.name+" ("+S.user.email+")":S.user.email}`;
+    const displayName=preferredName||S.user.name||S.user.email.split("@")[0];
+    btn.textContent=displayName;
+    if(accInfo)accInfo.textContent=`Signed in as ${displayName} (${S.user.email})`;
     if(S.user.isFounder){badge.style.display="inline";btn.textContent="👑 "+btn.textContent;}
+    const signedOutEl=document.getElementById("spProfileSignedOut");
+    const signedInEl=document.getElementById("spProfileSignedIn");
+    if(signedOutEl)signedOutEl.style.display="none";
+    if(signedInEl)signedInEl.style.display="block";
+    const photoEl=document.getElementById("spProfilePhoto");
+    if(photoEl)photoEl.src=S.user.photo||"";
+    const emailEl=document.getElementById("spProfileEmail");
+    if(emailEl)emailEl.textContent=S.user.email;
+    const founderEl=document.getElementById("spProfileFounderBadge");
+    if(founderEl)founderEl.style.display=S.user.isFounder?"block":"none";
+    const nameInput=document.getElementById("spDisplayNameInput");
+    if(nameInput&&document.activeElement!==nameInput)nameInput.value=preferredName||S.user.name||"";
   } else {
     btn.textContent="Sign In";
     if(badge)badge.style.display="none";
     if(accInfo)accInfo.textContent="Not signed in";
+    const signedOutEl=document.getElementById("spProfileSignedOut");
+    const signedInEl=document.getElementById("spProfileSignedIn");
+    if(signedOutEl)signedOutEl.style.display="block";
+    if(signedInEl)signedInEl.style.display="none";
   }
   // Founder-gated panels depend on auth state, which resolves asynchronously
   // after init() — refresh them here so they don't stay stuck on the
