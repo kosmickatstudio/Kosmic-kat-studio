@@ -3550,6 +3550,21 @@ function renderVideoCanvas(el){
               <button type="button" class="btn btn-ghost btn-sm" id="vcMotionBrushClearBtn" style="display:none" onclick="clearMotionBrush()">✕ Clear</button>
             </div>
           </div>
+          <div class="f-group" id="vcMultiShotWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">
+              <input type="checkbox" id="vcMultiShotToggle" onchange="toggleMultiShotMode()">
+              <span class="f-label" style="margin:0">🎬 Multi-Shot Storyboard <span style="font-weight:400;color:var(--texts)">(up to 6 shots, one generation)</span></span>
+            </label>
+            <div id="vcMultiShotBuilder" style="display:none">
+              <div class="f-group"><label class="f-label">Shot Type</label><select class="f-select" id="vcShotType">
+                <option value="customize">Customize — set each shot's prompt & duration</option>
+                <option value="intelligent">Intelligent — model auto-paces the shots</option>
+              </select></div>
+              <div id="vcShotList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px"></div>
+              <button type="button" class="btn btn-outline btn-sm" onclick="addVcShot()">+ Add Shot</button>
+              <div id="vcShotTotalInfo" style="font-size:11px;color:var(--textm);margin-top:8px"></div>
+            </div>
+          </div>
           <div class="f-group" id="vcMultiVideoWrap" style="display:none">
             <label class="f-label">Reference Videos <span style="font-weight:400;color:var(--texts)">(up to 3)</span></label>
             <input type="file" accept="video/*" multiple id="vcMultiVideoFile" style="display:none" onchange="handleVcMultiVideoUpload(event)">
@@ -3816,6 +3831,64 @@ function clearMotionBrush(){
   if(clearBtn)clearBtn.style.display="none";
 }
 
+// ── KLING MULTI-SHOT STORYBOARD — real multi_prompt/shot_type schema ──
+S.vcShots=S.vcShots||[];
+
+function toggleMultiShotMode(){
+  const on=document.getElementById("vcMultiShotToggle").checked;
+  document.getElementById("vcMultiShotBuilder").style.display=on?"block":"none";
+  const inputEl=document.getElementById("vcChatInput");
+  if(on){
+    if(!S.vcShots.length){S.vcShots=[{prompt:"",duration:"5"},{prompt:"",duration:"5"}];}
+    inputEl.disabled=true;
+    inputEl.placeholder="Multi-shot mode — build your shots below, then tap Send";
+    renderVcShotList();
+  } else {
+    inputEl.disabled=!gs("api_falai");
+    inputEl.placeholder="Describe the video you want…";
+  }
+}
+
+function renderVcShotList(){
+  const wrap=document.getElementById("vcShotList");
+  if(!wrap)return;
+  const durOptions=VIDEO_MODEL_DURATIONS[document.getElementById("vcModel").value]?.options||[3,4,5,6,7,8,9,10,11,12,13,14,15];
+  wrap.innerHTML=S.vcShots.map((s,i)=>`
+    <div style="border:1px solid var(--border);border-radius:8px;padding:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:700;color:var(--violet)">Shot ${i+1}</span>
+        ${S.vcShots.length>1?`<button type="button" onclick="removeVcShot(${i})" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:12px">✕ Remove</button>`:''}
+      </div>
+      <textarea class="f-textarea" style="min-height:44px;margin-bottom:6px" placeholder="Describe this shot…" oninput="updateVcShotField(${i},'prompt',this.value)">${s.prompt}</textarea>
+      <select class="f-select" onchange="updateVcShotField(${i},'duration',this.value)">${durOptions.map(d=>`<option value="${d}" ${s.duration==String(d)?'selected':''}>${d}s</option>`).join('')}</select>
+    </div>`).join('');
+  updateVcShotTotal();
+}
+
+function addVcShot(){
+  if(S.vcShots.length>=6){toast("Max 6 shots per generation","error");return;}
+  S.vcShots.push({prompt:"",duration:"5"});
+  renderVcShotList();
+}
+
+function removeVcShot(i){
+  S.vcShots.splice(i,1);
+  renderVcShotList();
+}
+
+function updateVcShotField(i,field,value){
+  S.vcShots[i][field]=value;
+  if(field==="duration")updateVcShotTotal();
+}
+
+function updateVcShotTotal(){
+  const total=S.vcShots.reduce((sum,s)=>sum+parseInt(s.duration||0,10),0);
+  const info=document.getElementById("vcShotTotalInfo");
+  if(!info)return;
+  const over=total>15;
+  info.innerHTML=`<span style="color:${over?'var(--red)':'var(--textm)'}">${total}s total${over?' — exceeds Kling\'s 15s max, trim a shot':''}</span>`;
+}
+
 function updateVcModelUI(){
   const model=document.getElementById("vcModel").value;
   const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
@@ -3825,6 +3898,8 @@ function updateVcModelUI(){
   document.getElementById("vcNegPromptWrap").style.display=cap.negPrompt?"block":"none";
   document.getElementById("vcMultiImageWrap").style.display=(cap.multiRef||cap.multiImage)?"block":"none";
   document.getElementById("vcMotionBrushWrap").style.display=(cap.multiImage&&S.vcMultiImages.length>0)?"block":"none";
+  document.getElementById("vcMultiShotWrap").style.display=cap.multiImage?"block":"none";
+  if(!cap.multiImage){document.getElementById("vcMultiShotToggle").checked=false;toggleMultiShotMode();}
   document.getElementById("vcMultiVideoWrap").style.display=(cap.multiRef&&cap.maxVideos)?"block":"none";
   document.getElementById("vcMultiAudioWrap").style.display=(cap.multiRef&&cap.maxAudio)?"block":"none";
   const tagHint=document.getElementById("vcTagHint");
@@ -3974,6 +4049,49 @@ function replaceVcLoadingBubble(loadingId,newMsg){
   renderVcChatThread();
 }
 
+async function sendVcMultiShotPrompt(){
+  const validShots=S.vcShots.filter(s=>s.prompt.trim());
+  if(validShots.length<2){toast("Add at least 2 shots with prompts","error");return;}
+  const totalDuration=validShots.reduce((sum,s)=>sum+parseInt(s.duration,10),0);
+  if(totalDuration>15){toast("Total duration exceeds Kling's 15s max — trim a shot","error");return;}
+
+  const model=document.getElementById("vcModel").value;
+  const ratio=document.getElementById("vcRatio").value;
+  const shotType=document.getElementById("vcShotType").value;
+  const negPrompt=document.getElementById("vcNegPrompt")?.value.trim()||"";
+  const directorStyle=getActiveDirectorPrompt();
+
+  pushVcChatMessage({role:"user",content:`🎬 Multi-shot storyboard — ${validShots.length} shots, ${totalDuration}s total`});
+  const loadingId="vcLoading_"+Date.now();
+  pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:`Generating ${validShots.length}-shot sequence…`});
+  const sendBtn=document.getElementById("vcSendBtn");
+  sendBtn.disabled=true;
+
+  try{
+    const apiKey=gs("api_falai","");
+    if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+    const body={
+      multi_prompt:validShots.map(s=>({prompt:directorStyle?`${s.prompt}, ${directorStyle}`:s.prompt,duration:String(s.duration)})),
+      shot_type:shotType,
+      aspect_ratio:ratio,
+      generate_audio:true,
+    };
+    if(negPrompt)body.negative_prompt=negPrompt;
+    if(S.vcMultiImages.length)body.image_url=S.vcMultiImages[0].dataUrl;
+    const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
+    const submitData=await submitRes.json();
+    if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
+    const videoUrl=await pollFalVideoResult(model,submitData,apiKey);
+    replaceVcLoadingBubble(loadingId,{role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:"Kling Multi-Shot",prompt:validShots.map(s=>s.prompt).join(" → ")}});
+    logCost(model,`Multi-shot (${validShots.length} shots)`);
+    toast(`✨ ${validShots.length}-shot video generated!`,"success");
+  }catch(err){
+    replaceVcLoadingBubble(loadingId,{role:"assistant",type:"error",content:err.message});
+    toast("❌ "+err.message,"error");
+  }
+  sendBtn.disabled=false;
+}
+
 async function clearVcChatConfirm(){
   if(!S.vcChatHistory.length){toast("Chat is already empty","");return;}
   if(!(await showConfirmDialog("Clear this entire chat? This deletes the conversation history — anything not saved to Gallery will be gone.",{danger:true,okLabel:"Clear Chat"})))return;
@@ -3984,6 +4102,9 @@ async function clearVcChatConfirm(){
 }
 
 async function sendVcChatPrompt(){
+  const multiShotOn=document.getElementById("vcMultiShotToggle")?.checked;
+  if(multiShotOn)return sendVcMultiShotPrompt();
+
   const inputEl=document.getElementById("vcChatInput");
   const rawPrompt=inputEl.value.trim();
   if(!rawPrompt){toast("Type a prompt first","error");return;}
@@ -4443,9 +4564,9 @@ const VIDEO_MODEL_DURATIONS={
   "bytedance/seedance-2.0/text-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
   "bytedance/seedance-2.0/fast/reference-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
   "bytedance/seedance-2.0/reference-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
-  "fal-ai/kling-video/v2.1/master/text-to-video":{options:[3,4,5,6,8,10,12,15],format:n=>String(n)},
-  "fal-ai/kling-video/v2.6/pro/text-to-video":{options:[3,4,5,6,8,10,12,15],format:n=>String(n)},
-  "fal-ai/kling-video/v3/standard/text-to-video":{options:[3,4,5,6,8,10,12,15],format:n=>String(n)},
+  "fal-ai/kling-video/v2.1/master/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
+  "fal-ai/kling-video/v2.6/pro/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
+  "fal-ai/kling-video/v3/standard/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/veo3.1":{options:[4,6,8],format:n=>`${n}s`},
   "fal-ai/veo3.1/reference-to-video":{options:[4,6,8],format:n=>`${n}s`},
 };
