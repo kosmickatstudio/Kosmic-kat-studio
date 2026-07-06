@@ -3565,6 +3565,13 @@ function renderVideoCanvas(el){
               <div id="vcShotTotalInfo" style="font-size:11px;color:var(--textm);margin-top:8px"></div>
             </div>
           </div>
+          <div class="f-group" id="vcVoiceWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+            <label class="f-label">🎙️ Dialogue Voices <span style="font-weight:400;color:var(--texts)">(optional, up to 2 — clone a voice from a sample)</span></label>
+            <div id="vcVoiceList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+            <input type="file" accept="audio/*,video/*" id="vcVoiceSampleFile" style="display:none" onchange="handleVoiceSampleUpload(event)">
+            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcVoiceSampleFile').click()">🎙️ Clone New Voice (5–30s sample)</button>
+            <div id="vcVoiceHint" style="display:none;font-size:10px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px;margin-top:6px"></div>
+          </div>
           <div class="f-group" id="vcMultiVideoWrap" style="display:none">
             <label class="f-label">Reference Videos <span style="font-weight:400;color:var(--texts)">(up to 3)</span></label>
             <input type="file" accept="video/*" multiple id="vcMultiVideoFile" style="display:none" onchange="handleVcMultiVideoUpload(event)">
@@ -3889,6 +3896,110 @@ function updateVcShotTotal(){
   info.innerHTML=`<span style="color:${over?'var(--red)':'var(--textm)'}">${total}s total${over?' — exceeds Kling\'s 15s max, trim a shot':''}</span>`;
 }
 
+// ── KLING VOICE CLONING — real create-voice endpoint, referenced via
+// <<<voice_1>>>/<<<voice_2>>> tags in the prompt, max 2 per generation.
+S.klingVoices=S.klingVoices||gs("kling_voices",[])||[];
+S.klingSelectedVoices=S.klingSelectedVoices||[];
+
+function handleVoiceSampleUpload(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  event.target.value="";
+  const reader=new FileReader();
+  reader.onload=async(e)=>{
+    const dataUrl=e.target.result;
+    // Rough client-side duration check where possible (audio only — video
+    // sample duration is validated server-side since we can't probe it
+    // cheaply client-side without extra decoding work).
+    if(file.type.startsWith("audio/")){
+      const audioEl=new Audio(dataUrl);
+      await new Promise(res=>{audioEl.onloadedmetadata=res;audioEl.onerror=res;});
+      if(audioEl.duration&&(audioEl.duration<5||audioEl.duration>30)){
+        toast(`Sample is ${audioEl.duration.toFixed(1)}s — Kling needs 5–30s of clean, single-voice audio`,"error");
+        return;
+      }
+    }
+    createKlingVoice(dataUrl,file.name);
+  };
+  reader.readAsDataURL(file);
+}
+
+async function createKlingVoice(dataUrl,fileName){
+  const apiKey=gs("api_falai","");
+  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
+  toast("🎙️ Cloning voice…","");
+  try{
+    const submitRes=await fetch("https://queue.fal.run/fal-ai/kling-video/create-voice",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify({voice_url:dataUrl})});
+    const submitData=await submitRes.json();
+    if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
+    const requestId=submitData.request_id;
+    const statusUrl=submitData.status_url||`https://queue.fal.run/fal-ai/kling-video/create-voice/requests/${requestId}/status`;
+    const resultUrl=submitData.response_url||`https://queue.fal.run/fal-ai/kling-video/create-voice/requests/${requestId}`;
+    let attempts=0,finalData=null;
+    while(attempts<30){
+      await new Promise(r=>setTimeout(r,4000));attempts++;
+      const statusRes=await fetch(statusUrl,{headers:{"Authorization":"Key "+apiKey}});
+      const statusData=await statusRes.json();
+      if(statusData.status==="COMPLETED"){const finalRes=await fetch(resultUrl,{headers:{"Authorization":"Key "+apiKey}});finalData=await finalRes.json();break;}
+      if(statusData.status==="ERROR"||statusData.status==="FAILED")throw new Error(statusData.error||"Voice cloning failed");
+    }
+    if(!finalData)throw new Error("Timed out — try again");
+    const voiceId=finalData.voice_id||finalData.id||(finalData.voice&&finalData.voice.id);
+    if(!voiceId)throw new Error("No voice ID returned — fal.ai's response shape may have changed");
+    S.klingVoices.push({id:voiceId,name:fileName.replace(/\.[^.]+$/,"")||"Voice "+(S.klingVoices.length+1)});
+    saveSetting("kling_voices",S.klingVoices);
+    renderVcVoiceList();
+    toast("✅ Voice cloned — select it below and use <<<voice_1>>> in your prompt","success");
+  }catch(err){
+    toast("❌ "+err.message,"error");
+  }
+}
+
+function renderVcVoiceList(){
+  const wrap=document.getElementById("vcVoiceList");
+  if(!wrap)return;
+  if(!S.klingVoices.length){
+    wrap.innerHTML=`<div style="font-size:11px;color:var(--textm)">No cloned voices yet.</div>`;
+    document.getElementById("vcVoiceHint").style.display="none";
+    return;
+  }
+  wrap.innerHTML=S.klingVoices.map(v=>{
+    const selected=S.klingSelectedVoices.includes(v.id);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px">
+      <input type="checkbox" ${selected?'checked':''} onchange="toggleVoiceSelection('${v.id}')">
+      <span style="flex:1;font-size:12px">${v.name}</span>
+      <button type="button" onclick="deleteKlingVoice('${v.id}')" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:12px">✕</button>
+    </div>`;
+  }).join('');
+  updateVoiceHint();
+}
+
+function toggleVoiceSelection(id){
+  const idx=S.klingSelectedVoices.indexOf(id);
+  if(idx>=0)S.klingSelectedVoices.splice(idx,1);
+  else{
+    if(S.klingSelectedVoices.length>=2){toast("Max 2 voices per generation","error");renderVcVoiceList();return;}
+    S.klingSelectedVoices.push(id);
+  }
+  renderVcVoiceList();
+}
+
+function updateVoiceHint(){
+  const hint=document.getElementById("vcVoiceHint");
+  if(!hint)return;
+  if(S.klingSelectedVoices.length){
+    hint.style.display="block";
+    hint.textContent=`Reference in your prompt with ${S.klingSelectedVoices.map((_,i)=>`<<<voice_${i+1}>>>`).join(' and ')} — e.g. "<<<voice_1>>> says: welcome home."`;
+  } else hint.style.display="none";
+}
+
+function deleteKlingVoice(id){
+  S.klingVoices=S.klingVoices.filter(v=>v.id!==id);
+  S.klingSelectedVoices=S.klingSelectedVoices.filter(vid=>vid!==id);
+  saveSetting("kling_voices",S.klingVoices);
+  renderVcVoiceList();
+}
+
 function updateVcModelUI(){
   const model=document.getElementById("vcModel").value;
   const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
@@ -3899,6 +4010,8 @@ function updateVcModelUI(){
   document.getElementById("vcMultiImageWrap").style.display=(cap.multiRef||cap.multiImage)?"block":"none";
   document.getElementById("vcMotionBrushWrap").style.display=(cap.multiImage&&S.vcMultiImages.length>0)?"block":"none";
   document.getElementById("vcMultiShotWrap").style.display=cap.multiImage?"block":"none";
+  document.getElementById("vcVoiceWrap").style.display=cap.multiImage?"block":"none";
+  if(cap.multiImage)renderVcVoiceList();
   if(!cap.multiImage){document.getElementById("vcMultiShotToggle").checked=false;toggleMultiShotMode();}
   document.getElementById("vcMultiVideoWrap").style.display=(cap.multiRef&&cap.maxVideos)?"block":"none";
   document.getElementById("vcMultiAudioWrap").style.display=(cap.multiRef&&cap.maxAudio)?"block":"none";
@@ -4023,6 +4136,7 @@ function renderVcChatThread(){
     if(msg.type==="error")return `<div class="ig-bubble-assistant" style="color:var(--red)">❌ ${msg.content}</div>`;
     if(msg.type==="video"){
       const isVeo=(msg.meta.providerLabel||"").includes("Veo");
+      const isKling=(msg.meta.providerLabel||"").includes("Kling");
       const totalDur=msg.meta.totalDuration||8;
       return `<div class="ig-bubble-assistant">
         <video src="${msg.content}" controls style="width:100%;max-width:320px;border-radius:12px;display:block;margin-bottom:8px"></video>
@@ -4034,6 +4148,7 @@ function renderVcChatThread(){
           <a href="${msg.content}" target="_blank" class="btn btn-outline btn-xs">⬇</a>
           <button class="btn btn-primary btn-xs" onclick="saveVideoToGallery('${msg.content.replace(/'/g,"\\'")}','${(msg.meta.prompt||'').replace(/'/g,"\\'").slice(0,200)}','')">💾 Save</button>
           ${isVeo?`<button class="btn btn-outline btn-xs" onclick="extendVeoVideo('${msg.id||''}')">⏩ Extend</button>`:''}
+          ${isKling?`<button class="btn btn-outline btn-xs" onclick="openLipSyncDialog('${msg.id||''}')">👄 Lip Sync</button>`:''}
         </div>
       </div>`;
     }
@@ -4062,6 +4177,100 @@ function replaceVcLoadingBubble(loadingId,newMsg){
 // results, so no upload-payload risk like the multi-reference paths have).
 // fal.ai's own current page states "up to 30 seconds" total — noting this
 // since it differs from an earlier ~148s figure that may be outdated.
+// ── KLING LIP-SYNC — real endpoint, verified. Either an uploaded audio
+// clip, or text + one of Kling's preset voice IDs (their real enum list,
+// shown as-is since no human-readable names were found for them).
+const KLING_PRESET_VOICES=["genshin_vindi2","zhinen_xuesheng","AOT","ai_shatang","genshin_klee2","genshin_kirara","ai_kaiya","oversea_male1","ai_chenjiahao_712","girlfriend_4_speech02","chat1_female_new-3","chat_0407_5-1","cartoon-boy-07","uk_boy1","cartoon-girl-01","PeppaPig_platform","ai_huangzhong_712","ai_huangyaoshi_712","ai_laoguowang_712","chengshu_jiejie","you_pingjing","calm_story1","uk_man2","laopopo_speech02","heainainai_speech02","reader_en_m-v1","commercial_lady_en_f-v1","tiyuxi_xuedi","tiexin_nanyou","girlfriend_1_speech02","girlfriend_2_speech02","zhuxi_speech02","uk_oldman3"];
+
+function openLipSyncDialog(msgId){
+  const msg=S.vcChatHistory.find(m=>m.id===msgId);
+  if(!msg){toast("Couldn't find that video — try regenerating","error");return;}
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show";
+  overlay.id="lipSyncModal";
+  overlay.innerHTML=`
+    <div class="modal">
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:6px">👄 Lip Sync</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Dub this video with either an audio clip or text read by a preset voice.</div>
+      <div class="f-group">
+        <label class="f-label">Source</label>
+        <select class="f-select" id="lsMode" onchange="updateLsMode()">
+          <option value="audio">Upload Audio Clip</option>
+          <option value="text">Text + Preset Voice</option>
+        </select>
+      </div>
+      <div class="f-group" id="lsAudioWrap">
+        <input type="file" accept="audio/*" id="lsAudioFile" style="display:none" onchange="handleLsAudioUpload(event)">
+        <button type="button" class="btn btn-outline btn-sm btn-full" onclick="document.getElementById('lsAudioFile').click()">📤 Choose Audio (2–60s)</button>
+        <div id="lsAudioName" style="font-size:11px;color:var(--textm);margin-top:6px"></div>
+      </div>
+      <div class="f-group" id="lsTextWrap" style="display:none">
+        <label class="f-label">Preset Voice</label>
+        <select class="f-select" id="lsVoiceId">${KLING_PRESET_VOICES.map(v=>`<option value="${v}">${v}</option>`).join('')}</select>
+        <label class="f-label" style="margin-top:8px">Text <span style="font-weight:400;color:var(--texts)">(max 120 characters)</span></label>
+        <input class="f-input" id="lsText" maxlength="120" placeholder="What should they say?">
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="document.getElementById('lipSyncModal').remove()">Cancel</button>
+        <button class="btn btn-primary" onclick="runLipSync('${msgId}')">👄 Generate</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  S.lsAudioDataUrl=null;
+}
+
+function updateLsMode(){
+  const mode=document.getElementById("lsMode").value;
+  document.getElementById("lsAudioWrap").style.display=mode==="audio"?"block":"none";
+  document.getElementById("lsTextWrap").style.display=mode==="text"?"block":"none";
+}
+
+function handleLsAudioUpload(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    S.lsAudioDataUrl=e.target.result;
+    document.getElementById("lsAudioName").textContent="✓ "+file.name;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function runLipSync(msgId){
+  const msg=S.vcChatHistory.find(m=>m.id===msgId);
+  if(!msg)return;
+  const mode=document.getElementById("lsMode").value;
+  const body={video_url:msg.content};
+  if(mode==="audio"){
+    if(!S.lsAudioDataUrl){toast("Choose an audio file first","error");return;}
+    body.audio_url=S.lsAudioDataUrl;
+  } else {
+    const text=document.getElementById("lsText").value.trim();
+    if(!text){toast("Enter the text to speak first","error");return;}
+    body.text=text;
+    body.voice_id=document.getElementById("lsVoiceId").value;
+  }
+  document.getElementById("lipSyncModal").remove();
+
+  const loadingId="vcLoading_"+Date.now();
+  pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating lip-synced video…"});
+  try{
+    const apiKey=gs("api_falai","");
+    if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+    const endpoint="fal-ai/kling-video/lipsync/audio-to-video";
+    const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
+    const submitData=await submitRes.json();
+    if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
+    const videoUrl=await pollFalVideoResult(endpoint,submitData,apiKey);
+    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:"Kling Lip-Sync",prompt:msg.meta.prompt}});
+    logCost(endpoint,"Lip-sync");
+    toast("✨ Lip-synced video ready!","success");
+  }catch(err){
+    replaceVcLoadingBubble(loadingId,{role:"assistant",type:"error",content:err.message});
+    toast("❌ "+err.message,"error");
+  }
+}
+
 async function extendVeoVideo(msgId){
   const msg=S.vcChatHistory.find(m=>m.id===msgId);
   if(!msg){toast("Couldn't find that video — try regenerating","error");return;}
@@ -4127,6 +4336,7 @@ async function sendVcMultiShotPrompt(){
       generate_audio:true,
     };
     if(negPrompt)body.negative_prompt=negPrompt;
+    if(S.klingSelectedVoices.length)body.voice_ids=S.klingSelectedVoices;
     if(S.vcMultiImages.length)body.image_url=S.vcMultiImages[0].dataUrl;
     const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
     const submitData=await submitRes.json();
@@ -4196,6 +4406,7 @@ async function sendVcChatPrompt(){
       if(model.startsWith("fal-ai/kling-video")){
         body.duration=formattedDuration;body.generate_audio=true;
         if(negPrompt)body.negative_prompt=negPrompt;
+        if(S.klingSelectedVoices.length)body.voice_ids=S.klingSelectedVoices;
         if(S.vcMotionBrush){
           // Motion Brush requires a single base image (image_url) + masks + trajectory,
           // not the multi-image array — these are mutually exclusive modes of the same endpoint.
