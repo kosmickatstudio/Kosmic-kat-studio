@@ -424,7 +424,7 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
         <span class="mod-badge-api">● ON</span>
       </button>
       <button class="mod-btn" data-mod="videocanvas" onclick="switchMod('videocanvas',this)">
-        <span class="mod-icon">🎬</span><span class="mod-label">Video Canvas</span>
+        <span class="mod-icon">▶</span><span class="mod-label">Video</span>
         <span class="mod-badge pro">PRO</span>
       </button>
     </div>
@@ -3423,34 +3423,158 @@ const IMAGE_TO_VIDEO_MAP={
   "fal-ai/veo3.1":{endpoint:"fal-ai/veo3.1/image-to-video",field:"image_url"},
 };
 
+// ── SEEDANCE 2.0 REFERENCE-TO-VIDEO — real multi-modal endpoint, verified.
+// Up to 9 images + 3 videos + 3 audio (12 total). Prompt must use @Image1/
+// @Video1/@Audio1 tags to reference the uploaded assets.
+async function genViaSeedanceReference(prompt,model,ratio,duration,imageUrls,videoUrls,audioUrls){
+  const apiKey=gs("api_falai","");
+  if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+  const body={prompt,aspect_ratio:ratio,duration:String(duration),generate_audio:true};
+  if(imageUrls&&imageUrls.length)body.image_urls=imageUrls;
+  if(videoUrls&&videoUrls.length)body.video_urls=videoUrls;
+  if(audioUrls&&audioUrls.length)body.audio_urls=audioUrls;
+  const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
+  const submitData=await submitRes.json();
+  if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
+  return pollFalVideoResult(model,submitData,apiKey);
+}
+
+// ── VEO 3.1 REFERENCE-TO-VIDEO — real endpoint, verified. Up to 3 reference images.
+async function genViaVeoReference(prompt,ratio,duration,imageUrls){
+  const apiKey=gs("api_falai","");
+  if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+  const model="fal-ai/veo3.1/reference-to-video";
+  const body={prompt,image_urls:imageUrls,audio:true};
+  const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
+  const submitData=await submitRes.json();
+  if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
+  return pollFalVideoResult(model,submitData,apiKey);
+}
+
+// Shared queue-polling logic, extracted so the new reference-to-video paths
+// don't duplicate the same poll loop already proven in runProductionVideoGen.
+async function pollFalVideoResult(model,submitData,apiKey){
+  const requestId=submitData.request_id;
+  const statusUrl=submitData.status_url||`https://queue.fal.run/${model}/requests/${requestId}/status`;
+  const resultUrl=submitData.response_url||`https://queue.fal.run/${model}/requests/${requestId}`;
+  let attempts=0,finalData=null;
+  while(attempts<60){
+    await new Promise(r=>setTimeout(r,5000));attempts++;
+    const statusRes=await fetch(statusUrl,{headers:{"Authorization":"Key "+apiKey}});
+    const statusData=await statusRes.json();
+    if(statusData.status==="COMPLETED"){const finalRes=await fetch(resultUrl,{headers:{"Authorization":"Key "+apiKey}});finalData=await finalRes.json();break;}
+    if(statusData.status==="ERROR"||statusData.status==="FAILED")throw new Error(statusData.error||"Generation failed");
+  }
+  if(!finalData)throw new Error("Timed out — try again");
+  const videoUrl=finalData.video&&finalData.video.url;
+  if(!videoUrl)throw new Error("No video returned");
+  return videoUrl;
+}
+
+// ── VIDEO MODEL CAPABILITIES — verified against fal.ai's actual current docs,
+// not assumed. Reference-to-video variants are real, separate endpoints with
+// genuinely different multi-modal input support per model.
+const VIDEO_MODEL_CAPABILITIES={
+  "bytedance/seedance-2.0/fast/text-to-video":{},
+  "bytedance/seedance-2.0/text-to-video":{},
+  "bytedance/seedance-2.0/fast/reference-to-video":{multiRef:true,maxImages:9,maxVideos:3,maxAudio:3,provider:"seedance-ref",tagSyntax:"@Image1 / @Video1 / @Audio1"},
+  "bytedance/seedance-2.0/reference-to-video":{multiRef:true,maxImages:9,maxVideos:3,maxAudio:3,provider:"seedance-ref",tagSyntax:"@Image1 / @Video1 / @Audio1"},
+  "fal-ai/kling-video/v2.1/master/text-to-video":{multiImage:true,maxImages:4,negPrompt:true},
+  "fal-ai/kling-video/v2.6/pro/text-to-video":{multiImage:true,maxImages:4,negPrompt:true},
+  "fal-ai/kling-video/v3/standard/text-to-video":{multiImage:true,maxImages:4,negPrompt:true},
+  "fal-ai/veo3.1":{},
+  "fal-ai/veo3.1/reference-to-video":{multiRef:true,maxImages:3,provider:"veo-ref"},
+};
+
 function renderVideoCanvas(el){
   const hasKey=gs("api_falai");
   const project=S.vcActiveProject?S.projects.find(p=>p.id===S.vcActiveProject):null;
 
   if(!project){
-    // No project open — project picker + a standalone quick-generate fallback
     el.innerHTML=`
-      <div class="panel">
-        <div class="panel-title">🎬 Video Canvas</div>
-        <div style="font-size:12px;color:var(--textm);margin-bottom:12px">Open a project to build a real shot-by-shot storyboard, or generate a single standalone video below.</div>
-        ${S.projects.length?`<div class="f-group"><label class="f-label">Open Project</label><select class="f-select" id="vcProjectPicker" onchange="if(this.value){S.vcActiveProject=this.value;renderVideoCanvas(document.getElementById('moduleContent'));}"><option value="">— Select a project —</option>${S.projects.filter(p=>!p.archived).map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`:`<div style="font-size:12px;color:var(--textm)">No projects yet — <a href="#" onclick="switchMod('projects',document.querySelector('[data-mod=projects]'));return false" style="color:var(--vm)">create one</a> to use the storyboard.</div>`}
+      ${S.projects.length?`<div class="panel" style="margin-bottom:0"><div class="f-group" style="margin-bottom:0"><label class="f-label">Open a Project for a Shot-by-Shot Storyboard</label><select class="f-select" id="vcProjectPicker" onchange="if(this.value){S.vcActiveProject=this.value;renderVideoCanvas(document.getElementById('moduleContent'));}"><option value="">— Select a project —</option>${S.projects.filter(p=>!p.archived).map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div></div>`:''}
+
+      <div class="ig-chat-shell" style="margin-top:${S.projects.length?'12px':'0'}">
+        <div class="ig-chat-header">
+          <div>
+            <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">▶ Video</div>
+            <div style="font-size:10px;color:var(--textm);margin-top:1px">${hasKey?'<span style="color:var(--green);font-weight:700">●</span> fal.ai':'<span style="color:var(--red);font-weight:700">●</span> No key configured'}${gs("active_director","")?' · 🎬 '+(getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name:''}</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="ig-icon-btn" onclick="clearVcChatConfirm()" title="Clear Chat">🗑</button>
+          </div>
+        </div>
+        <div id="vcGalleryView" style="display:none"></div>
+
+        <div id="vcSettingsPanel" style="display:none;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--pearl2)">
+          ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:10px">Add a <b>fal.ai</b> API key in Settings — this one key powers Seedance, Kling, and Veo.</div>`:''}
+          <div class="f-group">
+            <label class="f-label">Model</label>
+            <select class="f-select" id="vcModel" onchange="updateVcModelUI()">
+              <optgroup label="Seedance 2.0 (ByteDance)">
+                <option value="bytedance/seedance-2.0/fast/text-to-video">Seedance 2.0 Fast</option>
+                <option value="bytedance/seedance-2.0/text-to-video">Seedance 2.0</option>
+                <option value="bytedance/seedance-2.0/fast/reference-to-video">Seedance 2.0 Fast — Multi-Reference (img+video+audio)</option>
+                <option value="bytedance/seedance-2.0/reference-to-video">Seedance 2.0 — Multi-Reference (img+video+audio)</option>
+              </optgroup>
+              <optgroup label="Kling (Kuaishou)">
+                <option value="fal-ai/kling-video/v2.1/master/text-to-video">Kling 2.1 Master</option>
+                <option value="fal-ai/kling-video/v2.6/pro/text-to-video">Kling 2.6 Pro</option>
+                <option value="fal-ai/kling-video/v3/standard/text-to-video">Kling 3.0 Standard</option>
+              </optgroup>
+              <optgroup label="Veo (Google DeepMind)">
+                <option value="fal-ai/veo3.1">Veo 3.1</option>
+                <option value="fal-ai/veo3.1/reference-to-video">Veo 3.1 — Multi-Reference (up to 3 images)</option>
+              </optgroup>
+            </select>
+            <div id="vcModelNote" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
+          </div>
+          <div class="f-row">
+            <div class="f-group"><label class="f-label">Resolution</label><select class="f-select" id="vcRes"><option value="720p">720p</option><option value="1080p">1080p</option></select></div>
+            <div class="f-group"><label class="f-label">Aspect Ratio</label><select class="f-select" id="vcRatio"><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option><option value="4:3">4:3</option><option value="3:4">3:4</option></select></div>
+          </div>
+          <div class="f-group"><label class="f-label">Duration</label><select class="f-select" id="vcDuration"></select></div>
+          <div class="f-group" id="vcNegPromptWrap" style="display:none"><label class="f-label">Negative Prompt</label><input class="f-input" id="vcNegPrompt" placeholder="e.g. blur, distort, low quality"></div>
+
+          <div class="f-group" id="vcMultiImageWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+            <label class="f-label" id="vcMultiImageLabel">Reference Images</label>
+            <input type="file" accept="image/*" multiple id="vcMultiImageFile" style="display:none" onchange="handleVcMultiImageUpload(event)">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px" id="vcMultiImagePreview"></div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcMultiImageFile').click()">📤 Add Images</button>
+          </div>
+          <div class="f-group" id="vcMultiVideoWrap" style="display:none">
+            <label class="f-label">Reference Videos <span style="font-weight:400;color:var(--texts)">(up to 3)</span></label>
+            <input type="file" accept="video/*" multiple id="vcMultiVideoFile" style="display:none" onchange="handleVcMultiVideoUpload(event)">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px" id="vcMultiVideoPreview"></div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcMultiVideoFile').click()">📤 Add Videos</button>
+          </div>
+          <div class="f-group" id="vcMultiAudioWrap" style="display:none">
+            <label class="f-label">Reference Audio <span style="font-weight:400;color:var(--texts)">(up to 3)</span></label>
+            <input type="file" accept="audio/*" multiple id="vcMultiAudioFile" style="display:none" onchange="handleVcMultiAudioUpload(event)">
+            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px" id="vcMultiAudioPreview"></div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcMultiAudioFile').click()">📤 Add Audio</button>
+          </div>
+          <div id="vcTagHint" style="display:none;font-size:10px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px;margin-top:6px"></div>
+        </div>
+
+        <div class="ig-chat-thread" id="vcChatThread"></div>
+
+        <div class="ig-chat-inputbar">
+          <div class="ig-input-shell">
+            <textarea class="ig-input-textarea-v2" id="vcChatInput" rows="1" placeholder="${hasKey?'Describe the video you want…':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleVcChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
+            <div class="ig-input-toolbar">
+              <button class="ig-tool-btn" onclick="toggleVcSettings()" title="Settings">⚙</button>
+              <button class="ig-tool-btn" id="vcVoiceBtn" onclick="toggleVcVoiceInput()" title="Voice Message">🎤</button>
+              <button class="ig-send-round" id="vcSendBtn" ${!hasKey?'disabled':''} onclick="sendVcChatPrompt()" title="Generate">➤</button>
+            </div>
+          </div>
+        </div>
       </div>
-      ${renderQuickGenerateForm(hasKey)}
-      <div class="panel" id="vcResultPanel" style="display:none;margin-top:14px">
-        <div class="panel-title">🎥 Result</div>
-        <div id="vcResultContent"></div>
-      </div>
-      ${S.assets.filter(a=>a.type==='video').length?`
-      <div class="panel" style="margin-top:14px">
-        <div class="panel-title">🎞 Recent Videos</div>
-        <div class="grid2">${S.assets.filter(a=>a.type==='video').slice(-4).reverse().map(a=>`
-          <div class="card" style="padding:6px">
-            <video src="${a.url}" controls style="width:100%;border-radius:8px;aspect-ratio:16/9"></video>
-            <div style="font-size:10px;color:var(--textm);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.prompt||''}</div>
-          </div>`).join('')}</div>
-      </div>`:''}
+
+      <div class="ig-settings-backdrop" id="vcSettingsBackdrop" onclick="toggleVcSettings()"></div>
     `;
-    updateVcDurationOptions();
+    updateVcModelUI();
+    renderVcChatThread();
     return;
   }
 
@@ -3477,51 +3601,228 @@ function renderVideoCanvas(el){
   `;
 }
 
-function updateVcDurationOptions(){
+// ── VIDEO CHAT UI — model-driven dynamic settings ──
+S.vcMultiImages=S.vcMultiImages||[];
+S.vcMultiVideos=S.vcMultiVideos||[];
+S.vcMultiAudios=S.vcMultiAudios||[];
+S.vcChatHistory=S.vcChatHistory||gs("vc_chat_history",[])||[];
+
+function updateVcModelUI(){
   const model=document.getElementById("vcModel").value;
-  const config=VIDEO_MODEL_DURATIONS[model];
-  const sel=document.getElementById("vcDuration");
-  if(sel)sel.innerHTML=config.options.map(c=>`<option value="${c}">${c} seconds</option>`).join('');
+  const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
+  const durConfig=VIDEO_MODEL_DURATIONS[model];
+  document.getElementById("vcDuration").innerHTML=durConfig.options.map(c=>`<option value="${c}">${c}s</option>`).join('');
+
+  document.getElementById("vcNegPromptWrap").style.display=cap.negPrompt?"block":"none";
+  document.getElementById("vcMultiImageWrap").style.display=(cap.multiRef||cap.multiImage)?"block":"none";
+  document.getElementById("vcMultiVideoWrap").style.display=(cap.multiRef&&cap.maxVideos)?"block":"none";
+  document.getElementById("vcMultiAudioWrap").style.display=(cap.multiRef&&cap.maxAudio)?"block":"none";
+  const tagHint=document.getElementById("vcTagHint");
+  if(cap.tagSyntax){
+    tagHint.style.display="block";
+    tagHint.textContent=`Reference your uploads in the prompt using ${cap.tagSyntax} — e.g. "@Image1 walks down a neon street".`;
+  } else tagHint.style.display="none";
+
+  if(cap.multiRef||cap.multiImage){
+    document.getElementById("vcMultiImageLabel").textContent=`Reference Images (up to ${cap.maxImages})`;
+  }
+  const note=document.getElementById("vcModelNote");
+  if(cap.provider==="seedance-ref")note.textContent="Real multi-modal: combine images, video, and audio references in one generation.";
+  else if(cap.provider==="veo-ref")note.textContent="Real reference-based generation — keeps a character/product/object consistent across the shot.";
+  else if(cap.multiImage)note.textContent="Up to 4 images for multi-image generation, plus negative prompt support.";
+  else note.textContent="";
 }
 
-function renderQuickGenerateForm(hasKey){
-  return `
-    <div class="panel" style="margin-top:14px">
-      <div class="panel-title">⚡ Quick Generate (standalone, not saved to a project's storyboard)</div>
-      <div class="f-group">
-        <label class="f-label">Prompt</label>
-        <textarea class="f-textarea" id="vcPrompt" placeholder="A galaxy cat leaping through nebula clouds, camera tracking alongside, cinematic lighting…" style="min-height:70px"></textarea>
-      </div>
-      <div class="f-row">
-        <div class="f-group">
-          <label class="f-label">Model</label>
-          <select class="f-select" id="vcModel" onchange="updateVcDurationOptions()">
-            <option value="bytedance/seedance-2.0/fast/text-to-video">Seedance 2.0 Fast (cheap, quick)</option>
-            <option value="bytedance/seedance-2.0/text-to-video">Seedance 2.0 (higher quality)</option>
-            <option value="fal-ai/kling-video/v2.1/master/text-to-video">Kling 2.1 Master (cinematic)</option>
-            <option value="fal-ai/kling-video/v2.6/pro/text-to-video">Kling 2.6 Pro (native audio)</option>
-            <option value="fal-ai/kling-video/v3/standard/text-to-video">Kling 3.0 Standard (latest)</option>
-            <option value="fal-ai/veo3.1">Veo 3.1 (premium, native audio)</option>
-          </select>
-        </div>
-        <div class="f-group">
-          <label class="f-label">Duration</label>
-          <select class="f-select" id="vcDuration"></select>
-        </div>
-      </div>
-      <div class="f-row">
-        <div class="f-group">
-          <label class="f-label">Aspect Ratio</label>
-          <select class="f-select" id="vcRatio"><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option></select>
-        </div>
-        <div class="f-group">
-          <label class="f-label">Resolution</label>
-          <select class="f-select" id="vcRes"><option value="720p">720p</option><option value="1080p">1080p</option></select>
-        </div>
-      </div>
-      <button class="btn btn-primary btn-full" id="vcGenBtn" ${!hasKey?'disabled':''} onclick="generateVideo()">${hasKey?'🎬 Generate Video':'🔑 Add API Key First'}</button>
-      <div style="font-size:10px;color:var(--texts);margin-top:8px;text-align:center">⏱ Video generation takes 60–300 seconds — don't close this tab while waiting</div>
+function handleVcMultiImageUpload(event){handleVcMultiUpload(event,S.vcMultiImages,"vcMultiImagePreview",VIDEO_MODEL_CAPABILITIES[document.getElementById("vcModel").value]?.maxImages||4);}
+function handleVcMultiVideoUpload(event){handleVcMultiUpload(event,S.vcMultiVideos,"vcMultiVideoPreview",3,true);}
+function handleVcMultiAudioUpload(event){handleVcMultiUpload(event,S.vcMultiAudios,"vcMultiAudioPreview",3,false,true);}
+
+function handleVcMultiUpload(event,targetArr,previewId,max,isVideo,isAudio){
+  const files=Array.from(event.target.files||[]);
+  if(!files.length)return;
+  if(targetArr.length+files.length>max){toast(`Max ${max} for this type`,"error");event.target.value="";return;}
+  files.forEach(file=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      targetArr.push({dataUrl:e.target.result,name:file.name});
+      renderVcMultiPreview(previewId,targetArr,isAudio);
+    };
+    reader.readAsDataURL(file);
+  });
+  event.target.value="";
+}
+
+function renderVcMultiPreview(previewId,arr,isAudio){
+  const wrap=document.getElementById(previewId);
+  if(!wrap)return;
+  if(isAudio){
+    wrap.innerHTML=arr.map((a,i)=>`<div style="display:flex;align-items:center;gap:6px;font-size:11px;background:var(--lav);border-radius:6px;padding:4px 8px"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🎵 ${a.name}</span><span style="cursor:pointer;color:var(--red)" onclick="removeVcMultiItem('${previewId}',${i})">✕</span></div>`).join('');
+  } else {
+    wrap.innerHTML=arr.map((a,i)=>`<div style="position:relative;width:56px">
+      ${a.dataUrl.startsWith("data:video")?`<video src="${a.dataUrl}" style="width:56px;height:56px;border-radius:8px;object-fit:cover"></video>`:`<img src="${a.dataUrl}" style="width:56px;height:56px;border-radius:8px;object-fit:cover">`}
+      <button onclick="removeVcMultiItem('${previewId}',${i})" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;cursor:pointer;line-height:1">✕</button>
+    </div>`).join('');
+  }
+}
+
+function removeVcMultiItem(previewId,i){
+  const map={vcMultiImagePreview:S.vcMultiImages,vcMultiVideoPreview:S.vcMultiVideos,vcMultiAudioPreview:S.vcMultiAudios};
+  const arr=map[previewId];
+  arr.splice(i,1);
+  renderVcMultiPreview(previewId,arr,previewId==="vcMultiAudioPreview");
+}
+
+function toggleVcSettings(){
+  const panel=document.getElementById("vcSettingsPanel");
+  const backdrop=document.getElementById("vcSettingsBackdrop");
+  if(!panel)return;
+  panel.style.display=panel.style.display==="none"?"block":"none";
+}
+
+function handleVcChatKeydown(e){
+  if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendVcChatPrompt();}
+}
+
+function toggleVcVoiceInput(){
+  const SpeechRecognitionCtor=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SpeechRecognitionCtor){toast("Voice input isn't supported in this browser — try Chrome","error");return;}
+  const btn=document.getElementById("vcVoiceBtn");
+  if(S.vcRecognition){S.vcRecognition.stop();return;}
+  const recognition=new SpeechRecognitionCtor();
+  recognition.lang=navigator.language||"en-US";
+  recognition.interimResults=true;
+  recognition.continuous=false;
+  const inputEl=document.getElementById("vcChatInput");
+  const baseText=inputEl.value?inputEl.value+" ":"";
+  recognition.onstart=()=>btn.classList.add("recording");
+  recognition.onresult=(event)=>{
+    let transcript="";
+    for(let i=0;i<event.results.length;i++)transcript+=event.results[i][0].transcript;
+    inputEl.value=baseText+transcript;
+  };
+  recognition.onerror=(event)=>{
+    toast(event.error==="not-allowed"?"Microphone permission denied":"Voice input error: "+event.error,"error");
+    btn.classList.remove("recording");S.vcRecognition=null;
+  };
+  recognition.onend=()=>{btn.classList.remove("recording");S.vcRecognition=null;};
+  S.vcRecognition=recognition;
+  recognition.start();
+}
+
+function renderVcChatThread(){
+  const thread=document.getElementById("vcChatThread");
+  if(!thread)return;
+  if(!S.vcChatHistory.length){
+    thread.innerHTML=`<div class="ig-empty-chat">
+      <div style="font-size:36px;margin-bottom:10px;opacity:0.5">✨</div>
+      <div style="font-size:13px;font-weight:600;color:var(--textm)">Describe a video below to get started</div>
+      <div style="font-size:11px;color:var(--texts);margin-top:4px">Your generations stay here like a conversation — scroll up to see past ones</div>
     </div>`;
+    return;
+  }
+  thread.innerHTML=S.vcChatHistory.map(msg=>{
+    if(msg.role==="user")return `<div class="ig-bubble-user">${msg.content}</div>`;
+    if(msg.type==="loading")return `<div class="ig-bubble-loading" id="${msg.id}"><span class="ig-dot"></span><span class="ig-dot"></span><span class="ig-dot"></span>&nbsp;${msg.content}</div>`;
+    if(msg.type==="error")return `<div class="ig-bubble-assistant" style="color:var(--red)">❌ ${msg.content}</div>`;
+    if(msg.type==="video")return `<div class="ig-bubble-assistant">
+        <video src="${msg.content}" controls style="width:100%;max-width:320px;border-radius:12px;display:block;margin-bottom:8px"></video>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span class="badge badge-gray">via ${msg.meta.providerLabel}</span></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <a href="${msg.content}" target="_blank" class="btn btn-outline btn-xs">⬇</a>
+          <button class="btn btn-primary btn-xs" onclick="saveVideoToGallery('${msg.content.replace(/'/g,"\\'")}','${(msg.meta.prompt||'').replace(/'/g,"\\'").slice(0,200)}','')">💾 Save</button>
+        </div>
+      </div>`;
+    return '';
+  }).join('');
+  thread.scrollTop=thread.scrollHeight;
+}
+
+function pushVcChatMessage(msg){
+  S.vcChatHistory.push(msg);
+  if(S.vcChatHistory.length>60)S.vcChatHistory=S.vcChatHistory.slice(-60);
+  saveSetting("vc_chat_history",S.vcChatHistory);
+  renderVcChatThread();
+}
+
+function replaceVcLoadingBubble(loadingId,newMsg){
+  const idx=S.vcChatHistory.findIndex(m=>m.id===loadingId);
+  if(idx>=0)S.vcChatHistory[idx]=newMsg;
+  else S.vcChatHistory.push(newMsg);
+  saveSetting("vc_chat_history",S.vcChatHistory);
+  renderVcChatThread();
+}
+
+async function clearVcChatConfirm(){
+  if(!S.vcChatHistory.length){toast("Chat is already empty","");return;}
+  if(!(await showConfirmDialog("Clear this entire chat? This deletes the conversation history — anything not saved to Gallery will be gone.",{danger:true,okLabel:"Clear Chat"})))return;
+  S.vcChatHistory=[];
+  saveSetting("vc_chat_history",[]);
+  renderVcChatThread();
+  toast("🗑 Chat cleared","success");
+}
+
+async function sendVcChatPrompt(){
+  const inputEl=document.getElementById("vcChatInput");
+  const rawPrompt=inputEl.value.trim();
+  if(!rawPrompt){toast("Type a prompt first","error");return;}
+  const directorStyle=getActiveDirectorPrompt();
+  const prompt=directorStyle?`${rawPrompt}, ${directorStyle}`:rawPrompt;
+  const model=document.getElementById("vcModel").value;
+  const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
+  const ratio=document.getElementById("vcRatio").value;
+  const duration=document.getElementById("vcDuration").value;
+  const negPrompt=document.getElementById("vcNegPrompt")?.value.trim()||"";
+
+  pushVcChatMessage({role:"user",content:rawPrompt});
+  inputEl.value="";inputEl.style.height="auto";
+  const loadingId="vcLoading_"+Date.now();
+  const sendBtn=document.getElementById("vcSendBtn");
+  sendBtn.disabled=true;
+
+  try{
+    let videoUrl,providerLabel,costKey;
+    if(cap.provider==="seedance-ref"){
+      if(!S.vcMultiImages.length&&!S.vcMultiVideos.length&&!S.vcMultiAudios.length){
+        throw new Error("Add at least one reference image, video, or audio file — this model needs one to generate.");
+      }
+      pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"});
+      videoUrl=await genViaSeedanceReference(prompt,model,ratio,duration,S.vcMultiImages.map(i=>i.dataUrl),S.vcMultiVideos.map(v=>v.dataUrl),S.vcMultiAudios.map(a=>a.dataUrl));
+      providerLabel="Seedance 2.0 Reference-to-Video";costKey=model;
+    } else if(cap.provider==="veo-ref"){
+      if(!S.vcMultiImages.length)throw new Error("Add at least 1 reference image (up to 3) — this model needs one to generate.");
+      pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with reference images…"});
+      videoUrl=await genViaVeoReference(prompt,ratio,duration,S.vcMultiImages.map(i=>i.dataUrl));
+      providerLabel="Veo 3.1 Reference-to-Video";costKey=model;
+    } else {
+      pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating…"});
+      const apiKey=gs("api_falai","");
+      if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+      let body={prompt,aspect_ratio:ratio};
+      const durationConfig=VIDEO_MODEL_DURATIONS[model];
+      const formattedDuration=durationConfig?durationConfig.format(duration):duration;
+      if(model.startsWith("fal-ai/kling-video")){
+        body.duration=formattedDuration;body.generate_audio=true;
+        if(negPrompt)body.negative_prompt=negPrompt;
+        if(cap.multiImage&&S.vcMultiImages.length)body.input_image_urls=S.vcMultiImages.map(i=>i.dataUrl);
+      } else if(model==="fal-ai/veo3.1"){
+        body.duration=formattedDuration;body.audio=true;body.resolution=document.getElementById("vcRes").value;
+      } else {
+        body.duration=formattedDuration;body.resolution=document.getElementById("vcRes").value;
+      }
+      const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
+      const submitData=await submitRes.json();
+      if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
+      videoUrl=await pollFalVideoResult(model,submitData,apiKey);
+      providerLabel=model.includes("kling")?"Kling":model.includes("veo")?"Veo 3.1":"Seedance 2.0";costKey=model;
+    }
+    replaceVcLoadingBubble(loadingId,{role:"assistant",type:"video",content:videoUrl,meta:{providerLabel,prompt}});
+    logCost(costKey,prompt.slice(0,60));
+    toast(`✨ Video generated via ${providerLabel}!`,"success");
+  }catch(err){
+    replaceVcLoadingBubble(loadingId,{role:"assistant",type:"error",content:err.message});
+    toast("❌ "+err.message,"error");
+  }
+  sendBtn.disabled=false;
 }
 
 // ── SHOT CARDS ──
@@ -3833,98 +4134,6 @@ async function generateShotVideo(shotId){
   if(cardEl2)cardEl2.outerHTML=shotCardHTML(s);
 }
 
-async function generateVideo(){
-  const promptEl=document.getElementById("vcPrompt");
-  const rawPrompt=promptEl.value.trim();
-  if(!rawPrompt){toast("Enter a prompt first","error");return;}
-  const directorStyle=getActiveDirectorPrompt();
-  const prompt=directorStyle?`${rawPrompt}, ${directorStyle}`:rawPrompt;
-  const apiKey=gs("api_falai","");
-  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
-
-  const model=document.getElementById("vcModel").value;
-  const duration=document.getElementById("vcDuration").value;
-  const ratio=document.getElementById("vcRatio").value;
-  const res=document.getElementById("vcRes").value;
-
-  const btn=document.getElementById("vcGenBtn");
-  const resultPanel=document.getElementById("vcResultPanel");
-  const resultContent=document.getElementById("vcResultContent");
-  btn.disabled=true;
-  resultPanel.style.display="block";
-
-  let body={prompt,aspect_ratio:ratio};
-  const durationConfig=VIDEO_MODEL_DURATIONS[model];
-  const formattedDuration=durationConfig?durationConfig.format(duration):duration;
-  if(model.startsWith("fal-ai/kling-video")){
-    body.duration=formattedDuration;
-    body.generate_audio=true;
-  } else if(model==="fal-ai/veo3.1"){
-    body.duration=formattedDuration;
-    body.audio=true;
-    body.resolution=res==="1080p"?"1080p":"720p";
-  } else {
-    body.duration=formattedDuration;
-    body.resolution=res;
-  }
-
-  try{
-    btn.textContent="⏳ Submitting…";
-    resultContent.innerHTML=`<div style="text-align:center;padding:30px;color:var(--textm);font-size:13px">📤 Submitting to ${model.split('/')[0]}…</div>`;
-    const submitRes=await fetch(`https://queue.fal.run/${model}`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
-      body:JSON.stringify(body)
-    });
-    const submitData=await submitRes.json();
-    if(!submitRes.ok){
-      const msg=(submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText;
-      throw new Error(msg);
-    }
-    const requestId=submitData.request_id;
-    if(!requestId)throw new Error("No request ID returned from fal.ai");
-    const statusUrl=submitData.status_url||`https://queue.fal.run/${model}/requests/${requestId}/status`;
-    const resultUrl=submitData.response_url||`https://queue.fal.run/${model}/requests/${requestId}`;
-
-    btn.textContent="⏳ Generating…";
-    let attempts=0;
-    const maxAttempts=90;
-    let finalData=null;
-    while(attempts<maxAttempts){
-      await new Promise(r=>setTimeout(r,5000));
-      attempts++;
-      const statusRes=await fetch(statusUrl,{headers:{"Authorization":"Key "+apiKey}});
-      const statusData=await statusRes.json();
-      resultContent.innerHTML=`<div style="text-align:center;padding:30px;color:var(--textm);font-size:13px">🎬 ${statusData.status||'Processing'}… (${attempts*5}s elapsed)</div>`;
-      if(statusData.status==="COMPLETED"){
-        const finalRes=await fetch(resultUrl,{headers:{"Authorization":"Key "+apiKey}});
-        finalData=await finalRes.json();
-        break;
-      }
-      if(statusData.status==="ERROR"||statusData.status==="FAILED"){
-        throw new Error(statusData.error||"Generation failed on fal.ai's side");
-      }
-    }
-    if(!finalData)throw new Error("Timed out waiting for video — try again, it may still complete on fal.ai's dashboard");
-
-    const videoUrl=finalData.video&&finalData.video.url;
-    if(!videoUrl)throw new Error("No video URL in response");
-
-    resultContent.innerHTML=`
-      <video src="${videoUrl}" controls style="width:100%;border-radius:12px;margin-bottom:10px"></video>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <a href="${videoUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
-        <button class="btn btn-primary btn-sm" onclick="saveVideoToGallery('${videoUrl.replace(/'/g,"\\'")}','${prompt.replace(/'/g,"\\'").slice(0,200)}','')">💾 Save to Gallery</button>
-      </div>`;
-    logCost(model,prompt.slice(0,60));
-    toast("🎬 Video generated!","success");
-  }catch(err){
-    console.error("Video gen error:",err);
-    resultContent.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px;background:rgba(239,68,68,0.08);border-radius:8px">❌ ${err.message}</div>`;
-    toast("❌ Video generation failed: "+err.message,"error");
-  }
-  btn.disabled=false;btn.textContent="🎬 Generate Video";
-}
 
 function saveVideoToGallery(url,prompt,projectId){
   const asset={id:"asset_"+Date.now(),type:"video",url,prompt,projectId:projectId||null,created:new Date().toISOString()};
@@ -4002,10 +4211,13 @@ function getAllDirectors(){
 const VIDEO_MODEL_DURATIONS={
   "bytedance/seedance-2.0/fast/text-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
   "bytedance/seedance-2.0/text-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
+  "bytedance/seedance-2.0/fast/reference-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
+  "bytedance/seedance-2.0/reference-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
   "fal-ai/kling-video/v2.1/master/text-to-video":{options:[3,4,5,6,8,10,12,15],format:n=>String(n)},
   "fal-ai/kling-video/v2.6/pro/text-to-video":{options:[3,4,5,6,8,10,12,15],format:n=>String(n)},
   "fal-ai/kling-video/v3/standard/text-to-video":{options:[3,4,5,6,8,10,12,15],format:n=>String(n)},
   "fal-ai/veo3.1":{options:[4,6,8],format:n=>`${n}s`},
+  "fal-ai/veo3.1/reference-to-video":{options:[4,6,8],format:n=>`${n}s`},
 };
 
 // ── PRODUCTION STUDIO (own top-level module, not nested in Directorial Studio) ──
