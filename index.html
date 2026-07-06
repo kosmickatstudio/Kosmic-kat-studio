@@ -73,6 +73,7 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
 .h-settings{background:transparent;border:1.5px solid var(--border);color:var(--textm);width:36px;height:36px;border-radius:10px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all 0.2s}
 .h-settings:hover{background:var(--lav);border-color:var(--vs);color:var(--violet)}
 .sign-in-btn{background:linear-gradient(135deg,var(--violet),var(--vm));color:#fff;border:none;padding:7px 16px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.04em;transition:all 0.2s;white-space:nowrap}
+.sign-in-btn-avatar{width:32px;height:32px;padding:0;border-radius:50%;overflow:hidden;flex-shrink:0}
 .sign-in-btn:hover{opacity:0.9;transform:translateY(-1px)}
 .founder-badge{background:linear-gradient(135deg,var(--gold),var(--gold-l));color:#fff;font-size:9px;font-weight:800;padding:3px 10px;border-radius:10px;letter-spacing:0.08em;text-transform:uppercase;box-shadow:0 2px 8px rgba(201,151,42,0.3)}
 .hamburger{background:transparent;border:1.5px solid var(--border);color:var(--textm);width:36px;height:36px;border-radius:10px;cursor:pointer;font-size:16px;display:none;align-items:center;justify-content:center;transition:all 0.2s}
@@ -386,7 +387,6 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
       <div class="h-logo-sub" style="color:var(--gold);text-transform:none;letter-spacing:0.06em">Ai Architecture</div>
     </div>
   </a>
-  <button class="hamburger" id="hamburger" onclick="toggleSidebar()" style="flex-shrink:0">☰</button>
   <div class="h-center"></div>
   <div class="h-right">
     <div class="h-right-top">
@@ -394,9 +394,10 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
     </div>
     <div class="h-right-bottom">
       <button class="h-settings" onclick="openSettings()" title="Settings">⚙️</button>
-      <button class="sign-in-btn" id="signInBtn" onclick="openAuth()">Sign In</button>
+      <button class="sign-in-btn" id="signInBtn" onclick="handleAccountBtnClick()">Sign In</button>
     </div>
   </div>
+  <button class="hamburger" id="hamburger" onclick="toggleSidebar()" style="flex-shrink:0">☰</button>
 </header>
 
 <!-- STUDIO BODY -->
@@ -8042,6 +8043,15 @@ function pickOpt(type,el){
 }
 
 // ── AUTH ──
+function handleAccountBtnClick(){
+  if(S.user&&S.user.email!=="guest"){
+    openSettings();
+    setTimeout(()=>document.getElementById("profileSection")?.scrollIntoView({behavior:"smooth",block:"start"}),150);
+  } else {
+    openAuth();
+  }
+}
+
 function openAuth(){document.getElementById("authModal").classList.add("show");}
 function closeAuth(){document.getElementById("authModal").classList.remove("show");}
 
@@ -8079,9 +8089,15 @@ function updateUserUI(){
   const preferredName=gs("preferred_name","");
   if(S.user&&S.user.email!=="guest"){
     const displayName=preferredName||S.user.name||S.user.email.split("@")[0];
-    btn.textContent=displayName;
+    btn.classList.add("sign-in-btn-avatar");
+    if(S.user.photo){
+      btn.innerHTML=`<img src="${S.user.photo}" alt="${displayName}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+    } else {
+      btn.innerHTML=`<span style="width:100%;height:100%;border-radius:50%;background:var(--vm);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">${displayName.charAt(0).toUpperCase()}</span>`;
+    }
+    btn.title=displayName;
     if(accInfo)accInfo.textContent=`Signed in as ${displayName} (${S.user.email})`;
-    if(S.user.isFounder){badge.style.display="inline";btn.textContent="👑 "+btn.textContent;}
+    if(S.user.isFounder)badge.style.display="inline";
     const signedOutEl=document.getElementById("spProfileSignedOut");
     const signedInEl=document.getElementById("spProfileSignedIn");
     if(signedOutEl)signedOutEl.style.display="none";
@@ -8095,7 +8111,9 @@ function updateUserUI(){
     const nameInput=document.getElementById("spDisplayNameInput");
     if(nameInput&&document.activeElement!==nameInput)nameInput.value=preferredName||S.user.name||"";
   } else {
+    btn.classList.remove("sign-in-btn-avatar");
     btn.textContent="Sign In";
+    btn.title="";
     if(badge)badge.style.display="none";
     if(accInfo)accInfo.textContent="Not signed in";
     const signedOutEl=document.getElementById("spProfileSignedOut");
