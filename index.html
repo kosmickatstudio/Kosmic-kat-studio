@@ -928,6 +928,67 @@ function injectLogos(){
 
 // ── TOAST ──
 let _toastTimer;
+// ══════════════════════════════════════════════════════
+// CUSTOM CONFIRM/PROMPT DIALOGS — on-brand replacements for native
+// confirm()/prompt(), which are 100% browser chrome and can't be styled
+// at all. Both return Promises since a custom modal is inherently async.
+// ══════════════════════════════════════════════════════
+function showConfirmDialog(message,opts={}){
+  const {title="Are you sure?",okLabel="Confirm",cancelLabel="Cancel",danger=false}=opts;
+  return new Promise(resolve=>{
+    const overlay=document.createElement("div");
+    overlay.className="modal-overlay show";
+    overlay.innerHTML=`
+      <div class="modal" style="text-align:center">
+        <div style="font-size:30px;margin-bottom:8px">${danger?'⚠':'✦'}</div>
+        <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:10px">${title}</div>
+        <div style="font-size:13px;color:var(--textm);line-height:1.6;margin-bottom:22px;white-space:pre-line">${message}</div>
+        <div style="display:flex;gap:10px;justify-content:center">
+          <button class="btn btn-ghost" id="ccCancel">${cancelLabel}</button>
+          <button class="btn ${danger?'btn-danger':'btn-primary'}" id="ccOk">${okLabel}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const cleanup=result=>{overlay.remove();resolve(result);};
+    overlay.querySelector("#ccCancel").onclick=()=>cleanup(false);
+    overlay.querySelector("#ccOk").onclick=()=>cleanup(true);
+  });
+}
+
+function showPromptDialog(message,defaultValue="",opts={}){
+  const {title="Enter a value",okLabel="Confirm",cancelLabel="Cancel",multiline=false}=opts;
+  return new Promise(resolve=>{
+    const overlay=document.createElement("div");
+    overlay.className="modal-overlay show";
+    const fieldId="cpField_"+Date.now();
+    const fieldHtml=multiline
+      ?`<textarea class="f-textarea" id="${fieldId}" style="margin-bottom:16px;min-height:80px">${(defaultValue||'').replace(/</g,'&lt;')}</textarea>`
+      :`<input class="f-input" id="${fieldId}" value="${(defaultValue||'').replace(/"/g,'&quot;')}" style="margin-bottom:16px">`;
+    overlay.innerHTML=`
+      <div class="modal">
+        <div style="text-align:center;font-size:28px;margin-bottom:8px">✎</div>
+        <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:10px;text-align:center">${title}</div>
+        ${message?`<div style="font-size:12px;color:var(--textm);line-height:1.6;margin-bottom:12px;white-space:pre-line">${message}</div>`:''}
+        ${fieldHtml}
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn btn-ghost" id="cpCancel">${cancelLabel}</button>
+          <button class="btn btn-primary" id="cpOk">${okLabel}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const field=overlay.querySelector(`#${fieldId}`);
+    field.focus();
+    if(field.select)field.select();
+    const cleanup=result=>{overlay.remove();resolve(result);};
+    overlay.querySelector("#cpCancel").onclick=()=>cleanup(null);
+    overlay.querySelector("#cpOk").onclick=()=>cleanup(field.value);
+    field.addEventListener("keydown",e=>{
+      if(e.key==="Enter"&&!multiline){e.preventDefault();cleanup(field.value);}
+      if(e.key==="Escape")cleanup(null);
+    });
+  });
+}
+
 function toast(msg,type="",dur=3400){
   try{
     clearTimeout(_toastTimer);
@@ -1568,8 +1629,8 @@ function episodeTileHTML(e){
     </div>`;
 }
 
-function addEpisode(projectId){
-  const title=prompt("Episode title:");
+async function addEpisode(projectId){
+  const title=await showPromptDialog("","",{title:"Episode Title",okLabel:"Add Episode"});
   if(!title)return;
   const existing=S.episodes.filter(e=>e.projectId===projectId);
   const number=existing.length?Math.max(...existing.map(e=>e.number||0))+1:1;
@@ -1612,8 +1673,8 @@ function renderProjectTimeline(p,episodes,shots){
   </div>`;
 }
 
-function addShot(projectId){
-  const name=prompt("Shot name / description:");
+async function addShot(projectId){
+  const name=await showPromptDialog("","",{title:"Shot Name / Description",okLabel:"Add Shot"});
   if(!name)return;
   const shot={id:"shot_"+Date.now(),projectId,name,type:"Scene",created:new Date().toISOString()};
   S.shots.push(shot);save("shots");
@@ -1623,10 +1684,10 @@ function addShot(projectId){
   toast(`🎬 Shot added: ${name}`,"success");
 }
 
-function deleteShot(id){
+async function deleteShot(id){
   const shot=S.shots.find(s=>s.id===id);
   if(shot){
-    if(!confirm("Delete this shot? This cannot be undone.")){return;}
+    if(!(await showConfirmDialog("Delete this shot? This cannot be undone.",{danger:true,okLabel:"Delete"}))){return;}
     const p=S.projects.find(x=>x.id===shot.projectId);
     if(p)p.shots=Math.max(0,(p.shots||1)-1);
     S.shots=S.shots.filter(s=>s.id!==id);
@@ -1835,8 +1896,8 @@ function handleImportProjectFile(event){
   reader.readAsText(file);
 }
 
-function deleteProject(id){
-  if(!confirm("Delete this project? This cannot be undone."))return;
+async function deleteProject(id){
+  if(!(await showConfirmDialog("Delete this project? This cannot be undone.",{danger:true,okLabel:"Delete"})))return;
   S.projects=S.projects.filter(p=>p.id!==id);
   S.shots=S.shots.filter(s=>s.projectId!==id);
   S.characters=S.characters.filter(c=>c.projectId!==id);
@@ -2144,7 +2205,7 @@ async function launchLoraTraining(charId){
   if(approved.length<4){toast("Need at least 4 approved reference images (10–20+ recommended)","error");return;}
   const apiKey=gs("api_falai","");
   if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
-  if(!confirm(`Launch LoRA training for ${c.name} using ${approved.length} approved images?\n\nThis costs ~$2 on fal.ai and takes a few minutes.`))return;
+  if(!(await showConfirmDialog(`Launch LoRA training for ${c.name} using ${approved.length} approved images?\n\nThis costs ~$2 on fal.ai and takes a few minutes.`,{okLabel:"Launch Training"})))return;
 
   c.loraStatus={state:"training",startedAt:new Date().toISOString()};
   save("characters");
@@ -2407,8 +2468,8 @@ function saveCharacter(){
   else{renderModule("characters");}
 }
 
-function deleteChar(id){
-  if(!confirm("Delete this character? This cannot be undone."))return;
+async function deleteChar(id){
+  if(!(await showConfirmDialog("Delete this character? This cannot be undone.",{danger:true,okLabel:"Delete"})))return;
   const c=S.characters.find(x=>x.id===id);
   if(c&&c.projectId){
     const p=S.projects.find(x=>x.id===c.projectId);
@@ -2642,9 +2703,9 @@ function showIgChatView(){
   document.querySelectorAll("#moduleTabs .inner-tab").forEach(t=>t.classList.toggle("active",t.textContent==="Generate"));
 }
 
-function clearIgChatConfirm(){
+async function clearIgChatConfirm(){
   if(!S.igChatHistory.length){toast("Chat is already empty","");return;}
-  if(!confirm("Clear this entire chat? This deletes the conversation history — anything not saved to Gallery/Collections will be gone."))return;
+  if(!(await showConfirmDialog("Clear this entire chat? This deletes the conversation history — anything not saved to Gallery/Collections will be gone.",{danger:true,okLabel:"Clear Chat"})))return;
   S.igChatHistory=[];
   save("igChatHistory");
   renderIgChatThread();
@@ -4023,8 +4084,8 @@ function restoreProductionWizard(){
   document.getElementById("prodWizardRestorePill")?.remove();
 }
 
-function cancelProductionWizard(){
-  if(!confirm("Are you sure you want to cancel? Your progress on this production setup will be lost."))return;
+async function cancelProductionWizard(){
+  if(!(await showConfirmDialog("Are you sure you want to cancel? Your progress on this production setup will be lost.",{danger:true,okLabel:"Discard & Cancel"})))return;
   document.getElementById("prodWizardModal")?.remove();
   document.getElementById("prodWizardRestorePill")?.remove();
   S.pendingProductionDraft=null;
@@ -4583,8 +4644,8 @@ function approveEpisodeStage(prodId,epIndex,stage){
   toast(`✅ Episode ${epIndex} ${stage} approved`,"success");
 }
 
-function rejectEpisodeStage(prodId,epIndex,stage){
-  const feedback=prompt(`Why are you rejecting this ${stage}? (optional — helps the rewrite)`,"") || "";
+async function rejectEpisodeStage(prodId,epIndex,stage){
+  const feedback=await showPromptDialog(`Why are you rejecting this ${stage}? (optional — helps the rewrite)`,"",{title:"Rejection Feedback",okLabel:"Reject & Send Back",multiline:true})||"";
   const p=S.productions.find(x=>x.id===prodId);
   const e=getEpisode(p,epIndex);
   if(stage==="script"){e.scriptStatus="pending";e.script=null;e.scriptRejectionFeedback=feedback;}
@@ -4797,10 +4858,10 @@ function reshootEpisodeScene(prodId,epIndex){
 }
 
 // ── FINALIZE: push all approved clips into Video Editor sequence, in order ──
-function finalizeProductionToEditor(prodId){
+async function finalizeProductionToEditor(prodId){
   const p=S.productions.find(x=>x.id===prodId);
   if(!p.episodes.every(e=>e.sceneStatus==="approved")){toast("All 6 episodes must be approved first","error");return;}
-  if(!confirm(`Add all ${p.totalShots} clips from this production to the Video Editor sequence, in order?`))return;
+  if(!(await showConfirmDialog(`Add all ${p.totalShots} clips from this production to the Video Editor sequence, in order?`,{okLabel:"Add to Editor"})))return;
   const seq=normalizeSequence(S.editorSequence||[]);
   p.episodes.sort((a,b)=>a.index-b.index).forEach(e=>{
     e.shots.forEach(s=>{
@@ -5690,8 +5751,8 @@ function renderCollectionsView(el){
   `;
 }
 
-function createCollectionPrompt(){
-  const name=prompt("Name this collection:");
+async function createCollectionPrompt(){
+  const name=await showPromptDialog("","",{title:"Name This Collection",okLabel:"Create"});
   if(!name||!name.trim())return;
   const collection={id:"col_"+Date.now(),name:name.trim(),created:new Date().toISOString(),items:[]};
   S.collections.push(collection);
@@ -5700,18 +5761,18 @@ function createCollectionPrompt(){
   renderModule("assets");
 }
 
-function renameCollectionPrompt(id){
+async function renameCollectionPrompt(id){
   const c=S.collections.find(x=>x.id===id);
   if(!c)return;
-  const name=prompt("Rename collection:",c.name);
+  const name=await showPromptDialog("",c.name,{title:"Rename Collection",okLabel:"Rename"});
   if(!name||!name.trim())return;
   c.name=name.trim();
   save("collections");
   renderModule("assets");
 }
 
-function deleteCollectionConfirm(id){
-  if(!confirm("Delete this collection? Items inside it (uploads/gallery assets) are NOT deleted, only the collection itself."))return;
+async function deleteCollectionConfirm(id){
+  if(!(await showConfirmDialog("Delete this collection? Items inside it (uploads/gallery assets) are NOT deleted, only the collection itself.",{danger:true,okLabel:"Delete Collection"})))return;
   S.collections=S.collections.filter(c=>c.id!==id);
   S.activeCollectionId=null;
   save("collections");
@@ -5804,8 +5865,8 @@ function assetCardHTML(u){
     </div>`;
 }
 
-function addAssetTag(id){
-  const tag=prompt("Add a tag (e.g. character name, project, 'universe:fharomorph', 'logo'):");
+async function addAssetTag(id){
+  const tag=await showPromptDialog("e.g. character name, project, 'universe:fharomorph', 'logo'","",{title:"Add a Tag",okLabel:"Add Tag"});
   if(!tag||!tag.trim())return;
   const u=(S.uploads||[]).find(x=>x.id===id);
   if(!u)return;
@@ -5897,8 +5958,8 @@ function addUpload(u){
   toast(`📦 ${u.name} uploaded`,"success");
 }
 
-function deleteUpload(id){
-  if(!confirm("Delete this file?"))return;
+async function deleteUpload(id){
+  if(!(await showConfirmDialog("Delete this file?",{danger:true,okLabel:"Delete"})))return;
   S.uploads=(S.uploads||[]).filter(u=>u.id!==id);
   save("uploads");
   renderAssets(document.getElementById("moduleContent"));
@@ -6092,8 +6153,8 @@ async function downloadGalleryZip(){
   }
 }
 
-function deleteAsset(id){
-  if(!confirm("Delete this from your gallery? This cannot be undone."))return;
+async function deleteAsset(id){
+  if(!(await showConfirmDialog("Delete this from your gallery? This cannot be undone.",{danger:true,okLabel:"Delete"})))return;
   S.assets=S.assets.filter(a=>a.id!==id);
   save("assets");
   renderGallery(document.getElementById("moduleContent"));
@@ -6546,8 +6607,8 @@ function saveBudgetCap(){
   renderCosts(document.getElementById("moduleContent"));
 }
 
-function resetCostLog(){
-  if(!confirm("Reset the cost tracker to $0? This only clears the local log — it does NOT affect your real provider billing."))return;
+async function resetCostLog(){
+  if(!(await showConfirmDialog("Reset the cost tracker to $0? This only clears the local log — it does NOT affect your real provider billing.",{danger:true,okLabel:"Reset"})))return;
   S.costLog=[];
   save("costLog");
   saveSetting("total_spent","0");
@@ -6627,15 +6688,13 @@ function renderTeam(el){
   `;
 }
 
-function openInviteForm(){
+async function openInviteForm(){
   if(!isFounderUser()){toast("Team Manager is Founder-only","error");return;}
-  const email=prompt("Email address to invite:");
+  const email=await showPromptDialog("","",{title:"Invite a Team Member",okLabel:"Next: Pick Role"});
   if(!email||!email.includes("@")){if(email)toast("Enter a valid email","error");return;}
   const roles=Object.keys(ROLE_PERMS).filter(r=>r!=="Founder");
-  const roleChoice=prompt(`Role for ${email}?\n\n${roles.map((r,i)=>`${i+1}. ${r}`).join('\n')}\n\nEnter a number:`);
-  const idx=parseInt(roleChoice,10)-1;
-  const role=roles[idx];
-  if(!role){toast("Invite cancelled — invalid role","error");return;}
+  const role=await showRolePickerDialog(email,roles);
+  if(!role)return;
   if(!S.team)S.team=[];
   if(S.team.some(m=>m.email===email)){toast("That email is already on the roster","error");return;}
   S.team.push({email,role,invited:new Date().toISOString()});
@@ -6645,9 +6704,32 @@ function openInviteForm(){
   renderTeam(document.getElementById("moduleContent"));
 }
 
-function removeTeamMember(i){
+function showRolePickerDialog(email,roles){
+  return new Promise(resolve=>{
+    const overlay=document.createElement("div");
+    overlay.className="modal-overlay show";
+    overlay.innerHTML=`
+      <div class="modal">
+        <div style="text-align:center;font-size:28px;margin-bottom:8px">◆</div>
+        <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:6px;text-align:center">Pick a Role</div>
+        <div style="font-size:12px;color:var(--textm);text-align:center;margin-bottom:16px">for ${email}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+          ${roles.map(r=>`<button class="btn btn-outline" data-role="${r}" style="text-align:left">${r}</button>`).join('')}
+        </div>
+        <button class="btn btn-ghost btn-full" id="rpCancel">Cancel</button>
+      </div>`;
+    document.body.appendChild(overlay);
+    const cleanup=result=>{overlay.remove();resolve(result);};
+    overlay.querySelectorAll("[data-role]").forEach(btn=>{
+      btn.onclick=()=>cleanup(btn.dataset.role);
+    });
+    overlay.querySelector("#rpCancel").onclick=()=>cleanup(null);
+  });
+}
+
+async function removeTeamMember(i){
   if(!isFounderUser()){toast("Team Manager is Founder-only","error");return;}
-  if(!confirm("Remove this team member from the roster?"))return;
+  if(!(await showConfirmDialog("Remove this team member from the roster?",{danger:true,okLabel:"Remove"})))return;
   const removed=S.team[i];
   S.team.splice(i,1);
   save("team");
@@ -6881,10 +6963,10 @@ function exportAllSettings(){
   toast("📤 Full backup exported (API keys excluded for security)","success");
 }
 
-function importAllSettings(event){
+async function importAllSettings(event){
   const file=event.target.files[0];
   if(!file)return;
-  if(!confirm("Importing will REPLACE your current projects, characters, shots, episodes, team roster, and settings (except API keys) with the backup file's contents. This cannot be undone. Continue?")){
+  if(!(await showConfirmDialog("Importing will REPLACE your current projects, characters, shots, episodes, team roster, and settings (except API keys) with the backup file's contents. This cannot be undone. Continue?",{danger:true,okLabel:"Import & Replace"}))){
     event.target.value="";return;
   }
   const reader=new FileReader();
