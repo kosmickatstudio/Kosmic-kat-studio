@@ -568,13 +568,18 @@ header{position:relative;z-index:50;height:var(--header);background:rgba(250,248
   <div class="sp-section">
     <div class="sp-section-title">AI Director Brain</div>
     <div class="sp-section-body">
-      <select class="f-select" id="aiModelSelect" onchange="saveSetting('ai_model',this.value);updateAiModelLabel()">
+      <select class="f-select" id="aiModelSelect" onchange="saveSetting('ai_model',this.value);updateAiModelLabel();updateAicreditsModelVisibility()">
         <option value="claude">Claude (Anthropic) — Best Quality</option>
         <option value="gemini">Google Gemini — Vision-capable, cheap</option>
         <option value="groq">Groq Llama 3.3 — Free & Fast</option>
         <option value="deepseek">DeepSeek V3 — Ultra Cheap</option>
         <option value="openai">OpenAI GPT-4o</option>
+        <option value="aicredits">AICredits — Gateway (pick any model below)</option>
       </select>
+      <div class="f-group" id="aicreditsModelWrap" style="display:none;margin-top:8px">
+        <label class="f-label">AICredits Model <span style="font-weight:400;color:var(--texts)">(any model name their gateway supports)</span></label>
+        <input class="f-input" id="aicreditsModelInput" placeholder="e.g. claude-3-5-sonnet, gpt-4o, gemini-1.5-pro" oninput="saveSetting('aicredits_model',this.value)">
+      </div>
     </div>
   </div>
 
@@ -830,6 +835,7 @@ const API_SERVICES = [
   {key:"groq", label:"Groq", ph:"gsk_…", mod:"groq"},
   {key:"deepseek", label:"DeepSeek", ph:"sk-…", mod:"deepseek"},
   {key:"openai", label:"OpenAI", ph:"sk-…", mod:"openai"},
+  {key:"aicredits", label:"AICredits", ph:"sk-…", mod:"aicredits"},
   {key:"falai", label:"fal.ai", ph:"…", mod:"imagegen"},
   {key:"replicate", label:"Replicate", ph:"r8_…", mod:"imagegen"},
   {key:"elevenlabs", label:"ElevenLabs", ph:"…", mod:"audio"},
@@ -1690,8 +1696,8 @@ async function aiGenerateShots(projectId){
   const p=S.projects.find(x=>x.id===projectId);
   if(!p)return;
   const model=gs("ai_model","claude");
-  const apiKeyMap={claude:"api_anthropic",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai"};
-  if(!gs(apiKeyMap[model],"")){toast("Add an AI brain API key (Anthropic/Groq/DeepSeek/OpenAI) in Settings first","error");return;}
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
+  if(!gs(apiKeyMap[model],"")){toast("Add an AI brain API key (Anthropic/Gemini/Groq/DeepSeek/OpenAI/AICredits) in Settings first","error");return;}
 
   const btn=document.getElementById("aiGenShotsBtn");
   const originalLabel=btn?btn.textContent:"";
@@ -2966,7 +2972,7 @@ async function magicPrompt(targetId,mediaType){
   const rough=el.value.trim();
   if(!rough){toast("Type a rough idea first","error");return;}
   const model=gs("ai_model","claude");
-  const apiKeyMap={claude:"api_anthropic",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai"};
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
   if(!gs(apiKeyMap[model],"")){toast("Add an AI API key in Settings first (used for Magic Prompt / AI Director)","error");return;}
   toast("🪄 Enhancing prompt…","");
   try{
@@ -5070,6 +5076,7 @@ function openProductionWizard(projectId){
           <option value="openai">OpenAI GPT-4o — supports images</option>
           <option value="groq">Groq Llama 3.3 — Free, text only</option>
           <option value="deepseek">DeepSeek V3 — Ultra Cheap, text only</option>
+          <option value="aicredits">AICredits Gateway — text only</option>
         </select>
       </div>
 
@@ -5938,7 +5945,7 @@ async function analyzeShotFeedback(){
   const text=document.getElementById("feedbackInput").value.trim();
   if(!text){toast("Paste a hook or shot description first","error");return;}
   const model=gs("ai_model","claude");
-  const apiKeyMap={claude:"api_anthropic",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai"};
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
   if(!gs(apiKeyMap[model],"")){toast("Add an AI API key in Settings first","error");return;}
   const resultEl=document.getElementById("feedbackResult");
   resultEl.innerHTML=`<div style="text-align:center;padding:20px;color:var(--textm);font-size:13px">🔍 Analyzing…</div>`;
@@ -8197,8 +8204,8 @@ function toggleAiPanel(){
 
 function updateAiModelLabel(){
   const model=gs("ai_model","claude");
-  const modelNames={claude:"Claude (Anthropic)",groq:"Groq Llama 3.3",deepseek:"DeepSeek V3",openai:"OpenAI GPT-4o"};
-  const apiKeyMap={claude:"api_anthropic",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai"};
+  const modelNames={claude:"Claude (Anthropic)",gemini:"Google Gemini",groq:"Groq Llama 3.3",deepseek:"DeepSeek V3",openai:"OpenAI GPT-4o",aicredits:"AICredits ("+(gs("aicredits_model","")||"no model set")+")"};
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
   const hasKey=!!gs(apiKeyMap[model],"");
   const lbl=document.getElementById("aiModelLabel");
   const status=document.getElementById("aiApiStatus");
@@ -8206,6 +8213,12 @@ function updateAiModelLabel(){
   if(lbl)lbl.textContent="Model: "+(modelNames[model]||model);
   if(status){status.textContent=hasKey?"● Ready":"⚠ No API key";status.style.color=hasKey?"var(--green)":"var(--red)";}
   if(sendBtn)sendBtn.disabled=!hasKey;
+}
+
+function updateAicreditsModelVisibility(){
+  const model=document.getElementById("aiModelSelect")?.value;
+  const wrap=document.getElementById("aicreditsModelWrap");
+  if(wrap)wrap.style.display=model==="aicredits"?"block":"none";
 }
 
 function updateAiContext(ctx){
@@ -8222,9 +8235,9 @@ function aiKeyDown(e){
 
 async function callAiSimple(userPrompt,systemPrompt,modelOverride){
   const model=modelOverride||gs("ai_model","claude");
-  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai"};
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
   const apiKey=gs(apiKeyMap[model],"");
-  if(!apiKey)throw new Error("Add an AI brain API key (Anthropic/Gemini/Groq/DeepSeek/OpenAI) in Settings first");
+  if(!apiKey)throw new Error("Add an AI brain API key (Anthropic/Gemini/Groq/DeepSeek/OpenAI/AICredits) in Settings first");
   if(model==="claude"){
     const response=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
@@ -8244,15 +8257,19 @@ async function callAiSimple(userPrompt,systemPrompt,modelOverride){
     if(data.error)throw new Error(data.error.message);
     return data.candidates[0].content.parts[0].text;
   } else {
-    const endpoints={groq:"https://api.groq.com/openai/v1/chat/completions",deepseek:"https://api.deepseek.com/v1/chat/completions",openai:"https://api.openai.com/v1/chat/completions"};
-    const modelIds={groq:"llama-3.3-70b-versatile",deepseek:"deepseek-chat",openai:"gpt-4o-mini"};
+    // AICredits is a real OpenAI-compatible gateway (verified against their own
+    // docs) — same request/response shape as OpenAI itself, just a different
+    // base URL and a user-chosen model name instead of a fixed one.
+    const endpoints={groq:"https://api.groq.com/openai/v1/chat/completions",deepseek:"https://api.deepseek.com/v1/chat/completions",openai:"https://api.openai.com/v1/chat/completions",aicredits:"https://api.aicredits.in/v1/chat/completions"};
+    const modelIds={groq:"llama-3.3-70b-versatile",deepseek:"deepseek-chat",openai:"gpt-4o-mini",aicredits:gs("aicredits_model","")||"gpt-4o-mini"};
+    if(model==="aicredits"&&!gs("aicredits_model",""))throw new Error("Set which model AICredits should use in Settings (e.g. claude-3-5-sonnet, gpt-4o)");
     const response=await fetch(endpoints[model],{
       method:"POST",
       headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
       body:JSON.stringify({model:modelIds[model],messages:[{role:"system",content:systemPrompt},{role:"user",content:userPrompt}],max_tokens:1200})
     });
     const data=await response.json();
-    if(data.error)throw new Error(data.error.message);
+    if(data.error)throw new Error(data.error.message||data.error);
     return data.choices[0].message.content;
   }
 }
@@ -8262,9 +8279,10 @@ async function sendAiPrompt(){
   const msg=promptEl.value.trim();
   if(!msg)return;
   const model=gs("ai_model","claude");
-  const apiKeyMap={claude:"api_anthropic",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai"};
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
   const apiKey=gs(apiKeyMap[model],"");
   if(!apiKey){toast("Add an API key in Settings first","error");return;}
+  if(model==="aicredits"&&!gs("aicredits_model","")){toast("Set which model AICredits should use in Settings first","error");return;}
 
   promptEl.value="";promptEl.style.height="auto";
   appendAiMsg("user",msg);
@@ -8296,17 +8314,30 @@ async function sendAiPrompt(){
         appendAiMsg("assistant",reply);
         S.aiHistory.push({role:"assistant",content:reply});
       }
+    } else if(model==="gemini"){
+      const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+        body:JSON.stringify({system_instruction:{parts:[{text:systemPrompt}]},contents:S.aiHistory.slice(-10).map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]}))})
+      });
+      const data=await response.json();
+      if(data.error){appendAiMsg("assistant","❌ Error: "+data.error.message);}
+      else{
+        const reply=data.candidates[0].content.parts[0].text;
+        appendAiMsg("assistant",reply);
+        S.aiHistory.push({role:"assistant",content:reply});
+      }
     } else {
-      // Groq / OpenAI compatible
-      const endpoints={groq:"https://api.groq.com/openai/v1/chat/completions",deepseek:"https://api.deepseek.com/v1/chat/completions",openai:"https://api.openai.com/v1/chat/completions"};
-      const modelIds={groq:"llama-3.3-70b-versatile",deepseek:"deepseek-chat",openai:"gpt-4o-mini"};
+      // Groq / OpenAI / AICredits — all OpenAI-compatible
+      const endpoints={groq:"https://api.groq.com/openai/v1/chat/completions",deepseek:"https://api.deepseek.com/v1/chat/completions",openai:"https://api.openai.com/v1/chat/completions",aicredits:"https://api.aicredits.in/v1/chat/completions"};
+      const modelIds={groq:"llama-3.3-70b-versatile",deepseek:"deepseek-chat",openai:"gpt-4o-mini",aicredits:gs("aicredits_model","")||"gpt-4o-mini"};
       const response=await fetch(endpoints[model],{
         method:"POST",
         headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
         body:JSON.stringify({model:modelIds[model],messages:[{role:"system",content:systemPrompt},...S.aiHistory.slice(-10)],max_tokens:800})
       });
       const data=await response.json();
-      if(data.error){appendAiMsg("assistant","❌ Error: "+data.error.message);}
+      if(data.error){appendAiMsg("assistant","❌ Error: "+(data.error.message||data.error));}
       else{
         const reply=data.choices[0].message.content;
         appendAiMsg("assistant",reply);
@@ -8374,6 +8405,9 @@ function init(){
   const model=gs("ai_model","claude");
   const sel=document.getElementById("aiModelSelect");
   if(sel)sel.value=model;
+  const aicreditsModelInput=document.getElementById("aicreditsModelInput");
+  if(aicreditsModelInput)aicreditsModelInput.value=gs("aicredits_model","");
+  updateAicreditsModelVisibility();
   applyTheme(gs("theme","auto"));
 
   // Restore user — real Firebase session, not a localStorage guess
