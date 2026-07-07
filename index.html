@@ -30,7 +30,7 @@
   --red:#EF4444;--green:#10B981;--yellow:#F59E0B;--orange:#F97316;
   --sidebar:220px;--header:60px;
   --ice:#4AA9D9;--ice-l:#7FC8EC;--ember:#E8794A;
-  --glass:rgba(255,255,255,0.55);--glass-brd:rgba(61,31,122,0.14);
+  --glass:rgba(255,255,255,0.55);--glass-brd:rgba(61,31,122,0.14);--glass-solid:rgba(252,250,255,0.96);
   --glow-gold:rgba(201,151,42,0.28);--glow-ice:rgba(74,169,217,0.22);
   --font-display:'Space Grotesk',sans-serif;--font-mono:'JetBrains Mono',monospace;
 }
@@ -52,7 +52,7 @@ html[data-theme="dark"]{
   --shg:0 2px 24px rgba(240,198,116,0.20);
   --shv:0 10px 44px rgba(163,110,240,0.22);
   --ice:#6FE3FF;--ice-l:#A8EEFF;--ember:#FF7A52;
-  --glass:rgba(25,19,36,0.55);--glass-brd:rgba(195,174,250,0.18);
+  --glass:rgba(25,19,36,0.55);--glass-brd:rgba(195,174,250,0.18);--glass-solid:rgba(20,15,30,0.96);
   --glow-gold:rgba(240,198,116,0.30);--glow-ice:rgba(111,227,255,0.24);
 }
 html{scroll-behavior:smooth;overscroll-behavior-y:contain}
@@ -273,7 +273,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .ai-tool-btn:hover{background:var(--lav);color:var(--violet);border-color:var(--vs)}
 
 /* ── SETTINGS PANEL ── */
-.settings-panel{position:fixed;top:0;right:0;bottom:0;width:340px;background:var(--glass);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);border-left:1px solid var(--glass-brd);z-index:100;transform:translateX(100%);transition:transform 0.3s;overflow-y:auto;box-shadow:-8px 0 48px rgba(0,0,0,0.14)}
+.settings-panel{position:fixed;top:0;right:0;bottom:0;width:340px;background:var(--glass-solid);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-left:1px solid var(--glass-brd);z-index:100;transform:translateX(100%);transition:transform 0.3s;overflow-y:auto;box-shadow:-8px 0 48px rgba(0,0,0,0.14)}
 .settings-panel.open{transform:translateX(0)}
 .sp-header{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--surface);z-index:2}
 .sp-title{font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)}
