@@ -5229,7 +5229,7 @@ function renderProductionSection(projectId){
   return `<div class="panel">
     <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between">
       <span>🎬 Production Pipeline</span>
-      ${projectId?`<button class="btn btn-primary btn-sm" onclick="openProductionWizard('${projectId}')">+ Start New Production</button>`:''}
+      ${projectId?`<button class="btn btn-primary btn-sm" onclick="openProductionEntryChoice('${projectId}')">+ Start New Production</button>`:''}
     </div>
     ${!projectId?`<div class="empty-desc">Select a project above to start a production.</div>`:
       productions.length?`<div style="display:flex;flex-direction:column;gap:8px">${productions.map(p=>`
@@ -5299,18 +5299,83 @@ function updatePdAspectRatioOptions(){
   sel.value=ratios.includes(prevValue)?prevValue:ratios[0];
 }
 
-function openProductionWizard(projectId){
-  S.pdRefImages=[]; // reset reference image selection for this new wizard session
-  const libraryImages=(S.uploads||[]).filter(u=>u.kind==="image");
+function openProductionEntryChoice(projectId){
   const overlay=document.createElement("div");
   overlay.className="modal-overlay show";
-  overlay.id="prodWizardModal";
+  overlay.id="prodEntryChoiceModal";
   overlay.innerHTML=`
-    <div class="modal project-modal">
-      ${wizardHeaderControls()}
-      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:6px">🎬 New Production — Director Intake</div>
-      <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Give the Director your idea. He'll ask a few questions, then hand off to the Assistant Director for budgeting.</div>
+    <div class="modal" style="text-align:center">
+      <div style="font-size:30px;margin-bottom:6px">✦</div>
+      <div style="font-family:'Cinzel',serif;font-size:17px;font-weight:700;color:var(--violet);margin-bottom:6px">What are you bringing today?</div>
+      <div style="font-size:12px;color:var(--textm);margin-bottom:20px">Either way, the Director takes it from here.</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div onclick="document.getElementById('prodEntryChoiceModal').remove();openScriptWizard('${projectId}')" style="cursor:pointer;border-radius:16px;padding:22px 16px;background:linear-gradient(135deg,#1E3A5F,#3D1F7A);position:relative;overflow:hidden">
+          <div style="font-size:28px;margin-bottom:6px">📜</div>
+          <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:#fff">I Have a Script</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:4px">Already written it out? Upload or paste it — the Director will work from your exact words.</div>
+        </div>
+        <div onclick="document.getElementById('prodEntryChoiceModal').remove();openProductionWizard('${projectId}')" style="cursor:pointer;border-radius:16px;padding:22px 16px;background:linear-gradient(135deg,#7C2D12,#C9972A);position:relative;overflow:hidden">
+          <div style="font-size:28px;margin-bottom:6px">💡</div>
+          <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:#fff">I Have an Idea / Concept</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:4px">Just a spark of a premise? The Director and Scriptwriter will build it out with you.</div>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-full" style="margin-top:14px" onclick="document.getElementById('prodEntryChoiceModal').remove()">Cancel</button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
 
+// ── SCRIPT FILE PARSING — pdf.js/mammoth.js loaded lazily (only when a
+// PDF/DOCX is actually uploaded) rather than on every page load, since
+// this is phone-first and script upload is an occasional-use feature.
+let _pdfLibLoaded=false,_mammothLibLoaded=false;
+function loadScriptLib(src,flagSetter){
+  return new Promise((resolve,reject)=>{
+    const script=document.createElement("script");
+    script.src=src;
+    script.onload=()=>{flagSetter(true);resolve();};
+    script.onerror=()=>reject(new Error("Couldn't load parsing library — check your connection"));
+    document.head.appendChild(script);
+  });
+}
+
+async function extractTextFromScriptFile(file){
+  const name=file.name.toLowerCase();
+  if(name.endsWith(".txt")){
+    return await file.text();
+  }
+  if(name.endsWith(".html")||name.endsWith(".htm")){
+    const raw=await file.text();
+    const doc=new DOMParser().parseFromString(raw,"text/html");
+    return doc.body.textContent||"";
+  }
+  if(name.endsWith(".pdf")){
+    if(!_pdfLibLoaded)await loadScriptLib("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js",v=>_pdfLibLoaded=v);
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
+    const buffer=await file.arrayBuffer();
+    const pdf=await window.pdfjsLib.getDocument({data:buffer}).promise;
+    let text="";
+    for(let i=1;i<=pdf.numPages;i++){
+      const page=await pdf.getPage(i);
+      const content=await page.getTextContent();
+      text+=content.items.map(it=>it.str).join(" ")+"\n\n";
+    }
+    return text.trim();
+  }
+  if(name.endsWith(".docx")){
+    if(!_mammothLibLoaded)await loadScriptLib("https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.7.0/mammoth.browser.min.js",v=>_mammothLibLoaded=v);
+    const buffer=await file.arrayBuffer();
+    const result=await window.mammoth.extractRawText({arrayBuffer:buffer});
+    return result.value.trim();
+  }
+  throw new Error("Unsupported file type — try .docx, .pdf, .html, or .txt, or paste your script directly instead");
+}
+
+// ── SHARED INTAKE FIELDS — reused by both the Idea/Concept wizard and the
+// Script wizard, so the two paths stay in sync rather than drifting apart.
+function renderPdSharedFields(){
+  const libraryImages=(S.uploads||[]).filter(u=>u.kind==="image");
+  return `
       <div class="f-group">
         <label class="f-label">Select Brain <span style="font-weight:400;color:var(--texts)">(powers Director, Promptwriter, and all episode scripts for this production)</span></label>
         <select class="f-select" id="pdBrain" onchange="updatePdImageUploadAvailability()">
@@ -5335,12 +5400,14 @@ function openProductionWizard(projectId){
             <div style="font-size:22px">📚</div>
             <div style="font-size:11px;font-weight:600;color:var(--violet);margin-top:4px">From Library (${libraryImages.length})</div>
           </div>`:''}
+          ${S.characters&&S.characters.length?`<div onclick="openPdCharacterBiblePicker()" style="flex:1;border:2px dashed var(--border);border-radius:14px;padding:16px 10px;text-align:center;cursor:pointer;background:rgba(61,31,122,0.02)">
+            <div style="font-size:22px">🎭</div>
+            <div style="font-size:11px;font-weight:600;color:var(--violet);margin-top:4px">Character Bible (${S.characters.length})</div>
+          </div>`:''}
         </div>
         <div id="pdRefPreview" style="display:flex;gap:6px;flex-wrap:wrap"></div>
       </div>
-      <div id="pdRefImagesDisabledNote" style="display:none;font-size:11px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:10px;margin-bottom:14px">🔒 Reference image upload needs Claude, Gemini, OpenAI, or AICredits (with a vision model chosen) as the brain — Groq and DeepSeek don't support image input. Switch brains above to enable it.</div>
-
-      <div class="f-group"><label class="f-label">Idea / Concept / Character Description</label><textarea class="f-textarea" id="pdConcept" style="min-height:80px" placeholder="Describe anything — a character, a scene, a whole premise…"></textarea></div>
+      <div id="pdRefImagesDisabledNote" style="display:none;font-size:11px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:10px;margin-bottom:14px"></div>
 
       <div class="f-group"><label class="f-label">1. Image Model</label><select class="f-select" id="pdImageModel">
         <option value="fal-ai/flux/schnell">FLUX Schnell</option><option value="fal-ai/flux/dev">FLUX Dev</option><option value="fal-ai/flux-pro/v1.1">FLUX 1.1 Pro</option>
@@ -5357,7 +5424,7 @@ function openProductionWizard(projectId){
       </select></div>
       <div class="f-row">
         <div class="f-group"><label class="f-label">3. Video Quality</label><select class="f-select" id="pdQuality"><option value="720p">720p</option><option value="1080p">1080p</option></select></div>
-        <div class="f-group"><label class="f-label">Aspect Ratio <span style="font-weight:400;color:var(--texts)" id="pdAspectRatioHint"></span></label><select class="f-select" id="pdAspectRatio"></select></div>
+        <div class="f-group"><label class="f-label">Aspect Ratio</label><select class="f-select" id="pdAspectRatio"></select></div>
       </div>
       <div class="f-group">
         <label class="f-label">4. Total Duration <span style="font-weight:400;color:var(--texts)" id="pdDurationValueLabel">— seconds</span></label>
@@ -5368,17 +5435,151 @@ function openProductionWizard(projectId){
         <option value="narrative">Narrative only (shared story/character details across episodes)</option>
         <option value="visual">Visual chaining (each episode starts from the previous episode's last frame)</option>
         <option value="both">Both</option>
-      </select></div>
+      </select></div>`;
+}
+
+function initPdSharedFields(){
+  document.getElementById("pdBrain").value=gs("ai_model","claude");
+  updatePdImageUploadAvailability();
+  updatePdAspectRatioOptions();
+  updateClipLenOptions();
+}
+
+function openScriptWizard(projectId){
+  S.pdRefImages=[];
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show";
+  overlay.id="prodWizardModal";
+  overlay.innerHTML=`
+    <div class="modal project-modal">
+      ${wizardHeaderControls()}
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:6px">📜 New Production — Script Intake</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Bring images, a script file, pasted text — whatever you've got, all optional. The Director works from your exact words.</div>
+
+      <div class="f-group">
+        <label class="f-label">Select Brain <span style="font-weight:400;color:var(--texts)">(powers Director, Scriptwriter, and all episode scripts)</span></label>
+        <select class="f-select" id="pdBrain" onchange="updatePdImageUploadAvailability()">
+          <option value="claude">Claude (Anthropic) — Best Quality, supports images</option>
+          <option value="gemini">Google Gemini — Cheap, supports images</option>
+          <option value="openai">OpenAI GPT-4o — supports images</option>
+          <option value="groq">Groq Llama 3.3 — Free, text only</option>
+          <option value="deepseek">DeepSeek V3 — Ultra Cheap, text only</option>
+          <option value="aicredits">AICredits Gateway — supports images if your chosen model does (Claude/GPT-4o/Gemini)</option>
+        </select>
+      </div>
+
+      <div class="f-group" id="pdRefImagesWrap">
+        <label class="f-label">1. Images <span style="font-weight:400;color:var(--texts)">(optional, up to 9 — skip this and the Director will design characters from your script instead)</span></label>
+        <input type="file" accept="image/*" multiple id="pdRefUpload" style="display:none" onchange="handlePdRefUpload(event)">
+        <div style="display:flex;gap:10px;margin-bottom:8px">
+          <div onclick="document.getElementById('pdRefUpload').click()" style="flex:1;border:2px dashed var(--border);border-radius:14px;padding:16px 10px;text-align:center;cursor:pointer;background:rgba(61,31,122,0.02)">
+            <div style="font-size:22px">📤</div>
+            <div style="font-size:11px;font-weight:600;color:var(--violet);margin-top:4px">Browse Device</div>
+          </div>
+          ${(S.uploads||[]).filter(u=>u.kind==="image").length?`<div onclick="openPdLibraryPicker()" style="flex:1;border:2px dashed var(--border);border-radius:14px;padding:16px 10px;text-align:center;cursor:pointer;background:rgba(61,31,122,0.02)">
+            <div style="font-size:22px">📚</div>
+            <div style="font-size:11px;font-weight:600;color:var(--violet);margin-top:4px">Site Gallery</div>
+          </div>`:''}
+          ${S.characters&&S.characters.length?`<div onclick="openPdCharacterBiblePicker()" style="flex:1;border:2px dashed var(--border);border-radius:14px;padding:16px 10px;text-align:center;cursor:pointer;background:rgba(61,31,122,0.02)">
+            <div style="font-size:22px">🎭</div>
+            <div style="font-size:11px;font-weight:600;color:var(--violet);margin-top:4px">Character Bible</div>
+          </div>`:''}
+        </div>
+        <div id="pdRefPreview" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+      <div id="pdRefImagesDisabledNote" style="display:none;font-size:11px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:10px;margin-bottom:14px"></div>
+
+      <div class="f-group">
+        <label class="f-label">2. Upload Script File <span style="font-weight:400;color:var(--texts)">(optional — .docx, .pdf, .html, .txt)</span></label>
+        <input type="file" accept=".docx,.pdf,.html,.htm,.txt" id="pdScriptFile" style="display:none" onchange="handleScriptFileUpload(event)">
+        <button type="button" class="btn btn-outline btn-full" onclick="document.getElementById('pdScriptFile').click()">📤 Choose Script File</button>
+        <div id="pdScriptFileStatus" style="font-size:11px;color:var(--textm);margin-top:6px"></div>
+      </div>
+
+      <div class="f-group">
+        <label class="f-label">3. Or Paste Your Script <span style="font-weight:400;color:var(--texts)">(optional — a file upload above will fill this in too, review/edit freely)</span></label>
+        <textarea class="f-textarea" id="pdScriptText" style="min-height:140px" placeholder="Paste your script here…"></textarea>
+      </div>
+
+      ${renderPdSharedFields()}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="cancelProductionWizard()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitScriptIntake('${projectId}')">Next: Director Review →</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  initPdSharedFields();
+}
+
+async function handleScriptFileUpload(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  const statusEl=document.getElementById("pdScriptFileStatus");
+  statusEl.textContent="⏳ Reading "+file.name+"…";
+  try{
+    const text=await extractTextFromScriptFile(file);
+    if(!text||!text.trim()){
+      statusEl.innerHTML=`<span style="color:var(--red)">⚠️ Couldn't find readable text in this file (scanned/image-based PDFs have none) — try pasting your script directly below instead.</span>`;
+      return;
+    }
+    document.getElementById("pdScriptText").value=text;
+    statusEl.innerHTML=`<span style="color:var(--green)">✓ Loaded ${text.length.toLocaleString()} characters from ${file.name} — review below, edit freely</span>`;
+  }catch(err){
+    statusEl.innerHTML=`<span style="color:var(--red)">❌ ${err.message}</span>`;
+  }
+  event.target.value="";
+}
+
+function submitScriptIntake(projectId){
+  const scriptText=document.getElementById("pdScriptText").value.trim();
+  if(!scriptText){toast("Upload a script file or paste your script text first","error");return;}
+  const requested=parseFloat(document.getElementById("pdDuration").value)||0;
+  if(!requested){toast("Enter a total duration","error");return;}
+  const videoModel=document.getElementById("pdVideoModel").value;
+  const durConfig=VIDEO_MODEL_DURATIONS[videoModel];
+  const clipLen=durConfig?Math.max(...durConfig.options):15;
+  const imageModel=document.getElementById("pdImageModel").value;
+  const quality=document.getElementById("pdQuality").value;
+  const aspectRatio=document.getElementById("pdAspectRatio").value;
+  const continuity=document.getElementById("pdContinuity").value;
+  const brainModel=document.getElementById("pdBrain").value;
+  const refImages=[...S.pdRefImages];
+
+  // TEMPORARY: same placeholder fixed-6-episode math as the Idea/Concept path,
+  // replaced by the real variable-episode-count + weighted-duration engine next.
+  const rounded=roundProductionDuration(requested,clipLen);
+  const totalShots=rounded/clipLen;
+  const shotsPerEp=totalShots/6;
+
+  const draft={
+    projectId,concept:scriptText.slice(0,200),imageModel,videoModel,quality,aspectRatio,clipLen,
+    totalDurationRequested:requested,totalDurationRounded:rounded,totalShots,shotsPerEp,continuity,brainModel,refImages,
+    reviewedCharacterDesc:"",hasFullScript:true,fullScriptText:scriptText,
+  };
+  S.pendingProductionDraft=draft;
+  document.getElementById("prodWizardModal").querySelector(".modal").innerHTML=`${wizardHeaderControls()}<div style="text-align:center;padding:40px 0;color:var(--textm)">Loading…</div>`;
+  renderDirectorReviewStep();
+}
+
+function openProductionWizard(projectId){
+  S.pdRefImages=[]; // reset reference image selection for this new wizard session
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show";
+  overlay.id="prodWizardModal";
+  overlay.innerHTML=`
+    <div class="modal project-modal">
+      ${wizardHeaderControls()}
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:6px">🎬 New Production — Director Intake</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Give the Director your idea. He'll ask a few questions, then hand off to the Assistant Director for budgeting.</div>
+      ${renderPdSharedFields()}
+      <div class="f-group"><label class="f-label">Idea / Concept / Character Description</label><textarea class="f-textarea" id="pdConcept" style="min-height:80px" placeholder="Describe anything — a character, a scene, a whole premise…"></textarea></div>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
         <button class="btn btn-ghost" onclick="cancelProductionWizard()">Cancel</button>
         <button class="btn btn-primary" onclick="submitDirectorIntake('${projectId}')">Next: Director Review →</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  document.getElementById("pdBrain").value=gs("ai_model","claude");
-  updatePdImageUploadAvailability();
-  updatePdAspectRatioOptions();
-  updateClipLenOptions();
+  initPdSharedFields();
 }
 
 function isPdBrainVisionCapable(brain){
@@ -5458,6 +5659,40 @@ function openPdLibraryPicker(){
       <div style="text-align:right"><button class="btn btn-primary btn-sm" onclick="document.getElementById('pdLibraryPickerModal').remove()">Done</button></div>
     </div>`;
   document.body.appendChild(overlay);
+}
+
+function openPdCharacterBiblePicker(){
+  const chars=(S.characters||[]).filter(c=>c.refImg);
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show";
+  overlay.id="pdCharBibleModal";
+  overlay.innerHTML=`
+    <div class="modal" style="position:relative">
+      <button onclick="document.getElementById('pdCharBibleModal').remove()" aria-label="Close" style="position:absolute;top:14px;right:14px;width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--red);font-size:12px;cursor:pointer;z-index:5">✕</button>
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:14px">🎭 Choose from Character Bible</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-height:300px;overflow-y:auto;margin-bottom:14px">
+        ${chars.map(c=>`<div style="text-align:center">
+          <img src="${c.refImg}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer;border:2px solid ${S.pdRefImages.some(r=>r.id===c.id)?'var(--violet)':'transparent'}" onclick="togglePdCharBibleImage('${c.id}')">
+          <div style="font-size:10px;color:var(--textm);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name||'Unnamed'}</div>
+        </div>`).join('')}
+      </div>
+      <div style="text-align:right"><button class="btn btn-primary btn-sm" onclick="document.getElementById('pdCharBibleModal').remove()">Done</button></div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function togglePdCharBibleImage(charId){
+  const existing=S.pdRefImages.findIndex(r=>r.id===charId);
+  if(existing>=0){
+    S.pdRefImages.splice(existing,1);
+  } else {
+    if(S.pdRefImages.length>=9){toast("Max 9 reference images total","error");return;}
+    const c=S.characters.find(x=>x.id===charId);
+    if(c)S.pdRefImages.push({id:c.id,dataUrl:c.refImg});
+  }
+  renderPdRefPreview();
+  document.getElementById("pdCharBibleModal")?.remove();
+  openPdCharacterBiblePicker();
 }
 
 function togglePdLibraryImage(uploadId){
@@ -5550,9 +5785,53 @@ function submitDirectorIntake(projectId){
 async function renderDirectorReviewStep(){
   const draft=S.pendingProductionDraft;
   const modal=document.getElementById("prodWizardModal");
-  const brainLabel={claude:"Claude",gemini:"Gemini",openai:"GPT-4o"}[draft.brainModel]||draft.brainModel;
-  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",openai:"api_openai"};
-  const hasKeyForBrain=isBrainVisionCapable(draft.brainModel)&&!!gs(apiKeyMap[draft.brainModel],"");
+  const brainLabel={claude:"Claude",gemini:"Gemini",openai:"GPT-4o",groq:"Groq",deepseek:"DeepSeek",aicredits:"AICredits"}[draft.brainModel]||draft.brainModel;
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",openai:"api_openai",groq:"api_groq",deepseek:"api_deepseek",aicredits:"api_aicredits"};
+
+  // Script provided but no reference images — generate character design &
+  // description directly from the script text instead of reviewing images.
+  if(draft.hasFullScript&&!draft.refImages.length){
+    const hasAnyKey=!!gs(apiKeyMap[draft.brainModel],"");
+    modal.querySelector(".modal").innerHTML=`
+      ${wizardHeaderControls()}<div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:10px">🎭 Character Design from Script</div>
+      <div id="reviewStatus" style="font-size:12px;color:var(--textm);padding:16px;text-align:center">${hasAnyKey?`⏳ Reading your script and designing characters with ${brainLabel}…`:''}</div>
+      ${!hasAnyKey?`
+        <div style="font-size:12px;color:var(--red);background:rgba(239,68,68,0.08);border-radius:8px;padding:12px;margin-bottom:14px">${brainLabel} needs a valid API key in Settings. Add one, or skip and proceed without generated character descriptions.</div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn btn-ghost" onclick="cancelProductionWizard()">Cancel</button>
+          <button class="btn btn-outline" onclick="skipDirectorReview()">Skip — Proceed Without Character Design →</button>
+        </div>
+      `:''}
+    `;
+    if(!hasAnyKey)return;
+    try{
+      const reply=await callAiSimple(
+        `Here is a full script for a video production:\n\n"${draft.fullScriptText.slice(0,8000)}"\n\nAnalyze it and write a detailed character design & description covering: each named character's appearance (face, build, clothing, distinguishing features), the overall art style, color palette, and setting/mood — everything a director would need to keep every shot visually consistent, since no reference images were provided. Be specific and concrete, not vague.`,
+        "You are the Director for an AI video production pipeline, designing characters from a script when no reference images exist. Be precise and concrete.",
+        draft.brainModel
+      );
+      draft.reviewedCharacterDesc=reply;
+      modal.querySelector(".modal").innerHTML=`
+        ${wizardHeaderControls()}<div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:10px">🎭 Character Design from Script</div>
+        <div style="font-size:11px;color:var(--textm);margin-bottom:6px">Director's character design — edit if needed, this feeds every episode's prompts:</div>
+        <textarea class="f-textarea" id="reviewedDescText" style="min-height:160px">${reply}</textarea>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+          <button class="btn btn-ghost" onclick="cancelProductionWizard()">Cancel</button>
+          <button class="btn btn-primary" onclick="confirmDirectorReview()">Next: Assistant Director →</button>
+        </div>`;
+    }catch(err){
+      modal.querySelector(".modal").innerHTML=`
+        ${wizardHeaderControls()}<div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:10px">🎭 Character Design from Script</div>
+        <div style="font-size:12px;color:var(--red);background:rgba(239,68,68,0.08);border-radius:8px;padding:12px;margin-bottom:14px">❌ ${err.message}</div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn btn-ghost" onclick="cancelProductionWizard()">Cancel</button>
+          <button class="btn btn-outline" onclick="skipDirectorReview()">Skip — Proceed Without Character Design →</button>
+        </div>`;
+    }
+    return;
+  }
+
+  const hasKeyForBrain=isPdBrainVisionCapable(draft.brainModel)&&!!gs(apiKeyMap[draft.brainModel],"");
   modal.querySelector(".modal").innerHTML=`
     ${wizardHeaderControls()}<div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:10px">🔍 Director Review</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${draft.refImages.map(r=>`<img src="${r.dataUrl}" style="width:60px;height:60px;border-radius:6px;object-fit:cover">`).join('')}</div>
