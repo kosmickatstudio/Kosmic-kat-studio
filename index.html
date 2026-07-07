@@ -64,7 +64,7 @@ body{font-family:'Inter',sans-serif;background:var(--pearl);color:var(--text);ov
 #stars{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.22}
 
 /* ── HEADER ── */
-header{position:relative;z-index:50;height:var(--header);background:var(--glass);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-bottom:1px solid var(--glass-brd);display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0;box-shadow:0 1px 20px rgba(0,0,0,0.04)}
+header{position:relative;z-index:50;height:var(--header);background:var(--glass);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-bottom:1px solid var(--glass-brd);display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 16px;flex-shrink:0;box-shadow:0 1px 20px rgba(0,0,0,0.04)}
 header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--glow-gold),transparent)}
 .h-logo{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}
 .h-logo-img-wrap{width:40px;height:40px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px var(--glow-gold),0 0 0 2px var(--glass-brd)}
@@ -396,6 +396,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 
 <!-- HEADER -->
 <header>
+  <button class="hamburger" id="hamburger" onclick="toggleSidebar()" style="flex-shrink:0">☰</button>
   <a class="h-logo" href="#" ondblclick="location.reload();return false">
     <div class="h-logo-img-wrap"><img id="logo-img" src="" alt="KK"></div>
     <div>
@@ -405,15 +406,12 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   </a>
   <div class="h-center"></div>
   <div class="h-right">
-    <div class="h-right-top">
-      <span class="founder-badge" id="founderBadge" style="display:none">👑 Founder</span>
-    </div>
-    <div class="h-right-bottom">
-      <button class="h-settings" onclick="openSettings()" title="Settings">⚙️</button>
+    <div class="h-avatar-wrap" style="position:relative;display:flex">
       <button class="sign-in-btn" id="signInBtn" onclick="handleAccountBtnClick()">Sign In</button>
+      <span id="founderBadge" style="display:none;position:absolute;top:-5px;right:-5px;font-size:12px;line-height:1;background:var(--surface);border-radius:50%;padding:2px;box-shadow:0 0 0 1.5px var(--gold),0 2px 8px var(--glow-gold);pointer-events:none">👑</span>
     </div>
   </div>
-  <button class="hamburger" id="hamburger" onclick="toggleSidebar()" style="flex-shrink:0">☰</button>
+  <button class="h-settings" onclick="openSettings()" title="Settings" style="flex-shrink:0">⚙️</button>
 </header>
 
 <!-- STUDIO BODY -->
@@ -867,7 +865,31 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 // KOSMIC KAT AI STUDIO v2.0
 // ════════════════════════════════════════
 
-const FOUNDERS = ["kosmic735@gmail.com","khansohailpathan360@gmail.com","sohailykhan290@gmail.com","playgamesohel@gmail.com"];
+// Founder emails are stored as SHA-256 hashes, never in plaintext, so opening
+// dev tools or viewing source never exposes a real address.
+const FOUNDER_HASHES = ["0d1da5ec1409e3604bcd6caebe3caced293e6546cf0fd5a358a18d72e843f9de","8bdb7299885e9e1bcbc448640ef9ccf0e96bff91b6a05762a9b3616efcde1591","b24d75b91ab9cc50dfaad6f8131a126b4cd06c02d1322c3443a18e31a2ebafe8","e4e5fe80b172c6cc4881b05ff72aac437d6b0da641120ab1fde6f058e467dae4"];
+async function hashEmail(email){
+  if(!email)return "";
+  const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(email.toLowerCase().trim()));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+async function isFounderEmail(email){
+  if(!email)return false;
+  return FOUNDER_HASHES.includes(await hashEmail(email));
+}
+function maskEmail(email){
+  if(!email||email==="guest")return "guest";
+  if(email.indexOf("@")<0)return email;
+  const at=email.indexOf("@");
+  if(at<1)return "•••";
+  const user=email.slice(0,at),domain=email.slice(at+1);
+  const dot=domain.indexOf(".");
+  const domainName=dot>0?domain.slice(0,dot):domain;
+  const domainRest=dot>0?domain.slice(dot):"";
+  const mu=user.length<=2?user[0]+"•":user[0]+"•".repeat(Math.max(1,user.length-2))+user[user.length-1];
+  const md=domainName[0]+"•".repeat(Math.max(1,domainName.length-1));
+  return `${mu}@${md}${domainRest}`;
+}
 
 const API_SERVICES = [
   {key:"anthropic", label:"Anthropic", ph:"sk-ant-…", mod:"claude"},
@@ -6604,7 +6626,7 @@ function renderHierarchyPanel(projectId,activeAssistantId,allDirectors){
   const project=S.projects.find(p=>p.id===projectId);
   const showrunnerName=(S.user&&S.user.email!=="guest")?S.user.email:"Not signed in";
   const roster=S.team||[];
-  const episodeDirectorOptions=[{email:showrunnerName,label:`${showrunnerName} (Showrunner)`},...roster.map(m=>({email:m.email,label:`${m.email} (${m.role})`}))];
+  const episodeDirectorOptions=[{email:showrunnerName,label:`${maskEmail(showrunnerName)} (Showrunner)`},...roster.map(m=>({email:m.email,label:`${maskEmail(m.email)} (${m.role})`}))];
   const currentEpDirector=project?(project.episodeDirector||showrunnerName):showrunnerName;
   const activeAssistant=allDirectors.find(d=>d.id===activeAssistantId);
 
@@ -6614,7 +6636,7 @@ function renderHierarchyPanel(projectId,activeAssistantId,allDirectors){
     <div style="display:flex;flex-direction:column;gap:2px">
       <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(201,151,42,0.08);border-radius:8px 8px 0 0">
         <span style="font-size:18px">👑</span>
-        <div style="flex:1"><div style="font-size:9px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em">Showrunner</div><div style="font-size:12px;font-weight:600;color:var(--text)">${showrunnerName}</div></div>
+        <div style="flex:1"><div style="font-size:9px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em">Showrunner</div><div style="font-size:12px;font-weight:600;color:var(--text)">${maskEmail(showrunnerName)}</div></div>
       </div>
       <div style="height:14px;width:1.5px;background:var(--border);margin-left:19px"></div>
       <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(61,31,122,0.05)">
@@ -8381,13 +8403,13 @@ function renderTeam(el){
     <div style="font-size:11px;color:var(--textm);background:rgba(201,151,42,0.08);border:1px solid rgba(201,151,42,0.2);border-radius:8px;padding:10px;margin-bottom:14px">
       ${isFounder
         ?'✅ Real, working now: signing in with Google is real (Firebase Auth), and Founder-only areas (this roster, Settings → API Keys) are actually locked to founder accounts — a non-founder signed-in user genuinely cannot edit these on this device.<br><br>⚠ Still not real: this roster itself is stored locally in this browser only. Adding "Sarah" as Director here does not give Sarah an actual account or actual permissions when she signs in on her own device — it\'s a reference list, not a live permission system. Making that fully real (so invited members get enforced roles wherever they sign in) needs a shared database (Firestore), not just this device\'s storage.'
-        :`🔒 Signed in as ${S.user?S.user.email:'guest'} — Team Manager is Founder-only. You can view the roster below but can't invite or remove members.`}
+        :`🔒 Signed in as ${S.user?maskEmail(S.user.email):'guest'} — Team Manager is Founder-only. You can view the roster below but can't invite or remove members.`}
     </div>
 
     <div class="panel">
       <div class="panel-title">👑 Founders (permanent, hardcoded)</div>
       <div style="display:flex;flex-direction:column;gap:6px">
-        ${FOUNDERS.map(email=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--textm)"><span class="badge badge-gold">👑 Founder</span> ${email}</div>`).join('')}
+        ${isFounder?`<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--textm)"><span class="badge badge-gold">👑 Founder</span> ${maskEmail(S.user.email)} (you)</div>`:`<div style="font-size:12px;color:var(--texts)">Founder identities are private — not shown here.</div>`}
       </div>
     </div>
 
@@ -8801,7 +8823,7 @@ function isFounderUser(){return !!(S.user&&S.user.isFounder);}
 // ── ACTIVITY LOG (local, device-scoped — see honesty note in Team Manager) ──
 function logActivity(action){
   S.activityLog=S.activityLog||[];
-  const who=(S.user&&S.user.email!=="guest")?S.user.email:"local session";
+  const who=(S.user&&S.user.email!=="guest")?maskEmail(S.user.email):"local session";
   S.activityLog.unshift({action,who,ts:new Date().toISOString()});
   if(S.activityLog.length>50)S.activityLog=S.activityLog.slice(0,50);
   save("activityLog");
@@ -8810,7 +8832,7 @@ function logActivity(action){
 function buildApiKeyFields(){
   const wrap=document.getElementById("apiKeyFields");
   if(!isFounderUser()){
-    const who=S.user&&S.user.email!=="guest"?`Signed in as ${S.user.email} — ask a founder to manage keys, or sign in with a founder account.`:`Sign in with a founder account to manage API keys.`;
+    const who=S.user&&S.user.email!=="guest"?`Signed in as ${maskEmail(S.user.email)} — ask a founder to manage keys, or sign in with a founder account.`:`Sign in with a founder account to manage API keys.`;
     wrap.innerHTML=`<div style="font-size:12px;color:var(--textm);background:rgba(201,151,42,0.08);border:1px solid rgba(201,151,42,0.2);border-radius:8px;padding:12px">🔒 API keys are billed to the studio founder and are Founder-only. ${who}</div>`;
     return;
   }
@@ -8879,12 +8901,12 @@ function closeAuth(){document.getElementById("authModal").classList.remove("show
 function authWithGoogle(){
   const provider=new firebase.auth.GoogleAuthProvider();
   fbAuth.signInWithPopup(provider)
-    .then(result=>{
+    .then(async result=>{
       const email=result.user.email;
-      S.user={email,provider:"google",uid:result.user.uid,name:result.user.displayName||"",photo:result.user.photoURL,isFounder:FOUNDERS.includes(email)};
+      S.user={email,provider:"google",uid:result.user.uid,name:result.user.displayName||"",photo:result.user.photoURL,isFounder:await isFounderEmail(email)};
       updateUserUI();
       closeAuth();
-      toast(`✅ Signed in as ${email}`,"success");
+      toast(`✅ Signed in as ${maskEmail(email)}`,"success");
     })
     .catch(err=>{
       console.error("Auth error:",err);
@@ -8917,7 +8939,7 @@ function updateUserUI(){
       btn.innerHTML=`<span style="width:100%;height:100%;border-radius:50%;background:var(--vm);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">${displayName.charAt(0).toUpperCase()}</span>`;
     }
     btn.title=displayName;
-    if(accInfo)accInfo.textContent=`Signed in as ${displayName} (${S.user.email})`;
+    if(accInfo)accInfo.textContent=`Signed in as ${displayName}`;
     if(S.user.isFounder)badge.style.display="inline";
     const signedOutEl=document.getElementById("spProfileSignedOut");
     const signedInEl=document.getElementById("spProfileSignedIn");
@@ -8926,7 +8948,7 @@ function updateUserUI(){
     const photoEl=document.getElementById("spProfilePhoto");
     if(photoEl)photoEl.src=S.user.photo||"";
     const emailEl=document.getElementById("spProfileEmail");
-    if(emailEl)emailEl.textContent=S.user.email;
+    if(emailEl)emailEl.textContent=maskEmail(S.user.email);
     const founderEl=document.getElementById("spProfileFounderBadge");
     if(founderEl)founderEl.style.display=S.user.isFounder?"block":"none";
     const nameInput=document.getElementById("spDisplayNameInput");
@@ -9196,9 +9218,9 @@ function init(){
   applyTheme(gs("theme","auto"));
 
   // Restore user — real Firebase session, not a localStorage guess
-  fbAuth.onAuthStateChanged(user=>{
+  fbAuth.onAuthStateChanged(async user=>{
     if(user){
-      S.user={email:user.email,provider:"google",uid:user.uid,name:user.displayName||"",photo:user.photoURL,isFounder:FOUNDERS.includes(user.email)};
+      S.user={email:user.email,provider:"google",uid:user.uid,name:user.displayName||"",photo:user.photoURL,isFounder:await isFounderEmail(user.email)};
     } else if(S.user&&S.user.provider!=="guest"){
       S.user=null;
     }
