@@ -6261,9 +6261,24 @@ async function generateEpisodeScript(prodId,epIndex){
   e.shotsExpected=1; // each episode's duration is already clamped to fit one clip — see parsePromptwriterOutput
   toast(`✍️ Episode ${epIndex} writing script…`,"");
   const feedbackNote=e.scriptRejectionFeedback?`\n\nYour previous attempt was rejected for this reason — address it directly: "${e.scriptRejectionFeedback}"`:"";
+
+  // Real narrative continuity: carry forward what earlier episodes actually
+  // established, not just a generic "stay consistent" instruction with
+  // nothing behind it. Only the earlier episodes' scripts — never later
+  // ones, since those haven't been written yet from this episode's POV.
+  const usesNarrative=p.continuity==="narrative"||p.continuity==="both";
+  let priorContext="";
+  if(usesNarrative){
+    const priorEpisodes=p.episodes.filter(pe=>pe.index<epIndex&&pe.script&&(pe.scriptStatus==="ready"||pe.scriptStatus==="approved"));
+    if(priorEpisodes.length){
+      const summaries=priorEpisodes.map(pe=>`Episode ${pe.index}: ${pe.script}`).join("\n\n");
+      priorContext=`\n\nHere is exactly what happened in the earlier episode${priorEpisodes.length!==1?'s':''} — continue naturally from this, keep every established detail (character appearance, setting, objects, established facts) consistent, don't contradict anything:\n\n${summaries.slice(0,6000)}`;
+    }
+  }
+
   try{
     const reply=await callAiSimple(
-      `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"\n\nWrite a detailed shooting script for a single continuous ${e.duration}-second video clip. Include: camera angle, setting/background, scene time, and precise character movement/action. Format EXACTLY as "SHOT 1: <description>" — this exact format is required for the storyboard step to work.${feedbackNote}`,
+      `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"${priorContext}\n\nWrite a detailed shooting script for a single continuous ${e.duration}-second video clip. Include: camera angle, setting/background, scene time, and precise character movement/action. Format EXACTLY as "SHOT 1: <description>" — this exact format is required for the storyboard step to work.${feedbackNote}`,
       "You are Episode Director for a professional AI video production. Write a precise, filmable shot description. No preamble.",
       p.brainModel
     );
@@ -6406,6 +6421,53 @@ async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImag
   return videoUrl;
 }
 
+// ── REAL LAST-FRAME EXTRACTION — for genuine visual chaining. Loads the
+// actual generated video, seeks to its end, captures that frame via canvas.
+// fal.media may or may not permit cross-origin canvas reads — if it doesn't,
+// this throws (a "tainted canvas" security error) and the caller falls back
+// to the old storyboard-image approach rather than breaking the feature.
+function extractLastFrameFromVideo(videoUrl){
+  return new Promise((resolve,reject)=>{
+    const video=document.createElement("video");
+    video.crossOrigin="anonymous";
+    video.muted=true;
+    video.playsInline=true;
+    let settled=false;
+    const fail=(err)=>{if(!settled){settled=true;reject(err);}};
+    video.addEventListener("loadedmetadata",()=>{
+      video.currentTime=Math.max(0,video.duration-0.15);
+    });
+    video.addEventListener("seeked",()=>{
+      if(settled)return;
+      try{
+        const canvas=document.createElement("canvas");
+        canvas.width=video.videoWidth;
+        canvas.height=video.videoHeight;
+        const ctx=canvas.getContext("2d");
+        ctx.drawImage(video,0,0);
+        const dataUrl=canvas.toDataURL("image/jpeg",0.9); // throws if canvas is CORS-tainted
+        settled=true;
+        resolve(dataUrl);
+      }catch(err){
+        fail(err);
+      }
+    });
+    video.addEventListener("error",()=>fail(new Error("Video failed to load for frame extraction")));
+    setTimeout(()=>fail(new Error("Frame extraction timed out")),15000);
+    video.src=videoUrl;
+  });
+}
+
+async function getChainedReferenceFrame(fallbackUrl,videoUrl){
+  if(!videoUrl)return fallbackUrl;
+  try{
+    return await extractLastFrameFromVideo(videoUrl);
+  }catch(err){
+    console.warn("Last-frame extraction failed, falling back to storyboard image:",err.message);
+    return fallbackUrl;
+  }
+}
+
 async function generateEpisodeScene(prodId,epIndex,retryOnly=false){
   const p=S.productions.find(x=>x.id===prodId);
   const e=getEpisode(p,epIndex);
@@ -6417,17 +6479,27 @@ async function generateEpisodeScene(prodId,epIndex,retryOnly=false){
   toast(`🎬 Episode ${epIndex} generating ${indicesToGenerate.length} clip${indicesToGenerate.length!==1?'s':''}…`,"");
 
   // Cross-episode chaining: if visual continuity is on and this isn't episode 1,
-  // seed the first shot's reference from the previous episode's last approved frame.
+  // seed the first shot's reference from the previous episode's ACTUAL last
+  // rendered frame (extracted via canvas) — falls back to the storyboard
+  // reference image automatically if extraction fails (e.g. CORS).
   let priorLastFrame=null;
   if(useVisualChain&&epIndex>1){
     const prevEp=getEpisode(p,epIndex-1);
     const lastShot=prevEp.shots[prevEp.shots.length-1];
-    if(lastShot&&lastShot.videoUrl)priorLastFrame=prevEp.storyboard[prevEp.storyboard.length-1]?.url||null;
+    const fallback=prevEp.storyboard[prevEp.storyboard.length-1]?.url||null;
+    if(lastShot&&lastShot.videoUrl)priorLastFrame=await getChainedReferenceFrame(fallback,lastShot.videoUrl);
   }
 
   for(const i of indicesToGenerate){
     const sb=e.storyboard[i];
-    const refImage=i===0?priorLastFrame:(useVisualChain?e.storyboard[i-1].url:null);
+    let refImage=null;
+    if(i===0){
+      refImage=priorLastFrame;
+    } else if(useVisualChain){
+      const prevShot=e.shots.find(s=>s.shotIndex===i-1);
+      const fallback=e.storyboard[i-1].url;
+      refImage=prevShot&&prevShot.videoUrl?await getChainedReferenceFrame(fallback,prevShot.videoUrl):fallback;
+    }
     try{
       const videoUrl=await runProductionVideoGen(p.videoModel,`${sb.desc}, ${p.characterDesc}`,p.aspectRatio,e.duration,p.quality,refImage);
       e.shots.push({shotIndex:i,videoUrl,refImage});
