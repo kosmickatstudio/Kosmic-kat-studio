@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Kosmic Kat AI Studio</title>
+<title>KosmicKat AI Studio</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#3D1F7A">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Kosmic Kat AI">
+<meta name="apple-mobile-web-app-title" content="KosmicKat AI">
 <meta name="description" content="AI-driven cinematic content studio — video, image, audio, and ad production powered by Seedance, Kling, Veo, and more.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1011,7 +1011,7 @@ function logCost(key,note){
 }
 
 // ── LOGO ──
-const LOGO_SRC = "https://raw.githubusercontent.com/kosmickatstudio/Kosmic-kat-studio/main/logo.png";
+const LOGO_SRC = "logo.png";
 function injectLogos(){
   const imgs = document.querySelectorAll("#logo-img,#modal-logo,#loader-logo-img");
   imgs.forEach(img=>{
@@ -3538,7 +3538,7 @@ function applyWatermark(imgUrl){
         ctx.font=`700 ${fontSize}px Inter, sans-serif`;
         ctx.textAlign="right";
         ctx.textBaseline="bottom";
-        const text="Kosmic Kat AI Studio";
+        const text="KosmicKat AI Studio";
         const pad=fontSize*0.8;
         ctx.fillStyle="rgba(0,0,0,0.35)";
         ctx.fillText(text,img.width-pad+1,img.height-pad+1);
@@ -6800,7 +6800,7 @@ function renderAdStudio(el){
       ${products.length?`<div class="f-group"><label class="f-label">Load from Product Library</label><select class="f-select" id="productLibSelect" onchange="loadLibraryProduct()"><option value="">— Select saved product —</option>${products.map((p,i)=>`<option value="${i}">${p.name}</option>`).join('')}</select></div>`:''}
       <div class="f-group">
         <label class="f-label">Product / Service</label>
-        <input class="f-input" id="adProduct" placeholder="e.g. Kosmic Kat AI Studio, a cinematic video toolkit">
+        <input class="f-input" id="adProduct" placeholder="e.g. KosmicKat AI Studio, a cinematic video toolkit">
       </div>
       <div class="f-group">
         <label class="f-label">Key selling point</label>
@@ -8795,7 +8795,7 @@ function onNotifsToggle(el){
     Notification.requestPermission().then(perm=>{
       if(perm==="granted"){
         saveSetting("notifs",true);
-        new Notification("Kosmic Kat AI Studio",{body:"Notifications enabled — you'll be alerted when long generations finish.",icon:LOGO_SRC});
+        new Notification("KosmicKat AI Studio",{body:"Notifications enabled — you'll be alerted when long generations finish.",icon:LOGO_SRC});
       } else {
         toast("Notification permission denied by browser — enable it in your browser's site settings","error");
         el.checked=false;saveSetting("notifs",false);
@@ -9105,7 +9105,7 @@ async function sendAiPrompt(){
   // Build messages
   S.aiHistory.push({role:"user",content:msg});
   const directorStyle=getActiveDirectorPrompt();
-  const systemPrompt=`You are the Kosmic Kat AI Director — a creative AI assistant for the Kosmic Kat AI Studio. You help with screenwriting, character development, shot lists, scene descriptions, and creative direction. Be concise and cinematic. Current module: ${S.mod}.${directorStyle?` The active director's visual style is: ${directorStyle}. Weave this style into your creative suggestions.`:''}`;
+  const systemPrompt=`You are the KosmicKat AI Director — a creative AI assistant for the KosmicKat AI Studio. You help with screenwriting, character development, shot lists, scene descriptions, and creative direction. Be concise and cinematic. Current module: ${S.mod}.${directorStyle?` The active director's visual style is: ${directorStyle}. Weave this style into your creative suggestions.`:''}`;
 
   try{
     // Use Anthropic API if claude selected

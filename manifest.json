@@ -1,6 +1,6 @@
 {
-  "name": "Kosmic Kat AI Studio",
-  "short_name": "Kosmic Kat AI",
+  "name": "KosmicKat AI Studio",
+  "short_name": "KosmicKat AI",
   "description": "AI-driven cinematic content studio — video, image, audio, and ad production powered by Seedance, Kling, Veo, and more.",
   "start_url": "/index.html",
   "scope": "/",
