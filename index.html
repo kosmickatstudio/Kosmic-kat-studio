@@ -5885,35 +5885,87 @@ function skipDirectorReview(){
 // ── STEP 2: ASSISTANT DIRECTOR — budget + split ──
 function renderAssistantDirectorStep(){
   const draft=S.pendingProductionDraft;
-  const {videoModel,imageModel,totalShots,clipLen,rounded=draft.totalDurationRounded,shotsPerEp,continuity,aspectRatio}=draft;
+  const {videoModel,imageModel,continuity,aspectRatio}=draft;
+  const durConfig=VIDEO_MODEL_DURATIONS[videoModel];
+  const maxClip=durConfig?Math.max(...durConfig.options):15;
   const costPerClip=COST_TABLE[videoModel]!==undefined?COST_TABLE[videoModel]:0.5;
   const costPerImage=COST_TABLE[imageModel]!==undefined?COST_TABLE[imageModel]:0.02;
-  const videoBudget=totalShots*costPerClip;
-  const storyboardBudget=totalShots*costPerImage;
+  const estShots=Math.ceil(draft.totalDurationRequested/maxClip)+2; // rough estimate, real count set after episode planning
+  const videoBudget=estShots*costPerClip;
+  const storyboardBudget=estShots*costPerImage;
   const textModel=draft.brainModel||gs("ai_model","claude");
   const textCostPerCall=TEXT_AI_COST_ESTIMATE[textModel]!==undefined?TEXT_AI_COST_ESTIMATE[textModel]:0.005;
-  const textBudget=7*textCostPerCall; // 1 Promptwriter call + 6 episode script calls
+  const textBudget=(estShots+1)*textCostPerCall;
   const totalBudget=videoBudget+storyboardBudget+textBudget;
-  const estMinutes=Math.ceil(totalShots*1.5+6*0.5);
+  const estMinutes=Math.ceil(estShots*1.5+2);
 
   const modal=document.getElementById("prodWizardModal");
   modal.querySelector(".modal").innerHTML=`
-    ${wizardHeaderControls()}<div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:14px">🎯 Assistant Director — Budget & Split</div>
+    ${wizardHeaderControls()}<div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:14px">🎯 Assistant Director — Budget Estimate</div>
     <div style="font-size:12px;color:var(--textm);line-height:1.8;background:rgba(61,31,122,0.05);border-radius:8px;padding:12px;margin-bottom:14px">
-      <b>Total:</b> ${draft.totalDurationRounded}s across 6 episodes (${(draft.totalDurationRounded/6)}s each) at ${draft.aspectRatio}<br>
-      <b>Shots per episode:</b> ${draft.shotsPerEp} × ${draft.clipLen}s clips = ${draft.totalShots} total video generations<br>
-      <b>Storyboard images:</b> ${draft.totalShots} keyframes<br>
-      <b>Estimated cost:</b> ~$${totalBudget.toFixed(2)} (video ~$${videoBudget.toFixed(2)} + storyboards ~$${storyboardBudget.toFixed(2)} + text/AI ~$${textBudget.toFixed(3)})<br>
-      <b>Estimated time:</b> ~${estMinutes} minutes of actual generation (spread across script/storyboard/scene approval stages)<br>
+      <b>Requested:</b> ${draft.totalDurationRequested}s total at ${draft.aspectRatio}<br>
+      <b>Estimated cost:</b> ~$${totalBudget.toFixed(2)} (rough — exact episode split comes next)<br>
+      <b>Estimated time:</b> ~${estMinutes} minutes of actual generation (spread across script/storyboard/scene approval)<br>
       <b>Continuity:</b> ${draft.continuity==='narrative'?'Narrative only':draft.continuity==='visual'?'Visual chaining':'Narrative + visual chaining'}
-      ${draft.refImages.length?`<br><b>Reference images:</b> ${draft.refImages.length} reviewed, feeding every episode's Character Description`:''}
+      ${draft.refImages.length?`<br><b>Reference images:</b> ${draft.refImages.length} reviewed, feeding the Character Description`:''}
     </div>
-    <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Next, the Promptwriter will draft 6 Master Prompts + Character Descriptions — one per episode — based on your concept${draft.refImages.length?' and the Director\'s image review':''}.</div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Next: the Director picks how many episodes your story actually needs — could be just one, could be several — based on your total duration and how much the model can handle in a single clip.</div>
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button class="btn btn-ghost" onclick="cancelProductionWizard()">Cancel</button>
-      <button class="btn btn-primary" id="pdConfirmBtn" onclick="runPromptwriter()">Confirm — Start Promptwriter →</button>
+      <button class="btn btn-primary" id="pdConfirmBtn" onclick="renderEpisodePlanningStep()">Confirm — Plan Episodes →</button>
     </div>`;
 }
+
+// ── STEP 2.5: EPISODE PLANNING — variable count, curated options ──
+function generateEpisodeCountOptions(totalDuration,minClip,maxClip){
+  const minCount=Math.max(1,Math.ceil(totalDuration/maxClip));
+  const maxCount=Math.min(10,Math.max(minCount,Math.floor(totalDuration/minClip)));
+  const all=[];
+  for(let c=minCount;c<=maxCount;c++)all.push(c);
+  if(all.length<=4)return all;
+  const picks=[all[0]];
+  const step=(all.length-1)/3;
+  for(let i=1;i<=3;i++)picks.push(all[Math.round(i*step)]);
+  return [...new Set(picks)].sort((a,b)=>a-b);
+}
+
+function renderEpisodePlanningStep(){
+  const draft=S.pendingProductionDraft;
+  const durConfig=VIDEO_MODEL_DURATIONS[draft.videoModel];
+  const maxClip=durConfig?Math.max(...durConfig.options):15;
+  const minClip=durConfig?Math.min(...durConfig.options):3;
+
+  if(draft.totalDurationRequested<=maxClip){
+    draft.episodeCount=1;
+    runPromptwriter();
+    return;
+  }
+
+  const options=generateEpisodeCountOptions(draft.totalDurationRequested,minClip,maxClip);
+  const modal=document.getElementById("prodWizardModal");
+  modal.querySelector(".modal").innerHTML=`
+    ${wizardHeaderControls()}<div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:6px">🎬 How Many Episodes?</div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:16px">Your ${draft.totalDurationRequested}s needs more than one clip on this model (max ${maxClip}s each). Pick how you'd like it split — exact per-episode timing gets decided next based on your story's actual content.</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
+      ${options.map(n=>`<div onclick="selectEpisodeCount(${n})" style="cursor:pointer;border:1.5px solid var(--border);border-radius:14px;padding:14px;display:flex;align-items:center;gap:12px" onmouseover="this.style.borderColor='var(--violet)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-family:'Cinzel',serif;font-size:22px;font-weight:700;color:var(--violet);width:36px;text-align:center">${n}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700;color:var(--text)">${n} Episode${n!==1?'s':''}</div>
+          <div style="font-size:11px;color:var(--textm)">~${Math.round(draft.totalDurationRequested/n)}s each on average — exact split adjusts to your story next</div>
+        </div>
+      </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="cancelProductionWizard()">Cancel</button>
+    </div>`;
+}
+
+function selectEpisodeCount(n){
+  S.pendingProductionDraft.episodeCount=n;
+  runPromptwriter();
+}
+
+
 
 // ── STEP 3: PROMPTWRITER — 6 Master Prompts + Character Descriptions ──
 // ── VISION AI CALL — only Claude, OpenAI, and Gemini's wired models actually
@@ -5995,61 +6047,86 @@ async function callAiVision(images,userPrompt,systemPrompt,modelOverride){
 async function runPromptwriter(){
   const draft=S.pendingProductionDraft;
   if(!draft){toast("Something went wrong — please restart the wizard","error");return;}
-  const btn=document.getElementById("pdConfirmBtn");
-  const modal=document.getElementById("prodWizardModal");
-  btn.disabled=true;btn.textContent="⏳ Promptwriter working…";
-  modal.querySelector(".modal").insertAdjacentHTML("beforeend",`<div id="pwStatus" style="text-align:center;padding:16px;color:var(--textm);font-size:12px">✍️ Drafting 6 Master Prompts…</div>`);
+  const n=draft.episodeCount||1;
+  const durConfig=VIDEO_MODEL_DURATIONS[draft.videoModel];
+  const maxClip=durConfig?Math.max(...durConfig.options):15;
+  const minClip=durConfig?Math.min(...durConfig.options):3;
 
-  const continuityNote=draft.continuity==="narrative"?"All 6 episodes must share consistent characters, setting, and world details — write them as direct narrative continuations of each other.":
-    draft.continuity==="visual"?"Episodes will be visually chained (each starts from the previous episode's last frame) — keep character/setting descriptions consistent so the visual handoff makes sense.":
-    "Episodes share consistent characters/setting/world AND will be visually chained frame-to-frame — keep everything consistent across all 6.";
-  const reviewNote=draft.reviewedCharacterDesc?`\n\nThe Director has already reviewed reference images and provided this visual description — your Character Description MUST match and build on this exactly, don't invent contradictory details:\n"${draft.reviewedCharacterDesc}"`:"";
+  const modal=document.getElementById("prodWizardModal");
+  modal.querySelector(".modal").innerHTML=`${wizardHeaderControls()}<div id="pwStatus" style="text-align:center;padding:30px 16px;color:var(--textm);font-size:12px">✍️ ${n===1?'Writing your episode…':`Splitting into ${n} episodes…`}</div>`;
+
+  const continuityNote=draft.continuity==="narrative"?`All ${n} episode${n!==1?'s':''} must share consistent characters, setting, and world details — write them as direct narrative continuations of each other.`:
+    draft.continuity==="visual"?`Episodes will be visually chained (each starts from the previous episode's last frame) — keep character/setting descriptions consistent so the visual handoff makes sense.`:
+    `Episodes share consistent characters/setting/world AND will be visually chained frame-to-frame — keep everything consistent across all ${n}.`;
+  const reviewNote=draft.reviewedCharacterDesc?`\n\nThe Director has already ${draft.hasFullScript?'designed characters from the script':'reviewed reference images'} and provided this visual description — your Character Description MUST match and build on this exactly, don't invent contradictory details:\n"${draft.reviewedCharacterDesc}"`:"";
+
+  const personaList=DIRECTORS.map(d=>`${d.name.replace('Director ','')} (${d.style})`).join(", ");
+  const durationRule=`Assign each episode a whole-number duration in seconds between ${minClip} and ${maxClip} (this model's real per-clip range). Durations should NOT be equal — weight them by how much story content, action, or complexity that portion actually has. They should roughly add up to ${draft.totalDurationRequested}s total, but favor honest weighting over hitting that number exactly.`;
+
+  const task=draft.hasFullScript
+    ? `Here is the user's exact script:\n\n"${draft.fullScriptText.slice(0,10000)}"\n\nSplit this script into exactly ${n} episode${n!==1?'s':''} — preserve the user's exact wording and content, don't rewrite it. Just divide it at sensible narrative breaks and assign each portion a duration.`
+    : `Concept: "${draft.concept}"\n\nWrite exactly ${n} Master Prompt${n!==1?'s':''} (one per episode) and a shared Character Description block, based on this concept.`;
 
   try{
     const reply=await callAiSimple(
-      `Concept: "${draft.concept}"\n\nWrite exactly 6 Master Prompts (one per episode of a 6-part series) and a shared Character Description block. ${continuityNote}${reviewNote}\n\nFormat EXACTLY like this, nothing else:\nCHARACTERS: <character description text>\nEPISODE 1: <master prompt text for episode 1>\nEPISODE 2: <master prompt text for episode 2>\nEPISODE 3: <master prompt text for episode 3>\nEPISODE 4: <master prompt text for episode 4>\nEPISODE 5: <master prompt text for episode 5>\nEPISODE 6: <master prompt text for episode 6>`,
+      `${task}\n\nAlso pick exactly ONE directorial approach that best fits this story's genre and tone, from this list: ${personaList}.\n\n${continuityNote}${reviewNote}\n\n${durationRule}\n\nFormat EXACTLY like this, nothing else:\nPERSONA: <one name from the list, no title>\nCHARACTERS: <character description text>\nEPISODE 1: <duration>s | <content for episode 1>\nEPISODE 2: <duration>s | <content for episode 2>\n(continue for all ${n} episodes)`,
       "You are a professional Promptwriter for an AI video production pipeline. Follow the requested format exactly, one line per field, no markdown, no extra commentary.",
       draft.brainModel
     );
-    const parsed=parsePromptwriterOutput(reply);
+    const parsed=parsePromptwriterOutput(reply,n,minClip,maxClip);
     if(!parsed)throw new Error("Couldn't parse Promptwriter output — try again");
     createProduction(draft,parsed);
     logCost(draft.brainModel+"_promptwriter","Promptwriter: "+draft.concept.slice(0,40));
     S.pendingProductionDraft=null;
     document.getElementById("prodWizardModal").remove();
-    toast("✍️ Master Prompts ready — 6 Episode Directors assigned","success");
+    toast(`✍️ Script ready — ${n} episode${n!==1?'s':''} assigned to Director ${parsed.persona}`,"success");
   }catch(err){
-    document.getElementById("pwStatus").innerHTML=`<span style="color:var(--red)">❌ ${err.message}</span>`;
-    btn.disabled=false;btn.textContent="Confirm — Start Promptwriter →";
+    modal.querySelector(".modal").innerHTML=`
+      ${wizardHeaderControls()}<div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:10px">✍️ Promptwriter</div>
+      <div style="font-size:12px;color:var(--red);background:rgba(239,68,68,0.08);border-radius:8px;padding:12px;margin-bottom:14px">❌ ${err.message}</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="cancelProductionWizard()">Cancel</button>
+        <button class="btn btn-primary" onclick="runPromptwriter()">Retry →</button>
+      </div>`;
   }
 }
 
-function parsePromptwriterOutput(text){
+function parsePromptwriterOutput(text,n,minClip,maxClip){
+  const personaMatch=text.match(/PERSONA:\s*(\w+)/i);
+  const rawPersonaName=personaMatch?personaMatch[1].trim():"";
+  const matchedDirector=DIRECTORS.find(d=>d.name.toLowerCase().includes(rawPersonaName.toLowerCase())||rawPersonaName.toLowerCase().includes(d.id));
+  const persona=matchedDirector||DIRECTORS[0]; // fallback: first persona if AI's answer didn't match cleanly
+
   const charMatch=text.match(/CHARACTERS:\s*([\s\S]*?)(?=EPISODE 1:)/i);
   const characterDesc=charMatch?charMatch[1].trim():"";
+
   const episodes=[];
-  for(let i=1;i<=6;i++){
-    const re=new RegExp(`EPISODE ${i}:\\s*([\\s\\S]*?)(?=EPISODE ${i+1}:|$)`,"i");
+  for(let i=1;i<=n;i++){
+    const re=new RegExp(`EPISODE ${i}:\\s*(\\d+)s?\\s*\\|\\s*([\\s\\S]*?)(?=EPISODE ${i+1}:|$)`,"i");
     const m=text.match(re);
     if(!m)return null;
-    episodes.push(m[1].trim());
+    let duration=parseInt(m[1],10)||Math.round((minClip+maxClip)/2);
+    duration=Math.max(minClip,Math.min(maxClip,duration)); // clamp to this model's real valid range
+    episodes.push({duration,content:m[2].trim()});
   }
-  return {characterDesc,masterPrompts:episodes};
+  return {characterDesc,episodes,persona:persona.name.replace('Director ',''),personaId:persona.id};
 }
 
 function createProduction(draft,parsed){
-  const approaches=DIRECTORS; // genre-agnostic approach flavors, kept visible per your call
   const production={
     id:"prod_"+Date.now(),
     ...draft,
     characterDesc:parsed.characterDesc,
+    persona:parsed.persona,
+    personaId:parsed.personaId,
     status:"active",
     created:new Date().toISOString(),
-    episodes:parsed.masterPrompts.map((mp,i)=>({
+    episodes:parsed.episodes.map((ep,i)=>({
       index:i+1,
-      approach:approaches[i%approaches.length].name,
-      approachPrompt:approaches[i%approaches.length].prompt,
-      masterPrompt:mp,
+      approach:parsed.persona,
+      approachPrompt:(DIRECTORS.find(d=>d.id===parsed.personaId)||DIRECTORS[0]).prompt,
+      duration:ep.duration,
+      masterPrompt:ep.content,
       script:null,scriptStatus:"pending", // pending -> ready -> approved
       storyboard:[],storyboardStatus:"pending",
       shots:[],sceneStatus:"pending",
@@ -6069,7 +6146,7 @@ function openProductionDetail(prodId){
   el.innerHTML=`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
       <button class="btn btn-ghost btn-sm" onclick="renderModule('directors')">← Directorial Studio</button>
-      <div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">🎬 ${p.concept.slice(0,60)}</div><div style="font-size:11px;color:var(--textm)">${p.totalDurationRounded}s · ${p.shotsPerEp} shots/episode · ${p.continuity}</div></div>
+      <div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">🎬 ${p.concept.slice(0,60)}</div><div style="font-size:11px;color:var(--textm)">${p.episodes.length} episode${p.episodes.length!==1?'s':''} · Director ${p.persona||''} · ${p.continuity}</div></div>
       ${allApproved?`<button class="btn btn-primary btn-sm" onclick="finalizeProductionToEditor('${p.id}')">🎞 Finalize to Video Editor</button>`:''}
     </div>
     <div class="panel">
@@ -6113,7 +6190,7 @@ function episodeCardHTML(p,e){
         <span style="font-size:11px;font-weight:700;color:var(--violet)">2. STORYBOARD</span>${stageBadge(e.storyboardStatus,{pending:'Not generated',ready:'Awaiting your approval',partial:'⚠️ Incomplete',approved:'✅ Approved',rejected:'❌ Rejected — redoing'})}
       </div>
       ${e.storyboardStatus==='pending'?`<button class="btn btn-primary btn-sm" onclick="generateEpisodeStoryboard('${p.id}',${e.index})">🖼 Generate Storyboard</button>`:''}
-      ${e.storyboardStatus==='partial'?`<div style="font-size:11px;color:#b45309;margin-bottom:6px">Only ${e.storyboard.length} of ${p.shotsPerEp} shots generated — approving now will produce an incomplete scene.</div>`:''}
+      ${e.storyboardStatus==='partial'?`<div style="font-size:11px;color:#b45309;margin-bottom:6px">Only ${e.storyboard.length} of ${e.shotsExpected||1} shot${(e.shotsExpected||1)!==1?'s':''} generated — approving now will produce an incomplete scene.</div>`:''}
       ${e.storyboard.length?`<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:6px">${e.storyboard.map(s=>`<img src="${s.url}" style="width:70px;height:70px;border-radius:6px;object-fit:cover;flex-shrink:0">`).join('')}</div>`:''}
       ${(e.storyboardStatus==='ready'||e.storyboardStatus==='partial')?`<div style="display:flex;gap:6px;flex-wrap:wrap">
         ${e.storyboardStatus==='partial'?`<button class="btn btn-primary btn-xs" onclick="generateEpisodeStoryboard('${p.id}',${e.index},true)">🔄 Retry Missing Shots</button>`:''}
@@ -6181,12 +6258,13 @@ async function rejectEpisodeStage(prodId,epIndex,stage){
 async function generateEpisodeScript(prodId,epIndex){
   const p=S.productions.find(x=>x.id===prodId);
   const e=getEpisode(p,epIndex);
+  e.shotsExpected=1; // each episode's duration is already clamped to fit one clip — see parsePromptwriterOutput
   toast(`✍️ Episode ${epIndex} writing script…`,"");
   const feedbackNote=e.scriptRejectionFeedback?`\n\nYour previous attempt was rejected for this reason — address it directly: "${e.scriptRejectionFeedback}"`:"";
   try{
     const reply=await callAiSimple(
-      `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"\n\nWrite a detailed shooting script broken into exactly ${p.shotsPerEp} shots (each shot will become a ${p.clipLen}-second video clip). For each shot include: camera angle, setting/background, scene time, and precise character movement/action. Format EXACTLY as "SHOT 1: <description>", "SHOT 2: <description>", etc. — this exact format is required for the storyboard step to work.${feedbackNote}`,
-      "You are Episode Director for a professional AI video production. Write a precise, filmable shot-by-shot script. No preamble.",
+      `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"\n\nWrite a detailed shooting script for a single continuous ${e.duration}-second video clip. Include: camera angle, setting/background, scene time, and precise character movement/action. Format EXACTLY as "SHOT 1: <description>" — this exact format is required for the storyboard step to work.${feedbackNote}`,
+      "You are Episode Director for a professional AI video production. Write a precise, filmable shot description. No preamble.",
       p.brainModel
     );
     e.script=reply;
@@ -6241,7 +6319,7 @@ function parseScriptShots(script,count){
 async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
   const p=S.productions.find(x=>x.id===prodId);
   const e=getEpisode(p,epIndex);
-  const parsed=parseScriptShots(e.script,p.shotsPerEp);
+  const parsed=parseScriptShots(e.script,e.shotsExpected||1);
   if(parsed.usedFallback){
     toast(`⚠️ Episode ${epIndex}'s script wasn't in strict "SHOT 1:/SHOT 2:" format — split by paragraph instead. Check the storyboard prompts look right.`,"error");
   }
@@ -6351,7 +6429,7 @@ async function generateEpisodeScene(prodId,epIndex,retryOnly=false){
     const sb=e.storyboard[i];
     const refImage=i===0?priorLastFrame:(useVisualChain?e.storyboard[i-1].url:null);
     try{
-      const videoUrl=await runProductionVideoGen(p.videoModel,`${sb.desc}, ${p.characterDesc}`,p.aspectRatio,p.clipLen,p.quality,refImage);
+      const videoUrl=await runProductionVideoGen(p.videoModel,`${sb.desc}, ${p.characterDesc}`,p.aspectRatio,e.duration,p.quality,refImage);
       e.shots.push({shotIndex:i,videoUrl,refImage});
       e.shots.sort((a,b)=>a.shotIndex-b.shotIndex);
       logCost(p.videoModel,`Ep${epIndex} scene shot ${i+1}`);
