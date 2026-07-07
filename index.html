@@ -6164,7 +6164,7 @@ function episodeCardHTML(p,e){
   const isEditingScript=S.editingScriptFor===`${p.id}_${e.index}`;
   return `<div class="panel">
     <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between">
-      <span>🎬 Episode ${e.index} <span style="font-weight:400;color:var(--textm);font-size:11px">— ${e.approach}</span></span>
+      <span>🎬 Episode ${e.index} <span style="font-weight:400;color:var(--textm);font-size:11px">— ${e.approach} · ${e.duration}s${e.genre?` · ${e.genre}`:''}</span></span>
       ${stageBadge(e.sceneStatus==='approved'?'approved':e.storyboardStatus==='approved'?'storyboard':e.scriptStatus==='approved'?'script':'pending',{approved:'✅ Complete',storyboard:'🖼 Storyboard stage',script:'✍️ Script approved',pending:'⬜ Not started'})}
     </div>
     <div style="font-size:11px;color:var(--textm);margin-bottom:10px;font-style:italic">"${e.masterPrompt.slice(0,120)}${e.masterPrompt.length>120?'…':''}"</div>
@@ -6255,6 +6255,36 @@ async function rejectEpisodeStage(prodId,epIndex,stage){
 }
 
 // ── EPISODE SCRIPT (per-episode AI call) ──
+// ── GENRE PROMPT FORMULAS — how the Episode Director structures the final
+// generation prompt based on the actual genre of its assigned script portion.
+// Initial set covering the most common cases, expandable later.
+const GENRE_PROMPT_FORMULAS={
+  "Action/Fight":{
+    components:"Characters + Location + Camera Movement + Fight Choreography + Physical Impact + Environmental Reactions + Lighting + Cinematic Style + Quality",
+    negativePrompt:"static poses, weak impact, floaty movement, no motion blur, cartoonish violence, low detail, stiff choreography"
+  },
+  "Romance/Emotional":{
+    components:"Characters + Location + Intimate Framing + Micro-Expressions + Lighting Mood + Color Palette + Emotional Beat + Cinematic Style + Quality",
+    negativePrompt:"stiff acting, exaggerated expressions, harsh lighting, disconnected framing, rushed pacing"
+  },
+  "Horror/Suspense":{
+    components:"Characters + Location + Camera Movement + Tension Building + Shadow and Darkness + Implied Threat + Unsettling Detail + Cinematic Style + Quality",
+    negativePrompt:"bright cheerful lighting, comedic tone, fast cuts, obvious jump scares without buildup, flat lighting"
+  },
+  "Comedy":{
+    components:"Characters + Location + Physical Comedy Timing + Exaggerated Reaction + Bright Lighting + Playful Camera Movement + Cinematic Style + Quality",
+    negativePrompt:"dark moody tone, slow pacing, unnecessary dramatic weight, flat expressions"
+  },
+  "Dialogue/Drama":{
+    components:"Characters + Location + Framing (close-up or medium) + Subtle Expression + Naturalistic Lighting + Emotional Subtext + Cinematic Style + Quality",
+    negativePrompt:"over-the-top expressions, rapid camera movement, unnecessary action elements, exaggerated motion"
+  },
+  "Chase/Pursuit":{
+    components:"Characters + Location + Camera Movement (tracking or handheld) + Speed and Momentum + Environmental Obstacles + Tension Pacing + Lighting + Cinematic Style + Quality",
+    negativePrompt:"static camera, slow motion, calm pacing, empty environment, weak sense of speed"
+  },
+};
+
 async function generateEpisodeScript(prodId,epIndex){
   const p=S.productions.find(x=>x.id===prodId);
   const e=getEpisode(p,epIndex);
@@ -6276,13 +6306,20 @@ async function generateEpisodeScript(prodId,epIndex){
     }
   }
 
+  const genreList=Object.keys(GENRE_PROMPT_FORMULAS).map(g=>`${g}: ${GENRE_PROMPT_FORMULAS[g].components}`).join("\n");
+
   try{
     const reply=await callAiSimple(
-      `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"${priorContext}\n\nWrite a detailed shooting script for a single continuous ${e.duration}-second video clip. Include: camera angle, setting/background, scene time, and precise character movement/action. Format EXACTLY as "SHOT 1: <description>" — this exact format is required for the storyboard step to work.${feedbackNote}`,
-      "You are Episode Director for a professional AI video production. Write a precise, filmable shot description. No preamble.",
+      `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"${priorContext}\n\nFirst, identify which genre this portion of the story actually is, from this list (pick the single best fit, don't invent a new one):\n${genreList}\n\nThen write a detailed shooting script for a single continuous ${e.duration}-second video clip, structured using that genre's exact formula (cover every component listed for it, in a natural sentence, not a literal list). Include concrete camera angle, setting/background, scene time, and precise character movement/action within that structure.\n\nFormat EXACTLY like this, nothing else:\nGENRE: <one genre name from the list above, exactly as written>\nSHOT 1: <the shooting script description>${feedbackNote}`,
+      "You are Episode Director for a professional AI video production, analyzing your assigned script portion to pick the right genre formula before writing. No preamble, no markdown.",
       p.brainModel
     );
-    e.script=reply;
+    const genreMatch=reply.match(/GENRE:\s*([^\n]+)/i);
+    const shotMatch=reply.match(/SHOT 1:\s*([\s\S]*)/i);
+    const genre=genreMatch&&GENRE_PROMPT_FORMULAS[genreMatch[1].trim()]?genreMatch[1].trim():null;
+    e.script=shotMatch?`SHOT 1: ${shotMatch[1].trim()}`:reply;
+    e.genre=genre;
+    e.negativePrompt=genre?GENRE_PROMPT_FORMULAS[genre].negativePrompt:"";
     e.scriptStatus="ready";
     e.scriptRejectionFeedback=null;
     save("productions");
@@ -6386,7 +6423,7 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
 }
 
 // ── EPISODE SCENE (real video gen per shot, with continuity chaining) ──
-async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImageUrl){
+async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImageUrl,negativePrompt){
   const apiKey=gs("api_falai","");
   if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
   let endpoint=model;
@@ -6397,7 +6434,7 @@ async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImag
   }
   const durationConfig=VIDEO_MODEL_DURATIONS[model];
   const formattedDuration=durationConfig?durationConfig.format(duration):String(duration);
-  if(endpoint.startsWith("fal-ai/kling-video")){body.duration=formattedDuration;body.generate_audio=true;}
+  if(endpoint.startsWith("fal-ai/kling-video")){body.duration=formattedDuration;body.generate_audio=true;if(negativePrompt)body.negative_prompt=negativePrompt;}
   else if(endpoint==="fal-ai/veo3.1"){body.duration=formattedDuration;body.audio=true;body.resolution=quality;}
   else{body.duration=formattedDuration;body.resolution=quality;}
 
@@ -6501,7 +6538,7 @@ async function generateEpisodeScene(prodId,epIndex,retryOnly=false){
       refImage=prevShot&&prevShot.videoUrl?await getChainedReferenceFrame(fallback,prevShot.videoUrl):fallback;
     }
     try{
-      const videoUrl=await runProductionVideoGen(p.videoModel,`${sb.desc}, ${p.characterDesc}`,p.aspectRatio,e.duration,p.quality,refImage);
+      const videoUrl=await runProductionVideoGen(p.videoModel,`${sb.desc}, ${p.characterDesc}`,p.aspectRatio,e.duration,p.quality,refImage,e.negativePrompt);
       e.shots.push({shotIndex:i,videoUrl,refImage});
       e.shots.sort((a,b)=>a.shotIndex-b.shotIndex);
       logCost(p.videoModel,`Ep${epIndex} scene shot ${i+1}`);
