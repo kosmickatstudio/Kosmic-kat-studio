@@ -3750,7 +3750,7 @@ function renderVideoCanvas(el){
             <div id="vcModelNote" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
           </div>
           <div class="f-row">
-            <div class="f-group"><label class="f-label">Resolution</label><select class="f-select" id="vcRes"><option value="720p">720p</option><option value="1080p">1080p</option></select></div>
+            <div class="f-group" id="vcResWrap"><label class="f-label">Resolution</label><select class="f-select" id="vcRes"></select></div>
             <div class="f-group"><label class="f-label">Aspect Ratio</label><select class="f-select" id="vcRatio"><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option><option value="4:3">4:3</option><option value="3:4">3:4</option></select></div>
           </div>
           <div class="f-group"><label class="f-label">Duration</label><select class="f-select" id="vcDuration"></select></div>
@@ -4260,6 +4260,7 @@ function updateVcModelUI(){
   const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
   const durConfig=VIDEO_MODEL_DURATIONS[model];
   document.getElementById("vcDuration").innerHTML=durConfig.options.map(c=>`<option value="${c}">${c}s</option>`).join('');
+  populateResolutionSelect("vcRes","vcResWrap",model);
 
   document.getElementById("vcNegPromptWrap").style.display=cap.negPrompt?"block":"none";
   document.getElementById("vcMultiImageWrap").style.display=(cap.multiRef||cap.multiImage)?"block":"none";
@@ -4287,7 +4288,8 @@ function updateVcModelUI(){
     document.getElementById("vcMultiImageLabel").textContent=`Reference Images for ${modelLabel} (up to ${cap.maxImages})`;
   }
   const note=document.getElementById("vcModelNote");
-  if(cap.provider==="seedance-ref")note.textContent="Real multi-modal: combine images, video, and audio references in one generation.";
+  if(KLING_FIXED_RESOLUTION_NOTE[model])note.textContent=KLING_FIXED_RESOLUTION_NOTE[model];
+  else if(cap.provider==="seedance-ref")note.textContent="Real multi-modal: combine images, video, and audio references in one generation.";
   else if(cap.provider==="veo-ref")note.textContent="Real reference-based generation — keeps a character/product/object consistent across the shot.";
   else if(cap.multiImage)note.textContent="Up to 4 images for multi-image generation, plus negative prompt support.";
   else note.textContent="";
@@ -4907,8 +4909,8 @@ function openShotEditor(projectId,shotId=null){
         <div class="f-group"><label class="f-label">Aspect Ratio</label>
           <select class="f-select" id="seRatio"><option value="16:9" ${!s||s?.ratio==="16:9"?'selected':''}>16:9</option><option value="9:16" ${s?.ratio==="9:16"?'selected':''}>9:16</option><option value="1:1" ${s?.ratio==="1:1"?'selected':''}>1:1</option></select>
         </div>
-        <div class="f-group"><label class="f-label">Resolution</label>
-          <select class="f-select" id="seRes"><option value="720p" ${!s||s?.resolution==="720p"?'selected':''}>720p</option><option value="1080p" ${s?.resolution==="1080p"?'selected':''}>1080p</option></select>
+        <div class="f-group" id="seResWrap"><label class="f-label">Resolution</label>
+          <select class="f-select" id="seRes"></select>
         </div>
       </div>
 
@@ -4930,14 +4932,15 @@ function openShotEditor(projectId,shotId=null){
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  updateShotDurationOptions(s?s.duration:null);
+  updateShotDurationOptions(s?s.duration:null,s?s.resolution:null);
 }
 
-function updateShotDurationOptions(preselectDuration){
+function updateShotDurationOptions(preselectDuration,preselectResolution){
   const model=document.getElementById("seModel").value;
   const config=VIDEO_MODEL_DURATIONS[model];
   const sel=document.getElementById("seDuration");
   sel.innerHTML=config.options.map(c=>`<option value="${c}" ${String(preselectDuration)===String(c)?'selected':''}>${c}s</option>`).join('');
+  populateResolutionSelect("seRes","seResWrap",model,preselectResolution);
 }function handleShotRefUpload(event){
   const file=event.target.files[0];
   if(!file)return;
@@ -5228,6 +5231,50 @@ const VIDEO_MODEL_DURATIONS={
   "fal-ai/veo3.1/reference-to-video":{options:[4,6,8],format:n=>`${n}s`},
 };
 
+// Real per-model resolution support on fal, not a one-size-fits-all list.
+// Seedance 2.0 fast tier tops out at 720p; the standard tier is the one that
+// actually exposes 1080p and true 4K (this is what "Seedance 2.0 4K" is —
+// there's no separate 4K endpoint, it's the standard-tier resolution option).
+// Veo 3.1 supports up to native 4K on the base endpoint; its reference-to-video
+// mode currently only documents 720p/1080p. Kling's endpoints on fal don't
+// expose a resolution parameter at all — output is fixed by model/tier — so
+// those map to null and the Resolution field hides itself for those models.
+const VIDEO_MODEL_RESOLUTIONS={
+  "bytedance/seedance-2.0/fast/text-to-video":["480p","720p"],
+  "bytedance/seedance-2.0/text-to-video":["480p","720p","1080p","4k"],
+  "bytedance/seedance-2.0/fast/reference-to-video":["480p","720p"],
+  "bytedance/seedance-2.0/reference-to-video":["480p","720p","1080p","4k"],
+  "fal-ai/veo3.1":["720p","1080p","4k"],
+  "fal-ai/veo3.1/reference-to-video":["720p","1080p"],
+  "fal-ai/kling-video/v2.1/master/text-to-video":null,
+  "fal-ai/kling-video/v2.6/pro/text-to-video":null,
+  "fal-ai/kling-video/v3/standard/text-to-video":null,
+};
+const KLING_FIXED_RESOLUTION_NOTE={
+  "fal-ai/kling-video/v2.1/master/text-to-video":"Kling 2.1 Master renders at a fixed resolution — no manual selection on fal.",
+  "fal-ai/kling-video/v2.6/pro/text-to-video":"Kling 2.6 Pro renders at a fixed 1080p — no manual selection on fal.",
+  "fal-ai/kling-video/v3/standard/text-to-video":"Kling 3.0 renders at a fixed resolution up to 1080p — no manual selection on fal.",
+};
+
+// Shared across Video Canvas, Shot Editor, and Production Studio: shows only
+// the resolutions the selected model actually supports, and hides the field
+// entirely (with an inline note) for models like Kling that don't take a
+// resolution parameter on fal at all.
+function populateResolutionSelect(selectId,wrapId,model,preselect){
+  const sel=document.getElementById(selectId);
+  const wrap=document.getElementById(wrapId);
+  if(!sel||!wrap)return;
+  const options=VIDEO_MODEL_RESOLUTIONS[model];
+  if(!options){
+    wrap.style.display="none";
+    sel.innerHTML="";
+    return;
+  }
+  wrap.style.display="block";
+  const fallback=options.includes("720p")?"720p":options[0];
+  sel.innerHTML=options.map(r=>`<option value="${r}" ${(preselect&&preselect===r)||(!preselect&&r===fallback)?'selected':''}>${r==="4k"?"4K":r}</option>`).join('');
+}
+
 // ── PRODUCTION STUDIO (own top-level module, not nested in Directorial Studio) ──
 function renderProductionStudio(el){
   const projects=S.projects.filter(p=>!p.archived);
@@ -5457,7 +5504,7 @@ function renderPdSharedFields(){
         <option value="fal-ai/kling-video/v3/standard/text-to-video">Kling 3.0 Standard</option><option value="fal-ai/veo3.1">Veo 3.1</option>
       </select></div>
       <div class="f-row">
-        <div class="f-group"><label class="f-label">3. Video Quality</label><select class="f-select" id="pdQuality"><option value="720p">720p</option><option value="1080p">1080p</option></select></div>
+        <div class="f-group" id="pdQualityWrap"><label class="f-label">3. Video Quality</label><select class="f-select" id="pdQuality"></select></div>
         <div class="f-group"><label class="f-label">Aspect Ratio</label><select class="f-select" id="pdAspectRatio"></select></div>
       </div>
       <div class="f-group">
@@ -5647,6 +5694,7 @@ function updatePdImageUploadAvailability(){
 }
 
 function updateClipLenOptions(){
+  populateResolutionSelect("pdQuality","pdQualityWrap",document.getElementById("pdVideoModel").value);
   updateDurationPreview();
 }
 
