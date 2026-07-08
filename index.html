@@ -1297,7 +1297,7 @@ function renderHome(el){
     <div class="panel">
       <div class="panel-title">🤖 Ask Your Agent</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Talk through an idea, ask for help, or give a direction — opens straight into your AI Director chat.</div>
-      <div class="f-group"><textarea class="f-textarea" id="homeAgentInput" placeholder="What do you need help with?" style="min-height:60px" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendHomeAgentPrompt();}"></textarea></div>
+      <div class="f-group"><textarea class="f-textarea" id="homeAgentInput" placeholder="What do you need help with?" style="min-height:60px" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendHomeAgentPrompt();}"></textarea></div>
       <button class="btn btn-primary btn-full" onclick="sendHomeAgentPrompt()">➤ Send to Agent</button>
     </div>
 
@@ -2632,6 +2632,7 @@ function renderImageGen(el){
             <button class="ig-tool-btn" id="igVoiceBtn" onclick="toggleIgVoiceInput()" title="Voice Message"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></button>
             <button class="ig-send-round" id="igSendBtn" ${!hasKey?'disabled':''} onclick="sendIgChatPrompt()" title="Generate">➤</button>
           </div>
+          <div style="font-size:9px;color:var(--texts);padding:2px 4px 0;text-align:right">Enter for a new line · <b>Ctrl+Enter</b> to generate</div>
         </div>
       </div>
     </div>
@@ -2961,7 +2962,7 @@ function renderIgChatThread(){
 }
 
 function handleIgChatKeydown(e){
-  if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendIgChatPrompt();}
+  if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();sendIgChatPrompt();}
 }
 
 function pushIgChatMessage(msg){
@@ -3885,6 +3886,7 @@ function renderVideoCanvas(el){
               <button class="ig-tool-btn" id="vcVoiceBtn" onclick="toggleVcVoiceInput()" title="Voice Message"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></button>
               <button class="ig-send-round" id="vcSendBtn" ${!hasKey?'disabled':''} onclick="sendVcChatPrompt()" title="Generate">➤</button>
             </div>
+            <div style="font-size:9px;color:var(--texts);padding:2px 4px 0;text-align:right">Enter for a new line · <b>Ctrl+Enter</b> to generate</div>
           </div>
         </div>
       </div>
@@ -4492,11 +4494,10 @@ function insertVcTag(tag){
 
 function handleVcChatKeydown(e){
   const dropdown=document.getElementById("vcTagAutocomplete");
-  if(e.key==="Enter"&&!e.shiftKey){
-    e.preventDefault();
-    if(dropdown&&dropdown.style.display==="block"){hideVcTagAutocomplete();return;}
-    sendVcChatPrompt();
+  if(e.key==="Enter"&&dropdown&&dropdown.style.display==="block"){
+    e.preventDefault();hideVcTagAutocomplete();return;
   }
+  if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();sendVcChatPrompt();}
 }
 
 function toggleVcVoiceInput(){
@@ -9159,7 +9160,7 @@ function updateAiContext(ctx){
 }
 
 function aiKeyDown(e){
-  if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAiPrompt();}
+  if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();sendAiPrompt();}
   // Auto-resize
   e.target.style.height="auto";
   e.target.style.height=Math.min(e.target.scrollHeight,80)+"px";
