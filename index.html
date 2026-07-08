@@ -4367,18 +4367,30 @@ function updateVcCostHint(){
   if(hint)hint.textContent=est?formatCostLine(est):"";
 }
 // ── COST ESTIMATION ──
-// Rates verified directly against fal.ai's own model pages and pricing docs
-// where possible (Veo 3.1, Seedance 2.0 @720p comparison article). Where fal
-// doesn't publish an exact per-resolution breakdown (Seedance/Kling at
-// non-720p resolutions), the 720p rate is used as the base and flagged as an
-// estimate in the UI — actual billing may differ slightly. These are for
-// budgeting awareness, not a guaranteed final invoice; check your fal
-// dashboard for exact charges.
+// Rates verified directly against fal.ai's own model pages. Seedance 2.0
+// standard tier bills by a token formula, NOT a flat per-second rate:
+//   tokens = (height * width * duration * 24) / 1024
+//   cost = tokens/1000 * ratePerK   (ratePerK: $0.014 for 480p/720p/1080p, $0.008 for 4k)
+// Verified by recomputing fal's own published 720p ($0.3034/s) and 1080p
+// ($0.682/s) rates through this formula — both match almost exactly. This
+// means 4K costs far more than a flat-rate assumption would suggest, since
+// pixel count (not just the lower per-token rate) drives the real cost.
+// Fast tier only goes up to 720p in this app and fal doesn't publish its
+// token rate separately, so it stays a flat verified per-second rate.
+const SEEDANCE_RES_PX={"480p":[854,480],"720p":[1280,720],"1080p":[1920,1080],"4k":[3840,2160]};
+function seedanceStandardCost(resolution,seconds,videoRefMultiplier){
+  const px=SEEDANCE_RES_PX[resolution]||SEEDANCE_RES_PX["720p"];
+  const tokens=(px[1]*px[0]*seconds*24)/1024;
+  const ratePerK=resolution==="4k"?0.008:0.014;
+  let cost=(tokens/1000)*ratePerK;
+  if(videoRefMultiplier)cost*=videoRefMultiplier;
+  return cost;
+}
 const VIDEO_PRICING={
   "bytedance/seedance-2.0/fast/text-to-video":{perSec:0.2419,audioIncluded:true},
-  "bytedance/seedance-2.0/text-to-video":{perSec:0.3034,audioIncluded:true},
+  "bytedance/seedance-2.0/text-to-video":{standard:true,audioIncluded:true},
   "bytedance/seedance-2.0/fast/reference-to-video":{perSec:0.2419,audioIncluded:true,videoRefMultiplier:0.6},
-  "bytedance/seedance-2.0/reference-to-video":{perSec:0.3024,audioIncluded:true,videoRefMultiplier:0.6},
+  "bytedance/seedance-2.0/reference-to-video":{standard:true,audioIncluded:true,videoRefMultiplier:0.6},
   "fal-ai/kling-video/v2.1/master/text-to-video":{perSec:0.112},
   "fal-ai/kling-video/v2.6/pro/text-to-video":{perSec:0.112},
   "fal-ai/kling-video/v3/standard/text-to-video":{perSec:0.084},
@@ -4388,6 +4400,10 @@ const VIDEO_PRICING={
 function estimateVideoCost(model,seconds,resolution){
   const p=VIDEO_PRICING[model];
   if(!p||!seconds)return null;
+  if(p.standard){
+    const cost=seedanceStandardCost(resolution,seconds,p.videoRefMultiplier);
+    return{cost,approx:false};
+  }
   let rate=(resolution==="4k"&&p.perSec4k)?p.perSec4k:p.perSec;
   if(p.audioSurcharge)rate=rate*p.audioSurcharge; // Veo bills audio-on by default in this app (generate_audio true)
   const cost=rate*seconds;
