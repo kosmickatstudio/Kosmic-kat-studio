@@ -378,6 +378,8 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 <!-- Firebase Auth -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <script>
   const firebaseConfig = {
     apiKey: "AIzaSyDpreHhomC4Ug1LLc6mtAkSj2VnFjFQcrM",
@@ -390,6 +392,8 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
   };
   firebase.initializeApp(firebaseConfig);
   const fbAuth = firebase.auth();
+  const fbDB = firebase.firestore();
+  const fbStorage = firebase.storage();
 </script>
 </head>
 <body>
@@ -703,7 +707,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
     <div class="sp-section-body">
       <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Add your own director presets — they'll appear in the Directors module alongside the 6 built-in ones.</div>
       <div id="customDirectorsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
-      <div class="f-group"><input class="f-input" id="cdName" placeholder="Name (e.g. 'Neo-Noir Voss')"></div>
+      <div class="f-group"><input class="f-input" id="cdName" placeholder="Name (e.g. 'Neo-Noir Kosmic')"></div>
       <div class="f-group"><input class="f-input" id="cdPrompt" placeholder="Style prompt fragment"></div>
       <button class="btn btn-outline btn-sm btn-full" onclick="addCustomDirector()">+ Add Director</button>
     </div>
@@ -1170,6 +1174,8 @@ const TAB_DISPLAY_LABELS={
 function renderTabs(mod){
   const tabs=MOD_TABS[mod]||["Overview"];
   const el=document.getElementById("moduleTabs");
+  if(tabs.length<=1){el.style.display="none";el.innerHTML="";return;}
+  el.style.display="flex";
   const assetViewLabels={all:"All Assets",upload:"Upload",collections:"Collections"};
   const activeTab=mod==="projects"?(S.projectsTab||"Overview"):mod==="assets"?assetViewLabels[S.assetLibraryView||"all"]:tabs[0];
   const displayMap=TAB_DISPLAY_LABELS[mod]||{};
@@ -1259,12 +1265,12 @@ const MODEL_BANNERS={
   "fal-ai/veo3.1":"linear-gradient(135deg,#1E1B4B,#4338CA)",
 };
 const DIRECTOR_BANNERS={
-  voss:"linear-gradient(135deg,#27272A,#52525B)",
-  kael:"linear-gradient(135deg,#7C2D12,#EA580C)",
-  mira:"linear-gradient(135deg,#1E3A5F,#60A5FA)",
-  atlas:"linear-gradient(135deg,#44403C,#CA8A04)",
-  neon:"linear-gradient(135deg,#701A75,#22D3EE)",
-  sage:"linear-gradient(135deg,#365314,#65A30D)",
+  kosmic:"linear-gradient(135deg,#27272A,#52525B)",
+  siamese:"linear-gradient(135deg,#7C2D12,#EA580C)",
+  floppa:"linear-gradient(135deg,#1E3A5F,#60A5FA)",
+  angora:"linear-gradient(135deg,#44403C,#CA8A04)",
+  calico:"linear-gradient(135deg,#701A75,#22D3EE)",
+  sphynx:"linear-gradient(135deg,#365314,#65A30D)",
 };
 
 // ── HOME ──
@@ -1294,15 +1300,27 @@ function renderHome(el){
       </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-title">🤖 Ask Your Agent</div>
-      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Talk through an idea, ask for help, or give a direction — opens straight into your AI Director chat.</div>
-      <div class="f-group"><textarea class="f-textarea" id="homeAgentInput" placeholder="What do you need help with?" style="min-height:60px" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendHomeAgentPrompt();}"></textarea></div>
-      <button class="btn btn-primary btn-full" onclick="sendHomeAgentPrompt()">➤ Send to Agent</button>
+    <div class="panel" style="background:var(--glass-solid);border:1px solid var(--glass-brd);position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,var(--glow-gold),transparent)"></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--ice));display:flex;align-items:center;justify-content:center;box-shadow:0 3px 14px var(--glow-ice);flex-shrink:0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4M22 5h-4M4 17v2M5 18H3"/></svg>
+        </div>
+        <div>
+          <div class="panel-title" style="margin:0;font-family:var(--font-display)">Ask Your Director</div>
+          <div style="font-size:10px;color:var(--textm)">Talk through an idea — opens straight into your AI Director chat</div>
+        </div>
+      </div>
+      <div class="f-group" style="margin-top:10px">
+        <div class="ig-input-shell">
+          <textarea class="ig-input-textarea-v2" id="homeAgentInput" placeholder="What do you need help with?" style="min-height:52px" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendHomeAgentPrompt();}"></textarea>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="sendHomeAgentPrompt()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z"/></svg> Send to Director</button>
     </div>
 
     <div class="panel">
-      <div class="panel-title">◆ Agents</div>
+      <div class="panel-title">◆ Directors</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Pick an Assistant Director's approach for your next generation, or talk through an idea with your AI Director.</div>
       <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px">
         ${allDirectors.map(d=>{
@@ -1364,6 +1382,7 @@ function renderHome(el){
   `;
   renderHomeCarousel();
   attachHomeSwipeHandlers();
+  loadDisplayItemsFromCloud();
 }
 
 function sendHomeAgentPrompt(){
@@ -2632,7 +2651,7 @@ function renderImageGen(el){
             <button class="ig-tool-btn" id="igVoiceBtn" onclick="toggleIgVoiceInput()" title="Voice Message"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></button>
             <button class="ig-send-round" id="igSendBtn" ${!hasKey?'disabled':''} onclick="sendIgChatPrompt()" title="Generate">➤</button>
           </div>
-          <div style="font-size:9px;color:var(--texts);padding:2px 4px 0;text-align:right">Enter for a new line · <b>Ctrl+Enter</b> to generate</div>
+          <div style="font-size:9px;color:var(--texts);padding:2px 4px 0;display:flex;justify-content:space-between"><span id="igCostHint" style="font-weight:700;color:var(--gold)"></span><span>Enter for a new line · <b>Ctrl+Enter</b> to generate</span></div>
         </div>
       </div>
     </div>
@@ -2710,7 +2729,7 @@ function renderImageGen(el){
 
         <div class="f-group" id="igBatchWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
           <label class="f-label">Batch Count <span style="font-weight:400;color:var(--texts)">(GPT Image 2 can generate up to 8 at once)</span></label>
-          <select class="f-select" id="igBatchCount"><option value="1">1 image</option><option value="2">2 images</option><option value="4">4 images</option><option value="8">8 images</option></select>
+          <select class="f-select" id="igBatchCount" onchange="updateIgCostHint()"><option value="1">1 image</option><option value="2">2 images</option><option value="4">4 images</option><option value="8">8 images</option></select>
         </div>
       </div>
     </div>
@@ -3017,9 +3036,18 @@ function setModelBadge(containerId,key){
   if(el)el.innerHTML=modelBadgeHtml(key);
 }
 
+function updateIgCostHint(){
+  const model=document.getElementById("igModel").value;
+  const countEl=document.getElementById("igBatchCount");
+  const count=countEl?parseInt(countEl.value,10)||1:1;
+  const est=estimateImageCost(model,count);
+  const hint=document.getElementById("igCostHint");
+  if(hint)hint.textContent=est?formatCostLine(est):"";
+}
 function updateIgModelUI(){
   const model=document.getElementById("igModel").value;
   setModelBadge("igModelBadge",model);
+  updateIgCostHint();
   const cap=IMAGE_MODEL_CAPABILITIES[model]||{};
   const singleWrap=document.getElementById("igSingleRefWrap");
   const multiWrap=document.getElementById("igMultiRefWrap");
@@ -3811,7 +3839,7 @@ function renderVideoCanvas(el){
             <div id="vcModelNote" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
           </div>
           <div class="f-row">
-            <div class="f-group" id="vcResWrap"><label class="f-label">Resolution</label><select class="f-select" id="vcRes"></select></div>
+            <div class="f-group" id="vcResWrap"><label class="f-label">Resolution</label><select class="f-select" id="vcRes" onchange="updateVcCostHint()"></select></div>
             <div class="f-group"><label class="f-label">Aspect Ratio</label><select class="f-select" id="vcRatio"><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option><option value="4:3">4:3</option><option value="3:4">3:4</option></select></div>
           </div>
           <div class="f-group"><label class="f-label">Duration <span id="vcDurationLabel" style="font-weight:400;color:var(--texts)"></span></label>
@@ -3886,7 +3914,7 @@ function renderVideoCanvas(el){
               <button class="ig-tool-btn" id="vcVoiceBtn" onclick="toggleVcVoiceInput()" title="Voice Message"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></button>
               <button class="ig-send-round" id="vcSendBtn" ${!hasKey?'disabled':''} onclick="sendVcChatPrompt()" title="Generate">➤</button>
             </div>
-            <div style="font-size:9px;color:var(--texts);padding:2px 4px 0;text-align:right">Enter for a new line · <b>Ctrl+Enter</b> to generate</div>
+            <div style="font-size:9px;color:var(--texts);padding:2px 4px 0;display:flex;justify-content:space-between"><span id="vcCostHint" style="font-weight:700;color:var(--gold)"></span><span>Enter for a new line · <b>Ctrl+Enter</b> to generate</span></div>
           </div>
         </div>
       </div>
@@ -4327,7 +4355,71 @@ function updateVcDurationFromSlider(){
   const val=durConfig.options[idx];
   document.getElementById("vcDuration").value=val;
   document.getElementById("vcDurationLabel").textContent=`— ${val}s`;
+  updateVcCostHint();
 }
+function updateVcCostHint(){
+  const model=document.getElementById("vcModel").value;
+  const seconds=parseFloat(document.getElementById("vcDuration").value)||0;
+  const resEl=document.getElementById("vcRes");
+  const resolution=resEl?resEl.value:"720p";
+  const est=estimateVideoCost(model,seconds,resolution);
+  const hint=document.getElementById("vcCostHint");
+  if(hint)hint.textContent=est?formatCostLine(est):"";
+}
+// ── COST ESTIMATION ──
+// Rates verified directly against fal.ai's own model pages and pricing docs
+// where possible (Veo 3.1, Seedance 2.0 @720p comparison article). Where fal
+// doesn't publish an exact per-resolution breakdown (Seedance/Kling at
+// non-720p resolutions), the 720p rate is used as the base and flagged as an
+// estimate in the UI — actual billing may differ slightly. These are for
+// budgeting awareness, not a guaranteed final invoice; check your fal
+// dashboard for exact charges.
+const VIDEO_PRICING={
+  "bytedance/seedance-2.0/fast/text-to-video":{perSec:0.2419,audioIncluded:true},
+  "bytedance/seedance-2.0/text-to-video":{perSec:0.3034,audioIncluded:true},
+  "bytedance/seedance-2.0/fast/reference-to-video":{perSec:0.2419,audioIncluded:true,videoRefMultiplier:0.6},
+  "bytedance/seedance-2.0/reference-to-video":{perSec:0.3024,audioIncluded:true,videoRefMultiplier:0.6},
+  "fal-ai/kling-video/v2.1/master/text-to-video":{perSec:0.112},
+  "fal-ai/kling-video/v2.6/pro/text-to-video":{perSec:0.112},
+  "fal-ai/kling-video/v3/standard/text-to-video":{perSec:0.084},
+  "fal-ai/veo3.1":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
+  "fal-ai/veo3.1/reference-to-video":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
+};
+function estimateVideoCost(model,seconds,resolution){
+  const p=VIDEO_PRICING[model];
+  if(!p||!seconds)return null;
+  let rate=(resolution==="4k"&&p.perSec4k)?p.perSec4k:p.perSec;
+  if(p.audioSurcharge)rate=rate*p.audioSurcharge; // Veo bills audio-on by default in this app (generate_audio true)
+  const cost=rate*seconds;
+  return{cost,approx:!p.audioIncluded||resolution!=="720p"};
+}
+
+const IMAGE_PRICING={
+  "fal-ai/flux/schnell":0.003,
+  "fal-ai/flux/dev":0.025,
+  "fal-ai/flux-pro/v1.1":0.04,
+  "fal-ai/ideogram/v3":0.03,
+  "fal-ai/recraft/v3/text-to-image":0.04,
+  "fal-ai/stable-diffusion-v35-large":0.035,
+  "fal-ai/flux-2":0.025,
+  "fal-ai/flux-2-pro":0.05,
+  "fal-ai/flux-2/flash":0.01,
+  "fal-ai/flux-2/flash/edit":0.01,
+  "gemini-3.1-flash-image":0.08,
+  "gemini-3-pro-image":0.15,
+  "gpt-image-2":0.07,
+};
+function estimateImageCost(model,count){
+  const rate=IMAGE_PRICING[model];
+  if(rate==null)return null;
+  return{cost:rate*(count||1),approx:false};
+}
+function formatCostLine(est){
+  if(!est)return "";
+  const dollars=est.cost<0.01?est.cost.toFixed(4):est.cost.toFixed(2);
+  return `${est.approx?'~':''}$${dollars} est.`;
+}
+
 function updateVcModelUI(){
   const model=document.getElementById("vcModel").value;
   setModelBadge("vcModelBadge",model);
@@ -4338,6 +4430,7 @@ function updateVcModelUI(){
   slider.value=0;
   updateVcDurationFromSlider();
   populateResolutionSelect("vcRes","vcResWrap",model);
+  updateVcCostHint();
 
   document.getElementById("vcNegPromptWrap").style.display=cap.negPrompt?"block":"none";
   document.getElementById("vcMultiImageWrap").style.display=(cap.multiRef||cap.multiImage)?"block":"none";
@@ -5269,12 +5362,12 @@ const STYLE_LIBRARY=[
 // director should serve horror, comedy, romance, or sci-fi equally; only their
 // approach-based fragment layers on top of whatever genre the shot itself describes.
 const DIRECTORS=[
-  {id:"voss",name:"Director Voss",style:"Meticulous Continuity",cls:"voss",icon:"●",prompt:"meticulous visual continuity, deliberate blocking, patient pacing that builds naturally with the story's own rhythm"},
-  {id:"kael",name:"Director Kael",style:"Kinetic Energy",cls:"kael",icon:"▲",prompt:"kinetic momentum, dynamic camera energy, propulsive pacing that pushes the scene forward"},
-  {id:"mira",name:"Director Mira",style:"Emotional Truth",cls:"mira",icon:"☾",prompt:"intimate emotional focus, authentic character performance, close attention to unspoken feeling in the scene"},
-  {id:"atlas",name:"Director Atlas",style:"Scale & Spectacle",cls:"atlas",icon:"◆",prompt:"grand production scale, sweeping visual scope, a sense of scale and consequence appropriate to the story"},
-  {id:"neon",name:"Director Neon",style:"Bold Visual Innovation",cls:"neon",icon:"◈",prompt:"bold unconventional framing, inventive visual choices, willingness to take a compositional risk"},
-  {id:"sage",name:"Director Sage",style:"Economical Precision",cls:"sage",icon:"❖",prompt:"clean economical storytelling, precise purposeful framing, nothing in the frame without reason"},
+  {id:"kosmic",name:"Director Kosmic",style:"Meticulous Continuity",cls:"kosmic",icon:"●",prompt:"meticulous visual continuity, deliberate blocking, patient pacing that builds naturally with the story's own rhythm"},
+  {id:"siamese",name:"Director Siamese",style:"Kinetic Energy",cls:"siamese",icon:"▲",prompt:"kinetic momentum, dynamic camera energy, propulsive pacing that pushes the scene forward"},
+  {id:"floppa",name:"Director Floppa",style:"Emotional Truth",cls:"floppa",icon:"☾",prompt:"intimate emotional focus, authentic character performance, close attention to unspoken feeling in the scene"},
+  {id:"angora",name:"Director Angora",style:"Scale & Spectacle",cls:"angora",icon:"◆",prompt:"grand production scale, sweeping visual scope, a sense of scale and consequence appropriate to the story"},
+  {id:"calico",name:"Director Calico",style:"Bold Visual Innovation",cls:"calico",icon:"◈",prompt:"bold unconventional framing, inventive visual choices, willingness to take a compositional risk"},
+  {id:"sphynx",name:"Director Sphynx",style:"Economical Precision",cls:"sphynx",icon:"❖",prompt:"clean economical storytelling, precise purposeful framing, nothing in the frame without reason"},
 ];
 
 function getAllDirectors(){
@@ -8627,10 +8720,12 @@ async function removeTeamMember(i){
 
 // ── DISPLAY AREA ──
 function clearDisplay(){
+  if(!isFounderUser()){toast("Only founders can change what visitors see on Home","error");return;}
   S.displayItems=[];
   S.displayIndex=0;
   saveSetting("display_items",[]);
   renderHomeCarousel();
+  syncDisplayItemsToCloud();
 }
 
 // ── DISPLAY AREA — real content system, lives only on Home now ──
@@ -8688,9 +8783,11 @@ function updateDisplayContentFields(){
 
 S.dcUploadedDataUrl=null;
 S.dcUploadedType=null;
+S.dcUploadedFile=null;
 function handleDisplayUpload(event){
   const file=event.target.files[0];
   if(!file)return;
+  S.dcUploadedFile=file;
   const reader=new FileReader();
   reader.onload=e=>{
     S.dcUploadedDataUrl=e.target.result;
@@ -8700,14 +8797,27 @@ function handleDisplayUpload(event){
   reader.readAsDataURL(file);
 }
 
-function addDisplayContent(){
+async function addDisplayContent(){
+  if(!isFounderUser()){toast("Only founders can change what visitors see on Home","error");return;}
   const type=document.getElementById("dcType").value;
+  const addBtn=document.querySelector("#displayContentModal .btn-primary");
   let item={id:"disp_"+Date.now(),type};
   if(type==="upload"){
-    if(!S.dcUploadedDataUrl){toast("Choose a file from your device first","error");return;}
-    item.type=S.dcUploadedType;
-    item.url=S.dcUploadedDataUrl;
-    S.dcUploadedDataUrl=null;S.dcUploadedType=null;
+    if(!S.dcUploadedFile){toast("Choose a file from your device first","error");return;}
+    try{
+      if(addBtn){addBtn.disabled=true;addBtn.textContent="Uploading…";}
+      const path=`home-display/${Date.now()}_${S.dcUploadedFile.name}`;
+      const ref=fbStorage.ref(path);
+      await ref.put(S.dcUploadedFile);
+      item.type=S.dcUploadedType;
+      item.url=await ref.getDownloadURL();
+      item.storagePath=path;
+    }catch(err){
+      toast("Upload failed: "+err.message,"error");
+      if(addBtn){addBtn.disabled=false;addBtn.textContent="+ Add";}
+      return;
+    }
+    S.dcUploadedDataUrl=null;S.dcUploadedType=null;S.dcUploadedFile=null;
   } else if(type==="html"){
     const html=document.getElementById("dcHtml").value.trim();
     if(!html){toast("Paste some HTML first","error");return;}
@@ -8726,9 +8836,40 @@ function addDisplayContent(){
   S.displayItems.push(item);
   saveSetting("display_items",S.displayItems);
   S.displayIndex=S.displayItems.length-1;
+  await syncDisplayItemsToCloud();
   document.getElementById("displayContentModal").remove();
   renderHomeCarousel();
-  toast("✅ Added — swipe to browse on Home","success");
+  toast("✅ Added — visible to every visitor on Home now","success");
+}
+
+// Home display content is shared publicly (Firestore doc + Storage files) so
+// every visitor sees the same banner/video, not just the device that uploaded
+// it. Requires Firestore + Storage enabled in the Firebase console with rules
+// allowing public read and founder-only write on 'public/homeDisplay' and the
+// 'home-display/' storage path.
+async function syncDisplayItemsToCloud(){
+  try{
+    await fbDB.collection("public").doc("homeDisplay").set({items:S.displayItems,updatedAt:Date.now()});
+  }catch(err){
+    console.warn("Cloud sync failed — content saved locally only:",err.message);
+    toast("⚠️ Saved on this device, but cloud sync failed so other visitors won't see it yet — Firestore may need to be enabled in Firebase Console.","error");
+  }
+}
+async function loadDisplayItemsFromCloud(){
+  try{
+    const doc=await fbDB.collection("public").doc("homeDisplay").get();
+    if(doc.exists){
+      const data=doc.data();
+      if(Array.isArray(data.items)){
+        S.displayItems=data.items;
+        if(S.displayIndex>=S.displayItems.length)S.displayIndex=0;
+        saveSetting("display_items",S.displayItems);
+        renderHomeCarousel();
+      }
+    }
+  }catch(err){
+    console.warn("Couldn't load shared Home display from cloud — showing local cache:",err.message);
+  }
 }
 
 function insertPixverseBanner(){
