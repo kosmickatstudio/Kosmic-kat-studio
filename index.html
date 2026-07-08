@@ -6187,7 +6187,12 @@ function renderAssistantDirectorStep(){
   const {videoModel,imageModel,continuity,aspectRatio}=draft;
   const durConfig=VIDEO_MODEL_DURATIONS[videoModel];
   const maxClip=durConfig?Math.max(...durConfig.options):15;
-  const costPerClip=COST_TABLE[videoModel]!==undefined?COST_TABLE[videoModel]:0.5;
+  // Use the same real per-second/token-based formula as Video Canvas's cost
+  // hint (estimateVideoCost), not the old flat per-clip guess this screen used
+  // to rely on — that guess didn't even have an entry for reference-to-video
+  // models and was silently falling back to a generic $0.50/clip default.
+  const perShotEst=estimateVideoCost(videoModel,maxClip,draft.quality);
+  const costPerClip=perShotEst?perShotEst.cost:(COST_TABLE[videoModel]!==undefined?COST_TABLE[videoModel]:0.5);
   const costPerImage=COST_TABLE[imageModel]!==undefined?COST_TABLE[imageModel]:0.02;
   const estShots=Math.ceil(draft.totalDurationRequested/maxClip)+2; // rough estimate, real count set after episode planning
   const videoBudget=estShots*costPerClip;
