@@ -4387,7 +4387,7 @@ function updateVcCostHint(){
   const seconds=parseFloat(document.getElementById("vcDuration").value)||0;
   const resEl=document.getElementById("vcRes");
   const resolution=resEl?resEl.value:"720p";
-  const est=estimateVideoCost(model,seconds,resolution);
+  const est=estimateVideoCost(model,seconds,resolution,!!(S.vcMultiVideos&&S.vcMultiVideos.length));
   const hint=document.getElementById("vcCostHint");
   if(hint)hint.textContent=est?formatCostLine(est):"";
 }
@@ -4416,17 +4416,21 @@ const VIDEO_PRICING={
   "bytedance/seedance-2.0/text-to-video":{standard:true,audioIncluded:true},
   "bytedance/seedance-2.0/fast/reference-to-video":{perSec:0.2419,audioIncluded:true,videoRefMultiplier:0.6},
   "bytedance/seedance-2.0/reference-to-video":{standard:true,audioIncluded:true,videoRefMultiplier:0.6},
+  "bytedance/seedance-2.0/image-to-video":{standard:true,audioIncluded:true},
   "fal-ai/kling-video/v2.1/master/text-to-video":{perSec:0.112},
   "fal-ai/kling-video/v2.6/pro/text-to-video":{perSec:0.112},
   "fal-ai/kling-video/v3/standard/text-to-video":{perSec:0.084},
   "fal-ai/veo3.1":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
   "fal-ai/veo3.1/reference-to-video":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
 };
-function estimateVideoCost(model,seconds,resolution){
+function estimateVideoCost(model,seconds,resolution,hasVideoRefs){
   const p=VIDEO_PRICING[model];
   if(!p||!seconds)return null;
   if(p.standard){
-    const cost=seedanceStandardCost(resolution,seconds,p.videoRefMultiplier);
+    // The 0.6x multiplier on reference-to-video applies only when VIDEO
+    // reference inputs are attached (per fal's pricing docs) — image-only
+    // references bill at the full standard rate.
+    const cost=seedanceStandardCost(resolution,seconds,hasVideoRefs?p.videoRefMultiplier:null);
     return{cost,approx:false};
   }
   let rate=(resolution==="4k"&&p.perSec4k)?p.perSec4k:p.perSec;
@@ -5438,6 +5442,7 @@ const VIDEO_MODEL_DURATIONS={
   "bytedance/seedance-2.0/text-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
   "bytedance/seedance-2.0/fast/reference-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
   "bytedance/seedance-2.0/reference-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
+  "bytedance/seedance-2.0/image-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
   "fal-ai/kling-video/v2.1/master/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/v2.6/pro/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/v3/standard/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
@@ -5458,6 +5463,7 @@ const VIDEO_MODEL_RESOLUTIONS={
   "bytedance/seedance-2.0/text-to-video":["480p","720p","1080p","4k"],
   "bytedance/seedance-2.0/fast/reference-to-video":["480p","720p"],
   "bytedance/seedance-2.0/reference-to-video":["480p","720p","1080p","4k"],
+  "bytedance/seedance-2.0/image-to-video":["480p","720p","1080p","4k"],
   "fal-ai/veo3.1":["720p","1080p","4k"],
   "fal-ai/veo3.1/reference-to-video":["720p","1080p"],
   "fal-ai/kling-video/v2.1/master/text-to-video":null,
@@ -5578,6 +5584,9 @@ async function cancelProductionWizard(){
 const PD_ASPECT_RATIOS={
   "bytedance/seedance-2.0/fast/text-to-video":["16:9","9:16","4:3","3:4","21:9","1:1"],
   "bytedance/seedance-2.0/text-to-video":["16:9","9:16","4:3","3:4","21:9","1:1"],
+  "bytedance/seedance-2.0/reference-to-video":["16:9","9:16","4:3","3:4","21:9","1:1"],
+  "bytedance/seedance-2.0/fast/reference-to-video":["16:9","9:16","4:3","3:4","21:9","1:1"],
+  "bytedance/seedance-2.0/image-to-video":["16:9","9:16","4:3","3:4","21:9","1:1"],
   "fal-ai/kling-video/v2.1/master/text-to-video":["16:9","9:16","1:1","4:3","3:4"],
   "fal-ai/kling-video/v2.6/pro/text-to-video":["16:9","9:16","1:1","4:3","3:4"],
   "fal-ai/kling-video/v3/standard/text-to-video":["16:9","9:16","1:1","4:3","3:4"],
@@ -5716,7 +5725,9 @@ function renderPdSharedFields(){
         <option value="openai/gpt-image-2">GPT Image 2 (via fal.ai)</option>
       </select></div>
       <div class="f-group"><label class="f-label">2. Video Model</label><select class="f-select" id="pdVideoModel" onchange="updateClipLenOptions();updatePdAspectRatioOptions()">
-        <option value="bytedance/seedance-2.0/fast/text-to-video">Seedance 2.0 Fast</option><option value="bytedance/seedance-2.0/text-to-video">Seedance 2.0</option>
+        <option value="bytedance/seedance-2.0/reference-to-video">Seedance 2.0 — Multi-Reference</option>
+        <option value="bytedance/seedance-2.0/fast/reference-to-video">Seedance 2.0 Fast — Multi-Reference</option>
+        <option value="bytedance/seedance-2.0/image-to-video">Seedance 2.0 — Start→End Frame</option>
         <option value="fal-ai/kling-video/v2.1/master/text-to-video">Kling 2.1 Master</option><option value="fal-ai/kling-video/v2.6/pro/text-to-video">Kling 2.6 Pro</option>
         <option value="fal-ai/kling-video/v3/standard/text-to-video">Kling 3.0 Standard</option><option value="fal-ai/veo3.1">Veo 3.1</option>
       </select></div>
@@ -6885,12 +6896,25 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
 }
 
 // ── EPISODE SCENE (real video gen per shot, with continuity chaining) ──
-async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImageUrl,negativePrompt){
+async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImageUrl,negativePrompt,endImageUrl){
   const apiKey=gs("api_falai","");
   if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
   let endpoint=model;
   let body={prompt,aspect_ratio:ratio};
-  if(refImageUrl){
+  if(model.includes("/reference-to-video")){
+    // Multi-Reference endpoint: refs go in image_urls and MUST be referenced
+    // in the prompt via @Image1-style tags or the model ignores them.
+    if(refImageUrl){
+      body.image_urls=[refImageUrl];
+      body.prompt=`@Image1 is the main character reference — keep their appearance exactly consistent. ${prompt}`;
+    }
+  } else if(model.includes("/image-to-video")){
+    // Start→End Frame endpoint: needs a first frame; end frame is optional.
+    if(!refImageUrl)throw new Error("Start→End Frame model needs a reference image (storyboard frame) for the first frame");
+    body.image_url=refImageUrl;
+    if(endImageUrl)body.end_image_url=endImageUrl;
+    delete body.aspect_ratio; // derived from the input image on this endpoint
+  } else if(refImageUrl){
     const i2v=IMAGE_TO_VIDEO_MAP[model];
     if(i2v){endpoint=i2v.endpoint;body[i2v.field]=refImageUrl;}
   }
@@ -6999,8 +7023,14 @@ async function generateEpisodeScene(prodId,epIndex,retryOnly=false){
       const fallback=e.storyboard[i-1].url;
       refImage=prevShot&&prevShot.videoUrl?await getChainedReferenceFrame(fallback,prevShot.videoUrl):fallback;
     }
+    // The Multi-Reference and Start→End Frame models always need a reference —
+    // when chaining didn't supply one, use this shot's own storyboard frame.
+    if(!refImage&&(p.videoModel.includes("/reference-to-video")||p.videoModel.includes("/image-to-video")))refImage=sb.url;
+    // Start→End Frame mode: end each shot on the NEXT shot's storyboard frame
+    // so consecutive clips flow into each other; the last shot has no end frame.
+    const endImage=p.videoModel.includes("/image-to-video")&&e.storyboard[i+1]?e.storyboard[i+1].url:null;
     try{
-      const videoUrl=await runProductionVideoGen(p.videoModel,`${sb.desc}, ${p.characterDesc}`,p.aspectRatio,e.duration,p.quality,refImage,e.negativePrompt);
+      const videoUrl=await runProductionVideoGen(p.videoModel,`${sb.desc}, ${p.characterDesc}`,p.aspectRatio,e.duration,p.quality,refImage,e.negativePrompt,endImage);
       e.shots.push({shotIndex:i,videoUrl,refImage});
       e.shots.sort((a,b)=>a.shotIndex-b.shotIndex);
       logCost(p.videoModel,`Ep${epIndex} scene shot ${i+1}`);
