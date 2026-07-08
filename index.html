@@ -6440,11 +6440,17 @@ function episodeCardHTML(p,e){
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
         <span style="font-size:11px;font-weight:700;color:var(--violet)">2. STORYBOARD</span>${stageBadge(e.storyboardStatus,{pending:'Not generated',ready:'Awaiting your approval',partial:'⚠️ Incomplete',approved:'✅ Approved',rejected:'❌ Rejected — redoing'})}
       </div>
-      ${e.storyboardStatus==='pending'?`<button class="btn btn-primary btn-sm" onclick="generateEpisodeStoryboard('${p.id}',${e.index})">🖼 Generate Storyboard</button>`:''}
+      ${e.storyboardStatus==='pending'?`<div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="generateEpisodeStoryboard('${p.id}',${e.index})">🖼 Generate Storyboard</button>
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('ep${e.index}StoryboardUpload').click()">📤 Upload Storyboard</button>
+        <input type="file" id="ep${e.index}StoryboardUpload" accept="image/*" multiple style="display:none" onchange="uploadEpisodeStoryboard('${p.id}',${e.index},event)">
+      </div>`:''}
       ${e.storyboardStatus==='partial'?`<div style="font-size:11px;color:#b45309;margin-bottom:6px">Only ${e.storyboard.length} of ${e.shotsExpected||1} shot${(e.shotsExpected||1)!==1?'s':''} generated — approving now will produce an incomplete scene.</div>`:''}
       ${e.storyboard.length?`<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:6px">${e.storyboard.map(s=>`<img src="${s.url}" style="width:70px;height:70px;border-radius:6px;object-fit:cover;flex-shrink:0">`).join('')}</div>`:''}
       ${(e.storyboardStatus==='ready'||e.storyboardStatus==='partial')?`<div style="display:flex;gap:6px;flex-wrap:wrap">
         ${e.storyboardStatus==='partial'?`<button class="btn btn-primary btn-xs" onclick="generateEpisodeStoryboard('${p.id}',${e.index},true)">🔄 Retry Missing Shots</button>`:''}
+        ${e.storyboardStatus==='partial'?`<button class="btn btn-outline btn-xs" onclick="document.getElementById('ep${e.index}StoryboardUpload').click()">📤 Upload Missing Shots</button>
+        <input type="file" id="ep${e.index}StoryboardUpload" accept="image/*" multiple style="display:none" onchange="uploadEpisodeStoryboard('${p.id}',${e.index},event)">`:''}
         <button class="btn ${e.storyboardStatus==='partial'?'btn-outline':'btn-primary'} btn-xs" onclick="approveEpisodeStage('${p.id}',${e.index},'storyboard')">✅ Approve${e.storyboardStatus==='partial'?' Anyway':''}</button>
         <button class="btn btn-danger btn-xs" onclick="rejectEpisodeStage('${p.id}',${e.index},'storyboard')">❌ Reject & Redo</button>
       </div>`:''}
@@ -6619,6 +6625,54 @@ function parseScriptShots(script,count){
 }
 
 // ── EPISODE STORYBOARD (real image gen per shot) ──
+async function uploadEpisodeStoryboard(prodId,epIndex,event){
+  const files=Array.from(event.target.files||[]);
+  event.target.value="";
+  if(!files.length)return;
+  const p=S.productions.find(x=>x.id===prodId);
+  const e=getEpisode(p,epIndex);
+  const parsed=parseScriptShots(e.script,e.shotsExpected||1);
+  const shotDescs=parsed.shots;
+  const existingIndices=new Set(e.storyboard.map(s=>s.shotIndex));
+  const openSlots=[];
+  for(let i=0;i<shotDescs.length;i++){if(!existingIndices.has(i))openSlots.push(i);}
+  if(!openSlots.length){toast("All shots already have a storyboard image","error");return;}
+  const toAssign=files.slice(0,openSlots.length);
+  if(files.length>openSlots.length)toast(`Only ${openSlots.length} shot slot${openSlots.length!==1?'s':''} open — using the first ${openSlots.length} image${openSlots.length!==1?'s':''}`,"");
+  toast(`📤 Uploading ${toAssign.length} storyboard image${toAssign.length!==1?'s':''}…`,"");
+  for(let idx=0;idx<toAssign.length;idx++){
+    const file=toAssign[idx];
+    const shotIndex=openSlots[idx];
+    try{
+      const ext=(file.name.split(".").pop()||"jpg").toLowerCase();
+      const path=`production-storyboards/${prodId}/ep${epIndex}_shot${shotIndex}_${Date.now()}.${ext}`;
+      const ref=fbStorage.ref(path);
+      await ref.put(file);
+      const url=await ref.getDownloadURL();
+      e.storyboard.push({shotIndex,url,desc:shotDescs[shotIndex]||"",uploaded:true});
+    }catch(err){
+      // Storage may not be enabled yet — fall back to a local data URL so the
+      // upload still works, just without cross-device sharing until it is.
+      try{
+        const dataUrl=await new Promise((res,rej)=>{
+          const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error("read failed"));r.readAsDataURL(file);
+        });
+        e.storyboard.push({shotIndex,url:dataUrl,desc:shotDescs[shotIndex]||"",uploaded:true});
+        toast("⚠️ Cloud storage unavailable — saved on this device only for now","error");
+      }catch(err2){
+        toast(`❌ Couldn't read ${file.name}: ${err2.message}`,"error");
+      }
+    }
+  }
+  e.storyboard.sort((a,b)=>a.shotIndex-b.shotIndex);
+  const complete=e.storyboard.length>=shotDescs.length;
+  e.storyboardStatus=e.storyboard.length===0?"pending":(complete?"ready":"partial");
+  save("productions");
+  openProductionDetail(prodId);
+  if(complete)toast(`🖼 Episode ${epIndex} storyboard ready for your approval`,"success");
+  else if(e.storyboard.length>0)toast(`Uploaded — ${e.storyboard.length} of ${shotDescs.length} shots filled`,"");
+}
+
 async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
   const p=S.productions.find(x=>x.id===prodId);
   const e=getEpisode(p,epIndex);
