@@ -181,6 +181,11 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;appearance:non
 input[type="range"]::-webkit-slider-thumb:hover{transform:scale(1.15)}
 input[type="range"]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;border:none;background:linear-gradient(135deg,var(--violet),var(--ice));box-shadow:0 2px 8px var(--glow-ice),0 0 0 3px var(--surface);cursor:pointer}
 input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:var(--glass-brd)}
+.model-badge{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,0.12),0 0 0 1px var(--glass-brd);overflow:hidden}
+.model-badge img{width:60%;height:60%;object-fit:contain}
+.model-badge.mono{color:#fff;font-size:10px;font-weight:800;letter-spacing:0.02em;font-family:var(--font-display)}
+.model-select-row{display:flex;align-items:center;gap:8px}
+.model-select-row .f-select{flex:1}
 .f-group{margin-bottom:11px}
 .f-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .f-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
@@ -585,14 +590,17 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
   <div class="sp-section">
     <div class="sp-section-title">AI Director Brain</div>
     <div class="sp-section-body">
-      <select class="f-select" id="aiModelSelect" onchange="saveSetting('ai_model',this.value);updateAiModelLabel();updateAicreditsModelVisibility()">
+      <div class="model-select-row">
+        <div class="model-badge" id="aiModelBadge"></div>
+        <select class="f-select" id="aiModelSelect" onchange="saveSetting('ai_model',this.value);updateAiModelLabel();updateAicreditsModelVisibility()">
         <option value="claude">Claude (Anthropic) — Best Quality</option>
         <option value="gemini">Google Gemini — Vision-capable, cheap</option>
         <option value="groq">Groq Llama 3.3 — Free & Fast</option>
         <option value="deepseek">DeepSeek V3 — Ultra Cheap</option>
         <option value="openai">OpenAI GPT-4o</option>
         <option value="aicredits">AICredits — Gateway (pick any model below)</option>
-      </select>
+        </select>
+      </div>
       <div class="f-group" id="aicreditsModelWrap" style="display:none;margin-top:8px">
         <label class="f-label">AICredits Model <span style="font-weight:400;color:var(--texts)">(300+ available — curated list below, or type any exact ID)</span></label>
         <select class="f-select" id="aicreditsModelSelect" onchange="handleAicreditsModelSelect()">
@@ -2647,6 +2655,7 @@ function renderImageGen(el){
         <div class="f-group"><label class="f-label">Negative Prompt <span style="font-weight:400;color:var(--texts)">(optional)</span></label><input class="f-input" id="igNegPrompt" placeholder="e.g. blurry, low quality, watermark"></div>
         <div class="f-group">
           <label class="f-label">Model</label>
+          <div class="model-select-row"><div class="model-badge" id="igModelBadge"></div>
           <select class="f-select" id="igModel" onchange="updateIgModelUI()">
             <optgroup label="Fast / Standard">
               <option value="fal-ai/flux/schnell">FLUX Schnell (Fast, ~2s)</option>
@@ -2670,7 +2679,7 @@ function renderImageGen(el){
               <option value="gpt-image-2">GPT Image 2 (batch up to 8)</option>
             </optgroup>
             ${(gs("custom_image_models",[])||[]).map(m=>`<option value="${m.endpoint}">${m.label} (custom)</option>`).join('')}
-          </select>
+          </select></div>
           <div id="igModelNote" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
         </div>
         ${S.projects.length?`<div class="f-group"><label class="f-label">Save to Project</label><select class="f-select" id="igProject"><option value="">No project</option>${S.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`:''}
@@ -2965,8 +2974,51 @@ function pushIgChatMessage(msg){
 // ── IMAGE-TO-IMAGE reference handling ──
 S.igMultiRefImages=S.igMultiRefImages||[];
 
+// Real official marks, sourced only from Wikimedia Commons (verified, freely
+// hotlinkable via Special:FilePath). Where no safely-licensed mark exists
+// (Seedance, Kling, and most Image providers), a brand-colored monogram is
+// used instead rather than lifting logos from unlicensed logo-download sites.
+const MODEL_LOGOS={
+  claude:{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Claude_AI_symbol.svg",bg:"#D9775722"},
+  openai:{img:"https://commons.wikimedia.org/wiki/Special:FilePath/OpenAI_logo_2025_(symbol).svg",bg:"#10A37F22"},
+  gemini:{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
+  groq:{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Groq_logo.svg",bg:"#F5503622"},
+  deepseek:{img:"https://commons.wikimedia.org/wiki/Special:FilePath/DeepSeek-icon.svg",bg:"#4D6BFE22"},
+  aicredits:{mono:"AC",bg:"#8B5CF6"},
+  "bytedance/seedance-2.0/fast/text-to-video":{mono:"SD",bg:"#0C8CE9"},
+  "bytedance/seedance-2.0/text-to-video":{mono:"SD",bg:"#0C8CE9"},
+  "bytedance/seedance-2.0/fast/reference-to-video":{mono:"SD",bg:"#0C8CE9"},
+  "bytedance/seedance-2.0/reference-to-video":{mono:"SD",bg:"#0C8CE9"},
+  "fal-ai/kling-video/v2.1/master/text-to-video":{mono:"K",bg:"#1B5EFF"},
+  "fal-ai/kling-video/v2.6/pro/text-to-video":{mono:"K",bg:"#1B5EFF"},
+  "fal-ai/kling-video/v3/standard/text-to-video":{mono:"K",bg:"#1B5EFF"},
+  "fal-ai/veo3.1":{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
+  "fal-ai/veo3.1/reference-to-video":{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
+};
+function modelBadgeHtml(key){
+  const m=MODEL_LOGOS[key]||guessImageModelBadge(key);
+  if(!m)return '';
+  if(m.img)return `<div class="model-badge" style="background:${m.bg}"><img src="${m.img}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`;
+  return `<div class="model-badge mono" style="background:${m.bg}">${m.mono}</div>`;
+}
+function guessImageModelBadge(key){
+  if(!key)return null;
+  if(key.includes("flux"))return{mono:"FX",bg:"#1A1A2E"};
+  if(key.includes("ideogram"))return{mono:"ID",bg:"#6D28D9"};
+  if(key.includes("recraft"))return{mono:"RC",bg:"#F97316"};
+  if(key.includes("stable-diffusion"))return{mono:"SD",bg:"#8B5CF6"};
+  if(key.includes("gemini")||key.includes("nano-banana"))return MODEL_LOGOS.gemini;
+  if(key.includes("gpt")||key.includes("openai"))return MODEL_LOGOS.openai;
+  return{mono:"AI",bg:"#6B7280"};
+}
+function setModelBadge(containerId,key){
+  const el=document.getElementById(containerId);
+  if(el)el.innerHTML=modelBadgeHtml(key);
+}
+
 function updateIgModelUI(){
   const model=document.getElementById("igModel").value;
+  setModelBadge("igModelBadge",model);
   const cap=IMAGE_MODEL_CAPABILITIES[model]||{};
   const singleWrap=document.getElementById("igSingleRefWrap");
   const multiWrap=document.getElementById("igMultiRefWrap");
@@ -3737,6 +3789,7 @@ function renderVideoCanvas(el){
           ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:10px">Add a <b>fal.ai</b> API key in Settings — this one key powers Seedance, Kling, and Veo.</div>`:''}
           <div class="f-group">
             <label class="f-label">Model</label>
+            <div class="model-select-row"><div class="model-badge" id="vcModelBadge"></div>
             <select class="f-select" id="vcModel" onchange="updateVcModelUI()">
               <optgroup label="Seedance 2.0 (ByteDance)">
                 <option value="bytedance/seedance-2.0/fast/text-to-video">Seedance 2.0 Fast</option>
@@ -3753,7 +3806,7 @@ function renderVideoCanvas(el){
                 <option value="fal-ai/veo3.1">Veo 3.1</option>
                 <option value="fal-ai/veo3.1/reference-to-video">Veo 3.1 — Multi-Reference (up to 3 images)</option>
               </optgroup>
-            </select>
+            </select></div>
             <div id="vcModelNote" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
           </div>
           <div class="f-row">
@@ -4275,6 +4328,7 @@ function updateVcDurationFromSlider(){
 }
 function updateVcModelUI(){
   const model=document.getElementById("vcModel").value;
+  setModelBadge("vcModelBadge",model);
   const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
   const durConfig=VIDEO_MODEL_DURATIONS[model];
   const slider=document.getElementById("vcDurationSlider");
@@ -9052,6 +9106,7 @@ function toggleAiPanel(){
 
 function updateAiModelLabel(){
   const model=gs("ai_model","claude");
+  setModelBadge("aiModelBadge",model);
   const modelNames={claude:"Claude (Anthropic)",gemini:"Google Gemini",groq:"Groq Llama 3.3",deepseek:"DeepSeek V3",openai:"OpenAI GPT-4o",aicredits:"AICredits ("+(gs("aicredits_model","")||"no model set")+")"};
   const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
   const hasKey=!!gs(apiKeyMap[model],"");
