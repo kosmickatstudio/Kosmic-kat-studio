@@ -2871,13 +2871,13 @@ async function startNewIgChat(){
 function openIgChatHistory(){
   const overlay=document.createElement("div");
   overlay.className="modal-overlay show";
-  overlay.id="chatHistoryModal";
+  overlay.id="igChatHistoryModal";
   const sessions=S.igChatSessions;
   overlay.innerHTML=`
     <div class="modal" style="max-height:75vh;display:flex;flex-direction:column">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">☰ Chat History</div>
-        <button class="ig-icon-btn" onclick="document.getElementById('chatHistoryModal').remove()">✕</button>
+        <button class="ig-icon-btn" onclick="document.getElementById('igChatHistoryModal').remove()">✕</button>
       </div>
       <div style="overflow-y:auto;flex:1">
         ${sessions.length===0?`<div class="empty-desc">No past chats yet — start a new chat and your current one will be saved here.</div>`
@@ -2905,7 +2905,7 @@ async function loadIgChatSession(sessionId){
   saveSetting("ig_chat_sessions",S.igChatSessions);
   save("igChatHistory");
   renderIgChatThread();
-  document.getElementById("chatHistoryModal")?.remove();
+  document.getElementById("igChatHistoryModal")?.remove();
   toast("📂 Chat loaded","success");
 }
 
@@ -2913,7 +2913,7 @@ async function deleteIgChatSession(sessionId){
   if(!(await showConfirmDialog("Delete this saved chat permanently? This cannot be undone.",{danger:true,okLabel:"Delete"})))return;
   S.igChatSessions=S.igChatSessions.filter(s=>s.id!==sessionId);
   saveSetting("ig_chat_sessions",S.igChatSessions);
-  document.getElementById("chatHistoryModal")?.remove();
+  document.getElementById("igChatHistoryModal")?.remove();
   openIgChatHistory();
 }
 
@@ -4923,13 +4923,13 @@ async function startNewVcChat(){
 function openVcChatHistory(){
   const overlay=document.createElement("div");
   overlay.className="modal-overlay show";
-  overlay.id="chatHistoryModal";
+  overlay.id="vcChatHistoryModal";
   const sessions=S.vcChatSessions;
   overlay.innerHTML=`
     <div class="modal" style="max-height:75vh;display:flex;flex-direction:column">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">☰ Chat History</div>
-        <button class="ig-icon-btn" onclick="document.getElementById('chatHistoryModal').remove()">✕</button>
+        <button class="ig-icon-btn" onclick="document.getElementById('vcChatHistoryModal').remove()">✕</button>
       </div>
       <div style="overflow-y:auto;flex:1">
         ${sessions.length===0?`<div class="empty-desc">No past chats yet — start a new chat and your current one will be saved here.</div>`
@@ -4957,7 +4957,7 @@ async function loadVcChatSession(sessionId){
   saveSetting("vc_chat_sessions",S.vcChatSessions);
   saveSetting("vc_chat_history",S.vcChatHistory);
   renderVcChatThread();
-  document.getElementById("chatHistoryModal")?.remove();
+  document.getElementById("vcChatHistoryModal")?.remove();
   toast("📂 Chat loaded","success");
 }
 
@@ -4965,7 +4965,7 @@ async function deleteVcChatSession(sessionId){
   if(!(await showConfirmDialog("Delete this saved chat permanently? This cannot be undone.",{danger:true,okLabel:"Delete"})))return;
   S.vcChatSessions=S.vcChatSessions.filter(s=>s.id!==sessionId);
   saveSetting("vc_chat_sessions",S.vcChatSessions);
-  document.getElementById("chatHistoryModal")?.remove();
+  document.getElementById("vcChatHistoryModal")?.remove();
   openVcChatHistory();
 }
 
