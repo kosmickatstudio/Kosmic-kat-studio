@@ -2733,7 +2733,7 @@ function renderImageGen(el){
           </div>
           <div id="igStrengthWrap" style="display:none;margin-top:8px">
             <label class="f-label">Transformation Strength: <span id="igStrengthVal">0.75</span></label>
-            <input type="range" id="igStrength" min="0.1" max="1" step="0.05" value="0.75" style="width:100%" oninput="document.getElementById('igStrengthVal').textContent=this.value">
+            <input type="range" id="igStrength" min="0.1" max="1" step="0.05" value="0.75" style="width:100%;--range-fill:72.22%" oninput="document.getElementById('igStrengthVal').textContent=this.value">
           </div>
         </div>
 
@@ -4012,7 +4012,7 @@ function openMotionBrushEditor(){
         </div>
         <div id="mbBrushWrap" style="display:flex;align-items:center;gap:8px">
           <span style="color:#c9b8ea;font-size:11px">Brush</span>
-          <input type="range" id="mbBrushSize" min="10" max="100" value="30" style="flex:1" oninput="mb.brushSize=parseInt(this.value)">
+          <input type="range" id="mbBrushSize" min="10" max="100" value="30" style="flex:1;--range-fill:22.22%" oninput="mb.brushSize=parseInt(this.value)">
         </div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-outline btn-sm" style="flex:1;color:#fff;border-color:rgba(255,255,255,0.3)" onclick="clearMbLayer()">Clear Current Layer</button>
@@ -4376,10 +4376,12 @@ function clearAllVcMulti(previewId){
 function updateVcDurationFromSlider(){
   const model=document.getElementById("vcModel").value;
   const durConfig=VIDEO_MODEL_DURATIONS[model];
-  const idx=parseInt(document.getElementById("vcDurationSlider").value,10)||0;
+  const slider=document.getElementById("vcDurationSlider");
+  const idx=parseInt(slider.value,10)||0;
   const val=durConfig.options[idx];
   document.getElementById("vcDuration").value=val;
   document.getElementById("vcDurationLabel").textContent=`— ${val}s`;
+  updateRangeFill(slider);
   updateVcCostHint();
 }
 function updateVcCostHint(){
@@ -5737,7 +5739,7 @@ function renderPdSharedFields(){
       </div>
       <div class="f-group">
         <label class="f-label">4. Total Duration <span style="font-weight:400;color:var(--texts)" id="pdDurationValueLabel">— seconds</span></label>
-        <input type="range" id="pdDuration" min="4" max="300" value="30" step="1" style="width:100%" oninput="updateDurationPreview()">
+        <input type="range" id="pdDuration" min="4" max="300" value="30" step="1" style="width:100%;--range-fill:8.78%" oninput="updateDurationPreview()">
         <div id="pdDurationPreview" style="font-size:11px;color:var(--textm);margin-top:6px">Drag to set your total video length.</div>
       </div>
       <div class="f-group"><label class="f-label">5. Continuity Style</label><select class="f-select" id="pdContinuity">
@@ -7461,7 +7463,7 @@ function renderAudio(el){
       <div class="panel-title">🎼 Music Generation <span class="badge ${gs('api_falai')?'badge-green':'badge-red'}">${gs('api_falai')?'ACTIVE — fal.ai':'NO KEY'}</span></div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Real instrumental music, up to 6 minutes, via Stable Audio 3.</div>
       <div class="f-group"><textarea class="f-textarea" id="musicPrompt" placeholder="e.g. Tense cinematic orchestral build, low strings and brass, building to a dramatic climax" style="min-height:60px"></textarea></div>
-      <div class="f-group"><label class="f-label">Duration: <span id="musicDurVal">30</span>s</label><input type="range" id="musicDuration" min="10" max="180" value="30" style="width:100%" oninput="document.getElementById('musicDurVal').textContent=this.value"></div>
+      <div class="f-group"><label class="f-label">Duration: <span id="musicDurVal">30</span>s</label><input type="range" id="musicDuration" min="10" max="180" value="30" style="width:100%;--range-fill:11.76%" oninput="document.getElementById('musicDurVal').textContent=this.value"></div>
       <button class="btn btn-primary btn-full" ${!gs('api_falai')?'disabled':''} onclick="generateMusic()">🎼 Generate Music</button>
       <div id="musicResult" style="margin-top:10px"></div>
     </div>
@@ -7683,11 +7685,11 @@ function loadAudioForEditing(event){
       panel.innerHTML=`
         <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Duration: ${dur.toFixed(1)}s</div>
         <div class="f-row">
-          <div class="f-group"><label class="f-label">Trim Start: <span id="trimStartVal">0.0</span>s</label><input type="range" id="trimStart" min="0" max="${dur}" step="0.1" value="0" style="width:100%" oninput="document.getElementById('trimStartVal').textContent=parseFloat(this.value).toFixed(1)"></div>
-          <div class="f-group"><label class="f-label">Trim End: <span id="trimEndVal">${dur.toFixed(1)}</span>s</label><input type="range" id="trimEnd" min="0" max="${dur}" step="0.1" value="${dur}" style="width:100%" oninput="document.getElementById('trimEndVal').textContent=parseFloat(this.value).toFixed(1)"></div>
+          <div class="f-group"><label class="f-label">Trim Start: <span id="trimStartVal">0.0</span>s</label><input type="range" id="trimStart" min="0" max="${dur}" step="0.1" value="0" style="width:100%;--range-fill:0%" oninput="document.getElementById('trimStartVal').textContent=parseFloat(this.value).toFixed(1)"></div>
+          <div class="f-group"><label class="f-label">Trim End: <span id="trimEndVal">${dur.toFixed(1)}</span>s</label><input type="range" id="trimEnd" min="0" max="${dur}" step="0.1" value="${dur}" style="width:100%;--range-fill:100%" oninput="document.getElementById('trimEndVal').textContent=parseFloat(this.value).toFixed(1)"></div>
         </div>
-        <div class="f-group"><label class="f-label">Volume: <span id="volVal">100</span>%</label><input type="range" id="volGain" min="0" max="200" value="100" style="width:100%" oninput="document.getElementById('volVal').textContent=this.value"></div>
-        <div class="f-group"><label class="f-label">Fade In/Out: <span id="fadeVal">0.2</span>s</label><input type="range" id="fadeAmt" min="0" max="3" step="0.1" value="0.2" style="width:100%" oninput="document.getElementById('fadeVal').textContent=this.value"></div>
+        <div class="f-group"><label class="f-label">Volume: <span id="volVal">100</span>%</label><input type="range" id="volGain" min="0" max="200" value="100" style="width:100%;--range-fill:50%" oninput="document.getElementById('volVal').textContent=this.value"></div>
+        <div class="f-group"><label class="f-label">Fade In/Out: <span id="fadeVal">0.2</span>s</label><input type="range" id="fadeAmt" min="0" max="3" step="0.1" value="0.2" style="width:100%;--range-fill:6.67%" oninput="document.getElementById('fadeVal').textContent=this.value"></div>
         <button class="btn btn-primary btn-full" onclick="processAudioEdit()">✂️ Apply & Export</button>
         <div id="audioEditResult" style="margin-top:10px"></div>`;
     }catch(err){
@@ -8409,8 +8411,8 @@ function renderEditor(el){
             <button class="pc-menu-btn" onclick="removeSeqItem(${i})">✕</button>
           </div>
           <div class="f-row" style="margin-bottom:0">
-            <div class="f-group" style="margin-bottom:0"><label class="f-label" style="font-size:10px">Trim Start: ${(item.trimStart||0).toFixed(1)}s</label><input type="range" min="0" max="30" step="0.5" value="${item.trimStart||0}" style="width:100%" oninput="updateSeqTrim(${i},'trimStart',this.value)"></div>
-            <div class="f-group" style="margin-bottom:0"><label class="f-label" style="font-size:10px">Trim End: ${item.trimEnd===null?'Full':item.trimEnd.toFixed(1)+'s'}</label><input type="range" min="0" max="30" step="0.5" value="${item.trimEnd===null?30:item.trimEnd}" style="width:100%" oninput="updateSeqTrim(${i},'trimEnd',this.value)"></div>
+            <div class="f-group" style="margin-bottom:0"><label class="f-label" style="font-size:10px">Trim Start: ${(item.trimStart||0).toFixed(1)}s</label><input type="range" min="0" max="30" step="0.5" value="${item.trimStart||0}" style="width:100%;--range-fill:${((item.trimStart||0)/30*100).toFixed(1)}%" oninput="updateSeqTrim(${i},'trimStart',this.value)"></div>
+            <div class="f-group" style="margin-bottom:0"><label class="f-label" style="font-size:10px">Trim End: ${item.trimEnd===null?'Full':item.trimEnd.toFixed(1)+'s'}</label><input type="range" min="0" max="30" step="0.5" value="${item.trimEnd===null?30:item.trimEnd}" style="width:100%;--range-fill:${((item.trimEnd===null?30:item.trimEnd)/30*100).toFixed(1)}%" oninput="updateSeqTrim(${i},'trimEnd',this.value)"></div>
           </div>
           ${i<sequence.length-1?`<div class="f-group" style="margin:8px 0 0"><label class="f-label" style="font-size:10px">Transition to next clip</label><select class="f-select" onchange="updateSeqTransition(${i},this.value)"><option value="cut" ${item.transition==='cut'?'selected':''}>Cut</option><option value="fade" ${item.transition==='fade'?'selected':''}>Fade to Black</option></select></div>`:''}
         </div>`;
@@ -9760,13 +9762,15 @@ function updateRangeFill(el){
 document.addEventListener("input",e=>{
   if(e.target&&e.target.type==="range")updateRangeFill(e.target);
 });
-new MutationObserver(muts=>{
-  muts.forEach(m=>m.addedNodes.forEach(n=>{
-    if(n.nodeType!==1)return;
-    if(n.matches&&n.matches('input[type="range"]'))updateRangeFill(n);
-    n.querySelectorAll&&n.querySelectorAll('input[type="range"]').forEach(updateRangeFill);
-  }));
-}).observe(document.body,{childList:true,subtree:true});
+// A MutationObserver watching the whole document body used to live here to
+// set each slider's initial fill on render — removed because it scanned the
+// entire newly-added subtree on every single DOM mutation anywhere in the
+// app, and this app does frequent large innerHTML re-renders (every chat
+// message, every toast, every module switch). That combination was almost
+// certainly the cause of app-wide lag/freezing. Sliders now get their
+// initial --range-fill computed directly in their template markup instead
+// (zero runtime cost), or via a single targeted updateRangeFill() call at
+// the couple of spots where a slider's range is set dynamically after render.
 
 window.addEventListener("load",init);
 if("serviceWorker" in navigator){
