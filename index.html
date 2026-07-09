@@ -9795,15 +9795,24 @@ async function handleFlowShotMediaUpload(projectId,shotId,event){
   const p=getFlowProject(projectId);
   const shot=p.shots.find(s=>s.id===shotId);
   if(!shot)return;
+  const btn=event.target.previousElementSibling;
+  const origLabel=btn?btn.textContent:"";
+  if(btn){btn.textContent="Uploading…";btn.disabled=true;}
   try{
     const path=`flow-shots/${projectId}/${shotId}_${Date.now()}_${file.name}`;
     const ref=fbStorage.ref(path);
     await ref.put(file);
     shot.mediaUrl=await ref.getDownloadURL();
   }catch(err){
-    const dataUrl=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});
-    shot.mediaUrl=dataUrl;
-    toast("⚠️ Cloud storage unavailable — media saved locally on this device only","error");
+    console.warn("Flow shot cloud upload failed, falling back to local copy:",err);
+    try{
+      shot.mediaUrl=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error("Couldn't read the file"));r.readAsDataURL(file);});
+      toast("⚠️ Cloud storage unavailable — media saved locally on this device only","error");
+    }catch(err2){
+      toast(`❌ Upload failed: ${err2.message}`,"error");
+      if(btn){btn.textContent=origLabel;btn.disabled=false;}
+      return;
+    }
   }
   saveFlowProject(p);
   renderModule("flow");
@@ -9960,12 +9969,14 @@ function renderAssetRegistryModal(){
     <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--violet);margin-bottom:4px">📚 Asset Registry</div>
     <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Character keyframes and style plates, shared across every Flow project — no re-uploading the same reference shot after shot.</div>
     <div class="f-group"><input class="f-input" id="arLabel" placeholder="Label, e.g. 'Someoka - determined pose'"></div>
-    <div class="f-row">
-      <div class="f-group"><select class="f-select" id="arType"><option value="characterKeyframe">Character Keyframe</option><option value="stylePlate">Style Plate</option></select></div>
-      <div class="f-group"><button class="btn btn-outline btn-full" onclick="document.getElementById('arFile').click()">📤 Choose Image</button><input type="file" id="arFile" accept="image/*" style="display:none" onchange="handleAssetRegistryUpload(event)"></div>
+    <div class="f-group"><select class="f-select" id="arType"><option value="characterKeyframe">Character Keyframe</option><option value="stylePlate">Style Plate</option></select></div>
+    <div class="f-group">
+      <button class="btn btn-outline btn-full" onclick="document.getElementById('arFile').click()">📤 Choose Image</button>
+      <input type="file" id="arFile" accept="image/*" style="display:none" onchange="handleAssetRegistryUpload(event)">
     </div>
-    <div id="arUploadPreview" style="font-size:10px;color:var(--textm);margin-bottom:10px"></div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px" id="arList">
+    <div id="arUploadPreview" style="display:flex;align-items:center;gap:8px;margin-bottom:10px"></div>
+    <button class="btn btn-primary btn-full" id="arAddBtn" onclick="saveAssetRegistryItem()" disabled style="margin-bottom:14px;opacity:0.5">+ Add Asset</button>
+    <div style="display:flex;flex-direction:column;gap:8px" id="arList">
       ${(S.assetRegistry||[]).length===0?`<div style="font-size:11px;color:var(--textm);text-align:center;padding:16px 0">No assets yet — add your first one above.</div>`:
       (S.assetRegistry||[]).map(a=>`<div style="display:flex;align-items:center;gap:8px;background:var(--glass);border:1px solid var(--glass-brd);border-radius:10px;padding:6px">
         <img src="${a.url}" style="width:36px;height:36px;border-radius:8px;object-fit:cover">
@@ -9978,25 +9989,26 @@ function renderAssetRegistryModal(){
   document.body.appendChild(overlay);
 }
 let _arPendingFile=null;
-async function handleAssetRegistryUpload(event){
+function handleAssetRegistryUpload(event){
   const file=event.target.files[0];
   event.target.value="";
   if(!file)return;
   _arPendingFile=file;
-  document.getElementById("arUploadPreview").textContent=`Selected: ${file.name} — click "Add Asset" below`;
-  const addBtn=document.createElement("button");
-  addBtn.className="btn btn-primary btn-full";
-  addBtn.style.marginBottom="10px";
-  addBtn.textContent="+ Add Asset";
-  addBtn.onclick=saveAssetRegistryItem;
   const preview=document.getElementById("arUploadPreview");
-  preview.parentElement.insertBefore(addBtn,preview.nextSibling);
+  const objUrl=URL.createObjectURL(file);
+  preview.innerHTML=`<img src="${objUrl}" style="width:40px;height:40px;border-radius:8px;object-fit:cover"><span style="font-size:11px;color:var(--text)">${file.name}</span>`;
+  const addBtn=document.getElementById("arAddBtn");
+  addBtn.disabled=false;
+  addBtn.style.opacity="1";
 }
 async function saveAssetRegistryItem(){
   const label=document.getElementById("arLabel").value.trim();
   const type=document.getElementById("arType").value;
   if(!label){toast("Give this asset a label first","error");return;}
   if(!_arPendingFile){toast("Choose an image first","error");return;}
+  const addBtn=document.getElementById("arAddBtn");
+  addBtn.disabled=true;
+  addBtn.textContent="Uploading…";
   let url;
   try{
     const path=`asset-registry/${Date.now()}_${_arPendingFile.name}`;
@@ -10004,8 +10016,16 @@ async function saveAssetRegistryItem(){
     await ref.put(_arPendingFile);
     url=await ref.getDownloadURL();
   }catch(err){
-    url=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(_arPendingFile);});
-    toast("⚠️ Cloud storage unavailable — saved on this device only","error");
+    console.warn("Asset Registry cloud upload failed, falling back to local copy:",err);
+    try{
+      url=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error("Couldn't read the file"));r.readAsDataURL(_arPendingFile);});
+      toast("⚠️ Cloud storage unavailable — saved on this device only","error");
+    }catch(err2){
+      toast(`❌ Upload failed: ${err2.message}`,"error");
+      addBtn.disabled=false;
+      addBtn.textContent="+ Add Asset";
+      return;
+    }
   }
   S.assetRegistry.push({id:"asset_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),label,type,url,tags:[],createdAt:new Date().toISOString()});
   save("assetRegistry");
@@ -10013,6 +10033,7 @@ async function saveAssetRegistryItem(){
   _arPendingFile=null;
   document.getElementById("assetRegistryModal")?.remove();
   renderAssetRegistryModal();
+  toast("✅ Asset added","success");
   if(S.activeFlowProject)renderModule("flow");
 }
 function deleteAssetRegistryItem(id){
