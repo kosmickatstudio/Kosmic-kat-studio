@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>KosmicKat AI Studio</title>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#3D1F7A">
+<meta name="theme-color" content="#FAF8F5">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -66,9 +66,9 @@ body{font-family:'Inter',sans-serif;background:var(--pearl);color:var(--text);ov
 /* ── HEADER ── */
 header{position:relative;z-index:50;height:var(--header);background:var(--glass);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-bottom:1px solid var(--glass-brd);display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 16px;flex-shrink:0;box-shadow:0 1px 20px rgba(0,0,0,0.04)}
 header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--glow-gold),transparent)}
-.h-logo{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}
-.h-logo-img-wrap{width:40px;height:40px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px var(--glow-gold),0 0 0 2px var(--glass-brd)}
-.h-logo-img-wrap img{width:36px;height:36px;object-fit:contain;border-radius:50%}
+.h-logo{display:flex;align-items:center;gap:6px;text-decoration:none;flex-shrink:0}
+.h-logo-img-wrap{width:48px;height:48px;display:flex;align-items:center;justify-content:center}
+.h-logo-img-wrap img{width:48px;height:48px;object-fit:contain}
 .h-logo-text{font-family:'Cinzel',serif;font-weight:700;font-size:15px;color:var(--violet);letter-spacing:0.04em;line-height:1.1}
 .h-logo-text span{color:var(--gold)}
 .h-logo-sub{font-size:9px;color:var(--texts);letter-spacing:0.1em;text-transform:uppercase;font-weight:500}
@@ -308,7 +308,8 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 /* ── MODAL ── */
 .modal-overlay{position:fixed;inset:0;background:rgba(30,18,48,0.65);backdrop-filter:blur(8px);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 0.3s}
 .modal-overlay.show{opacity:1;pointer-events:all}
-.modal{background:var(--surface);border-radius:24px;padding:36px;width:380px;max-width:90vw;box-shadow:0 24px 80px rgba(61,31,122,0.3);transform:scale(0.95);transition:transform 0.3s;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;position:relative}
+.modal{background:var(--glass-solid);border:1px solid var(--glass-brd);border-radius:24px;padding:36px;width:380px;max-width:90vw;box-shadow:0 24px 80px rgba(61,31,122,0.28),0 0 0 1px rgba(255,255,255,0.04) inset;transform:scale(0.95);transition:transform 0.3s;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;position:relative}
+.modal::before{content:'';position:absolute;top:0;left:12%;right:12%;height:1px;background:linear-gradient(90deg,transparent,var(--glow-gold),transparent);border-radius:24px 24px 0 0}
 .modal-overlay.show .modal{transform:scale(1)}
 .auth-btn{width:100%;padding:12px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);color:var(--text);display:flex;align-items:center;justify-content:center;gap:10px;transition:all 0.2s;margin-bottom:10px}
 .auth-btn:hover{border-color:var(--vs);background:var(--lav);color:var(--violet)}
@@ -762,7 +763,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 <!-- Project Create Modal -->
 <div class="modal-overlay" id="projectModal">
   <div class="modal project-modal">
-    <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:16px" id="projectModalTitle">New Project</div>
+    <div style="font-family:var(--font-display);font-size:19px;font-weight:700;color:var(--violet);margin-bottom:18px;letter-spacing:0.01em" id="projectModalTitle">New Project</div>
     <div class="f-group">
       <label class="f-label">Project Name *</label>
       <input class="f-input" id="pmName" placeholder="e.g. Lil Bot, New Age…">
@@ -790,14 +791,20 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
       <textarea class="f-textarea" id="pmDesc" placeholder="Short description or logline…" style="min-height:60px"></textarea>
     </div>
     <div class="f-group">
-      <label class="f-label">Thumbnail Color</label>
-      <div style="display:flex;gap:8px;flex-wrap:wrap" id="pmColorPicker">
-        <div class="color-swatch" data-color="#7c3aed" style="width:28px;height:28px;border-radius:6px;background:#7c3aed;cursor:pointer;border:2px solid transparent" onclick="pickThumbColor(this)"></div>
-        <div class="color-swatch" data-color="#0891b2" style="width:28px;height:28px;border-radius:6px;background:#0891b2;cursor:pointer;border:2px solid transparent" onclick="pickThumbColor(this)"></div>
-        <div class="color-swatch" data-color="#059669" style="width:28px;height:28px;border-radius:6px;background:#059669;cursor:pointer;border:2px solid transparent" onclick="pickThumbColor(this)"></div>
-        <div class="color-swatch" data-color="#b45309" style="width:28px;height:28px;border-radius:6px;background:#b45309;cursor:pointer;border:2px solid transparent" onclick="pickThumbColor(this)"></div>
-        <div class="color-swatch" data-color="#be185d" style="width:28px;height:28px;border-radius:6px;background:#be185d;cursor:pointer;border:2px solid transparent" onclick="pickThumbColor(this)"></div>
-        <div class="color-swatch" data-color="#1e40af" style="width:28px;height:28px;border-radius:6px;background:#1e40af;cursor:pointer;border:2px solid transparent" onclick="pickThumbColor(this)"></div>
+      <label class="f-label">Thumbnail</label>
+      <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center" id="pmColorPicker">
+        <div class="color-swatch" data-color="#7c3aed" style="width:34px;height:34px;border-radius:10px;background:#7c3aed;cursor:pointer;border:2px solid transparent;transition:all 0.15s" onclick="pickThumbColor(this)"></div>
+        <div class="color-swatch" data-color="#0891b2" style="width:34px;height:34px;border-radius:10px;background:#0891b2;cursor:pointer;border:2px solid transparent;transition:all 0.15s" onclick="pickThumbColor(this)"></div>
+        <div class="color-swatch" data-color="#059669" style="width:34px;height:34px;border-radius:10px;background:#059669;cursor:pointer;border:2px solid transparent;transition:all 0.15s" onclick="pickThumbColor(this)"></div>
+        <div class="color-swatch" data-color="#b45309" style="width:34px;height:34px;border-radius:10px;background:#b45309;cursor:pointer;border:2px solid transparent;transition:all 0.15s" onclick="pickThumbColor(this)"></div>
+        <div class="color-swatch" data-color="#be185d" style="width:34px;height:34px;border-radius:10px;background:#be185d;cursor:pointer;border:2px solid transparent;transition:all 0.15s" onclick="pickThumbColor(this)"></div>
+        <div class="color-swatch" data-color="#1e40af" style="width:34px;height:34px;border-radius:10px;background:#1e40af;cursor:pointer;border:2px solid transparent;transition:all 0.15s" onclick="pickThumbColor(this)"></div>
+        <div id="pmThumbUploadBox" onclick="document.getElementById('pmThumbUpload').click()" style="width:34px;height:34px;border-radius:10px;border:1.5px dashed var(--glass-brd);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--textm);font-size:16px;flex-shrink:0;background:var(--glass);transition:all 0.15s" title="Upload your own thumbnail image" onmouseover="this.style.borderColor='var(--ice)';this.style.color='var(--ice)'" onmouseout="this.style.borderColor='var(--glass-brd)';this.style.color='var(--textm)'">+</div>
+        <input type="file" id="pmThumbUpload" accept="image/*" style="display:none" onchange="handleThumbUpload(event)">
+        <div id="pmThumbPreviewWrap" style="display:none;align-items:center;gap:8px">
+          <img id="pmThumbPreview" style="width:34px;height:34px;border-radius:10px;object-fit:cover;box-shadow:0 0 0 2px var(--gold)">
+          <button type="button" class="btn btn-ghost btn-xs" onclick="clearThumbUpload()">✕ Remove</button>
+        </div>
       </div>
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
@@ -1139,7 +1146,7 @@ function closeSidebar(){
 const MOD_TABS = {
   home:["Overview"],
   productionstudio:["Overview"],
-  projects:["Overview","Shots","Characters","Assets","Notes"],
+  projects:["Overview","Shots","Characters","Notes"],
   characters:["All","Create","Import"],
   imagegen:["Generate","Gallery"],
   videocanvas:["Generate","Gallery"],
@@ -1168,7 +1175,7 @@ function switchMod(mod,btn){
 }
 
 const TAB_DISPLAY_LABELS={
-  projects:{"Overview":"◆ The Gist","Shots":"▶ Shots","Characters":"☾ Cast","Assets":"▭ Stuff","Notes":"✎ Notes"},
+  projects:{"Overview":"◆ The Gist","Shots":"▶ Shots","Characters":"☾ Cast","Notes":"✎ Notes"},
 };
 
 function renderTabs(mod){
@@ -1582,10 +1589,14 @@ function toggleArchivedView(){
 
 function projectCardHTML(p){
   const statusColor={Development:"var(--blue)",Production:"var(--green)","Pre-production":"var(--yellow)",Post:"var(--violet)",Complete:"#059669",Released:"#b45309"}[p.status]||"var(--blue)";
+  const baseColor=p.color||"#7c3aed";
+  const thumbStyle=p.thumbImage
+    ?`background:linear-gradient(180deg,rgba(10,5,20,0.05),rgba(10,5,20,0.35)),url('${p.thumbImage}') center/cover no-repeat`
+    :`background:radial-gradient(circle at 30% 20%,${baseColor}dd,${baseColor} 60%,${baseColor}cc),radial-gradient(circle at 80% 75%,rgba(255,255,255,0.14),transparent 40%)`;
   return `
     <div class="project-card${S.activeProject===p.id?' active-project':''}" id="pc-${p.id}" onclick="openProject('${p.id}')" style="cursor:pointer">
-      <div class="project-card-thumb" style="background:${p.color||'#7c3aed'}">
-        <span style="font-size:40px;opacity:0.6">⚡</span>
+      <div class="project-card-thumb" style="${thumbStyle}">
+        ${p.thumbImage?'':`<div style="width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,0.14);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1px rgba(255,255,255,0.25) inset"><span style="font-size:24px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.25))">⚡</span></div>`}
       </div>
       <div class="project-card-menu">
         <button class="pc-menu-btn" onclick="event.stopPropagation();editProject('${p.id}')" title="Edit">✏️</button>
@@ -1880,6 +1891,7 @@ function openProjectModal(editId=null){
       document.getElementById("pmStatus").value=p.status||"Development";
       document.getElementById("pmUniverse").value=p.universe||"";
       S.thumbColor=p.color||"#7c3aed";
+      S.thumbImage=p.thumbImage||null;
     }
   } else {
     document.getElementById("pmName").value="";
@@ -1888,11 +1900,20 @@ function openProjectModal(editId=null){
     document.getElementById("pmStatus").value="Development";
     document.getElementById("pmUniverse").value="";
     S.thumbColor="#7c3aed";
+    S.thumbImage=null;
   }
-  // Set color picker
+  // Set color picker + thumbnail preview
   document.querySelectorAll(".color-swatch").forEach(sw=>{
-    sw.style.borderColor=sw.dataset.color===S.thumbColor?"var(--violet)":"transparent";
+    sw.style.borderColor=(!S.thumbImage&&sw.dataset.color===S.thumbColor)?"var(--violet)":"transparent";
   });
+  if(S.thumbImage){
+    document.getElementById("pmThumbPreview").src=S.thumbImage;
+    document.getElementById("pmThumbPreviewWrap").style.display="flex";
+    document.getElementById("pmThumbUploadBox").style.display="none";
+  } else {
+    document.getElementById("pmThumbPreviewWrap").style.display="none";
+    document.getElementById("pmThumbUploadBox").style.display="flex";
+  }
   modal.classList.add("show");
 }
 
@@ -1900,8 +1921,41 @@ function closeProjectModal(){document.getElementById("projectModal").classList.r
 
 function pickThumbColor(el){
   S.thumbColor=el.dataset.color;
+  S.thumbImage=null;
+  document.getElementById("pmThumbPreviewWrap").style.display="none";
+  document.getElementById("pmThumbUploadBox").style.display="flex";
   document.querySelectorAll(".color-swatch").forEach(sw=>sw.style.borderColor="transparent");
   el.style.borderColor="var(--violet)";
+}
+
+async function handleThumbUpload(event){
+  const file=event.target.files[0];
+  event.target.value="";
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    const dataUrl=e.target.result;
+    S.thumbImage=dataUrl; // show a preview immediately, upload happens in background
+    document.getElementById("pmThumbPreview").src=dataUrl;
+    document.getElementById("pmThumbPreviewWrap").style.display="flex";
+    document.getElementById("pmThumbUploadBox").style.display="none";
+    document.querySelectorAll(".color-swatch").forEach(sw=>sw.style.borderColor="transparent");
+    try{
+      const path=`project-thumbnails/${Date.now()}_${file.name}`;
+      const ref=fbStorage.ref(path);
+      await ref.put(file);
+      S.thumbImage=await ref.getDownloadURL(); // swap the preview for the real hosted URL once uploaded
+    }catch(err){
+      console.warn("Thumbnail cloud upload failed, using local copy only:",err.message);
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearThumbUpload(){
+  S.thumbImage=null;
+  document.getElementById("pmThumbPreviewWrap").style.display="none";
+  document.getElementById("pmThumbUploadBox").style.display="flex";
 }
 
 function saveProject(){
@@ -1916,12 +1970,12 @@ function saveProject(){
     if(S.editingProjectId){
       const p=S.projects.find(x=>x.id===S.editingProjectId);
       if(p){
-        p.name=name;p.genre=genre;p.status=status;p.desc=desc;p.universe=universe;p.color=S.thumbColor;
+        p.name=name;p.genre=genre;p.status=status;p.desc=desc;p.universe=universe;p.color=S.thumbColor;p.thumbImage=S.thumbImage||null;
         save("projects");
         toast("✅ Project updated","success");
       }
     } else {
-      const p={id:"proj_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),name,genre,status,desc,universe,color:S.thumbColor,shots:0,chars:0,archived:false,created:new Date().toISOString()};
+      const p={id:"proj_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),name,genre,status,desc,universe,color:S.thumbColor,thumbImage:S.thumbImage||null,shots:0,chars:0,archived:false,created:new Date().toISOString()};
       S.projects.push(p);
       save("projects");
       toast("🎉 Project created!","success");
