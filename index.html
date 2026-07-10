@@ -395,42 +395,51 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 .nc-root{position:relative;width:100%;height:calc(100vh - 220px);min-height:420px;overflow:hidden;border-radius:16px;border:1px solid var(--glass-brd);background:var(--pearl2)}
 .nc-toolbar{position:absolute;top:10px;left:10px;right:10px;z-index:20;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
 .nc-toolbar>*{pointer-events:auto}
-.nc-toolbar-group{display:flex;gap:4px;background:var(--glass-solid);backdrop-filter:blur(14px);border:1px solid var(--glass-brd);border-radius:12px;padding:5px;box-shadow:0 4px 16px rgba(0,0,0,0.1)}
-.nc-tool-btn{width:30px;height:30px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;color:var(--textm);transition:all 0.15s}
-.nc-tool-btn:hover{background:var(--glow-ice);color:var(--ice)}
+.nc-toolbar-group{display:flex;gap:5px;background:var(--glass-solid);backdrop-filter:blur(14px);border:1px solid var(--glass-brd);border-radius:12px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,0.1);overflow-x:auto;max-width:100%}
+.nc-tool-btn{border:none;border-radius:9px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:40px;height:34px;flex-shrink:0;color:#fff;font-size:13px;transition:transform 0.15s;padding:0}
+.nc-tool-btn:active{transform:scale(0.92)}
+.nc-tool-btn span{font-size:6.5px;font-weight:700;letter-spacing:0.02em;line-height:1;text-transform:uppercase;color:rgba(255,255,255,0.92)}
+.nc-tool-btn-plain{width:30px;height:30px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;color:var(--textm);transition:all 0.15s;flex-shrink:0}
+.nc-tool-btn-plain:hover{background:var(--glow-ice);color:var(--ice)}
 .nc-viewport{position:absolute;inset:0;touch-action:none;cursor:grab;background-image:radial-gradient(circle,rgba(61,31,122,0.10) 1px,transparent 1px);background-size:24px 24px}
 .nc-viewport.nc-panning{cursor:grabbing}
 .nc-transform-layer{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
 .nc-edge-svg{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
-.nc-edge-path{fill:none;stroke:var(--ice);stroke-width:2.5;opacity:0.7}
+.nc-edge-path{fill:none;stroke:var(--ice);stroke-width:2.5;opacity:0.75}
 .nc-edge-path.nc-edge-pending{stroke:var(--gold);stroke-dasharray:5,4;opacity:0.9}
-.nc-node{position:absolute;width:220px;background:var(--glass-solid);border:1.5px solid var(--glass-brd);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.10);overflow:hidden;transition:border-color 0.15s,box-shadow 0.15s}
-.nc-node.nc-selected{border-color:var(--gold);box-shadow:0 0 0 3px var(--glow-gold)}
+
+.nc-node{position:absolute;width:220px;background:var(--glass-solid);border:3px solid var(--nc-color,var(--ice));border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,0.10);transition:box-shadow 0.15s;padding-top:6px}
+.nc-node.nc-gradient-border{border-color:transparent;background-image:linear-gradient(var(--glass-solid),var(--glass-solid)),linear-gradient(135deg,var(--nc-color,#888),var(--nc-color2,#888));background-origin:border-box;background-clip:padding-box,border-box}
+.nc-node.nc-selected{box-shadow:0 0 0 3px var(--glow-gold)}
 .nc-node.nc-stale{opacity:0.55}
-.nc-node[data-status="running"]{border-color:var(--ice);animation:nc-pulse 1.4s ease-in-out infinite}
-.nc-node[data-status="error"]{border-color:var(--red)}
+.nc-node[data-status="running"]{animation:nc-pulse 1.4s ease-in-out infinite}
+.nc-node[data-status="error"]{border-color:var(--red)!important;background-image:none!important}
 @keyframes nc-pulse{0%,100%{box-shadow:0 4px 16px rgba(0,0,0,0.10)}50%{box-shadow:0 4px 24px var(--glow-ice)}}
-.nc-node-header{padding:7px 10px;font-size:11px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:space-between;cursor:grab;user-select:none}
-.nc-node-header:active{cursor:grabbing}
-.nc-node[data-type="promptText"] .nc-node-header{background:linear-gradient(135deg,#6D28D9,#8B5CF6)}
-.nc-node[data-type="referenceImage"] .nc-node-header{background:linear-gradient(135deg,#0891B2,#22D3EE)}
-.nc-node[data-type="characterSheet"] .nc-node-header{background:linear-gradient(135deg,#B45309,#F59E0B)}
-.nc-node[data-type="generatedImage"] .nc-node-header{background:linear-gradient(135deg,#059669,#10B981)}
-.nc-node[data-type="videoClip"] .nc-node-header{background:linear-gradient(135deg,#1D4ED8,#3B82F6)}
-.nc-node[data-type="upscale"] .nc-node-header{background:linear-gradient(135deg,#7C3AED,#A78BFA)}
-.nc-node[data-type="audioTTS"] .nc-node-header{background:linear-gradient(135deg,#BE185D,#EC4899)}
-.nc-node[data-type="styleRef"] .nc-node-header{background:linear-gradient(135deg,#374151,#6B7280)}
+
+/* Trapezoid name tab, popping out of the node's top-left corner */
+.nc-node-tab{position:absolute;top:-15px;left:12px;padding:3px 12px 4px;font-size:9.5px;font-weight:800;letter-spacing:0.03em;color:#fff;text-transform:uppercase;background:var(--nc-color,#888);clip-path:polygon(8% 0%,92% 0%,100% 100%,0% 100%);white-space:nowrap;cursor:grab;user-select:none}
+.nc-node-tab.nc-gradient-tab{background:linear-gradient(100deg,var(--nc-color,#888),var(--nc-color2,#888))}
+.nc-node-tab:active{cursor:grabbing}
+
 .nc-node-body{padding:9px;font-size:11px}
-.nc-node-body img,.nc-node-body video{width:100%;border-radius:6px;display:block}
-.nc-node-body textarea{width:100%;font-size:11px;border:1px solid var(--glass-brd);border-radius:6px;padding:5px;resize:vertical;min-height:48px;font-family:inherit}
-.nc-node-body select{width:100%;font-size:10px;padding:3px;border-radius:6px;border:1px solid var(--glass-brd);margin-top:4px}
-.nc-port-row{display:flex;justify-content:space-between;align-items:center;margin-top:4px}
-.nc-port{width:14px;height:14px;border-radius:50%;background:var(--surface);border:2px solid var(--ice);cursor:pointer;flex-shrink:0;transition:transform 0.15s,background 0.15s}
-.nc-port:hover,.nc-port.nc-port-active{transform:scale(1.3);background:var(--ice)}
-.nc-port-label{font-size:9px;color:var(--textm)}
-.nc-port-in{margin-left:-17px}
-.nc-port-out{margin-right:-17px}
-.nc-node-meta{font-size:9px;color:var(--textm);margin-top:6px;padding-top:6px;border-top:1px solid var(--glass-brd);display:flex;justify-content:space-between}
+.nc-node-body img{width:100%;min-height:120px;max-height:180px;object-fit:cover;border-radius:8px;display:block;margin-bottom:6px;background:#00000010}
+.nc-node-body video,.nc-node-body audio{width:100%;border-radius:8px;display:block;margin-bottom:6px}
+.nc-node-body textarea{width:100%;font-size:11.5px;border:1.5px solid var(--glass-brd);border-radius:8px;padding:7px;resize:vertical;min-height:56px;font-family:inherit;margin-bottom:4px}
+.nc-node-body select{width:100%;font-size:10.5px;padding:5px;border-radius:8px;border:1.5px solid var(--glass-brd);margin-top:4px;margin-bottom:2px}
+.nc-node-body label.nc-field-label{font-size:8.5px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.03em;display:block;margin-top:6px;margin-bottom:2px}
+
+/* Ports: a single colored + badge sitting fully outside the card edge, no label text — a wrong connection now explains itself via an error toast instead */
+.nc-port-row{position:relative;height:0}
+.nc-port{position:absolute;width:20px;height:20px;border-radius:50%;background:var(--nc-color,var(--ice));border:2px solid var(--glass-solid);cursor:pointer;flex-shrink:0;transition:transform 0.15s;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800;box-shadow:0 2px 6px rgba(0,0,0,0.18);top:50%;transform:translateY(-50%)}
+.nc-port:hover,.nc-port.nc-port-active{transform:translateY(-50%) scale(1.25)}
+.nc-port-in{left:-10px}
+.nc-port-out{right:-10px}
+.nc-ports-in-wrap,.nc-ports-out-wrap{position:absolute;top:36px;bottom:36px;width:0}
+.nc-ports-in-wrap{left:0}
+.nc-ports-out-wrap{right:0}
+
+.nc-node-meta{font-size:9px;color:var(--textm);margin-top:6px;padding-top:6px;border-top:1px solid var(--glass-brd);display:flex;justify-content:space-between;align-items:center}
+.nc-run-btn{background:var(--nc-color,var(--violet));color:#fff;border:none;border-radius:8px;padding:4px 12px;font-size:10.5px;font-weight:700;cursor:pointer}
 .nc-context-menu{position:fixed;z-index:100;background:var(--glass-solid);backdrop-filter:blur(16px);border:1px solid var(--glass-brd);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,0.25);padding:4px;min-width:140px}
 .nc-context-menu button{display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:transparent;font-size:12px;border-radius:8px;cursor:pointer;color:var(--text)}
 .nc-context-menu button:hover{background:var(--glow-ice);color:var(--ice)}
@@ -10353,7 +10362,7 @@ const NodeCanvas=(function(){
     const outPort=fn.outputs.find(p=>p.portId===fromPort);
     const inPort=tn.inputs.find(p=>p.portId===toPort);
     if(!outPort||!inPort)return null;
-    if(!inPort.accepts.includes(outPort.type)){ toast(`Can't connect — ${inPort.label} doesn't accept ${outPort.type}`,"error"); return null; }
+    if(!inPort.accepts.includes(outPort.type)){ toast(`❌ This node isn't for that — ${NODE_DEFS[tn.type].label} needs a ${inPort.accepts.join(" or ")} input, not ${outPort.type}`,"error"); return null; }
     // Input ports allow at most one connection — replace, don't stack.
     if(inPort.connectedEdgeId)deleteEdge(inPort.connectedEdgeId);
     const id=uid("edge");
@@ -10581,21 +10590,30 @@ const NodeCanvas=(function(){
     const html=nodeHTML(graphState.nodes[nodeId]);
     if(existing)existing.outerHTML=html; else nodesLayerEl.insertAdjacentHTML("beforeend",html);
   }
+  function neighborColors(nodeId){
+    const colors=new Set();
+    Object.values(graphState.edges).forEach(e=>{
+      if(e.fromNode===nodeId){const n=graphState.nodes[e.toNode];if(n)colors.add(NODE_DEFS[n.type].color);}
+      if(e.toNode===nodeId){const n=graphState.nodes[e.fromNode];if(n)colors.add(NODE_DEFS[n.type].color);}
+    });
+    return Array.from(colors);
+  }
   function nodeHTML(node){
     if(!node)return '';
     const def=NODE_DEFS[node.type];
     const statusIcon={idle:'',queued:'⏳',running:'⏳',done:'✅',error:'❌'}[node.status]||'';
-    return `<div class="nc-node${node._stale?' nc-stale':''}${(graphState.selection.nodeIds||[]).includes(node.id)?' nc-selected':''}" data-node-id="${node.id}" data-type="${node.type}" data-status="${node.status}" style="left:${node.position.x}px;top:${node.position.y}px;width:${node.size.w}px">
-      <div class="nc-node-header" onpointerdown="NodeCanvas._onNodeDragStart(event,'${node.id}')">
-        <span>${def.label}</span><span>${statusIcon}</span>
-      </div>
+    const neighbors=neighborColors(node.id).filter(c=>c!==def.color);
+    const isGradient=neighbors.length>0&&node.status!=="error";
+    const colorStyle=`--nc-color:${def.color};--nc-color2:${neighbors[0]||def.color}`;
+    return `<div class="nc-node${node._stale?' nc-stale':''}${(graphState.selection.nodeIds||[]).includes(node.id)?' nc-selected':''}${isGradient?' nc-gradient-border':''}" data-node-id="${node.id}" data-type="${node.type}" data-status="${node.status}" style="left:${node.position.x}px;top:${node.position.y}px;width:${node.size.w}px;${colorStyle}">
+      <div class="nc-node-tab${isGradient?' nc-gradient-tab':''}" onpointerdown="NodeCanvas._onNodeDragStart(event,'${node.id}')">${def.label} ${statusIcon}</div>
       <div class="nc-node-body" onpointerdown="NodeCanvas._onNodeBodyPointerDown(event,'${node.id}')">
         ${nodeBodyHTML(node)}
-        ${node.inputs.map(p=>`<div class="nc-port-row"><div class="nc-port nc-port-in" data-node="${node.id}" data-port="${p.portId}" data-dir="in" onclick="NodeCanvas._onPortTap(event,'${node.id}','${p.portId}','in')"></div><span class="nc-port-label">${p.label}</span></div>`).join('')}
-        ${node.outputs.map(p=>`<div class="nc-port-row" style="justify-content:flex-end"><span class="nc-port-label">${p.label}</span><div class="nc-port nc-port-out" data-node="${node.id}" data-port="${p.portId}" data-dir="out" onclick="NodeCanvas._onPortTap(event,'${node.id}','${p.portId}','out')"></div></div>`).join('')}
         ${node.meta.error?`<div style="color:var(--red);font-size:9px;margin-top:4px">${node.meta.error}</div>`:''}
-        <div class="nc-node-meta"><span>${node.meta.cost?'$'+node.meta.cost.toFixed(3):''}</span><button class="btn btn-primary btn-xs" style="padding:2px 8px" onclick="NodeCanvas.runNode('${node.id}')">▶ Run</button></div>
+        <div class="nc-node-meta"><span>${node.meta.cost?'$'+node.meta.cost.toFixed(3):''}</span><button class="nc-run-btn" onclick="NodeCanvas.runNode('${node.id}')">▶ Run</button></div>
       </div>
+      <div class="nc-ports-in-wrap">${node.inputs.map((p,i)=>`<div class="nc-port nc-port-in" data-node="${node.id}" data-port="${p.portId}" data-dir="in" style="top:${node.inputs.length>1?(20+i*32)+'px':'50%'}" title="${p.label}" onclick="NodeCanvas._onPortTap(event,'${node.id}','${p.portId}','in')">+</div>`).join('')}</div>
+      <div class="nc-ports-out-wrap">${node.outputs.map((p,i)=>`<div class="nc-port nc-port-out" data-node="${node.id}" data-port="${p.portId}" data-dir="out" style="top:${node.outputs.length>1?(20+i*32)+'px':'50%'}" title="${p.label}" onclick="NodeCanvas._onPortTap(event,'${node.id}','${p.portId}','out')">+</div>`).join('')}</div>
     </div>`;
   }
   function nodeBodyHTML(node){
@@ -10603,22 +10621,33 @@ const NodeCanvas=(function(){
       case "promptText":
         return `<textarea placeholder="Type a prompt…" onchange="NodeCanvas.updateNodeData('${node.id}','text',this.value)">${node.data.text||''}</textarea>`;
       case "referenceImage":
-        return node.data.url?`<img src="${node.data.url}">`:`<button class="btn btn-outline btn-xs btn-full" onclick="document.getElementById('ncUpload_${node.id}').click()">📤 Upload</button><input type="file" id="ncUpload_${node.id}" accept="image/*" style="display:none" onchange="NodeCanvas.uploadReferenceImage('${node.id}',event)">`;
+        return node.data.url?`<img src="${node.data.url}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'⚠️ Image failed to load',style:'font-size:10px;color:var(--red);padding:20px;text-align:center;background:rgba(239,68,68,0.08);border-radius:8px;margin-bottom:6px'}))"><button class="btn btn-outline btn-xs btn-full" onclick="document.getElementById('ncUpload_${node.id}').click()">🔄 Replace</button><input type="file" id="ncUpload_${node.id}" accept="image/*" style="display:none" onchange="NodeCanvas.uploadReferenceImage('${node.id}',event)">`
+          :`<button class="btn btn-outline btn-full" style="height:56px" onclick="document.getElementById('ncUpload_${node.id}').click()">📤 Upload Image</button><input type="file" id="ncUpload_${node.id}" accept="image/*" style="display:none" onchange="NodeCanvas.uploadReferenceImage('${node.id}',event)">`;
       case "characterSheet": {
         const prods=(S.productions||[]).filter(p=>p.characterSheetStatus==="approved");
         return `<select onchange="NodeCanvas.updateNodeData('${node.id}','sourceProductionId',this.value)"><option value="">Select production…</option>${prods.map(p=>`<option value="${p.id}" ${node.data.sourceProductionId===p.id?'selected':''}>${p.title||p.id}</option>`).join('')}</select>
         <select onchange="NodeCanvas.updateNodeData('${node.id}','view',this.value)">${["front","back","side","threeQuarter","face","special"].map(v=>`<option value="${v}" ${node.data.view===v?'selected':''}>${v}</option>`).join('')}</select>
-        ${(()=>{const prod=(S.productions||[]).find(p=>p.id===node.data.sourceProductionId);const url=prod&&prod.characterSheet?prod.characterSheet[node.data.view]:null;return url?`<img src="${url}" style="margin-top:4px">`:'';})()}`;
+        ${(()=>{const prod=(S.productions||[]).find(p=>p.id===node.data.sourceProductionId);const url=prod&&prod.characterSheet?prod.characterSheet[node.data.view]:null;return url?`<img src="${url}" style="margin-top:6px">`:'';})()}`;
       }
       case "styleRef":
         return `<select onchange="NodeCanvas.updateNodeData('${node.id}','styleName',this.value)">${STYLE_LIBRARY.map(s=>`<option value="${s.name}" ${node.data.styleName===s.name?'selected':''}>${s.name}</option>`).join('')}</select>`;
       case "generatedImage":
-        return `${node.data.resultUrl?`<img src="${node.data.resultUrl}">`:''}<textarea placeholder="Manual prompt (used if nothing connected)" onchange="NodeCanvas.updateNodeData('${node.id}','manualPrompt',this.value)">${node.data.manualPrompt||''}</textarea><select onchange="NodeCanvas.updateNodeData('${node.id}','model',this.value)"><option value="fal-ai/flux/dev" ${node.data.model==='fal-ai/flux/dev'?'selected':''}>FLUX Dev</option><option value="fal-ai/flux-pro/v1.1" ${node.data.model==='fal-ai/flux-pro/v1.1'?'selected':''}>FLUX Pro</option><option value="fal-ai/nano-banana-2" ${node.data.model==='fal-ai/nano-banana-2'?'selected':''}>Nano Banana 2 (fal)</option></select>`;
+        return `${node.data.resultUrl?`<img src="${node.data.resultUrl}">`:''}<textarea placeholder="Manual prompt (used if nothing connected)" onchange="NodeCanvas.updateNodeData('${node.id}','manualPrompt',this.value)">${node.data.manualPrompt||''}</textarea><label class="nc-field-label">Model</label><select onchange="NodeCanvas.updateNodeData('${node.id}','model',this.value)"><option value="fal-ai/flux/dev" ${node.data.model==='fal-ai/flux/dev'?'selected':''}>FLUX Dev</option><option value="fal-ai/flux-pro/v1.1" ${node.data.model==='fal-ai/flux-pro/v1.1'?'selected':''}>FLUX Pro</option><option value="fal-ai/nano-banana-2" ${node.data.model==='fal-ai/nano-banana-2'?'selected':''}>Nano Banana 2 (fal)</option><option value="openai/gpt-image-2" ${node.data.model==='openai/gpt-image-2'?'selected':''}>GPT Image 2 (fal)</option></select>`;
       case "videoClip":
         return `${node.data.resultUrl?`<video src="${node.data.resultUrl}" controls></video>`:''}<textarea placeholder="Manual prompt (used if nothing connected)" onchange="NodeCanvas.updateNodeData('${node.id}','manualPrompt',this.value)">${node.data.manualPrompt||''}</textarea>
+        <label class="nc-field-label">Video Model</label>
+        <select onchange="NodeCanvas.setVideoModel('${node.id}',this.value)">
+          <option value="bytedance/seedance-2.0/reference-to-video" ${node.data.model==='bytedance/seedance-2.0/reference-to-video'?'selected':''}>Seedance 2.0 — Multi-Ref</option>
+          <option value="bytedance/seedance-2.0/fast/reference-to-video" ${node.data.model==='bytedance/seedance-2.0/fast/reference-to-video'?'selected':''}>Seedance 2.0 Fast — Multi-Ref</option>
+          <option value="fal-ai/kling-video/v2.1/master/text-to-video" ${node.data.model==='fal-ai/kling-video/v2.1/master/text-to-video'?'selected':''}>Kling 2.1 Master</option>
+          <option value="fal-ai/kling-video/v2.6/pro/text-to-video" ${node.data.model==='fal-ai/kling-video/v2.6/pro/text-to-video'?'selected':''}>Kling 2.6 Pro</option>
+          <option value="fal-ai/kling-video/v3/standard/text-to-video" ${node.data.model==='fal-ai/kling-video/v3/standard/text-to-video'?'selected':''}>Kling 3.0 Standard</option>
+          <option value="fal-ai/veo3.1" ${node.data.model==='fal-ai/veo3.1'?'selected':''}>Veo 3.1</option>
+        </select>
+        <label class="nc-field-label">Duration</label>
         <select onchange="NodeCanvas.updateNodeData('${node.id}','duration',parseInt(this.value))">${(VIDEO_MODEL_DURATIONS[node.data.model]?.options||[4,5,6,8]).map(d=>`<option value="${d}" ${node.data.duration===d?'selected':''}>${d}s</option>`).join('')}</select>`;
       case "upscale":
-        return `${node.data.resultUrl?`<img src="${node.data.resultUrl}">`:''}<select onchange="NodeCanvas.updateNodeData('${node.id}','engine',this.value)"><option value="fal-ai/esrgan" ${node.data.engine==='fal-ai/esrgan'?'selected':''}>ESRGAN</option><option value="fal-ai/clarity-upscaler" ${node.data.engine==='fal-ai/clarity-upscaler'?'selected':''}>Clarity</option></select>`;
+        return `${node.data.resultUrl?`<img src="${node.data.resultUrl}">`:''}<label class="nc-field-label">Engine</label><select onchange="NodeCanvas.updateNodeData('${node.id}','engine',this.value)"><option value="fal-ai/esrgan" ${node.data.engine==='fal-ai/esrgan'?'selected':''}>ESRGAN</option><option value="fal-ai/clarity-upscaler" ${node.data.engine==='fal-ai/clarity-upscaler'?'selected':''}>Clarity</option></select>`;
       case "audioTTS":
         return `${node.data.resultUrl?`<audio src="${node.data.resultUrl}" controls style="width:100%"></audio>`:''}<textarea placeholder="Manual text (used if nothing connected)" onchange="NodeCanvas.updateNodeData('${node.id}','manualText',this.value)">${node.data.manualText||''}</textarea>`;
       default: return '';
@@ -10641,10 +10670,15 @@ const NodeCanvas=(function(){
     if(!node)return null;
     const el=nodesLayerEl.querySelector(`.nc-port[data-node="${nodeId}"][data-port="${portId}"][data-dir="${dir}"]`);
     if(!el)return{x:node.position.x+(dir==='out'?node.size.w:0),y:node.position.y+40};
-    // Port element position relative to the transform layer (canvas-space) —
-    // read via offset within nodesLayerEl rather than node.position math, so
-    // it stays correct regardless of how many ports/rows preceded it.
-    return{x:node.position.x+el.offsetLeft+7,y:node.position.y+el.offsetTop+7};
+    // getBoundingClientRect + the transform layer's own rect, rather than
+    // offsetLeft/Top — the ports wrapper is itself position:absolute, which
+    // would make offsetLeft relative to THAT wrapper, not the node card.
+    const portRect=el.getBoundingClientRect();
+    const layerRect=layerEl.getBoundingClientRect();
+    return{
+      x:(portRect.left+portRect.width/2-layerRect.left)/graphState.viewport.zoom,
+      y:(portRect.top+portRect.height/2-layerRect.top)/graphState.viewport.zoom
+    };
   }
   function edgePathD(edge){
     const from=portScreenPos(edge.fromNode,edge.fromPort,"out");
@@ -10809,6 +10843,15 @@ const NodeCanvas=(function(){
     renderMinimap();
   }
 
+  function setVideoModel(nodeId,model){
+    const node=graphState.nodes[nodeId];
+    if(!node)return;
+    node.data.model=model;
+    const durConfig=VIDEO_MODEL_DURATIONS[model];
+    if(durConfig&&!durConfig.options.includes(node.data.duration))node.data.duration=durConfig.options[0];
+    autoSaveDebounced();
+    renderNodeOnly(nodeId);
+  }
   function updateNodeData(nodeId,field,value){
     const node=graphState.nodes[nodeId];
     if(!node)return;
@@ -10835,6 +10878,7 @@ const NodeCanvas=(function(){
     node.data.uploadedAt=Date.now();
     autoSaveDebounced();
     renderNodeOnly(nodeId);
+    toast("✅ Reference image added","success");
   }
 
   // ── init / public API ──
@@ -10843,12 +10887,12 @@ const NodeCanvas=(function(){
     rootEl.innerHTML=`
       <div class="nc-toolbar">
         <div class="nc-toolbar-group">
-          ${Object.keys(NODE_DEFS).map(t=>`<button class="nc-tool-btn" title="Add ${NODE_DEFS[t].label}" onclick="NodeCanvas.addNode('${t}')">+${NODE_DEFS[t].label[0]}</button>`).join('')}
+          ${(()=>{const shortLabels={promptText:"PROMPT",referenceImage:"REF",characterSheet:"CHAR",styleRef:"STYLE",generatedImage:"IMAGE",videoClip:"VIDEO",upscale:"SCALE",audioTTS:"AUDIO"};return Object.keys(NODE_DEFS).map(t=>`<button class="nc-tool-btn" style="background:${NODE_DEFS[t].color}" title="Add ${NODE_DEFS[t].label}" onclick="NodeCanvas.addNode('${t}')"><span style="font-size:12px;line-height:1">+</span><span>${shortLabels[t]}</span></button>`).join('');})()}
         </div>
         <div class="nc-toolbar-group">
-          <button class="nc-tool-btn" title="Zoom in" onclick="NodeCanvas.zoomBy(1.2)">➕</button>
-          <button class="nc-tool-btn" title="Zoom out" onclick="NodeCanvas.zoomBy(0.83)">➖</button>
-          <button class="nc-tool-btn" title="Fit to screen" onclick="NodeCanvas.fitToScreen()">⛶</button>
+          <button class="nc-tool-btn-plain" title="Zoom in" onclick="NodeCanvas.zoomBy(1.2)">➕</button>
+          <button class="nc-tool-btn-plain" title="Zoom out" onclick="NodeCanvas.zoomBy(0.83)">➖</button>
+          <button class="nc-tool-btn-plain" title="Fit to screen" onclick="NodeCanvas.fitToScreen()">⛶</button>
         </div>
       </div>
       <div class="nc-viewport">
@@ -10881,7 +10925,7 @@ const NodeCanvas=(function(){
 
   return{
     init,addNode,deleteNode,addEdge,deleteEdge,runNode,runGraphFrom,
-    serializeGraph,loadGraph,switchProject,updateNodeData,uploadReferenceImage,
+    serializeGraph,loadGraph,switchProject,updateNodeData,uploadReferenceImage,setVideoModel,
     duplicateNode,zoomBy,fitToScreen,
     _onNodeDragStart:onNodeDragStart,_onNodeBodyPointerDown:onNodeBodyPointerDown,_onPortTap:onPortTap,
   };
