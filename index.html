@@ -10696,6 +10696,25 @@ const NodeCanvas=(function(){
       default: return '';
     }
   }
+  function updateEdgePositionsOnly(){
+    // Cheap path used during an active node drag: mutate existing <path> d
+    // and <linearGradient> coordinates in place, no DOM node creation. The
+    // full renderEdges() below recreates every gradient/path from scratch,
+    // which is fine once per drag but was very likely the actual cause of
+    // 'dragging does nothing' — that full rebuild firing on every single
+    // pointermove event is expensive enough to visibly stall on mobile.
+    Object.values(graphState.edges).forEach(edge=>{
+      const d=edgePathD(edge);
+      if(!d)return;
+      const path=edgeSvgEl.querySelector(`path[data-edge-id="${edge.id}"]`);
+      if(path)path.setAttribute("d",d);
+      const grad=edgeSvgEl.querySelector(`#nc-edge-grad-${edge.id}`);
+      if(grad){
+        const from=portScreenPos(edge.fromNode,edge.fromPort,"out"),to=portScreenPos(edge.toNode,edge.toPort,"in");
+        if(from&&to){grad.setAttribute("x1",from.x);grad.setAttribute("y1",from.y);grad.setAttribute("x2",to.x);grad.setAttribute("y2",to.y);}
+      }
+    });
+  }
   function renderEdges(){
     const svgNS="http://www.w3.org/2000/svg";
     edgeSvgEl.innerHTML='';
@@ -10718,6 +10737,7 @@ const NodeCanvas=(function(){
       grad.appendChild(stop1);grad.appendChild(stop2);
       defs.appendChild(grad);
       const path=document.createElementNS(svgNS,"path");
+      path.setAttribute("data-edge-id",edge.id);
       path.setAttribute("d",d);
       path.setAttribute("class","nc-edge-path");
       path.setAttribute("stroke",`url(#${gradId})`);
@@ -10773,7 +10793,6 @@ const NodeCanvas=(function(){
   // ── 3c. Interaction handlers (pointer-events based: unifies touch/mouse) ──
   function onNodeDragStart(e,nodeId){
     console.log("Node Canvas: tab pointerdown fired for node",nodeId,"pointerId",e.pointerId,"pointerType",e.pointerType);
-    toast("🔧 debug: tab touch detected","");
     e.stopPropagation();
     e.preventDefault();
     const node=graphState.nodes[nodeId];
@@ -10835,13 +10854,13 @@ const NodeCanvas=(function(){
       node.position.y=dragState.nodeStartY+dy/graphState.viewport.zoom;
       const el=nodesLayerEl.querySelector(`[data-node-id="${node.id}"]`);
       if(el){el.style.left=node.position.x+"px";el.style.top=node.position.y+"px";}
-      renderEdges(); // only edges need updating during a node drag, not the whole graph
+      updateEdgePositionsOnly(); // cheap in-place update, not a full rebuild — see comment on updateEdgePositionsOnly
     }
   }
   function onPointerUp(e){
     if(dragState&&dragState.pointerId===e.pointerId){
       viewportEl.classList.remove("nc-panning");
-      if(dragState.mode==="node"){autoSaveDebounced();renderMinimap();}
+      if(dragState.mode==="node"){autoSaveDebounced();renderEdges();renderMinimap();}
       dragState=null;
     }
   }
