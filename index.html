@@ -10259,7 +10259,7 @@ const NodeCanvas=(function(){
     referenceImage:{label:"Reference Image",color:"#22D3EE",inputs:[],outputs:[{portId:"out_1",label:"Image",type:"image"}]},
     characterSheet:{label:"Character Sheet",color:"#F59E0B",inputs:[],outputs:[{portId:"out_1",label:"Character",type:"image"}]},
     styleRef:{label:"Style Reference",color:"#6B7280",inputs:[],outputs:[{portId:"out_1",label:"Style",type:"text"}]},
-    generatedImage:{label:"Generated Image",color:"#10B981",inputs:[{portId:"in_1",label:"Prompt",accepts:["text"]},{portId:"in_2",label:"Ref 1",accepts:["image"]},{portId:"in_3",label:"Ref 2",accepts:["image"]}],outputs:[{portId:"out_1",label:"Image",type:"image"}]},
+    generatedImage:{label:"Generated Image",color:"#10B981",inputs:[{portId:"in_1",label:"Prompt",accepts:["text"]},...Array.from({length:16},(_,i)=>({portId:`in_ref_${i+1}`,label:`Ref ${i+1}`,accepts:["image"]}))],outputs:[{portId:"out_1",label:"Image",type:"image"}]},
     videoClip:{label:"Video Clip",color:"#3B82F6",inputs:[{portId:"in_1",label:"Prompt/Img",accepts:["text","image"]},{portId:"in_2",label:"Last Frame In",accepts:["image"]}],outputs:[{portId:"out_1",label:"Video",type:"video"},{portId:"out_2",label:"Last Frame",type:"image"}]},
     upscale:{label:"Upscale",color:"#A78BFA",inputs:[{portId:"in_1",label:"Source",accepts:["image"]}],outputs:[{portId:"out_1",label:"Result",type:"image"}]},
     audioTTS:{label:"Audio / TTS",color:"#EC4899",inputs:[{portId:"in_1",label:"Text",accepts:["text"]}],outputs:[{portId:"out_1",label:"Audio",type:"audio"}]},
@@ -10515,15 +10515,41 @@ const NodeCanvas=(function(){
     const promptInput=getConnectedInput(node,"in_1");
     const prompt=promptInput?promptInput.value:node.data.manualPrompt;
     if(!prompt)throw new Error("No prompt — connect a Prompt node or type one directly on this node");
-    const ref1=getConnectedInput(node,"in_2");
-    const ref2=getConnectedInput(node,"in_3");
-    const refs=[ref1,ref2].filter(r=>r&&r.value).map(r=>r.value);
-    let result;
+    const allRefs=[];
+    for(let i=1;i<=16;i++){
+      const r=getConnectedInput(node,`in_ref_${i}`);
+      if(r&&r.value)allRefs.push(r.value);
+    }
     const ar=node.data.aspectRatio||"1:1";
-    if(node.data.model.startsWith("gemini-"))result=await genViaGemini(prompt,ar,node.data.model,refs);
-    else if(node.data.model==="gpt-image-2"||node.data.model==="openai/gpt-image-2")result=await genViaOpenAI(prompt,ar);
-    else if(refs.length)result=await genViaFluxEdit(prompt,refs,ar);
-    else result=await genViaFal(prompt,"",node.data.model,ar,false);
+    const model=node.data.model;
+    // Real per-model reference-image caps, verified against fal's own docs —
+    // sending more than a model actually supports either errors out or
+    // silently drops the extras, so truncate here and tell the user if that
+    // happened rather than let it fail mysteriously.
+    const REF_CAPS={
+      "fal-ai/nano-banana-2":{max:14,endpoint:"fal-ai/nano-banana-2/edit"},
+      "fal-ai/nano-banana-pro":{max:2,endpoint:"fal-ai/gemini-3-pro-image-preview/edit"},
+      "openai/gpt-image-2":{max:16,endpoint:"openai/gpt-image-2/edit"},
+    };
+    let result;
+    if(model.startsWith("gemini-")){
+      const refs=allRefs.slice(0,4); // Gemini's own multi-ref cap — matches the rest of the app
+      if(allRefs.length>4)toast(`⚠️ ${model} supports up to 4 reference images — using the first 4 of ${allRefs.length} connected`,"error");
+      result=await genViaGemini(prompt,ar,model,refs);
+    } else if(model==="gpt-image-2"){
+      result=await genViaOpenAI(prompt,ar); // direct OpenAI path (not fal) — text-only currently
+    } else if(REF_CAPS[model]&&allRefs.length){
+      const cap=REF_CAPS[model];
+      const refs=allRefs.slice(0,cap.max);
+      if(allRefs.length>cap.max)toast(`⚠️ This model supports up to ${cap.max} reference images — using the first ${cap.max} of ${allRefs.length} connected`,"error");
+      result=await genViaFluxEdit(prompt,refs,ar,cap.endpoint);
+    } else if(allRefs.length){
+      const refs=allRefs.slice(0,4); // FLUX.2 Flash Edit's real cap
+      if(allRefs.length>4)toast(`⚠️ This model supports up to 4 reference images — using the first 4 of ${allRefs.length} connected`,"error");
+      result=await genViaFluxEdit(prompt,refs,ar);
+    } else {
+      result=await genViaFal(prompt,"",model,ar,false);
+    }
     node.data.resultUrl=result.url;
     const est=estimateImageCost(node.data.model,1);
     node.meta.model=node.data.model;
@@ -10676,9 +10702,13 @@ const NodeCanvas=(function(){
       }
       case "styleRef":
         return `<select onchange="NodeCanvas.updateNodeData('${node.id}','styleName',this.value)">${STYLE_LIBRARY.map(s=>`<option value="${s.name}" ${node.data.styleName===s.name?'selected':''}>${s.name}</option>`).join('')}</select>`;
-      case "generatedImage":
-        return `${node.data.resultUrl?`<img src="${node.data.resultUrl}">`:''}<textarea placeholder="Manual prompt (used if nothing connected)" onchange="NodeCanvas.updateNodeData('${node.id}','manualPrompt',this.value)">${node.data.manualPrompt||''}</textarea><label class="nc-field-label">Model</label><select onchange="NodeCanvas.updateNodeData('${node.id}','model',this.value)"><option value="fal-ai/flux/dev" ${node.data.model==='fal-ai/flux/dev'?'selected':''}>FLUX Dev</option><option value="fal-ai/flux-pro/v1.1" ${node.data.model==='fal-ai/flux-pro/v1.1'?'selected':''}>FLUX Pro</option><option value="fal-ai/nano-banana-2" ${node.data.model==='fal-ai/nano-banana-2'?'selected':''}>Nano Banana 2 (fal)</option><option value="openai/gpt-image-2" ${node.data.model==='openai/gpt-image-2'?'selected':''}>GPT Image 2 (fal)</option></select>
+      case "generatedImage": {
+        const refCount=node.inputs.filter(p=>p.portId.startsWith("in_ref_")&&p.connectedEdgeId).length;
+        const modelMax={"fal-ai/flux/dev":4,"fal-ai/flux-pro/v1.1":4,"fal-ai/nano-banana-2":14,"fal-ai/nano-banana-pro":2,"openai/gpt-image-2":16}[node.data.model]||4;
+        return `${node.data.resultUrl?`<img src="${node.data.resultUrl}">`:''}<textarea placeholder="Manual prompt (used if nothing connected)" onchange="NodeCanvas.updateNodeData('${node.id}','manualPrompt',this.value)">${node.data.manualPrompt||''}</textarea><label class="nc-field-label">Model</label><select onchange="NodeCanvas.updateNodeData('${node.id}','model',this.value)"><option value="fal-ai/flux/dev" ${node.data.model==='fal-ai/flux/dev'?'selected':''}>FLUX Dev — up to 4 refs</option><option value="fal-ai/flux-pro/v1.1" ${node.data.model==='fal-ai/flux-pro/v1.1'?'selected':''}>FLUX Pro — up to 4 refs</option><option value="fal-ai/nano-banana-2" ${node.data.model==='fal-ai/nano-banana-2'?'selected':''}>Nano Banana 2 — up to 14 refs</option><option value="fal-ai/nano-banana-pro" ${node.data.model==='fal-ai/nano-banana-pro'?'selected':''}>Nano Banana Pro — up to 2 refs</option><option value="openai/gpt-image-2" ${node.data.model==='openai/gpt-image-2'?'selected':''}>GPT Image 2 — up to 16 refs</option></select>
+        <div style="font-size:9px;color:${refCount>modelMax?'var(--red)':'var(--textm)'};margin-top:3px">${refCount}/${modelMax} reference images connected${refCount>modelMax?' — extras will be ignored on Run':''}</div>
         <label class="nc-field-label">Aspect Ratio</label><select onchange="NodeCanvas.updateNodeData('${node.id}','aspectRatio',this.value)">${["16:9","1:1","9:16","4:3","3:4"].map(r=>`<option value="${r}" ${(node.data.aspectRatio||"1:1")===r?'selected':''}>${r}</option>`).join('')}</select>`;
+      }
       case "videoClip":
         return `${node.data.resultUrl?`<video src="${node.data.resultUrl}" controls></video>`:''}<textarea placeholder="Manual prompt (used if nothing connected)" onchange="NodeCanvas.updateNodeData('${node.id}','manualPrompt',this.value)">${node.data.manualPrompt||''}</textarea>
         <label class="nc-field-label">Video Model</label>
