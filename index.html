@@ -438,7 +438,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
   clip-path:polygon(8% 0%,92% 0%,100% 100%,0% 100%);white-space:nowrap;cursor:grab;user-select:none;display:flex;align-items:center;gap:4px;touch-action:none}
 .nc-node-tab:active{cursor:grabbing}
 
-.nc-node-body{padding:9px;font-size:11px}
+.nc-node-body{position:relative;z-index:1;padding:9px;font-size:11px;background:var(--glass-solid);border-radius:11px}
 .nc-node-body img{width:100%;min-height:120px;max-height:180px;object-fit:cover;border-radius:8px;display:block;margin-bottom:6px;background:#00000010}
 .nc-node-body video,.nc-node-body audio{width:100%;border-radius:8px;display:block;margin-bottom:6px}
 .nc-node-body textarea{width:100%;font-size:11.5px;border:1.5px solid var(--glass-brd);border-radius:8px;padding:7px;resize:vertical;min-height:56px;font-family:inherit;margin-bottom:4px}
@@ -10244,6 +10244,7 @@ const NodeCanvas=(function(){
   let pendingConnection=null; // {nodeId,portId,type,direction}
   let autoSaveTimer=null;
   let dragState=null; // {mode:'pan'|'node',pointerId,startX,startY,nodeId,nodeStartX,nodeStartY}
+  let _documentListenersAttached=false;
   let pinchState=null; // {pointers:Map,startDist,startZoom,midX,midY}
   let longPressTimer=null;
 
@@ -10772,10 +10773,10 @@ const NodeCanvas=(function(){
   // ── 3c. Interaction handlers (pointer-events based: unifies touch/mouse) ──
   function onNodeDragStart(e,nodeId){
     e.stopPropagation();
+    e.preventDefault();
     const node=graphState.nodes[nodeId];
     if(!node)return;
     graphState.selection.nodeIds=[nodeId];
-    e.target.setPointerCapture(e.pointerId);
     dragState={mode:"node",pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,nodeId,nodeStartX:node.position.x,nodeStartY:node.position.y};
   }
   function onNodeBodyPointerDown(e,nodeId){
@@ -10814,7 +10815,6 @@ const NodeCanvas=(function(){
   }
   function onCanvasPointerDown(e){
     if(e.target!==viewportEl&&e.target!==layerEl)return; // only pan on empty canvas space, never on a node
-    viewportEl.setPointerCapture(e.pointerId);
     viewportEl.classList.add("nc-panning");
     dragState={mode:"pan",pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,viewStartX:graphState.viewport.x,viewStartY:graphState.viewport.y};
   }
@@ -11037,9 +11037,12 @@ const NodeCanvas=(function(){
     minimapEl=rootEl.querySelector(".nc-minimap");
 
     viewportEl.addEventListener("pointerdown",onCanvasPointerDown);
-    viewportEl.addEventListener("pointermove",onPointerMove);
-    viewportEl.addEventListener("pointerup",onPointerUp);
-    viewportEl.addEventListener("pointercancel",onPointerUp);
+    if(!_documentListenersAttached){
+      document.addEventListener("pointermove",onPointerMove);
+      document.addEventListener("pointerup",onPointerUp);
+      document.addEventListener("pointercancel",onPointerUp);
+      _documentListenersAttached=true;
+    }
     viewportEl.addEventListener("touchstart",onTouchStartPinch,{passive:true});
     viewportEl.addEventListener("touchmove",onTouchMovePinch,{passive:false});
     viewportEl.addEventListener("touchend",onTouchEndPinch);
