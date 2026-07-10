@@ -10260,7 +10260,12 @@ const NodeCanvas=(function(){
     characterSheet:{label:"Character Sheet",color:"#F59E0B",inputs:[],outputs:[{portId:"out_1",label:"Character",type:"image"}]},
     styleRef:{label:"Style Reference",color:"#6B7280",inputs:[],outputs:[{portId:"out_1",label:"Style",type:"text"}]},
     generatedImage:{label:"Generated Image",color:"#10B981",inputs:[{portId:"in_1",label:"Prompt",accepts:["text"]},...Array.from({length:16},(_,i)=>({portId:`in_ref_${i+1}`,label:`Ref ${i+1}`,accepts:["image"]}))],outputs:[{portId:"out_1",label:"Image",type:"image"}]},
-    videoClip:{label:"Video Clip",color:"#3B82F6",inputs:[{portId:"in_1",label:"Prompt/Img",accepts:["text","image"]},{portId:"in_2",label:"Last Frame In",accepts:["image"]}],outputs:[{portId:"out_1",label:"Video",type:"video"},{portId:"out_2",label:"Last Frame",type:"image"}]},
+    videoClip:{label:"Video Clip",color:"#3B82F6",inputs:[
+      {portId:"in_1",label:"Prompt",accepts:["text"]},
+      ...Array.from({length:9},(_,i)=>({portId:`in_img_${i+1}`,label:i===0?"Image Ref 1 / Last Frame In":`Image Ref ${i+1}`,accepts:["image"]})),
+      ...Array.from({length:3},(_,i)=>({portId:`in_vid_${i+1}`,label:`Video Ref ${i+1}`,accepts:["video"]})),
+      ...Array.from({length:3},(_,i)=>({portId:`in_aud_${i+1}`,label:`Audio Ref ${i+1}`,accepts:["audio"]})),
+    ],outputs:[{portId:"out_1",label:"Video",type:"video"},{portId:"out_2",label:"Last Frame",type:"image"}]},
     upscale:{label:"Upscale",color:"#A78BFA",inputs:[{portId:"in_1",label:"Source",accepts:["image"]}],outputs:[{portId:"out_1",label:"Result",type:"image"}]},
     audioTTS:{label:"Audio / TTS",color:"#EC4899",inputs:[{portId:"in_1",label:"Text",accepts:["text"]}],outputs:[{portId:"out_1",label:"Audio",type:"audio"}]},
   };
@@ -10557,20 +10562,40 @@ const NodeCanvas=(function(){
     logCost(node.data.model,"Node Canvas — Generated Image");
   }
   async function execVideoClip(node){
-    const mainInput=getConnectedInput(node,"in_1");
-    const prompt=(typeof mainInput?.value==="string"&&mainInput.value.length<500&&!mainInput.value.startsWith("http"))?mainInput.value:node.data.manualPrompt;
-    const imageRef=(mainInput&&typeof mainInput.value==="string"&&mainInput.value.startsWith("http"))?mainInput.value:null;
-    const lastFrameInput=getConnectedInput(node,"in_2");
-    const imageUrls=[imageRef,lastFrameInput?.value].filter(Boolean);
+    const promptInput=getConnectedInput(node,"in_1");
+    const prompt=promptInput?promptInput.value:node.data.manualPrompt;
+
+    const imageUrls=[];
+    for(let i=1;i<=9;i++){ const r=getConnectedInput(node,`in_img_${i}`); if(r&&r.value)imageUrls.push(r.value); }
+    const videoUrls=[];
+    for(let i=1;i<=3;i++){ const r=getConnectedInput(node,`in_vid_${i}`); if(r&&r.value)videoUrls.push(r.value); }
+    const audioUrls=[];
+    for(let i=1;i<=3;i++){ const r=getConnectedInput(node,`in_aud_${i}`); if(r&&r.value)audioUrls.push(r.value); }
+
     if(!prompt&&!imageUrls.length)throw new Error("No prompt or reference image connected");
     const apiKey=gs("api_falai","");
     if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+
+    // Only Seedance's reference-to-video endpoints actually accept
+    // image_urls/video_urls/audio_urls on fal — Kling and Veo in this app
+    // are plain text-to-video, so refs connected to those get dropped with
+    // a clear warning rather than silently ignored or sent to an endpoint
+    // that will just reject them.
+    const isSeedance=node.data.model.includes("seedance");
+    const totalFiles=imageUrls.length+videoUrls.length+audioUrls.length;
+    if(!isSeedance&&totalFiles>0)toast(`⚠️ ${node.data.model.split('/')[1]||node.data.model} doesn't support reference inputs — connected refs are being ignored. Switch to a Seedance model to use them.`,"error");
+    if(isSeedance&&totalFiles>12)throw new Error(`Too many references connected (${totalFiles}) — Seedance 2.0 allows up to 12 total files across images, videos, and audio combined`);
+
     const body={prompt:prompt||"Continue the scene naturally.",aspect_ratio:node.data.aspectRatio||"16:9",duration:String(node.data.duration||5),resolution:node.data.resolution||"720p"};
-    if(imageUrls.length)body.image_urls=imageUrls;
+    if(isSeedance){
+      if(imageUrls.length)body.image_urls=imageUrls;
+      if(videoUrls.length)body.video_urls=videoUrls;
+      if(audioUrls.length)body.audio_urls=audioUrls;
+    }
     const {videoUrl,lastFrameUrl}=await ncFalVideoSubmitAndPoll(node.data.model,body);
     node.data.resultUrl=videoUrl;
     node.data.lastFrameUrl=lastFrameUrl||imageUrls[0]||null;
-    const est=estimateVideoCost(node.data.model,node.data.duration||5,node.data.resolution||"720p",false);
+    const est=estimateVideoCost(node.data.model,node.data.duration||5,node.data.resolution||"720p",videoUrls.length>0);
     node.meta.model=node.data.model;
     node.meta.cost=est?est.cost:0;
     logCost(node.data.model,"Node Canvas — Video Clip");
@@ -10709,22 +10734,31 @@ const NodeCanvas=(function(){
         <div style="font-size:9px;color:${refCount>modelMax?'var(--red)':'var(--textm)'};margin-top:3px">${refCount}/${modelMax} reference images connected${refCount>modelMax?' — extras will be ignored on Run':''}</div>
         <label class="nc-field-label">Aspect Ratio</label><select onchange="NodeCanvas.updateNodeData('${node.id}','aspectRatio',this.value)">${["16:9","1:1","9:16","4:3","3:4"].map(r=>`<option value="${r}" ${(node.data.aspectRatio||"1:1")===r?'selected':''}>${r}</option>`).join('')}</select>`;
       }
-      case "videoClip":
+      case "videoClip": {
+        const imgCount=node.inputs.filter(p=>p.portId.startsWith("in_img_")&&p.connectedEdgeId).length;
+        const vidCount=node.inputs.filter(p=>p.portId.startsWith("in_vid_")&&p.connectedEdgeId).length;
+        const audCount=node.inputs.filter(p=>p.portId.startsWith("in_aud_")&&p.connectedEdgeId).length;
+        const isSeedance=node.data.model.includes("seedance");
         return `${node.data.resultUrl?`<video src="${node.data.resultUrl}" controls></video>`:''}<textarea placeholder="Manual prompt (used if nothing connected)" onchange="NodeCanvas.updateNodeData('${node.id}','manualPrompt',this.value)">${node.data.manualPrompt||''}</textarea>
         <label class="nc-field-label">Video Model</label>
         <select onchange="NodeCanvas.setVideoModel('${node.id}',this.value)">
-          <option value="bytedance/seedance-2.0/reference-to-video" ${node.data.model==='bytedance/seedance-2.0/reference-to-video'?'selected':''}>Seedance 2.0 — Multi-Ref</option>
-          <option value="bytedance/seedance-2.0/fast/reference-to-video" ${node.data.model==='bytedance/seedance-2.0/fast/reference-to-video'?'selected':''}>Seedance 2.0 Fast — Multi-Ref</option>
-          <option value="fal-ai/kling-video/v2.1/master/text-to-video" ${node.data.model==='fal-ai/kling-video/v2.1/master/text-to-video'?'selected':''}>Kling 2.1 Master</option>
-          <option value="fal-ai/kling-video/v2.6/pro/text-to-video" ${node.data.model==='fal-ai/kling-video/v2.6/pro/text-to-video'?'selected':''}>Kling 2.6 Pro</option>
-          <option value="fal-ai/kling-video/v3/standard/text-to-video" ${node.data.model==='fal-ai/kling-video/v3/standard/text-to-video'?'selected':''}>Kling 3.0 Standard</option>
-          <option value="fal-ai/veo3.1" ${node.data.model==='fal-ai/veo3.1'?'selected':''}>Veo 3.1</option>
+          <option value="bytedance/seedance-2.0/reference-to-video" ${node.data.model==='bytedance/seedance-2.0/reference-to-video'?'selected':''}>Seedance 2.0 — up to 9 img/3 vid/3 aud</option>
+          <option value="bytedance/seedance-2.0/fast/reference-to-video" ${node.data.model==='bytedance/seedance-2.0/fast/reference-to-video'?'selected':''}>Seedance 2.0 Fast — up to 9 img/3 vid/3 aud</option>
+          <option value="fal-ai/kling-video/v2.1/master/text-to-video" ${node.data.model==='fal-ai/kling-video/v2.1/master/text-to-video'?'selected':''}>Kling 2.1 Master — no refs</option>
+          <option value="fal-ai/kling-video/v2.6/pro/text-to-video" ${node.data.model==='fal-ai/kling-video/v2.6/pro/text-to-video'?'selected':''}>Kling 2.6 Pro — no refs</option>
+          <option value="fal-ai/kling-video/v3/standard/text-to-video" ${node.data.model==='fal-ai/kling-video/v3/standard/text-to-video'?'selected':''}>Kling 3.0 Standard — no refs</option>
+          <option value="fal-ai/veo3.1" ${node.data.model==='fal-ai/veo3.1'?'selected':''}>Veo 3.1 — no refs</option>
         </select>
+        <div style="font-size:9px;color:${(!isSeedance&&(imgCount+vidCount+audCount)>0)?'var(--red)':'var(--textm)'};margin-top:3px">
+          ${isSeedance?`${imgCount}/9 images · ${vidCount}/3 videos · ${audCount}/3 audio${(imgCount+vidCount+audCount)>12?' — over the 12-file combined limit':''}`
+            :(imgCount+vidCount+audCount)>0?`⚠️ ${imgCount+vidCount+audCount} ref(s) connected but this model ignores them`:'This model uses prompt only, no references'}
+        </div>
         <div class="nc-inline-row">
           <div style="flex:1"><label class="nc-field-label">Res</label><select onchange="NodeCanvas.updateNodeData('${node.id}','resolution',this.value)">${(VIDEO_MODEL_RESOLUTIONS[node.data.model]||["480p","720p"]).map(r=>`<option value="${r}" ${node.data.resolution===r?'selected':''}>${r}</option>`).join('')}</select></div>
           <div style="flex:1"><label class="nc-field-label">Duration</label><select onchange="NodeCanvas.updateNodeData('${node.id}','duration',parseInt(this.value))">${(VIDEO_MODEL_DURATIONS[node.data.model]?.options||[4,5,6,8]).map(d=>`<option value="${d}" ${node.data.duration===d?'selected':''}>${d}s</option>`).join('')}</select></div>
           <div style="flex:1"><label class="nc-field-label">Aspect</label><select onchange="NodeCanvas.updateNodeData('${node.id}','aspectRatio',this.value)">${["16:9","9:16","1:1","4:3","3:4"].map(r=>`<option value="${r}" ${(node.data.aspectRatio||"16:9")===r?'selected':''}>${r}</option>`).join('')}</select></div>
         </div>`;
+      }
       case "upscale":
         return `${node.data.resultUrl?`<img src="${node.data.resultUrl}">`:''}<label class="nc-field-label">Engine</label><select onchange="NodeCanvas.updateNodeData('${node.id}','engine',this.value)"><option value="fal-ai/esrgan" ${node.data.engine==='fal-ai/esrgan'?'selected':''}>ESRGAN</option><option value="fal-ai/clarity-upscaler" ${node.data.engine==='fal-ai/clarity-upscaler'?'selected':''}>Clarity</option></select>`;
       case "audioTTS":
