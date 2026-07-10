@@ -10878,20 +10878,40 @@ const NodeCanvas=(function(){
     if(!file)return;
     const node=graphState.nodes[nodeId];
     if(!node)return;
+    const btn=event.target.previousElementSibling;
+    const origLabel=btn?btn.textContent:"";
+    if(btn){btn.textContent="⏳ Uploading…";btn.disabled=true;}
     try{
       const path=`node-canvas/${nodeId}_${Date.now()}_${file.name}`;
       const ref=fbStorage.ref(path);
-      await ref.put(file);
+      // Race against a timeout — if Storage isn't actually enabled in the
+      // Firebase console, .put() can hang indefinitely instead of cleanly
+      // rejecting, which would otherwise leave this stuck forever with no
+      // visible error (exactly what "still not showing" looked like).
+      await Promise.race([
+        ref.put(file),
+        new Promise((_,rej)=>setTimeout(()=>rej(new Error("Cloud upload timed out")),8000))
+      ]);
       node.data.url=await ref.getDownloadURL();
+      console.log("Node Canvas: reference image uploaded to Storage:",node.data.url);
     }catch(err){
+      console.warn("Node Canvas cloud upload failed/timed out, falling back to local copy:",err);
       try{
         node.data.url=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error("Couldn't read file"));r.readAsDataURL(file);});
         toast("⚠️ Cloud storage unavailable — saved on this device only","error");
-      }catch(err2){ toast(`❌ Upload failed: ${err2.message}`,"error"); return; }
+      }catch(err2){
+        toast(`❌ Upload failed: ${err2.message}`,"error");
+        if(btn){btn.textContent=origLabel;btn.disabled=false;}
+        return;
+      }
     }
     node.data.uploadedAt=Date.now();
     autoSaveDebounced();
-    renderNodeOnly(nodeId);
+    // Self-healing: if the node's DOM element went stale during the upload
+    // (e.g. the graph re-rendered for an unrelated reason while we were
+    // waiting), fall back to a full re-render instead of silently no-op'ing.
+    if(nodesLayerEl.querySelector(`[data-node-id="${nodeId}"]`))renderNodeOnly(nodeId);
+    else renderAll();
     toast("✅ Reference image added","success");
   }
 
