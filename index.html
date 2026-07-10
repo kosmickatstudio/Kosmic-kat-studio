@@ -423,6 +423,11 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
   background-origin:border-box;background-clip:padding-box,border-box}
 .nc-node.nc-selected{box-shadow:0 0 0 3px var(--glow-gold)}
 .nc-node.nc-stale{opacity:0.55}
+.nc-node.nc-moving{animation:nc-move-pulse 1.1s ease-in-out infinite;box-shadow:0 0 0 3px var(--gold)!important}
+@keyframes nc-move-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}
+.nc-move-banner{position:absolute;bottom:56px;left:50%;transform:translateX(-50%);z-index:30;display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,var(--violet),var(--ice));color:#fff;padding:9px 10px 9px 16px;border-radius:24px;box-shadow:0 8px 24px rgba(0,0,0,0.25);font-size:12px;font-weight:600;white-space:nowrap}
+.nc-move-banner button{background:rgba(255,255,255,0.22);border:none;color:#fff;padding:6px 14px;border-radius:18px;font-size:11px;font-weight:800;cursor:pointer}
+.nc-move-banner button:active{transform:scale(0.94)}
 .nc-node[data-status="running"]{animation:nc-pulse 1.4s ease-in-out infinite}
 .nc-node[data-status="error"]{border-color:var(--red);background-image:linear-gradient(var(--glass-solid),var(--glass-solid))}
 @keyframes nc-pulse{0%,100%{box-shadow:0 4px 16px rgba(0,0,0,0.10)}50%{box-shadow:0 4px 24px var(--glow-ice)}}
@@ -10244,6 +10249,7 @@ const NodeCanvas=(function(){
   let pendingConnection=null; // {nodeId,portId,type,direction}
   let autoSaveTimer=null;
   let dragState=null; // {mode:'pan'|'node',pointerId,startX,startY,nodeId,nodeStartX,nodeStartY}
+  let moveModeNodeId=null; // tap-to-place move mode, armed by long-pressing a node's tab
   let _documentListenersAttached=false;
   let pinchState=null; // {pointers:Map,startDist,startZoom,midX,midY}
   let longPressTimer=null;
@@ -10644,8 +10650,8 @@ const NodeCanvas=(function(){
     const statusIcon={idle:'',queued:'⏳',running:'⏳',done:'✅',error:'❌'}[node.status]||'';
     const neighbors=neighborColors(node.id).filter(c=>c!==def.color);
     const colorStyle=`--nc-color:${def.color};--nc-color2:${neighbors[0]||def.color}`;
-    return `<div class="nc-node${node._stale?' nc-stale':''}${(graphState.selection.nodeIds||[]).includes(node.id)?' nc-selected':''}" data-node-id="${node.id}" data-type="${node.type}" data-status="${node.status}" style="left:${node.position.x}px;top:${node.position.y}px;width:${node.size.w}px;${colorStyle}">
-      <div class="nc-node-tab" onpointerdown="NodeCanvas._onNodeDragStart(event,'${node.id}')">${def.label} ${statusIcon}</div>
+    return `<div class="nc-node${node._stale?' nc-stale':''}${(graphState.selection.nodeIds||[]).includes(node.id)?' nc-selected':''}${node.id===moveModeNodeId?' nc-moving':''}" data-node-id="${node.id}" data-type="${node.type}" data-status="${node.status}" style="left:${node.position.x}px;top:${node.position.y}px;width:${node.size.w}px;${colorStyle}">
+      <div class="nc-node-tab" onpointerdown="NodeCanvas._onNodeDragStart(event,'${node.id}')">${def.label} ${statusIcon}${node.id===moveModeNodeId?' 📍':''}</div>
       <div class="nc-node-body" onpointerdown="NodeCanvas._onNodeBodyPointerDown(event,'${node.id}')">
         ${nodeBodyHTML(node)}
         ${node.meta.error?`<div style="color:var(--red);font-size:9px;margin-top:4px">${node.meta.error}</div>`:''}
@@ -10792,13 +10798,56 @@ const NodeCanvas=(function(){
 
   // ── 3c. Interaction handlers (pointer-events based: unifies touch/mouse) ──
   function onNodeDragStart(e,nodeId){
-    console.log("Node Canvas: tab pointerdown fired for node",nodeId,"pointerId",e.pointerId,"pointerType",e.pointerType);
+    // Long-press the tab to arm Move Mode, instead of a continuous drag —
+    // continuous pointer-drag tracking didn't hold up reliably on mobile
+    // even after two rounds of fixes, so this trades the fluid drag gesture
+    // for a more robust discrete tap-to-place interaction instead.
     e.stopPropagation();
-    e.preventDefault();
-    const node=graphState.nodes[nodeId];
-    if(!node)return;
+    const startX=e.clientX,startY=e.clientY;
+    clearTimeout(longPressTimer);
+    longPressTimer=setTimeout(()=>{ enterMoveMode(nodeId); },380);
+    const cancel=()=>{clearTimeout(longPressTimer);document.removeEventListener("pointerup",cancel);document.removeEventListener("pointermove",moveCancel);};
+    const moveCancel=(me)=>{ if(Math.hypot(me.clientX-startX,me.clientY-startY)>10)cancel(); };
+    document.addEventListener("pointerup",cancel,{once:true});
+    document.addEventListener("pointermove",moveCancel);
+  }
+  function enterMoveMode(nodeId){
+    moveModeNodeId=nodeId;
     graphState.selection.nodeIds=[nodeId];
-    dragState={mode:"node",pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,nodeId,nodeStartX:node.position.x,nodeStartY:node.position.y};
+    toast("📍 Move mode — tap anywhere on the canvas to place this node","");
+    renderMoveModeBanner();
+    renderNodeOnly(nodeId);
+  }
+  function freezeMove(){
+    if(!moveModeNodeId)return;
+    moveModeNodeId=null;
+    autoSaveDebounced();
+    renderMoveModeBanner();
+    renderAll();
+    toast("❄️ Position locked","success");
+  }
+  function renderMoveModeBanner(){
+    let banner=rootEl.querySelector(".nc-move-banner");
+    if(!moveModeNodeId){ if(banner)banner.remove(); return; }
+    if(!banner){
+      banner=document.createElement("div");
+      banner.className="nc-move-banner";
+      rootEl.appendChild(banner);
+    }
+    banner.innerHTML=`<span>📍 Tap the canvas to place this node</span><button onclick="NodeCanvas.freezeMove()">❄️ Freeze</button>`;
+  }
+  function onCanvasTapForMove(e){
+    if(!moveModeNodeId)return;
+    if(e.target!==viewportEl&&e.target!==layerEl)return; // only place on a tap over empty canvas, not on another node
+    const node=graphState.nodes[moveModeNodeId];
+    if(!node)return;
+    const pos=screenToCanvas(e.clientX,e.clientY);
+    node.position.x=pos.x-node.size.w/2;
+    node.position.y=pos.y-20;
+    autoSaveDebounced();
+    renderNodeOnly(moveModeNodeId);
+    renderEdges();
+    renderMinimap();
   }
   function onNodeBodyPointerDown(e,nodeId){
     // Long-press → context menu. Ignore if the tap landed on an interactive
@@ -11059,6 +11108,7 @@ const NodeCanvas=(function(){
     minimapEl=rootEl.querySelector(".nc-minimap");
 
     viewportEl.addEventListener("pointerdown",onCanvasPointerDown);
+    viewportEl.addEventListener("click",onCanvasTapForMove);
     if(!_documentListenersAttached){
       document.addEventListener("pointermove",onPointerMove);
       document.addEventListener("pointerup",onPointerUp);
@@ -11081,7 +11131,7 @@ const NodeCanvas=(function(){
     init,addNode,deleteNode,addEdge,deleteEdge,runNode,runGraphFrom,
     serializeGraph,loadGraph,switchProject,updateNodeData,uploadReferenceImage,setVideoModel,
     duplicateNode,zoomBy,fitToScreen,
-    _onNodeDragStart:onNodeDragStart,_onNodeBodyPointerDown:onNodeBodyPointerDown,_onPortTap:onPortTap,_pickOutputPort:pickOutputPort,
+    _onNodeDragStart:onNodeDragStart,_onNodeBodyPointerDown:onNodeBodyPointerDown,_onPortTap:onPortTap,_pickOutputPort:pickOutputPort,freezeMove,
   };
 })();
 
