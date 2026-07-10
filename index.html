@@ -10340,9 +10340,10 @@ const NodeCanvas=(function(){
     const def=NODE_DEFS[type];
     if(!def)return null;
     const id=uid("node");
+    const zoom=graphState.viewport.zoom||1; // guard: a stray zoom of 0 would make the position math produce Infinity
     graphState.nodes[id]={
       id,type,
-      position:position||{x:-graphState.viewport.x/graphState.viewport.zoom+40,y:-graphState.viewport.y/graphState.viewport.zoom+40},
+      position:position||{x:-graphState.viewport.x/zoom+40,y:-graphState.viewport.y/zoom+40},
       size:{w:220,h:160},
       data:defaultDataFor(type),
       status:"idle",
@@ -10350,6 +10351,7 @@ const NodeCanvas=(function(){
       outputs:def.outputs.map(p=>({...p})),
       meta:{createdAt:Date.now(),model:null,cost:0,error:null},
     };
+    console.log(`Node Canvas: added ${type} node ${id}, graph now has ${Object.keys(graphState.nodes).length} node(s)`);
     autoSaveDebounced();
     renderAll();
     return id;
@@ -10598,15 +10600,29 @@ const NodeCanvas=(function(){
   // (drag, run) touch only that node + its edges, per the spec's perf note. ──
   function renderAll(){
     if(!rootEl)return;
-    applyTransform();
-    renderNodes();
-    renderEdges();
-    renderMinimap();
-    renderCostReadout();
-    loadProjectsList();
+    try{
+      applyTransform();
+      renderNodes();
+      renderEdges();
+      renderMinimap();
+      renderCostReadout();
+      loadProjectsList();
+    }catch(err){
+      console.error("Node Canvas render error:",err);
+      toast(`❌ Canvas render error: ${err.message} — check the browser console for details`,"error");
+    }
   }
   function renderNodes(){
-    nodesLayerEl.innerHTML=Object.values(graphState.nodes).map(nodeHTML).join('');
+    // Render each node independently — one broken node (bad data, a future
+    // bug in a specific node type's body) no longer blanks the entire
+    // canvas; it's skipped with a visible error instead of taking every
+    // other node down with it.
+    const parts=[];
+    Object.values(graphState.nodes).forEach(node=>{
+      try{ parts.push(nodeHTML(node)); }
+      catch(err){ console.error(`Node Canvas: failed to render node ${node.id} (${node.type}):`,err); toast(`❌ Couldn't render a ${node.type} node: ${err.message}`,"error"); }
+    });
+    nodesLayerEl.innerHTML=parts.join('');
   }
   function renderNodeOnly(nodeId){
     const existing=nodesLayerEl.querySelector(`[data-node-id="${nodeId}"]`);
