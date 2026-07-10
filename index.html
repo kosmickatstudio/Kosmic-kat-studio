@@ -395,10 +395,14 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 .nc-root{position:relative;width:100%;height:calc(100vh - 220px);min-height:420px;overflow:hidden;border-radius:16px;border:1px solid var(--glass-brd);background:var(--pearl2)}
 .nc-toolbar{position:absolute;top:10px;left:10px;right:10px;z-index:20;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
 .nc-toolbar>*{pointer-events:auto}
-.nc-toolbar-group{display:flex;gap:5px;background:var(--glass-solid);backdrop-filter:blur(14px);border:1px solid var(--glass-brd);border-radius:12px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,0.1);overflow-x:auto;max-width:100%}
-.nc-tool-btn{border:none;border-radius:9px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:40px;height:34px;flex-shrink:0;color:#fff;font-size:13px;transition:transform 0.15s;padding:0}
-.nc-tool-btn:active{transform:scale(0.92)}
-.nc-tool-btn span{font-size:6.5px;font-weight:700;letter-spacing:0.02em;line-height:1;text-transform:uppercase;color:rgba(255,255,255,0.92)}
+.nc-toolbar-group{display:flex;gap:6px;background:var(--glass-solid);backdrop-filter:blur(14px);border:1px solid var(--glass-brd);border-radius:12px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,0.1);overflow-x:auto;max-width:100%}
+.nc-tool-btn{border:none;border-radius:10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:42px;height:36px;flex-shrink:0;color:#fff;font-size:13px;padding:0;
+  background:linear-gradient(150deg,color-mix(in srgb,var(--btn-color) 85%,white 30%),var(--btn-color) 55%,color-mix(in srgb,var(--btn-color) 85%,black 25%));
+  box-shadow:0 3px 10px color-mix(in srgb,var(--btn-color) 55%,transparent),inset 0 1px 0 rgba(255,255,255,0.35);
+  transition:transform 0.15s,box-shadow 0.15s}
+.nc-tool-btn:active{transform:scale(0.92);box-shadow:0 1px 4px color-mix(in srgb,var(--btn-color) 55%,transparent),inset 0 1px 0 rgba(255,255,255,0.35)}
+.nc-tool-btn span:first-child{font-size:13px;line-height:1;text-shadow:0 1px 2px rgba(0,0,0,0.25)}
+.nc-tool-btn span:last-child{font-size:6.5px;font-weight:800;letter-spacing:0.02em;line-height:1;text-transform:uppercase;color:rgba(255,255,255,0.95);text-shadow:0 1px 1px rgba(0,0,0,0.2)}
 .nc-tool-btn-plain{width:30px;height:30px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;color:var(--textm);transition:all 0.15s;flex-shrink:0}
 .nc-tool-btn-plain:hover{background:var(--glow-ice);color:var(--ice)}
 .nc-viewport{position:absolute;inset:0;touch-action:none;cursor:grab;background-image:radial-gradient(circle,rgba(61,31,122,0.10) 1px,transparent 1px);background-size:24px 24px}
@@ -408,17 +412,24 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 .nc-edge-path{fill:none;stroke:var(--ice);stroke-width:2.5;opacity:0.75}
 .nc-edge-path.nc-edge-pending{stroke:var(--gold);stroke-dasharray:5,4;opacity:0.9}
 
-.nc-node{position:absolute;width:220px;background:var(--glass-solid);border:3px solid var(--nc-color,var(--ice));border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,0.10);transition:box-shadow 0.15s;padding-top:6px}
-.nc-node.nc-gradient-border{border-color:transparent;background-image:linear-gradient(var(--glass-solid),var(--glass-solid)),linear-gradient(135deg,var(--nc-color,#888),var(--nc-color2,#888));background-origin:border-box;background-clip:padding-box,border-box}
+/* Node border always uses the double-background gradient technique (not a
+   conditional class) — with --nc-color2 defaulting to --nc-color when there's
+   no connected neighbor, it just renders as a solid color, and automatically
+   blends toward a neighbor's color the moment an edge connects. This removes
+   the earlier conditional-class approach, which depended on specificity/
+   timing that made the gradient easy to miss. */
+.nc-node{position:absolute;width:220px;border:3px solid transparent;border-radius:14px;box-shadow:0 4px 18px color-mix(in srgb,var(--nc-color,#888) 25%,transparent);transition:box-shadow 0.15s;padding-top:8px;
+  background-image:linear-gradient(var(--glass-solid),var(--glass-solid)),linear-gradient(135deg,var(--nc-color,#888),var(--nc-color2,var(--nc-color,#888)));
+  background-origin:border-box;background-clip:padding-box,border-box}
 .nc-node.nc-selected{box-shadow:0 0 0 3px var(--glow-gold)}
 .nc-node.nc-stale{opacity:0.55}
 .nc-node[data-status="running"]{animation:nc-pulse 1.4s ease-in-out infinite}
-.nc-node[data-status="error"]{border-color:var(--red)!important;background-image:none!important}
+.nc-node[data-status="error"]{border-color:var(--red);background-image:linear-gradient(var(--glass-solid),var(--glass-solid))}
 @keyframes nc-pulse{0%,100%{box-shadow:0 4px 16px rgba(0,0,0,0.10)}50%{box-shadow:0 4px 24px var(--glow-ice)}}
 
-/* Trapezoid name tab, popping out of the node's top-left corner */
-.nc-node-tab{position:absolute;top:-15px;left:12px;padding:3px 12px 4px;font-size:9.5px;font-weight:800;letter-spacing:0.03em;color:#fff;text-transform:uppercase;background:var(--nc-color,#888);clip-path:polygon(8% 0%,92% 0%,100% 100%,0% 100%);white-space:nowrap;cursor:grab;user-select:none}
-.nc-node-tab.nc-gradient-tab{background:linear-gradient(100deg,var(--nc-color,#888),var(--nc-color2,#888))}
+/* Name tab: floats fully above the card (not overlapping into it), thin
+   colored outline + light fill + colored text, instead of a solid block. */
+.nc-node-tab{position:absolute;top:-24px;left:10px;padding:3px 13px 6px;font-size:9.5px;font-weight:800;letter-spacing:0.03em;color:var(--nc-color,#888);text-transform:uppercase;background:var(--glass-solid);border:1.5px solid var(--nc-color,#888);border-bottom:none;clip-path:polygon(8% 0%,92% 0%,100% 100%,0% 100%);white-space:nowrap;cursor:grab;user-select:none;display:flex;align-items:center;gap:4px}
 .nc-node-tab:active{cursor:grabbing}
 
 .nc-node-body{padding:9px;font-size:11px}
@@ -428,18 +439,20 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 .nc-node-body select{width:100%;font-size:10.5px;padding:5px;border-radius:8px;border:1.5px solid var(--glass-brd);margin-top:4px;margin-bottom:2px}
 .nc-node-body label.nc-field-label{font-size:8.5px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.03em;display:block;margin-top:6px;margin-bottom:2px}
 
-/* Ports: a single colored + badge sitting fully outside the card edge, no label text — a wrong connection now explains itself via an error toast instead */
+/* Ports: a bare colored + glyph, no circular backdrop, no label text — a
+   wrong connection now explains itself via an error toast instead. */
 .nc-port-row{position:relative;height:0}
-.nc-port{position:absolute;width:20px;height:20px;border-radius:50%;background:var(--nc-color,var(--ice));border:2px solid var(--glass-solid);cursor:pointer;flex-shrink:0;transition:transform 0.15s;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800;box-shadow:0 2px 6px rgba(0,0,0,0.18);top:50%;transform:translateY(-50%)}
-.nc-port:hover,.nc-port.nc-port-active{transform:translateY(-50%) scale(1.25)}
-.nc-port-in{left:-10px}
-.nc-port-out{right:-10px}
+.nc-port{position:absolute;width:20px;height:20px;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--nc-color,var(--ice));font-size:19px;font-weight:900;text-shadow:0 1px 3px rgba(0,0,0,0.15);transition:transform 0.15s;top:50%;transform:translateY(-50%)}
+.nc-port:hover,.nc-port.nc-port-active{transform:translateY(-50%) scale(1.35)}
+.nc-port-in{left:-14px}
+.nc-port-out{right:-14px}
 .nc-ports-in-wrap,.nc-ports-out-wrap{position:absolute;top:36px;bottom:36px;width:0}
 .nc-ports-in-wrap{left:0}
 .nc-ports-out-wrap{right:0}
 
 .nc-node-meta{font-size:9px;color:var(--textm);margin-top:6px;padding-top:6px;border-top:1px solid var(--glass-brd);display:flex;justify-content:space-between;align-items:center}
-.nc-run-btn{background:var(--nc-color,var(--violet));color:#fff;border:none;border-radius:8px;padding:4px 12px;font-size:10.5px;font-weight:700;cursor:pointer}
+.nc-run-btn{background:linear-gradient(135deg,color-mix(in srgb,var(--nc-color,var(--violet)) 85%,white 25%),var(--nc-color,var(--violet)));color:#fff;border:none;border-radius:8px;padding:5px 13px;font-size:10.5px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px color-mix(in srgb,var(--nc-color,var(--violet)) 45%,transparent)}
+.nc-run-btn:active{transform:scale(0.95)}
 .nc-context-menu{position:fixed;z-index:100;background:var(--glass-solid);backdrop-filter:blur(16px);border:1px solid var(--glass-brd);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,0.25);padding:4px;min-width:140px}
 .nc-context-menu button{display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:transparent;font-size:12px;border-radius:8px;cursor:pointer;color:var(--text)}
 .nc-context-menu button:hover{background:var(--glow-ice);color:var(--ice)}
@@ -10267,7 +10280,12 @@ const NodeCanvas=(function(){
       localStorage.setItem("kk_nc_projects",JSON.stringify(S.nodeCanvasProjects));
     }
     const sel=document.getElementById("ncProjectSelect");
-    if(sel)sel.innerHTML=S.nodeCanvasProjects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')+`<option value="__new__">+ New Canvas</option>`;
+    // 'selected' is baked directly into the option HTML rather than set via a
+    // separate sel.value= call — this innerHTML rebuild runs on every
+    // renderAll(), which would silently wipe out any prior .value= assignment
+    // the instant it ran again, desyncing the dropdown from the actually
+    // loaded project (this was the cause of "select new one, still shows old one").
+    if(sel)sel.innerHTML=S.nodeCanvasProjects.map(p=>`<option value="${p.id}" ${p.id===currentProjectId?'selected':''}>${p.name}</option>`).join('')+`<option value="__new__">+ New Canvas</option>`;
   }
   async function switchProject(id){
     if(id==="__new__"){
@@ -10275,14 +10293,11 @@ const NodeCanvas=(function(){
       const proj={id:uid("ncproj"),name};
       S.nodeCanvasProjects.push(proj);
       localStorage.setItem("kk_nc_projects",JSON.stringify(S.nodeCanvasProjects));
-      await loadProjectsList();
-      document.getElementById("ncProjectSelect").value=proj.id;
       id=proj.id;
       graphState={nodes:{},edges:{},viewport:{x:0,y:0,zoom:1},selection:{nodeIds:[],edgeIds:[]}};
     }
     currentProjectId=id;
-    const sel=document.getElementById("ncProjectSelect");
-    if(sel)sel.value=id;
+    localStorage.setItem("kk_nc_last_project",id); // survives a tab reload/backgrounding, so init() resumes the right canvas
     const saved=localStorage.getItem("kk_nc_graph_"+id);
     if(saved){ loadGraph(saved); }
     else{
@@ -10603,10 +10618,9 @@ const NodeCanvas=(function(){
     const def=NODE_DEFS[node.type];
     const statusIcon={idle:'',queued:'⏳',running:'⏳',done:'✅',error:'❌'}[node.status]||'';
     const neighbors=neighborColors(node.id).filter(c=>c!==def.color);
-    const isGradient=neighbors.length>0&&node.status!=="error";
     const colorStyle=`--nc-color:${def.color};--nc-color2:${neighbors[0]||def.color}`;
-    return `<div class="nc-node${node._stale?' nc-stale':''}${(graphState.selection.nodeIds||[]).includes(node.id)?' nc-selected':''}${isGradient?' nc-gradient-border':''}" data-node-id="${node.id}" data-type="${node.type}" data-status="${node.status}" style="left:${node.position.x}px;top:${node.position.y}px;width:${node.size.w}px;${colorStyle}">
-      <div class="nc-node-tab${isGradient?' nc-gradient-tab':''}" onpointerdown="NodeCanvas._onNodeDragStart(event,'${node.id}')">${def.label} ${statusIcon}</div>
+    return `<div class="nc-node${node._stale?' nc-stale':''}${(graphState.selection.nodeIds||[]).includes(node.id)?' nc-selected':''}" data-node-id="${node.id}" data-type="${node.type}" data-status="${node.status}" style="left:${node.position.x}px;top:${node.position.y}px;width:${node.size.w}px;${colorStyle}">
+      <div class="nc-node-tab" onpointerdown="NodeCanvas._onNodeDragStart(event,'${node.id}')">${def.label} ${statusIcon}</div>
       <div class="nc-node-body" onpointerdown="NodeCanvas._onNodeBodyPointerDown(event,'${node.id}')">
         ${nodeBodyHTML(node)}
         ${node.meta.error?`<div style="color:var(--red);font-size:9px;margin-top:4px">${node.meta.error}</div>`:''}
@@ -10887,7 +10901,7 @@ const NodeCanvas=(function(){
     rootEl.innerHTML=`
       <div class="nc-toolbar">
         <div class="nc-toolbar-group">
-          ${(()=>{const shortLabels={promptText:"PROMPT",referenceImage:"REF",characterSheet:"CHAR",styleRef:"STYLE",generatedImage:"IMAGE",videoClip:"VIDEO",upscale:"SCALE",audioTTS:"AUDIO"};return Object.keys(NODE_DEFS).map(t=>`<button class="nc-tool-btn" style="background:${NODE_DEFS[t].color}" title="Add ${NODE_DEFS[t].label}" onclick="NodeCanvas.addNode('${t}')"><span style="font-size:12px;line-height:1">+</span><span>${shortLabels[t]}</span></button>`).join('');})()}
+          ${(()=>{const shortLabels={promptText:"PROMPT",referenceImage:"REF",characterSheet:"CHAR",styleRef:"STYLE",generatedImage:"IMAGE",videoClip:"VIDEO",upscale:"SCALE",audioTTS:"AUDIO"};return Object.keys(NODE_DEFS).map(t=>`<button class="nc-tool-btn" style="--btn-color:${NODE_DEFS[t].color}" title="Add ${NODE_DEFS[t].label}" onclick="NodeCanvas.addNode('${t}')"><span>+</span><span>${shortLabels[t]}</span></button>`).join('');})()}
         </div>
         <div class="nc-toolbar-group">
           <button class="nc-tool-btn-plain" title="Zoom in" onclick="NodeCanvas.zoomBy(1.2)">➕</button>
@@ -10918,9 +10932,12 @@ const NodeCanvas=(function(){
     viewportEl.addEventListener("touchmove",onTouchMovePinch,{passive:false});
     viewportEl.addEventListener("touchend",onTouchEndPinch);
 
-    switchProject(currentProjectId||(S.nodeCanvasProjects&&S.nodeCanvasProjects[0]&&S.nodeCanvasProjects[0].id)||null).then(()=>{
-      if(!currentProjectId)loadProjectsList().then(()=>{ const sel=document.getElementById("ncProjectSelect"); if(sel&&sel.value)switchProject(sel.value); });
-    });
+    (async()=>{
+      await loadProjectsList();
+      const lastId=currentProjectId||localStorage.getItem("kk_nc_last_project");
+      const validId=(lastId&&(S.nodeCanvasProjects||[]).find(p=>p.id===lastId))?lastId:(S.nodeCanvasProjects[0]&&S.nodeCanvasProjects[0].id);
+      switchProject(validId);
+    })();
   }
 
   return{
