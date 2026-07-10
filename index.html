@@ -418,7 +418,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
    blends toward a neighbor's color the moment an edge connects. This removes
    the earlier conditional-class approach, which depended on specificity/
    timing that made the gradient easy to miss. */
-.nc-node{position:absolute;width:220px;border:3px solid transparent;border-radius:14px;box-shadow:0 4px 18px color-mix(in srgb,var(--nc-color,#888) 25%,transparent);transition:box-shadow 0.15s;padding-top:8px;
+.nc-node{position:absolute;z-index:1;width:220px;border:3px solid transparent;border-radius:14px;box-shadow:0 4px 18px color-mix(in srgb,var(--nc-color,#888) 25%,transparent);transition:box-shadow 0.15s;padding-top:8px;
   background-image:linear-gradient(var(--glass-solid),var(--glass-solid)),linear-gradient(135deg,var(--nc-color,#888),var(--nc-color2,var(--nc-color,#888)));
   background-origin:border-box;background-clip:padding-box,border-box}
 .nc-node.nc-selected{box-shadow:0 0 0 3px var(--glow-gold)}
@@ -427,9 +427,15 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 .nc-node[data-status="error"]{border-color:var(--red);background-image:linear-gradient(var(--glass-solid),var(--glass-solid))}
 @keyframes nc-pulse{0%,100%{box-shadow:0 4px 16px rgba(0,0,0,0.10)}50%{box-shadow:0 4px 24px var(--glow-ice)}}
 
-/* Name tab: floats fully above the card (not overlapping into it), thin
-   colored outline + light fill + colored text, instead of a solid block. */
-.nc-node-tab{position:absolute;top:-24px;left:10px;padding:3px 13px 6px;font-size:9.5px;font-weight:800;letter-spacing:0.03em;color:var(--nc-color,#888);text-transform:uppercase;background:var(--glass-solid);border:1.5px solid var(--nc-color,#888);border-bottom:none;clip-path:polygon(8% 0%,92% 0%,100% 100%,0% 100%);white-space:nowrap;cursor:grab;user-select:none;display:flex;align-items:center;gap:4px}
+/* Name tab: fully filled glossy gradient (same technique as the toolbar
+   buttons) — a filled shape has no border to lose on the clipped diagonal
+   edges, which is what was happening with the earlier thin-outline version.
+   Sits at a lower z-index than node bodies so it tucks behind a neighboring
+   node instead of floating on top and blocking it. */
+.nc-node-tab{position:absolute;z-index:0;top:-18px;left:10px;padding:4px 14px 9px;font-size:9.5px;font-weight:800;letter-spacing:0.03em;color:#fff;text-transform:uppercase;text-shadow:0 1px 2px rgba(0,0,0,0.25);
+  background:linear-gradient(150deg,color-mix(in srgb,var(--nc-color,#888) 80%,white 35%),var(--nc-color,#888) 55%,color-mix(in srgb,var(--nc-color,#888) 80%,black 20%));
+  box-shadow:0 -2px 10px color-mix(in srgb,var(--nc-color,#888) 40%,transparent),inset 0 1px 0 rgba(255,255,255,0.4);
+  clip-path:polygon(8% 0%,92% 0%,100% 100%,0% 100%);white-space:nowrap;cursor:grab;user-select:none;display:flex;align-items:center;gap:4px;touch-action:none}
 .nc-node-tab:active{cursor:grabbing}
 
 .nc-node-body{padding:9px;font-size:11px}
@@ -438,19 +444,20 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 .nc-node-body textarea{width:100%;font-size:11.5px;border:1.5px solid var(--glass-brd);border-radius:8px;padding:7px;resize:vertical;min-height:56px;font-family:inherit;margin-bottom:4px}
 .nc-node-body select{width:100%;font-size:10.5px;padding:5px;border-radius:8px;border:1.5px solid var(--glass-brd);margin-top:4px;margin-bottom:2px}
 .nc-node-body label.nc-field-label{font-size:8.5px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.03em;display:block;margin-top:6px;margin-bottom:2px}
+.nc-inline-row{display:flex;gap:5px;margin-top:2px}
+.nc-inline-row select{margin-top:0}
 
-/* Ports: a bare colored + glyph, no circular backdrop, no label text — a
-   wrong connection now explains itself via an error toast instead. */
-.nc-port-row{position:relative;height:0}
-.nc-port{position:absolute;width:20px;height:20px;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--nc-color,var(--ice));font-size:19px;font-weight:900;text-shadow:0 1px 3px rgba(0,0,0,0.15);transition:transform 0.15s;top:50%;transform:translateY(-50%)}
+/* Ports: consolidated to a single + per side (not one per underlying data
+   port) so a multi-input node like Generated Image doesn't need 3 separate
+   dots — connecting still resolves to the correct specific input internally,
+   and multiple simultaneous wires fan out near the node so overlapping
+   connections stay visually distinguishable (see portScreenPos). */
+.nc-port{position:absolute;width:22px;height:22px;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--nc-color,var(--ice));font-size:21px;font-weight:900;text-shadow:0 1px 3px rgba(0,0,0,0.18);transition:transform 0.15s;top:50%;transform:translateY(-50%);z-index:2}
 .nc-port:hover,.nc-port.nc-port-active{transform:translateY(-50%) scale(1.35)}
-.nc-port-in{left:-14px}
-.nc-port-out{right:-14px}
-.nc-ports-in-wrap,.nc-ports-out-wrap{position:absolute;top:36px;bottom:36px;width:0}
-.nc-ports-in-wrap{left:0}
-.nc-ports-out-wrap{right:0}
+.nc-port-in{left:-24px}
+.nc-port-out{right:-24px}
 
-.nc-node-meta{font-size:9px;color:var(--textm);margin-top:6px;padding-top:6px;border-top:1px solid var(--glass-brd);display:flex;justify-content:space-between;align-items:center}
+.nc-node-meta{font-size:9px;color:var(--textm);margin-top:8px;display:flex;justify-content:space-between;align-items:center}
 .nc-run-btn{background:linear-gradient(135deg,color-mix(in srgb,var(--nc-color,var(--violet)) 85%,white 25%),var(--nc-color,var(--violet)));color:#fff;border:none;border-radius:8px;padding:5px 13px;font-size:10.5px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px color-mix(in srgb,var(--nc-color,var(--violet)) 45%,transparent)}
 .nc-run-btn:active{transform:scale(0.95)}
 .nc-context-menu{position:fixed;z-index:100;background:var(--glass-solid);backdrop-filter:blur(16px);border:1px solid var(--glass-brd);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,0.25);padding:4px;min-width:140px}
@@ -10354,7 +10361,7 @@ const NodeCanvas=(function(){
       case "characterSheet": return {sourceProductionId:null,view:"threeQuarter"};
       case "styleRef": return {styleName:STYLE_LIBRARY[0]?.name||""};
       case "generatedImage": return {model:"fal-ai/flux/dev",resultUrl:null,manualPrompt:"",params:{}};
-      case "videoClip": return {model:"bytedance/seedance-2.0/reference-to-video",resultUrl:null,lastFrameUrl:null,duration:5,resolution:"720p",manualPrompt:""};
+      case "videoClip": return {model:"bytedance/seedance-2.0/reference-to-video",resultUrl:null,lastFrameUrl:null,duration:5,resolution:"720p",aspectRatio:"16:9",manualPrompt:""};
       case "upscale": return {engine:"fal-ai/esrgan",resultUrl:null};
       case "audioTTS": return {voiceId:gs("elevenlabs_voice","21m00Tcm4TlvDq8ikWAM"),resultUrl:null,manualText:""};
       default: return {};
@@ -10503,10 +10510,11 @@ const NodeCanvas=(function(){
     const ref2=getConnectedInput(node,"in_3");
     const refs=[ref1,ref2].filter(r=>r&&r.value).map(r=>r.value);
     let result;
-    if(node.data.model.startsWith("gemini-"))result=await genViaGemini(prompt,"1:1",node.data.model,refs);
-    else if(node.data.model==="gpt-image-2"||node.data.model==="openai/gpt-image-2")result=await genViaOpenAI(prompt,"1:1");
-    else if(refs.length)result=await genViaFluxEdit(prompt,refs,"1:1");
-    else result=await genViaFal(prompt,"",node.data.model,"1:1",false);
+    const ar=node.data.aspectRatio||"1:1";
+    if(node.data.model.startsWith("gemini-"))result=await genViaGemini(prompt,ar,node.data.model,refs);
+    else if(node.data.model==="gpt-image-2"||node.data.model==="openai/gpt-image-2")result=await genViaOpenAI(prompt,ar);
+    else if(refs.length)result=await genViaFluxEdit(prompt,refs,ar);
+    else result=await genViaFal(prompt,"",node.data.model,ar,false);
     node.data.resultUrl=result.url;
     const est=estimateImageCost(node.data.model,1);
     node.meta.model=node.data.model;
@@ -10522,7 +10530,7 @@ const NodeCanvas=(function(){
     if(!prompt&&!imageUrls.length)throw new Error("No prompt or reference image connected");
     const apiKey=gs("api_falai","");
     if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
-    const body={prompt:prompt||"Continue the scene naturally.",aspect_ratio:"16:9",duration:String(node.data.duration||5),resolution:node.data.resolution||"720p"};
+    const body={prompt:prompt||"Continue the scene naturally.",aspect_ratio:node.data.aspectRatio||"16:9",duration:String(node.data.duration||5),resolution:node.data.resolution||"720p"};
     if(imageUrls.length)body.image_urls=imageUrls;
     const {videoUrl,lastFrameUrl}=await ncFalVideoSubmitAndPoll(node.data.model,body);
     node.data.resultUrl=videoUrl;
@@ -10626,8 +10634,8 @@ const NodeCanvas=(function(){
         ${node.meta.error?`<div style="color:var(--red);font-size:9px;margin-top:4px">${node.meta.error}</div>`:''}
         <div class="nc-node-meta"><span>${node.meta.cost?'$'+node.meta.cost.toFixed(3):''}</span><button class="nc-run-btn" onclick="NodeCanvas.runNode('${node.id}')">▶ Run</button></div>
       </div>
-      <div class="nc-ports-in-wrap">${node.inputs.map((p,i)=>`<div class="nc-port nc-port-in" data-node="${node.id}" data-port="${p.portId}" data-dir="in" style="top:${node.inputs.length>1?(20+i*32)+'px':'50%'}" title="${p.label}" onclick="NodeCanvas._onPortTap(event,'${node.id}','${p.portId}','in')">+</div>`).join('')}</div>
-      <div class="nc-ports-out-wrap">${node.outputs.map((p,i)=>`<div class="nc-port nc-port-out" data-node="${node.id}" data-port="${p.portId}" data-dir="out" style="top:${node.outputs.length>1?(20+i*32)+'px':'50%'}" title="${p.label}" onclick="NodeCanvas._onPortTap(event,'${node.id}','${p.portId}','out')">+</div>`).join('')}</div>
+      <div class="nc-port nc-port-in" data-node="${node.id}" data-dir="in" title="Inputs" onclick="NodeCanvas._onPortTap(event,'${node.id}','in')">+</div>
+      <div class="nc-port nc-port-out" data-node="${node.id}" data-dir="out" title="Outputs" onclick="NodeCanvas._onPortTap(event,'${node.id}','out')">+</div>
     </div>`;
   }
   function nodeBodyHTML(node){
@@ -10646,7 +10654,8 @@ const NodeCanvas=(function(){
       case "styleRef":
         return `<select onchange="NodeCanvas.updateNodeData('${node.id}','styleName',this.value)">${STYLE_LIBRARY.map(s=>`<option value="${s.name}" ${node.data.styleName===s.name?'selected':''}>${s.name}</option>`).join('')}</select>`;
       case "generatedImage":
-        return `${node.data.resultUrl?`<img src="${node.data.resultUrl}">`:''}<textarea placeholder="Manual prompt (used if nothing connected)" onchange="NodeCanvas.updateNodeData('${node.id}','manualPrompt',this.value)">${node.data.manualPrompt||''}</textarea><label class="nc-field-label">Model</label><select onchange="NodeCanvas.updateNodeData('${node.id}','model',this.value)"><option value="fal-ai/flux/dev" ${node.data.model==='fal-ai/flux/dev'?'selected':''}>FLUX Dev</option><option value="fal-ai/flux-pro/v1.1" ${node.data.model==='fal-ai/flux-pro/v1.1'?'selected':''}>FLUX Pro</option><option value="fal-ai/nano-banana-2" ${node.data.model==='fal-ai/nano-banana-2'?'selected':''}>Nano Banana 2 (fal)</option><option value="openai/gpt-image-2" ${node.data.model==='openai/gpt-image-2'?'selected':''}>GPT Image 2 (fal)</option></select>`;
+        return `${node.data.resultUrl?`<img src="${node.data.resultUrl}">`:''}<textarea placeholder="Manual prompt (used if nothing connected)" onchange="NodeCanvas.updateNodeData('${node.id}','manualPrompt',this.value)">${node.data.manualPrompt||''}</textarea><label class="nc-field-label">Model</label><select onchange="NodeCanvas.updateNodeData('${node.id}','model',this.value)"><option value="fal-ai/flux/dev" ${node.data.model==='fal-ai/flux/dev'?'selected':''}>FLUX Dev</option><option value="fal-ai/flux-pro/v1.1" ${node.data.model==='fal-ai/flux-pro/v1.1'?'selected':''}>FLUX Pro</option><option value="fal-ai/nano-banana-2" ${node.data.model==='fal-ai/nano-banana-2'?'selected':''}>Nano Banana 2 (fal)</option><option value="openai/gpt-image-2" ${node.data.model==='openai/gpt-image-2'?'selected':''}>GPT Image 2 (fal)</option></select>
+        <label class="nc-field-label">Aspect Ratio</label><select onchange="NodeCanvas.updateNodeData('${node.id}','aspectRatio',this.value)">${["16:9","1:1","9:16","4:3","3:4"].map(r=>`<option value="${r}" ${(node.data.aspectRatio||"1:1")===r?'selected':''}>${r}</option>`).join('')}</select>`;
       case "videoClip":
         return `${node.data.resultUrl?`<video src="${node.data.resultUrl}" controls></video>`:''}<textarea placeholder="Manual prompt (used if nothing connected)" onchange="NodeCanvas.updateNodeData('${node.id}','manualPrompt',this.value)">${node.data.manualPrompt||''}</textarea>
         <label class="nc-field-label">Video Model</label>
@@ -10658,8 +10667,11 @@ const NodeCanvas=(function(){
           <option value="fal-ai/kling-video/v3/standard/text-to-video" ${node.data.model==='fal-ai/kling-video/v3/standard/text-to-video'?'selected':''}>Kling 3.0 Standard</option>
           <option value="fal-ai/veo3.1" ${node.data.model==='fal-ai/veo3.1'?'selected':''}>Veo 3.1</option>
         </select>
-        <label class="nc-field-label">Duration</label>
-        <select onchange="NodeCanvas.updateNodeData('${node.id}','duration',parseInt(this.value))">${(VIDEO_MODEL_DURATIONS[node.data.model]?.options||[4,5,6,8]).map(d=>`<option value="${d}" ${node.data.duration===d?'selected':''}>${d}s</option>`).join('')}</select>`;
+        <div class="nc-inline-row">
+          <div style="flex:1"><label class="nc-field-label">Res</label><select onchange="NodeCanvas.updateNodeData('${node.id}','resolution',this.value)">${(VIDEO_MODEL_RESOLUTIONS[node.data.model]||["480p","720p"]).map(r=>`<option value="${r}" ${node.data.resolution===r?'selected':''}>${r}</option>`).join('')}</select></div>
+          <div style="flex:1"><label class="nc-field-label">Duration</label><select onchange="NodeCanvas.updateNodeData('${node.id}','duration',parseInt(this.value))">${(VIDEO_MODEL_DURATIONS[node.data.model]?.options||[4,5,6,8]).map(d=>`<option value="${d}" ${node.data.duration===d?'selected':''}>${d}s</option>`).join('')}</select></div>
+          <div style="flex:1"><label class="nc-field-label">Aspect</label><select onchange="NodeCanvas.updateNodeData('${node.id}','aspectRatio',this.value)">${["16:9","9:16","1:1","4:3","3:4"].map(r=>`<option value="${r}" ${(node.data.aspectRatio||"16:9")===r?'selected':''}>${r}</option>`).join('')}</select></div>
+        </div>`;
       case "upscale":
         return `${node.data.resultUrl?`<img src="${node.data.resultUrl}">`:''}<label class="nc-field-label">Engine</label><select onchange="NodeCanvas.updateNodeData('${node.id}','engine',this.value)"><option value="fal-ai/esrgan" ${node.data.engine==='fal-ai/esrgan'?'selected':''}>ESRGAN</option><option value="fal-ai/clarity-upscaler" ${node.data.engine==='fal-ai/clarity-upscaler'?'selected':''}>Clarity</option></select>`;
       case "audioTTS":
@@ -10670,29 +10682,51 @@ const NodeCanvas=(function(){
   function renderEdges(){
     const svgNS="http://www.w3.org/2000/svg";
     edgeSvgEl.innerHTML='';
+    const defs=document.createElementNS(svgNS,"defs");
+    edgeSvgEl.appendChild(defs);
     Object.values(graphState.edges).forEach(edge=>{
-      const path=document.createElementNS(svgNS,"path");
       const d=edgePathD(edge);
       if(!d)return;
+      const fromNode=graphState.nodes[edge.fromNode],toNode=graphState.nodes[edge.toNode];
+      const fromColor=fromNode?NODE_DEFS[fromNode.type].color:"#6FE3FF";
+      const toColor=toNode?NODE_DEFS[toNode.type].color:"#6FE3FF";
+      const gradId="nc-edge-grad-"+edge.id;
+      const grad=document.createElementNS(svgNS,"linearGradient");
+      grad.setAttribute("id",gradId);
+      grad.setAttribute("gradientUnits","userSpaceOnUse");
+      const from=portScreenPos(edge.fromNode,edge.fromPort,"out"),to=portScreenPos(edge.toNode,edge.toPort,"in");
+      if(from&&to){grad.setAttribute("x1",from.x);grad.setAttribute("y1",from.y);grad.setAttribute("x2",to.x);grad.setAttribute("y2",to.y);}
+      const stop1=document.createElementNS(svgNS,"stop");stop1.setAttribute("offset","0%");stop1.setAttribute("stop-color",fromColor);
+      const stop2=document.createElementNS(svgNS,"stop");stop2.setAttribute("offset","100%");stop2.setAttribute("stop-color",toColor);
+      grad.appendChild(stop1);grad.appendChild(stop2);
+      defs.appendChild(grad);
+      const path=document.createElementNS(svgNS,"path");
       path.setAttribute("d",d);
       path.setAttribute("class","nc-edge-path");
+      path.setAttribute("stroke",`url(#${gradId})`);
       edgeSvgEl.appendChild(path);
     });
   }
   function portScreenPos(nodeId,portId,dir){
     const node=graphState.nodes[nodeId];
     if(!node)return null;
-    const el=nodesLayerEl.querySelector(`.nc-port[data-node="${nodeId}"][data-port="${portId}"][data-dir="${dir}"]`);
+    const el=nodesLayerEl.querySelector(`.nc-port[data-node="${nodeId}"][data-dir="${dir}"]`);
     if(!el)return{x:node.position.x+(dir==='out'?node.size.w:0),y:node.position.y+40};
     // getBoundingClientRect + the transform layer's own rect, rather than
-    // offsetLeft/Top — the ports wrapper is itself position:absolute, which
-    // would make offsetLeft relative to THAT wrapper, not the node card.
+    // offsetLeft/Top — safe regardless of DOM nesting changes.
     const portRect=el.getBoundingClientRect();
     const layerRect=layerEl.getBoundingClientRect();
-    return{
-      x:(portRect.left+portRect.width/2-layerRect.left)/graphState.viewport.zoom,
-      y:(portRect.top+portRect.height/2-layerRect.top)/graphState.viewport.zoom
-    };
+    const baseX=(portRect.left+portRect.width/2-layerRect.left)/graphState.viewport.zoom;
+    const baseY=(portRect.top+portRect.height/2-layerRect.top)/graphState.viewport.zoom;
+    // Ports are consolidated to one visual + per side, but a node can still
+    // have multiple distinct underlying ports (e.g. Generated Image's 3
+    // inputs) — fan each one's actual wire endpoint out slightly so several
+    // simultaneous connections at the same visual point stay distinguishable
+    // instead of perfectly overlapping.
+    const portList=dir==='out'?node.outputs:node.inputs;
+    const idx=portList.findIndex(p=>p.portId===portId);
+    const fanOffset=portList.length>1&&idx>=0?(idx-(portList.length-1)/2)*13:0;
+    return{x:baseX,y:baseY+fanOffset};
   }
   function edgePathD(edge){
     const from=portScreenPos(edge.fromNode,edge.fromPort,"out");
@@ -10792,22 +10826,62 @@ const NodeCanvas=(function(){
       dragState=null;
     }
   }
-  function onPortTap(e,nodeId,portId,dir){
+  function pickInputPort(node,type){
+    return node.inputs.find(p=>!p.connectedEdgeId&&p.accepts.includes(type))||null;
+  }
+  function showOutputPortPicker(nodeId,anchorEl){
+    const node=graphState.nodes[nodeId];
+    document.querySelectorAll(".nc-context-menu").forEach(m=>m.remove());
+    const menu=document.createElement("div");
+    menu.className="nc-context-menu";
+    const rect=anchorEl.getBoundingClientRect();
+    menu.style.left=Math.min(rect.right+8,window.innerWidth-160)+"px";
+    menu.style.top=Math.max(8,rect.top-20)+"px";
+    menu.innerHTML=`<div style="padding:6px 10px;font-size:10px;color:var(--textm);font-weight:700">Connect from:</div>`+node.outputs.map(p=>`<button onclick="NodeCanvas._pickOutputPort('${nodeId}','${p.portId}');this.closest('.nc-context-menu').remove()">${p.label}</button>`).join('');
+    document.body.appendChild(menu);
+    setTimeout(()=>document.addEventListener("pointerdown",function close(ev){ if(!menu.contains(ev.target)){menu.remove();document.removeEventListener("pointerdown",close);} }),50);
+  }
+  function pickOutputPort(nodeId,portId){
+    const node=graphState.nodes[nodeId];
+    const portDef=node.outputs.find(p=>p.portId===portId);
+    pendingConnection={nodeId,portId,type:portDef.type,direction:"out"};
+    document.querySelectorAll(`.nc-port-out[data-node="${nodeId}"]`).forEach(p=>p.classList.add("nc-port-active"));
+    toast(`Selected "${portDef.label}" — now tap a target node's input`,"");
+  }
+  function onPortTap(e,nodeId,dir){
     e.stopPropagation();
     const node=graphState.nodes[nodeId];
-    const portDef=(dir==="in"?node.inputs:node.outputs).find(p=>p.portId===portId);
     if(!pendingConnection){
-      pendingConnection={nodeId,portId,type:dir==="out"?portDef.type:null,direction:dir};
+      if(dir==="out"){
+        if(node.outputs.length>1){ showOutputPortPicker(nodeId,e.target); return; }
+        pendingConnection={nodeId,portId:node.outputs[0].portId,type:node.outputs[0].type,direction:"out"};
+      } else {
+        pendingConnection={nodeId,portId:null,direction:"in"}; // resolved to a specific port on completion
+      }
       e.target.classList.add("nc-port-active");
       return;
     }
     // Second tap: try to complete a connection (order-independent — works
-    // whether the user tapped output-then-input or input-then-output).
+    // whether the user tapped output-then-input or input-then-output). The
+    // single + doesn't carry a specific portId for inputs anymore, so the
+    // actual target port is auto-resolved here: first empty input that
+    // accepts the source's type. A friendly error explains it when none fit.
     document.querySelectorAll(".nc-port-active").forEach(p=>p.classList.remove("nc-port-active"));
-    if(pendingConnection.nodeId===nodeId&&pendingConnection.portId===portId){ pendingConnection=null; return; } // tapped same port twice — cancel
-    if(pendingConnection.direction==="out"&&dir==="in")addEdge(pendingConnection.nodeId,pendingConnection.portId,nodeId,portId);
-    else if(pendingConnection.direction==="in"&&dir==="out")addEdge(nodeId,portId,pendingConnection.nodeId,pendingConnection.portId);
-    else toast("Connect an output port to an input port","error");
+    if(pendingConnection.nodeId===nodeId&&pendingConnection.direction===dir){ pendingConnection=null; return; } // tapped the same side twice — cancel
+    if(pendingConnection.direction==="out"&&dir==="in"){
+      const target=pickInputPort(node,pendingConnection.type);
+      if(!target){ toast(`❌ This node has no open input for that — every compatible slot is either full or doesn't accept a ${pendingConnection.type}`,"error"); pendingConnection=null; return; }
+      addEdge(pendingConnection.nodeId,pendingConnection.portId,nodeId,target.portId);
+    } else if(pendingConnection.direction==="in"&&dir==="out"){
+      if(node.outputs.length>1){ showOutputPortPicker(nodeId,e.target); pendingConnection={...pendingConnection}; return; }
+      const outPort=node.outputs[0];
+      const pendingNode=graphState.nodes[pendingConnection.nodeId];
+      const target=pickInputPort(pendingNode,outPort.type);
+      if(!target){ toast(`❌ This node has no open input for that — every compatible slot is either full or doesn't accept a ${outPort.type}`,"error"); pendingConnection=null; return; }
+      addEdge(nodeId,outPort.portId,pendingConnection.nodeId,target.portId);
+    } else {
+      toast("Connect an output to an input","error");
+    }
     pendingConnection=null;
   }
   function onTouchStartPinch(e){
@@ -10863,6 +10937,8 @@ const NodeCanvas=(function(){
     node.data.model=model;
     const durConfig=VIDEO_MODEL_DURATIONS[model];
     if(durConfig&&!durConfig.options.includes(node.data.duration))node.data.duration=durConfig.options[0];
+    const resOptions=VIDEO_MODEL_RESOLUTIONS[model];
+    if(resOptions&&!resOptions.includes(node.data.resolution))node.data.resolution=resOptions[0];
     autoSaveDebounced();
     renderNodeOnly(nodeId);
   }
@@ -10964,7 +11040,7 @@ const NodeCanvas=(function(){
     init,addNode,deleteNode,addEdge,deleteEdge,runNode,runGraphFrom,
     serializeGraph,loadGraph,switchProject,updateNodeData,uploadReferenceImage,setVideoModel,
     duplicateNode,zoomBy,fitToScreen,
-    _onNodeDragStart:onNodeDragStart,_onNodeBodyPointerDown:onNodeBodyPointerDown,_onPortTap:onPortTap,
+    _onNodeDragStart:onNodeDragStart,_onNodeBodyPointerDown:onNodeBodyPointerDown,_onPortTap:onPortTap,_pickOutputPort:pickOutputPort,
   };
 })();
 
