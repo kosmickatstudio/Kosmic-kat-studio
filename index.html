@@ -7292,10 +7292,13 @@ function renderDirectorChatModule(el){
     </div>
   `;
   if(!S.directorChat.messages.length||S.directorChat.tasks===undefined){
-    DirectorChat.reset();
-    DirectorChat.loadFromCloud(); // may replace the fresh-reset greeting if a shared session exists (e.g. resuming from another device)
+    (async()=>{
+      const foundCloudSession=await DirectorChat.loadFromCloud();
+      if(!foundCloudSession)DirectorChat.reset();
+    })();
+  } else {
+    DirectorChat.renderThread();
   }
-  else DirectorChat.renderThread();
 }
 
 const DirectorChat=(function(){
@@ -7316,8 +7319,10 @@ const DirectorChat=(function(){
         S.directorChat=doc.data().chat;
         window.save?window.save("directorChat"):localStorage.setItem("kk_director_chat",JSON.stringify(S.directorChat));
         renderThread();
+        return true;
       }
-    }catch(err){ console.warn("Couldn't load shared Kosmic Engine chat from cloud — showing local state:",err.message); }
+      return false;
+    }catch(err){ console.warn("Couldn't load shared Kosmic Engine chat from cloud — showing local state:",err.message); return false; }
   }
   function push(role,content,extra={}){
     S.directorChat.messages.push({role,content,...extra,ts:Date.now()});
