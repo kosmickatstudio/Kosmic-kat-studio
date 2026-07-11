@@ -1089,7 +1089,7 @@ const S = {
   flowProjects: JSON.parse(localStorage.getItem("kk_flow_projects")||"[]"),
   assetRegistry: JSON.parse(localStorage.getItem("kk_asset_registry")||"[]"),
   directorChat: JSON.parse(localStorage.getItem("kk_director_chat")||"null")||{active:false,productionId:null,directorName:"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief"},
-  worldMemory: JSON.parse(localStorage.getItem("kk_world_memory")||"null")||{characters:[],styleNotes:"",updated:0},
+  worldMemory: JSON.parse(localStorage.getItem("kk_world_memory")||"null")||{characters:[],locations:[],styleNotes:"",updated:0},
 };
 
 function save(k){
@@ -7491,20 +7491,37 @@ const DirectorChat=(function(){
       );
       const locs=[...reply.matchAll(/LOCATION:\s*([^|]+)\|(.+)/g)].map(m=>({name:m[1].trim(),desc:m[2].trim()})).slice(0,3);
       if(!locs.length)throw new Error("Couldn't identify locations from the story — retry");
-      p.locationBible=locs.map(l=>({...l,url:null}));
+      // World memory recall: if a newly-identified location word-overlaps one we
+      // already have an approved reference for, reuse its canon desc + image
+      // instead of re-imagining it from scratch (same pattern as character recall).
+      const rememberedNames=[];
+      locs.forEach(l=>{
+        const remembered=(S.worldMemory.locations||[]).find(rl=>{
+          const words=(rl.name+" "+rl.desc).toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>3);
+          const locWords=new Set((l.name+" "+l.desc).toLowerCase().split(/[^a-z0-9]+/));
+          return words.filter(w=>locWords.has(w)).length>=2;
+        });
+        if(remembered){ l.desc=remembered.desc; l.url=remembered.url||null; rememberedNames.push(remembered.name); }
+      });
+      p.locationBible=locs.map(l=>({name:l.name,desc:l.desc,url:l.url||null}));
       save2Productions();
       // Dynamically insert one parallel image task per location, and rewire
       // loc_review to wait for all of them (it currently only deps on loc_plan).
       const tasks=S.directorChat.tasks;
       const reviewIdx=tasks.findIndex(t=>t.id==="loc_review");
-      const imgIds=locs.map((l,i)=>{
+      // Only spin up an image task for locations we don't already have a
+      // remembered reference image for — no point re-generating a known place.
+      const imgIds=[];
+      locs.forEach((l,i)=>{
+        if(l.url)return; // recalled from world memory, already has a reference
         const id=`loc_img_${i}`;
         tasks.splice(reviewIdx,0,{id,type:"loc_img",locIndex:i,label:`Location — ${l.name}`,deps:["loc_plan"],parallel:true,requiresApproval:false,status:"pending",error:null});
-        return id;
+        imgIds.push(id);
       });
-      findTask("loc_review").deps=imgIds;
+      findTask("loc_review").deps=imgIds.length?imgIds:["loc_plan"];
       save();
-      return{summary:`📍 ${locs.length} key location${locs.length!==1?'s':''} identified: ${locs.map(l=>l.name).join(", ")} — generating establishing references in parallel…`};
+      const memNote=rememberedNames.length?` 🧠 Already know ${rememberedNames.join(", ")} — reusing the approved look.`:"";
+      return{summary:`📍 ${locs.length} key location${locs.length!==1?'s':''} identified: ${locs.map(l=>l.name).join(", ")} — generating establishing references in parallel…${memNote}`};
     }
     if(task.type==="loc_img"){
       const p=S.productions.find(x=>x.id===S.directorChat.productionId);
@@ -7706,6 +7723,22 @@ const DirectorChat=(function(){
         S.worldMemory.characters=S.worldMemory.characters.filter(ch=>ch.prodId!==prodId);
         S.worldMemory.characters.push({prodId,concept:(p.concept||"").slice(0,80),desc:p.characterDesc,sheetUrl:p.characterSheet&&(p.characterSheet.front||p.characterSheet.threeQuarter),savedAt:Date.now()});
         if(S.worldMemory.characters.length>12)S.worldMemory.characters=S.worldMemory.characters.slice(-12);
+        S.worldMemory.updated=Date.now();
+        window.save("worldMemory");
+      }
+    }
+    else if(task.type==="loc_review"){
+      // World memory: remember each approved location for future productions,
+      // same recall pattern as approved characters.
+      const p=S.productions.find(x=>x.id===prodId);
+      if(p&&p.locationBible&&p.locationBible.length){
+        if(!S.worldMemory.locations)S.worldMemory.locations=[];
+        p.locationBible.forEach(l=>{
+          if(!l.url)return; // no reference image, nothing durable to remember
+          S.worldMemory.locations=S.worldMemory.locations.filter(rl=>rl.name.toLowerCase()!==l.name.toLowerCase());
+          S.worldMemory.locations.push({name:l.name,desc:l.desc,url:l.url,prodId,savedAt:Date.now()});
+        });
+        if(S.worldMemory.locations.length>24)S.worldMemory.locations=S.worldMemory.locations.slice(-24);
         S.worldMemory.updated=Date.now();
         window.save("worldMemory");
       }
