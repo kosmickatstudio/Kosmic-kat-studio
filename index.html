@@ -1089,10 +1089,11 @@ const S = {
   flowProjects: JSON.parse(localStorage.getItem("kk_flow_projects")||"[]"),
   assetRegistry: JSON.parse(localStorage.getItem("kk_asset_registry")||"[]"),
   directorChat: JSON.parse(localStorage.getItem("kk_director_chat")||"null")||{active:false,productionId:null,directorName:"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief"},
+  worldMemory: JSON.parse(localStorage.getItem("kk_world_memory")||"null")||{characters:[],styleNotes:"",updated:0},
 };
 
 function save(k){
-  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",settings:"kk_settings",activityLog:"kk_activity",productions:"kk_productions",collections:"kk_collections",igChatHistory:"kk_ig_chat",flowProjects:"kk_flow_projects",assetRegistry:"kk_asset_registry",directorChat:"kk_director_chat"};
+  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",settings:"kk_settings",activityLog:"kk_activity",productions:"kk_productions",collections:"kk_collections",igChatHistory:"kk_ig_chat",flowProjects:"kk_flow_projects",assetRegistry:"kk_asset_registry",directorChat:"kk_director_chat",worldMemory:"kk_world_memory"};
   if(!m[k])return;
   try{
     localStorage.setItem(m[k],JSON.stringify(S[k]));
@@ -6564,7 +6565,7 @@ async function runPromptwriter(silent=false){
 
   try{
     const reply=await callAiSimple(
-      `${task}\n\nAlso pick exactly ONE directorial approach that best fits this story's genre and tone, from this list: ${personaList}.\n\n${continuityNote}${reviewNote}\n\n${durationRule}\n\nFormat EXACTLY like this, nothing else:\nPERSONA: <one name from the list, no title>\nCHARACTERS: <character description text>\nEPISODE 1: <duration>s | <content for episode 1>\nEPISODE 2: <duration>s | <content for episode 2>\n(continue for all ${n} episodes)`,
+      `${task}\n\nAlso pick exactly ONE directorial approach that best fits this story's genre and tone, from this list: ${personaList}.\n\n${continuityNote}${reviewNote}\n\n${durationRule}\n\nAlso identify 1-3 key recurring locations/settings this story actually takes place in (skip this if it's just one simple location not worth a dedicated reference sheet).\n\nFormat EXACTLY like this, nothing else:\nPERSONA: <one name from the list, no title>\nCHARACTERS: <character description text>\nLOCATIONS: <location name>: <short visual description>\n<location name 2>: <short visual description>\n(one per line, omit this whole section if there's nothing worth a dedicated sheet)\nEPISODE 1: <duration>s | <content for episode 1>\nEPISODE 2: <duration>s | <content for episode 2>\n(continue for all ${n} episodes)`,
       "You are a professional Promptwriter for an AI video production pipeline. Follow the requested format exactly, one line per field, no markdown, no extra commentary.",
       draft.brainModel
     );
@@ -6596,8 +6597,18 @@ function parsePromptwriterOutput(text,n,minClip,maxClip){
   const matchedDirector=DIRECTORS.find(d=>d.name.toLowerCase().includes(rawPersonaName.toLowerCase())||rawPersonaName.toLowerCase().includes(d.id));
   const persona=matchedDirector||DIRECTORS[0]; // fallback: first persona if AI's answer didn't match cleanly
 
-  const charMatch=text.match(/CHARACTERS:\s*([\s\S]*?)(?=EPISODE 1:)/i);
+  const charMatch=text.match(/CHARACTERS:\s*([\s\S]*?)(?=LOCATIONS:|EPISODE 1:)/i);
   const characterDesc=charMatch?charMatch[1].trim():"";
+
+  // Locations section is optional in the format — only Kosmic Engine's Location
+  // Bible feature reads this; the existing wizard flow never references
+  // parsed.locations, so this is purely additive and safe either way.
+  const locMatch=text.match(/LOCATIONS:\s*([\s\S]*?)(?=EPISODE 1:)/i);
+  const locationsRaw=locMatch?locMatch[1].trim():"";
+  const locations=locationsRaw?locationsRaw.split(/\n+/).map(l=>l.replace(/^[-•]\s*/,"").trim()).filter(Boolean).map(l=>{
+    const idx=l.indexOf(":");
+    return idx>0?{name:l.slice(0,idx).trim(),desc:l.slice(idx+1).trim()}:{name:l.trim(),desc:""};
+  }).filter(l=>l.name):[];
 
   const episodes=[];
   for(let i=1;i<=n;i++){
@@ -6608,7 +6619,7 @@ function parsePromptwriterOutput(text,n,minClip,maxClip){
     duration=Math.max(minClip,Math.min(maxClip,duration)); // clamp to this model's real valid range
     episodes.push({duration,content:m[2].trim()});
   }
-  return {characterDesc,episodes,persona:persona.name.replace('Director ',''),personaId:persona.id};
+  return {characterDesc,episodes,persona:persona.name.replace('Director ',''),personaId:persona.id,locations};
 }
 
 function createProduction(draft,parsed){
@@ -7055,14 +7066,14 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
         // image gen below don't have that path wired, so this branch is skipped
         // for those two providers (image still generates, just without the seed).
         S.igRefDataUrl=seedRef;
-        result=await genViaFal(`${shotDescs[i]}, ${p.characterDesc}`,"","fal-ai/flux/dev/image-to-image",p.aspectRatio,true);
+        result=await genViaFal(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}`,"","fal-ai/flux/dev/image-to-image",p.aspectRatio,true);
         S.igRefDataUrl="";
       } else if(p.imageModel.startsWith("gemini-")){
-        result=await genViaGemini(`${shotDescs[i]}, ${p.characterDesc}`,p.aspectRatio,p.imageModel);
+        result=await genViaGemini(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}`,p.aspectRatio,p.imageModel);
       } else if(p.imageModel==="gpt-image-2"){
-        result=await genViaOpenAI(`${shotDescs[i]}, ${p.characterDesc}`,p.aspectRatio);
+        result=await genViaOpenAI(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}`,p.aspectRatio);
       } else {
-        result=await genViaFal(`${shotDescs[i]}, ${p.characterDesc}`,"",p.imageModel,p.aspectRatio,false);
+        result=await genViaFal(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}`,"",p.imageModel,p.aspectRatio,false);
       }
       e.storyboard.push({shotIndex:i,url:result.url,desc:shotDescs[i]});
       e.storyboard.sort((a,b)=>a.shotIndex-b.shotIndex);
@@ -7308,21 +7319,30 @@ const DirectorChat=(function(){
     _cloudSyncTimer=setTimeout(syncToCloud,1200); // debounced — not every single message/task update
   }
   let _cloudSyncTimer=null;
+  function chatDocId(){
+    // Scope the cloud doc per user — a single global doc would mean every
+    // visitor to the site shares (and overwrites) one chat session.
+    if(S.user&&S.user.uid)return "kosmicEngineChat_"+S.user.uid;
+    let devId=localStorage.getItem("kk_device_id");
+    if(!devId){devId="dev_"+Date.now()+"_"+Math.random().toString(36).slice(2,8);localStorage.setItem("kk_device_id",devId);}
+    return "kosmicEngineChat_"+devId;
+  }
   async function syncToCloud(){
-    try{ await fbDB.collection("public").doc("kosmicEngineChat").set({chat:S.directorChat,updatedAt:Date.now()}); }
+    try{ await fbDB.collection("public").doc(chatDocId()).set({chat:S.directorChat,updatedAt:Date.now()}); }
     catch(err){ console.warn("Kosmic Engine cloud sync failed — kept locally only:",err.message); }
   }
   async function loadFromCloud(){
     try{
-      const doc=await fbDB.collection("public").doc("kosmicEngineChat").get();
+      const doc=await fbDB.collection("public").doc(chatDocId()).get();
       if(doc.exists&&doc.data().chat&&doc.data().chat.messages&&doc.data().chat.messages.length){
+        clearTimeout(_cloudSyncTimer); // don't let a pending local sync overwrite what we just loaded
         S.directorChat=doc.data().chat;
         window.save?window.save("directorChat"):localStorage.setItem("kk_director_chat",JSON.stringify(S.directorChat));
         renderThread();
         return true;
       }
       return false;
-    }catch(err){ console.warn("Couldn't load shared Kosmic Engine chat from cloud — showing local state:",err.message); return false; }
+    }catch(err){ console.warn("Couldn't load Kosmic Engine chat from cloud — showing local state:",err.message); return false; }
   }
   function push(role,content,extra={}){
     S.directorChat.messages.push({role,content,...extra,ts:Date.now()});
@@ -7391,8 +7411,8 @@ const DirectorChat=(function(){
     return `${cls.label}${suffix}\n\n${rawMessage}`;
   }
   function guessProvider(task){
-    if(task.type==="charsheet_view")return "fal";
-    if(task.type==="script"||task.type==="plan")return "brain";
+    if(task.type==="charsheet_view"||task.type==="loc_img")return "fal";
+    if(task.type==="script"||task.type==="plan"||task.type==="loc_plan")return "brain";
     if(task.type==="storyboard"||task.type==="scene")return "fal";
     return "unknown";
   }
@@ -7407,7 +7427,12 @@ const DirectorChat=(function(){
     const csViews=["front","back","side","threeQuarter","face","special"];
     csViews.forEach(v=>tasks.push({id:`cs_${v}`,type:"charsheet_view",label:`Character Sheet — ${v}`,viewKey:v,deps:["plan"],parallel:true,requiresApproval:false,status:"pending",error:null}));
     tasks.push({id:"cs_review",type:"charsheet_review",label:"Character Sheet ready for review",deps:csViews.map(v=>`cs_${v}`),parallel:false,requiresApproval:true,status:"pending",error:null});
-    let prevScriptId="cs_review";
+    // Location Bible: loc_plan lists key locations (count unknown until the
+    // brain answers), then dynamically inserts one parallel image task per
+    // location plus a loc_review approval gate — see runTaskWork("loc_plan").
+    tasks.push({id:"loc_plan",type:"loc_plan",label:"Identifying key locations",deps:["cs_review"],parallel:false,requiresApproval:false,status:"pending",error:null});
+    tasks.push({id:"loc_review",type:"loc_review",label:"Location Bible ready for review",deps:["loc_plan"],parallel:false,requiresApproval:true,status:"pending",error:null});
+    let prevScriptId="loc_review";
     for(let ep=1;ep<=episodeCount;ep++){
       const scriptId=`script_${ep}`,storyboardId=`storyboard_${ep}`,sceneId=`scene_${ep}`;
       tasks.push({id:scriptId,type:"script",epIndex:ep,label:`Episode ${ep} — script`,deps:[prevScriptId],parallel:false,requiresApproval:true,status:"pending",error:null});
@@ -7455,6 +7480,52 @@ const DirectorChat=(function(){
       save2Productions();
       const views=["front","threeQuarter","face"].map(k=>p.characterSheet&&p.characterSheet[k]).filter(Boolean);
       return{summary:"🎨 Character Sheet ready — all 6 views generated in parallel:",approval:{images:views}};
+    }
+    if(task.type==="loc_plan"){
+      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
+      const epContent=p.episodes.map(e=>e.masterPrompt).join("\n").slice(0,4000);
+      const reply=await callAiSimple(
+        `From this story content, list the 1-3 most important recurring LOCATIONS. Format EXACTLY, one per line, nothing else:\nLOCATION: <short name> | <one-line vivid visual description for an establishing shot>\n\nStory:\n${epContent}`,
+        "You are a production designer. Follow the format exactly.",
+        p.brainModel
+      );
+      const locs=[...reply.matchAll(/LOCATION:\s*([^|]+)\|(.+)/g)].map(m=>({name:m[1].trim(),desc:m[2].trim()})).slice(0,3);
+      if(!locs.length)throw new Error("Couldn't identify locations from the story — retry");
+      p.locationBible=locs.map(l=>({...l,url:null}));
+      save2Productions();
+      // Dynamically insert one parallel image task per location, and rewire
+      // loc_review to wait for all of them (it currently only deps on loc_plan).
+      const tasks=S.directorChat.tasks;
+      const reviewIdx=tasks.findIndex(t=>t.id==="loc_review");
+      const imgIds=locs.map((l,i)=>{
+        const id=`loc_img_${i}`;
+        tasks.splice(reviewIdx,0,{id,type:"loc_img",locIndex:i,label:`Location — ${l.name}`,deps:["loc_plan"],parallel:true,requiresApproval:false,status:"pending",error:null});
+        return id;
+      });
+      findTask("loc_review").deps=imgIds;
+      save();
+      return{summary:`📍 ${locs.length} key location${locs.length!==1?'s':''} identified: ${locs.map(l=>l.name).join(", ")} — generating establishing references in parallel…`};
+    }
+    if(task.type==="loc_img"){
+      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
+      const loc=p.locationBible[task.locIndex];
+      const prompt=`${loc.desc}, wide establishing shot, cinematic environment reference, no people, detailed background art`;
+      let result;
+      if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(prompt,"16:9",p.imageModel);
+      else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,"16:9");
+      else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/flux/dev","16:9",false);
+      loc.url=result.url;
+      save2Productions();
+      logCost(p.imageModel,`Location Bible — ${loc.name}`);
+      return{};
+    }
+    if(task.type==="loc_review"){
+      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
+      // locationDesc feeds every storyboard shot prompt from here on (see
+      // generateEpisodeStoryboard) so environments stay consistent too.
+      p.locationDesc=p.locationBible.map(l=>`${l.name}: ${l.desc}`).join("; ");
+      save2Productions();
+      return{summary:"📍 Location Bible ready — these environments will anchor every storyboard shot:",approval:{images:p.locationBible.map(l=>l.url).filter(Boolean)}};
     }
     if(task.type==="script"){
       await generateEpisodeScript(prodId,task.epIndex);
@@ -7587,13 +7658,18 @@ const DirectorChat=(function(){
     if(stage==="awaiting_brief"){
       const projectId=S.activeProject||(S.projects.find(p=>!p.archived)||{}).id;
       if(!projectId){ push("agent","You'll need at least one Project first — head to Projects, create one, then come back and tell me the story again."); return; }
+      const remembered=(S.worldMemory.characters||[]).find(ch=>{
+        const words=(ch.concept+" "+ch.desc).toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>3);
+        const briefWords=new Set(text.toLowerCase().split(/[^a-z0-9]+/));
+        return words.filter(w=>briefWords.has(w)).length>=2; // needs 2+ meaningful word overlaps, not one coincidence
+      });
       S.directorChat.draft={
         projectId,concept:text.slice(0,200),imageModel:"fal-ai/flux/dev",videoModel:"bytedance/seedance-2.0/fast/reference-to-video",
         quality:"720p",aspectRatio:"16:9",clipLen:8,totalDurationRequested:8,totalDurationRounded:8,totalShots:1,shotsPerEp:1,
-        continuity:"narrative",brainModel:gs("ai_model","claude"),refImages:[],reviewedCharacterDesc:"",hasFullScript:false,fullScriptText:text,episodeCount:1,
+        continuity:"narrative",brainModel:gs("ai_model","claude"),refImages:[],reviewedCharacterDesc:remembered?remembered.desc:"",hasFullScript:false,fullScriptText:text,episodeCount:1,
       };
       save();
-      push("agent",`Got it. Going with sensible defaults so we can move — 1 episode, ~8s, Seedance 2.0 Fast, 720p, 16:9. Say "3 episodes" or "20 seconds" etc. before I start if you want different — otherwise just say "go" and I'll start planning.`);
+      push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}") — I'll keep their approved look consistent unless you tell me otherwise.`:""} Going with sensible defaults so we can move — 1 episode, ~8s, Seedance 2.0 Fast (multi-ref), 720p, 16:9. Say "3 episodes" or "20 seconds" etc. before I start if you want different — otherwise just say "go" and I'll start planning.`);
       S.directorChat.intakeStage="confirm_plan";
       save();
       return;
@@ -7622,7 +7698,18 @@ const DirectorChat=(function(){
     if(!taskId)return;
     const task=findTask(taskId);
     const prodId=S.directorChat.productionId;
-    if(task.type==="charsheet_review")approveCharacterSheet(prodId);
+    if(task.type==="charsheet_review"){
+      approveCharacterSheet(prodId);
+      // World memory: remember this approved character for future productions
+      const p=S.productions.find(x=>x.id===prodId);
+      if(p&&p.characterDesc){
+        S.worldMemory.characters=S.worldMemory.characters.filter(ch=>ch.prodId!==prodId);
+        S.worldMemory.characters.push({prodId,concept:(p.concept||"").slice(0,80),desc:p.characterDesc,sheetUrl:p.characterSheet&&(p.characterSheet.front||p.characterSheet.threeQuarter),savedAt:Date.now()});
+        if(S.worldMemory.characters.length>12)S.worldMemory.characters=S.worldMemory.characters.slice(-12);
+        S.worldMemory.updated=Date.now();
+        window.save("worldMemory");
+      }
+    }
     else if(task.type==="script")approveEpisodeStage(prodId,task.epIndex,"script");
     else if(task.type==="storyboard")approveEpisodeStage(prodId,task.epIndex,"storyboard");
     else if(task.type==="scene")approveEpisodeStage(prodId,task.epIndex,"scene");
@@ -7649,6 +7736,16 @@ const DirectorChat=(function(){
       task.status="pending";
       save();
       push("agent","🔄 Regenerating the Character Sheet — all 6 views, in parallel…");
+      await dispatchTasks();
+      return;
+    }
+    if(task.type==="loc_review"){
+      // Regenerate the location establishing images (tasks already exist from
+      // the dynamic insertion — just reset them); the location list itself is kept.
+      task.deps.forEach(id=>{const t=findTask(id);if(t){t.status="pending";t.error=null;}});
+      task.status="pending";
+      save();
+      push("agent","🔄 Regenerating the Location Bible references, in parallel…");
       await dispatchTasks();
       return;
     }
