@@ -1088,7 +1088,7 @@ const S = {
   team: JSON.parse(localStorage.getItem("kk_team")||"[]"),
   flowProjects: JSON.parse(localStorage.getItem("kk_flow_projects")||"[]"),
   assetRegistry: JSON.parse(localStorage.getItem("kk_asset_registry")||"[]"),
-  directorChat: JSON.parse(localStorage.getItem("kk_director_chat")||"null")||{active:false,productionId:null,directorName:"Director",messages:[],stage:"idle",currentEpisode:1,draft:null},
+  directorChat: JSON.parse(localStorage.getItem("kk_director_chat")||"null")||{active:false,productionId:null,directorName:"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief"},
 };
 
 function save(k){
@@ -7291,7 +7291,7 @@ function renderDirectorChatModule(el){
       </div>
     </div>
   `;
-  if(!S.directorChat.messages.length)DirectorChat.reset();
+  if(!S.directorChat.messages.length||S.directorChat.tasks===undefined)DirectorChat.reset();
   else DirectorChat.renderThread();
 }
 
@@ -7302,6 +7302,167 @@ const DirectorChat=(function(){
     save();
     renderThread();
   }
+
+  // ── Task graph ──────────────────────────────────────────────────────
+  // Replaces the old single .stage string + _retryFn. Each unit of work is
+  // a task with explicit dependencies; the dispatcher only ever runs a task
+  // once every dependency is 'done'. Tasks marked parallel:true that become
+  // ready at the same time run together via Promise.allSettled — this is
+  // used for the Character Sheet's 6 views, which are genuinely independent
+  // (verified: each writes p.characterSheet[viewKey], no shared key, no
+  // read-after-write dependency between them). Episode script/storyboard/
+  // scene tasks stay sequential per-episode by design (storyboard's visual
+  // chaining and scene generation genuinely depend on the prior stage's
+  // output), but script tasks across episodes depend only on the *previous
+  // episode's script being approved* — matching generateEpisodeScript's
+  // real continuity logic — not on that episode's full storyboard+scene,
+  // which is real headroom for future pipelining even though this pass
+  // still runs the approval UI one card at a time for clarity.
+  function findTask(id){ return (S.directorChat.tasks||[]).find(t=>t.id===id); }
+  function depsSatisfied(t){ return (t.deps||[]).every(id=>{const d=findTask(id);return d&&d.status==="done";}); }
+
+  function buildTaskGraph(episodeCount){
+    const tasks=[
+      {id:"plan",type:"plan",label:"Planning production",deps:[],parallel:false,requiresApproval:false,status:"pending",error:null},
+    ];
+    const csViews=["front","back","side","threeQuarter","face","special"];
+    csViews.forEach(v=>tasks.push({id:`cs_${v}`,type:"charsheet_view",label:`Character Sheet — ${v}`,viewKey:v,deps:["plan"],parallel:true,requiresApproval:false,status:"pending",error:null}));
+    tasks.push({id:"cs_review",type:"charsheet_review",label:"Character Sheet ready for review",deps:csViews.map(v=>`cs_${v}`),parallel:false,requiresApproval:true,status:"pending",error:null});
+    let prevScriptId="cs_review";
+    for(let ep=1;ep<=episodeCount;ep++){
+      const scriptId=`script_${ep}`,storyboardId=`storyboard_${ep}`,sceneId=`scene_${ep}`;
+      tasks.push({id:scriptId,type:"script",epIndex:ep,label:`Episode ${ep} — script`,deps:[prevScriptId],parallel:false,requiresApproval:true,status:"pending",error:null});
+      tasks.push({id:storyboardId,type:"storyboard",epIndex:ep,label:`Episode ${ep} — storyboard`,deps:[scriptId],parallel:false,requiresApproval:true,status:"pending",error:null});
+      tasks.push({id:sceneId,type:"scene",epIndex:ep,label:`Episode ${ep} — scene`,deps:[storyboardId],parallel:false,requiresApproval:true,status:"pending",error:null});
+      prevScriptId=scriptId; // next episode's script only waits on THIS episode's script, not its storyboard/scene
+    }
+    return tasks;
+  }
+
+  async function runTaskWork(task){
+    const prodId=S.directorChat.productionId;
+    if(task.type==="plan"){
+      S.pendingProductionDraft=S.directorChat.draft;
+      const {prodId:newId,parsed}=await runPromptwriter(true);
+      S.directorChat.productionId=newId;
+      S.directorChat.episodeCount=parsed.episodes.length;
+      save();
+      return{summary:`✅ Plan ready — ${parsed.episodes.length} episode${parsed.episodes.length!==1?'s':''}, Director ${parsed.persona} assigned.\n\nCharacter: ${parsed.characterDesc.slice(0,200)}${parsed.characterDesc.length>200?'…':''}`};
+    }
+    if(task.type==="charsheet_view"){
+      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
+      const VIEW_PROMPTS={
+        front:"full body character turnaround reference, front view, neutral standing pose, clean plain background, character design sheet",
+        back:"full body character turnaround reference, back view, neutral standing pose, clean plain background, character design sheet",
+        side:"full body character turnaround reference, side profile view, neutral standing pose, clean plain background, character design sheet",
+        threeQuarter:"full body character turnaround reference, 3/4 angle view, neutral standing pose, clean plain background, character design sheet",
+        face:"close-up face portrait reference, detailed facial features, neutral expression, clean plain background, character design sheet",
+        special:"close-up reference of the character's distinguishing special features — scars, markings, unique accessories, or unusual anatomy — clean plain background, character design sheet",
+      };
+      const fullPrompt=`${p.characterDesc}, ${VIEW_PROMPTS[task.viewKey]}`;
+      let result;
+      if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(fullPrompt,"1:1",p.imageModel);
+      else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(fullPrompt,"1:1");
+      else result=await genViaFal(fullPrompt,"",p.imageModel||"fal-ai/flux/dev","1:1",false);
+      p.characterSheet=p.characterSheet||{};
+      p.characterSheet[task.viewKey]=result.url;
+      save2Productions();
+      logCost(p.imageModel,`Character Sheet — ${task.viewKey}`);
+      return{};
+    }
+    if(task.type==="charsheet_review"){
+      const p=S.productions.find(x=>x.id===prodId);
+      p.characterSheetStatus="ready";
+      save2Productions();
+      const views=["front","threeQuarter","face"].map(k=>p.characterSheet&&p.characterSheet[k]).filter(Boolean);
+      return{summary:"🎨 Character Sheet ready — all 6 views generated in parallel:",approval:{images:views}};
+    }
+    if(task.type==="script"){
+      await generateEpisodeScript(prodId,task.epIndex);
+      const p=S.productions.find(x=>x.id===prodId);
+      const e=getEpisode(p,task.epIndex);
+      if(e.scriptStatus!=="ready")throw new Error(`Episode ${task.epIndex} script generation didn't complete`);
+      return{summary:`✍️ Episode ${task.epIndex} script ready:`,approval:{text:e.script}};
+    }
+    if(task.type==="storyboard"){
+      await generateEpisodeStoryboard(prodId,task.epIndex);
+      const p=S.productions.find(x=>x.id===prodId);
+      const e=getEpisode(p,task.epIndex);
+      if(e.storyboardStatus==="pending")throw new Error("Storyboard generation failed — every shot errored out");
+      return{summary:`🖼 Episode ${task.epIndex} storyboard ready${e.storyboardStatus==='partial'?' (partial — some shots failed)':''}:`,approval:{images:e.storyboard.map(s=>s.url)}};
+    }
+    if(task.type==="scene"){
+      await generateEpisodeScene(prodId,task.epIndex);
+      const p=S.productions.find(x=>x.id===prodId);
+      const e=getEpisode(p,task.epIndex);
+      if(e.sceneStatus==="pending")throw new Error("Scene generation failed — every shot errored out");
+      const firstShot=e.shots&&e.shots[0];
+      return{summary:`🎥 Episode ${task.epIndex} scene ready${e.sceneStatus==='partial'?' (partial — some shots failed)':''}:`,approval:{video:firstShot&&firstShot.videoUrl}};
+    }
+    throw new Error("Unknown task type: "+task.type);
+  }
+  // productions is saved via the app's global save(k) — but this module's own
+  // local save() shadows it (see top of this IIFE), so route through window
+  // explicitly to avoid silently calling the wrong one.
+  function save2Productions(){ window.save("productions"); }
+
+  async function dispatchTasks(){
+    const tasks=S.directorChat.tasks;
+    if(!tasks||S.directorChat.awaitingApprovalTaskId)return; // don't dispatch further while a card is waiting on the user
+    const ready=tasks.filter(t=>t.status==="pending"&&depsSatisfied(t));
+    if(!ready.length)return;
+    const parallelReady=ready.filter(t=>t.parallel);
+    const sequentialReady=ready.filter(t=>!t.parallel);
+    if(parallelReady.length){
+      parallelReady.forEach(t=>t.status="running");
+      save();
+      await Promise.allSettled(parallelReady.map(async t=>{
+        try{
+          const out=await runTaskWork(t);
+          t.status="done";
+          t.error=null;
+          if(out&&out.summary)push("agent",out.summary,out.approval?{approval:out.approval}:{});
+        }catch(err){
+          t.status="error";
+          t.error=err.message;
+        }
+      }));
+      save();
+      const failed=parallelReady.filter(t=>t.status==="error");
+      if(failed.length)push("agent","",{error:`${failed.length} of ${parallelReady.length} parallel task(s) failed: ${failed.map(t=>t.label+' — '+t.error).join('; ')}`,retryable:true,retryTaskIds:failed.map(t=>t.id)});
+      await dispatchTasks();
+      return;
+    }
+    if(sequentialReady.length){
+      const t=sequentialReady[0];
+      t.status="running";
+      save();
+      if(!t.requiresApproval&&t.type!=="plan")push("agent",`⏳ ${t.label}…`);
+      else if(t.type==="plan")push("agent","📋 Planning your production…");
+      try{
+        const out=await runTaskWork(t);
+        if(t.requiresApproval){
+          t.status="awaiting_approval";
+          S.directorChat.awaitingApprovalTaskId=t.id;
+          save();
+          if(out&&out.summary)push("agent",out.summary,{approval:out.approval});
+          return; // wait for the user
+        }
+        t.status="done";
+        t.error=null;
+        save();
+        if(out&&out.summary)push("agent",out.summary);
+      }catch(err){
+        t.status="error";
+        t.error=err.message;
+        save();
+        push("agent","",{error:err.message,retryable:true,retryTaskIds:[t.id]});
+        return;
+      }
+      await dispatchTasks();
+    }
+  }
+
   function renderThread(){
     const thread=document.getElementById("dcThread");
     if(!thread)return;
@@ -7323,11 +7484,12 @@ const DirectorChat=(function(){
     }).join('');
     thread.scrollTop=thread.scrollHeight;
   }
+
   function reset(){
-    S.directorChat={active:true,productionId:null,directorName:S.directorChat.directorName||"Director",messages:[],stage:"awaiting_brief",currentEpisode:1,draft:null};
+    S.directorChat={active:true,productionId:null,directorName:S.directorChat.directorName||"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief"};
     save();
     renderThread();
-    push("agent",`Hey, I'm your ${S.directorChat.directorName}. Tell me the story you want to make — genre, setting, what happens. I'll plan it, write it, and build the character sheet, storyboard, and scenes from there. You approve or reject at each step.`);
+    push("agent",`Hey, I'm your ${S.directorChat.directorName}. Tell me the story you want to make — genre, setting, what happens. I'll plan it, write it, and build the character sheet, storyboard, and scenes from there. The Character Sheet's 6 views now generate in parallel — you approve or reject at each checkpoint.`);
   }
   function send(){
     const input=document.getElementById("dcInput");
@@ -7338,7 +7500,7 @@ const DirectorChat=(function(){
     handleUserMessage(text);
   }
   async function handleUserMessage(text){
-    const stage=S.directorChat.stage;
+    const stage=S.directorChat.intakeStage;
     if(stage==="awaiting_brief"){
       const projectId=S.activeProject||(S.projects.find(p=>!p.archived)||{}).id;
       if(!projectId){ push("agent","You'll need at least one Project first — head to Projects, create one, then come back and tell me the story again."); return; }
@@ -7349,7 +7511,7 @@ const DirectorChat=(function(){
       };
       save();
       push("agent",`Got it. Going with sensible defaults so we can move — 1 episode, ~8s, Seedance 2.0 Fast, 720p, 16:9. Say "3 episodes" or "20 seconds" etc. before I start if you want different — otherwise just say "go" and I'll start planning.`);
-      S.directorChat.stage="confirm_plan";
+      S.directorChat.intakeStage="confirm_plan";
       save();
       return;
     }
@@ -7363,146 +7525,64 @@ const DirectorChat=(function(){
         push("agent",`Noted. Say "go" whenever you're ready to start.`);
         return;
       }
+      S.directorChat.intakeStage="running";
+      S.directorChat.tasks=buildTaskGraph(S.directorChat.draft.episodeCount||1);
       save();
-      beginPlanning();
+      await dispatchTasks();
       return;
     }
-    // During any generation stage, free-text input is treated as feedback for a rejection already in progress via the Reject button, so plain messages here just acknowledge.
     push("agent","I'm mid-production right now — use Approve/Reject on the card above, or wait for the next step.");
   }
-  async function beginPlanning(){
-    push("agent",`📋 Planning your production…`,{checklist:[{label:"Writing character description + episode breakdown",done:false}]});
-    S.pendingProductionDraft=S.directorChat.draft;
-    try{
-      const {prodId,parsed}=await runPromptwriter(true);
-      S.directorChat.productionId=prodId;
-      S.directorChat.stage="charsheet";
-      save();
-      push("agent",`✅ Plan ready — ${parsed.episodes.length} episode${parsed.episodes.length!==1?'s':''}, Director ${parsed.persona} assigned.\n\nCharacter: ${parsed.characterDesc.slice(0,200)}${parsed.characterDesc.length>200?'…':''}`);
-      await runCharacterSheetStep();
-    }catch(err){
-      push("agent","",{error:err.message,retryable:true});
-      S.directorChat._retryFn="beginPlanning";
-      save();
-    }
-  }
-  async function runCharacterSheetStep(){
-    push("agent",`🎨 Dispatching ${S.directorChat.directorName} — building the Character Sheet (front, back, side, 3/4, face, special features)…`);
-    try{
-      await generateCharacterSheet(S.directorChat.productionId);
-      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
-      const views=["front","threeQuarter","face"].map(k=>p.characterSheet&&p.characterSheet[k]).filter(Boolean);
-      push("agent","Character Sheet ready — take a look:",{approval:{images:views}});
-      S.directorChat.stage="approve_charsheet";
-      save();
-    }catch(err){
-      push("agent","",{error:err.message,retryable:true});
-      S.directorChat._retryFn="runCharacterSheetStep";
-      save();
-    }
-  }
-  async function runEpisodeScriptStep(epIndex){
-    push("agent",`✍️ Dispatching Episode ${epIndex}'s Director to write the shooting script…`);
-    try{
-      await generateEpisodeScript(S.directorChat.productionId,epIndex);
-      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
-      const e=getEpisode(p,epIndex);
-      push("agent",`Episode ${epIndex} script ready:`,{approval:{text:e.script}});
-      S.directorChat.stage="approve_script";
-      save();
-    }catch(err){
-      push("agent","",{error:err.message,retryable:true});
-      S.directorChat._retryFn="runEpisodeScriptStep";
-      save();
-    }
-  }
-  async function runStoryboardStep(epIndex){
-    push("agent",`🖼 Building Episode ${epIndex}'s storyboard from the approved Character Sheet…`);
-    try{
-      await generateEpisodeStoryboard(S.directorChat.productionId,epIndex);
-      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
-      const e=getEpisode(p,epIndex);
-      if(e.storyboardStatus==="pending"){ push("agent","",{error:"Storyboard generation failed — every shot errored out.",retryable:true}); S.directorChat._retryFn="runStoryboardStep"; save(); return; }
-      push("agent",`Episode ${epIndex} storyboard ready${e.storyboardStatus==='partial'?' (partial — some shots failed)':''}:`,{approval:{images:e.storyboard.map(s=>s.url)}});
-      S.directorChat.stage="approve_storyboard";
-      save();
-    }catch(err){
-      push("agent","",{error:err.message,retryable:true});
-      S.directorChat._retryFn="runStoryboardStep";
-      save();
-    }
-  }
-  async function runSceneStep(epIndex){
-    push("agent",`🎥 Rendering Episode ${epIndex}'s scene — this is the slow one, hang tight…`);
-    try{
-      await generateEpisodeScene(S.directorChat.productionId,epIndex);
-      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
-      const e=getEpisode(p,epIndex);
-      if(e.sceneStatus==="pending"){ push("agent","",{error:"Scene generation failed — every shot errored out.",retryable:true}); S.directorChat._retryFn="runSceneStep"; save(); return; }
-      const firstShot=e.shots&&e.shots[0];
-      push("agent",`Episode ${epIndex} scene ready${e.sceneStatus==='partial'?' (partial — some shots failed)':''}:`,{approval:{video:firstShot&&firstShot.videoUrl}});
-      S.directorChat.stage="approve_scene";
-      save();
-    }catch(err){
-      push("agent","",{error:err.message,retryable:true});
-      S.directorChat._retryFn="runSceneStep";
-      save();
-    }
-  }
+
   async function approve(){
-    const stage=S.directorChat.stage;
+    const taskId=S.directorChat.awaitingApprovalTaskId;
+    if(!taskId)return;
+    const task=findTask(taskId);
     const prodId=S.directorChat.productionId;
-    const ep=S.directorChat.currentEpisode;
-    if(stage==="approve_charsheet"){
-      approveCharacterSheet(prodId);
-      push("agent","✅ Character Sheet approved.");
-      await runEpisodeScriptStep(ep);
-    } else if(stage==="approve_script"){
-      approveEpisodeStage(prodId,ep,"script");
-      push("agent",`✅ Episode ${ep} script approved.`);
-      await runStoryboardStep(ep);
-    } else if(stage==="approve_storyboard"){
-      approveEpisodeStage(prodId,ep,"storyboard");
-      push("agent",`✅ Episode ${ep} storyboard approved.`);
-      await runSceneStep(ep);
-    } else if(stage==="approve_scene"){
-      approveEpisodeStage(prodId,ep,"scene");
-      const p=S.productions.find(x=>x.id===prodId);
-      if(ep<p.episodes.length){
-        S.directorChat.currentEpisode=ep+1;
-        save();
-        push("agent",`✅ Episode ${ep} complete. Moving to Episode ${ep+1}.`);
-        await runEpisodeScriptStep(ep+1);
-      } else {
-        push("agent",`🎉 All ${p.episodes.length} episode${p.episodes.length!==1?'s':''} complete! Head to Production Pipeline to finalize this to the Video Editor.`);
-        S.directorChat.stage="done";
-        save();
-      }
-    }
-  }
-  async function reject(){
-    const stage=S.directorChat.stage;
-    const prodId=S.directorChat.productionId;
-    const ep=S.directorChat.currentEpisode;
-    const stageKey=stage==="approve_charsheet"?null:stage==="approve_script"?"script":stage==="approve_storyboard"?"storyboard":"scene";
-    if(stage==="approve_charsheet"){
-      push("agent","🔄 Regenerating the Character Sheet…");
-      await runCharacterSheetStep();
+    if(task.type==="charsheet_review")approveCharacterSheet(prodId);
+    else if(task.type==="script")approveEpisodeStage(prodId,task.epIndex,"script");
+    else if(task.type==="storyboard")approveEpisodeStage(prodId,task.epIndex,"storyboard");
+    else if(task.type==="scene")approveEpisodeStage(prodId,task.epIndex,"scene");
+    task.status="done";
+    S.directorChat.awaitingApprovalTaskId=null;
+    save();
+    push("agent",`✅ ${task.label} approved.`);
+    if(task.type==="scene"&&S.directorChat.episodeCount&&task.epIndex===S.directorChat.episodeCount){
+      push("agent",`🎉 All ${S.directorChat.episodeCount} episode${S.directorChat.episodeCount!==1?'s':''} complete! Head to Production Pipeline to finalize this to the Video Editor.`);
       return;
     }
-    await rejectEpisodeStage(prodId,ep,stageKey);
-    push("agent",`↩️ Rejected — redoing Episode ${ep}'s ${stageKey}…`);
-    if(stageKey==="script")await runEpisodeScriptStep(ep);
-    else if(stageKey==="storyboard")await runStoryboardStep(ep);
-    else await runSceneStep(ep);
+    await dispatchTasks();
+  }
+  async function reject(){
+    const taskId=S.directorChat.awaitingApprovalTaskId;
+    if(!taskId)return;
+    const task=findTask(taskId);
+    const prodId=S.directorChat.productionId;
+    S.directorChat.awaitingApprovalTaskId=null;
+    if(task.type==="charsheet_review"){
+      // Regenerate all 6 views in parallel again, not just re-show the same ones
+      const csViewIds=task.deps;
+      csViewIds.forEach(id=>{const t=findTask(id);t.status="pending";t.error=null;});
+      task.status="pending";
+      save();
+      push("agent","🔄 Regenerating the Character Sheet — all 6 views, in parallel…");
+      await dispatchTasks();
+      return;
+    }
+    const stageKey=task.type; // "script"|"storyboard"|"scene"
+    await rejectEpisodeStage(prodId,task.epIndex,stageKey);
+    task.status="pending";
+    task.error=null;
+    save();
+    push("agent",`↩️ Rejected — redoing Episode ${task.epIndex}'s ${stageKey}…`);
+    await dispatchTasks();
   }
   function retry(){
-    const fn=S.directorChat._retryFn;
-    if(fn==="beginPlanning")beginPlanning();
-    else if(fn==="runCharacterSheetStep")runCharacterSheetStep();
-    else if(fn==="runEpisodeScriptStep")runEpisodeScriptStep(S.directorChat.currentEpisode);
-    else if(fn==="runStoryboardStep")runStoryboardStep(S.directorChat.currentEpisode);
-    else if(fn==="runSceneStep")runSceneStep(S.directorChat.currentEpisode);
+    const lastMsg=[...S.directorChat.messages].reverse().find(m=>m.error);
+    const ids=(lastMsg&&lastMsg.retryTaskIds)||[];
+    ids.forEach(id=>{const t=findTask(id);if(t){t.status="pending";t.error=null;}});
+    save();
+    dispatchTasks();
   }
   async function renameDirector(){
     const name=await showPromptDialog("Name your Director","Director")||"Director";
