@@ -572,7 +572,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
         <span class="mod-icon">🎞</span><span class="mod-label">Production Pipeline</span>
       </button>
       <button class="mod-btn" data-mod="directorchat" onclick="switchMod('directorchat',this)">
-        <span class="mod-icon">🎬</span><span class="mod-label">Director Chat</span>
+        <span class="mod-icon">🎬</span><span class="mod-label">Kosmic Engine</span>
         <span class="mod-badge new">NEW</span>
       </button>
       <button class="mod-btn" data-mod="flow" onclick="switchMod('flow',this)">
@@ -6641,7 +6641,7 @@ function createProduction(draft,parsed){
 
 // ── PRODUCTION DETAIL VIEW ──
 function openProductionDetail(prodId){
-  if(S.mod!=="productionstudio")return; // don't hijack the screen if the user has navigated elsewhere (e.g. Director Chat) — this function's only job here is updating that screen's DOM, not forcing navigation to it
+  if(S.mod!=="productionstudio")return; // don't hijack the screen if the user has navigated elsewhere (e.g. Kosmic Engine) — this function's only job here is updating that screen's DOM, not forcing navigation to it
   const p=S.productions.find(x=>x.id===prodId);
   if(!p)return;
   const el=document.getElementById("moduleContent");
@@ -7276,7 +7276,7 @@ async function finalizeProductionToEditor(prodId){
 function renderDirectorChatModule(el){
   el.innerHTML=`
     <div style="margin-bottom:10px">
-      <div style="font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--violet)">🎬 Director Chat</div>
+      <div style="font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--violet)">🎬 Kosmic Engine</div>
       <div style="font-size:11px;color:var(--textm);margin-top:2px">One conversation drives the whole pipeline — script, character sheet, storyboard, and scenes — with the same generation your Production Pipeline already uses.</div>
     </div>
     <div class="ig-chat-shell" style="min-height:60vh">
