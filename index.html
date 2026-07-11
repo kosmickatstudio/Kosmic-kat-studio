@@ -7505,7 +7505,7 @@ const DirectorChat=(function(){
       const projectId=S.activeProject||(S.projects.find(p=>!p.archived)||{}).id;
       if(!projectId){ push("agent","You'll need at least one Project first — head to Projects, create one, then come back and tell me the story again."); return; }
       S.directorChat.draft={
-        projectId,concept:text.slice(0,200),imageModel:"fal-ai/flux/dev",videoModel:"bytedance/seedance-2.0/fast/text-to-video",
+        projectId,concept:text.slice(0,200),imageModel:"fal-ai/flux/dev",videoModel:"bytedance/seedance-2.0/fast/reference-to-video",
         quality:"720p",aspectRatio:"16:9",clipLen:8,totalDurationRequested:8,totalDurationRounded:8,totalShots:1,shotsPerEp:1,
         continuity:"narrative",brainModel:gs("ai_model","claude"),refImages:[],reviewedCharacterDesc:"",hasFullScript:false,fullScriptText:text,episodeCount:1,
       };
