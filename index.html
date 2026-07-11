@@ -7412,9 +7412,39 @@ const DirectorChat=(function(){
   }
   function guessProvider(task){
     if(task.type==="charsheet_view"||task.type==="loc_img")return "fal";
-    if(task.type==="script"||task.type==="plan"||task.type==="loc_plan")return "brain";
+    if(task.type==="script"||task.type==="plan"||task.type==="loc_plan"||task.type==="model_select")return "brain";
     if(task.type==="storyboard"||task.type==="scene")return "fal";
     return "unknown";
+  }
+
+  async function urlToDataUrl(url){
+    const res=await fetch(url);
+    if(!res.ok)throw new Error("Couldn't fetch image for QA check");
+    const blob=await res.blob();
+    return new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(reader.result);
+      reader.onerror=()=>reject(new Error("Couldn't read image for QA check"));
+      reader.readAsDataURL(blob);
+    });
+  }
+  async function runQACheck(imageUrl,description){
+    try{
+      if(!imageUrl)return null;
+      const dataUrl=await urlToDataUrl(imageUrl);
+      const result=await callAiVision(
+        [{dataUrl}],
+        `Does this image look like a valid, professionally-generated image — not broken, garbled, blank, duplicated limbs, or malformed? Does it reasonably match this description: "${description}"? Reply in EXACTLY this format:\nSTATUS: pass or flag\nNOTE: <one short sentence, only if flagged>`,
+        "You are doing a quick quality check on AI-generated production art for a human who will make the final call either way. Be lenient — only flag genuinely broken results, not minor stylistic differences or artistic license."
+      );
+      const statusMatch=result.match(/STATUS:\s*(pass|flag)/i);
+      const noteMatch=result.match(/NOTE:\s*(.+)/i);
+      if(statusMatch&&statusMatch[1].toLowerCase()==="flag")return noteMatch?noteMatch[1].trim():"Possible quality issue — worth a closer look";
+      return null;
+    }catch(err){
+      console.warn("QA check skipped (not blocking):",err.message);
+      return null; // QA is an enhancement, not a requirement — never blocks the flow on its own failure
+    }
   }
 
   function findTask(id){ return (S.directorChat.tasks||[]).find(t=>t.id===id); }
@@ -7423,9 +7453,10 @@ const DirectorChat=(function(){
   function buildTaskGraph(episodeCount){
     const tasks=[
       {id:"plan",type:"plan",label:"Planning production",deps:[],parallel:false,requiresApproval:false,status:"pending",error:null},
+      {id:"model_select",type:"model_select",label:"Choosing image & video models",deps:["plan"],parallel:false,requiresApproval:false,status:"pending",error:null},
     ];
     const csViews=["front","back","side","threeQuarter","face","special"];
-    csViews.forEach(v=>tasks.push({id:`cs_${v}`,type:"charsheet_view",label:`Character Sheet — ${v}`,viewKey:v,deps:["plan"],parallel:true,requiresApproval:false,status:"pending",error:null}));
+    csViews.forEach(v=>tasks.push({id:`cs_${v}`,type:"charsheet_view",label:`Character Sheet — ${v}`,viewKey:v,deps:["model_select"],parallel:true,requiresApproval:false,status:"pending",error:null}));
     tasks.push({id:"cs_review",type:"charsheet_review",label:"Character Sheet ready for review",deps:csViews.map(v=>`cs_${v}`),parallel:false,requiresApproval:true,status:"pending",error:null});
     // Location Bible: loc_plan lists key locations (count unknown until the
     // brain answers), then dynamically inserts one parallel image task per
@@ -7453,6 +7484,31 @@ const DirectorChat=(function(){
       save();
       return{summary:`✅ Plan ready — ${parsed.episodes.length} episode${parsed.episodes.length!==1?'s':''}, Director ${parsed.persona} assigned.\n\nCharacter: ${parsed.characterDesc.slice(0,200)}${parsed.characterDesc.length>200?'…':''}`};
     }
+    if(task.type==="model_select"){
+      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
+      const VALID_IMAGE=["fal-ai/flux/dev","fal-ai/nano-banana-2"];
+      const VALID_VIDEO=["bytedance/seedance-2.0/fast/reference-to-video","bytedance/seedance-2.0/reference-to-video"];
+      try{
+        const reply=await callAiSimple(
+          `Story: "${p.concept}"\nCharacter: ${p.characterDesc.slice(0,300)}\n\nPick the best-fit models for this production from these REAL options — base this on the story's actual needs, not a default guess:\n\nIMAGE MODELS:\n- fal-ai/flux/dev: fast, cheap, solid general-purpose quality — good default\n- fal-ai/nano-banana-2: higher fidelity, handles many reference images well — better for visually complex or detail-heavy characters\n\nVIDEO MODELS:\n- bytedance/seedance-2.0/fast/reference-to-video: cheaper, quicker turnaround — good default\n- bytedance/seedance-2.0/reference-to-video: standard tier, higher quality output, more expensive — better for hero/high-stakes shots\n\nReply in EXACTLY this format, nothing else:\nIMAGE: <model id>\nVIDEO: <model id>\nREASON: <one short sentence>`,
+          "You are a technical producer choosing generation models based on real production needs and cost tradeoffs. Only ever pick from the exact model ids given — never invent a different one.",
+          p.brainModel
+        );
+        const imgMatch=reply.match(/IMAGE:\s*(\S+)/);
+        const vidMatch=reply.match(/VIDEO:\s*(\S+)/);
+        const reasonMatch=reply.match(/REASON:\s*(.+)/);
+        if(imgMatch&&VALID_IMAGE.includes(imgMatch[1]))p.imageModel=imgMatch[1];
+        if(vidMatch&&VALID_VIDEO.includes(vidMatch[1]))p.videoModel=vidMatch[1];
+        save2Productions();
+        return{summary:`🧠 Models chosen — Image: ${p.imageModel.includes('nano-banana')?'Nano Banana 2':'FLUX Dev'}, Video: ${p.videoModel.includes('/fast/')?'Seedance 2.0 Fast':'Seedance 2.0 Standard'}.${reasonMatch?' '+reasonMatch[1].trim():''}`};
+      }catch(err){
+        // Model selection is an enhancement, not a hard requirement — the
+        // defaults already set in the draft (FLUX Dev / Seedance Fast) are
+        // perfectly valid, so a failure here shouldn't block the production.
+        console.warn("Model auto-selection skipped, using defaults:",err.message);
+        return{summary:`🧠 Using default models (couldn't reach the brain for a custom pick): FLUX Dev, Seedance 2.0 Fast.`};
+      }
+    }
     if(task.type==="charsheet_view"){
       const p=S.productions.find(x=>x.id===S.directorChat.productionId);
       const VIEW_PROMPTS={
@@ -7479,7 +7535,8 @@ const DirectorChat=(function(){
       p.characterSheetStatus="ready";
       save2Productions();
       const views=["front","threeQuarter","face"].map(k=>p.characterSheet&&p.characterSheet[k]).filter(Boolean);
-      return{summary:"🎨 Character Sheet ready — all 6 views generated in parallel:",approval:{images:views}};
+      const qaNote=await runQACheck(p.characterSheet&&p.characterSheet.front,p.characterDesc);
+      return{summary:"🎨 Character Sheet ready — all 6 views generated in parallel:",approval:{images:views,qaNote}};
     }
     if(task.type==="loc_plan"){
       const p=S.productions.find(x=>x.id===S.directorChat.productionId);
@@ -7542,7 +7599,9 @@ const DirectorChat=(function(){
       // generateEpisodeStoryboard) so environments stay consistent too.
       p.locationDesc=p.locationBible.map(l=>`${l.name}: ${l.desc}`).join("; ");
       save2Productions();
-      return{summary:"📍 Location Bible ready — these environments will anchor every storyboard shot:",approval:{images:p.locationBible.map(l=>l.url).filter(Boolean)}};
+      const firstLoc=p.locationBible[0];
+      const qaNote=firstLoc?await runQACheck(firstLoc.url,firstLoc.desc):null;
+      return{summary:"📍 Location Bible ready — these environments will anchor every storyboard shot:",approval:{images:p.locationBible.map(l=>l.url).filter(Boolean),qaNote}};
     }
     if(task.type==="script"){
       await generateEpisodeScript(prodId,task.epIndex);
@@ -7556,7 +7615,8 @@ const DirectorChat=(function(){
       const p=S.productions.find(x=>x.id===prodId);
       const e=getEpisode(p,task.epIndex);
       if(e.storyboardStatus==="pending")throw new Error("Storyboard generation failed — every shot errored out");
-      return{summary:`🖼 Episode ${task.epIndex} storyboard ready${e.storyboardStatus==='partial'?' (partial — some shots failed)':''}:`,approval:{images:e.storyboard.map(s=>s.url)}};
+      const qaNote=e.storyboard[0]?await runQACheck(e.storyboard[0].url,e.masterPrompt):null;
+      return{summary:`🖼 Episode ${task.epIndex} storyboard ready${e.storyboardStatus==='partial'?' (partial — some shots failed)':''}:`,approval:{images:e.storyboard.map(s=>s.url),qaNote}};
     }
     if(task.type==="scene"){
       await generateEpisodeScene(prodId,task.epIndex);
@@ -7645,6 +7705,7 @@ const DirectorChat=(function(){
         ${m.approval.images?`<div style="display:flex;gap:4px;overflow-x:auto">${m.approval.images.map(u=>`<img src="${u}" style="width:70px;height:70px;object-fit:cover;flex-shrink:0">`).join('')}</div>`:''}
         ${m.approval.video?`<video src="${m.approval.video}" controls style="width:100%"></video>`:''}
         ${m.approval.text?`<div style="font-size:11px;color:var(--text);white-space:pre-wrap">${m.approval.text}</div>`:''}
+        ${m.approval.qaNote?`<div style="font-size:10px;color:var(--gold);background:rgba(212,175,55,0.1);border-radius:6px;padding:5px 8px;margin-top:6px">🔍 QA note: ${m.approval.qaNote}</div>`:''}
         <div class="dc-approval-actions">
           <button class="btn btn-primary btn-xs" onclick="DirectorChat.approve()">✅ Approve</button>
           <button class="btn btn-danger btn-xs" onclick="DirectorChat.reject()">❌ Reject</button>
