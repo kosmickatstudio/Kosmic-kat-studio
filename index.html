@@ -472,7 +472,15 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 .nc-minimap{position:absolute;bottom:10px;right:10px;width:120px;height:80px;background:var(--glass-solid);backdrop-filter:blur(14px);border:1px solid var(--glass-brd);border-radius:10px;z-index:20;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.1)}
 .nc-minimap-node{position:absolute;background:var(--violet);border-radius:2px;opacity:0.6}
 .nc-minimap-viewport{position:absolute;border:1.5px solid var(--gold);border-radius:2px;pointer-events:none}
-.nc-cost-readout{position:absolute;bottom:10px;left:10px;z-index:20;background:var(--glass-solid);backdrop-filter:blur(14px);border:1px solid var(--glass-brd);border-radius:10px;padding:6px 12px;font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--gold);box-shadow:0 4px 16px rgba(0,0,0,0.1)}
+.nc-cost-readout{position:absolute;bottom:10px;left:10px;z-index:20;background:var(--glass-solid);backdrop-filter:blur(14px);border:1px solid var(--glass-brd);border-radius:10px;padding:6px 12px;font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--gold);box-shadow:0 4px 16px rgba(0,0,0,0.1)}/* ── DIRECTOR CHAT ── */
+.dc-checklist{background:var(--glass);border:1px solid var(--glass-brd);border-radius:10px;padding:8px 12px;font-size:11px;color:var(--textm);margin:4px 0}
+.dc-checklist-item{display:flex;align-items:center;gap:6px;padding:3px 0}
+.dc-checklist-item.done{color:var(--green)}
+.dc-checklist-item.pending{opacity:0.5}
+.dc-approval-card{background:var(--glass-solid);border:1px solid var(--glass-brd);border-radius:12px;padding:10px;margin-top:6px}
+.dc-approval-card img,.dc-approval-card video{border-radius:8px;margin-bottom:4px}
+.dc-approval-actions{display:flex;gap:8px;margin-top:8px}
+.dc-error-card{background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:10px;padding:10px;font-size:11px;color:var(--red);margin-top:6px}
 </style>
 <!-- Firebase Auth -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -562,6 +570,10 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
       <div class="sidebar-label">Production House</div>
       <button class="mod-btn" data-mod="productionstudio" onclick="switchMod('productionstudio',this)">
         <span class="mod-icon">🎞</span><span class="mod-label">Production Pipeline</span>
+      </button>
+      <button class="mod-btn" data-mod="directorchat" onclick="switchMod('directorchat',this)">
+        <span class="mod-icon">🎬</span><span class="mod-label">Director Chat</span>
+        <span class="mod-badge new">NEW</span>
       </button>
       <button class="mod-btn" data-mod="flow" onclick="switchMod('flow',this)">
         <span class="mod-icon">🌊</span><span class="mod-label">Flow</span>
@@ -1076,10 +1088,11 @@ const S = {
   team: JSON.parse(localStorage.getItem("kk_team")||"[]"),
   flowProjects: JSON.parse(localStorage.getItem("kk_flow_projects")||"[]"),
   assetRegistry: JSON.parse(localStorage.getItem("kk_asset_registry")||"[]"),
+  directorChat: JSON.parse(localStorage.getItem("kk_director_chat")||"null")||{active:false,productionId:null,directorName:"Director",messages:[],stage:"idle",currentEpisode:1,draft:null},
 };
 
 function save(k){
-  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",settings:"kk_settings",activityLog:"kk_activity",productions:"kk_productions",collections:"kk_collections",igChatHistory:"kk_ig_chat",flowProjects:"kk_flow_projects",assetRegistry:"kk_asset_registry"};
+  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",settings:"kk_settings",activityLog:"kk_activity",productions:"kk_productions",collections:"kk_collections",igChatHistory:"kk_ig_chat",flowProjects:"kk_flow_projects",assetRegistry:"kk_asset_registry",directorChat:"kk_director_chat"};
   if(!m[k])return;
   try{
     localStorage.setItem(m[k],JSON.stringify(S[k]));
@@ -1333,6 +1346,7 @@ function renderModule(mod){
   const fn={
     home:renderHome,
     productionstudio:renderProductionStudio,
+    directorchat:renderDirectorChatModule,
     flow:renderFlow,
     nodecanvas:renderNodeCanvasModule,
     projects:renderProjects,
@@ -6525,16 +6539,16 @@ async function callAiVision(images,userPrompt,systemPrompt,modelOverride){
   }
 }
 
-async function runPromptwriter(){
+async function runPromptwriter(silent=false){
   const draft=S.pendingProductionDraft;
-  if(!draft){toast("Something went wrong — please restart the wizard","error");return;}
+  if(!draft){if(!silent)toast("Something went wrong — please restart the wizard","error");throw new Error("No pending production draft");}
   const n=draft.episodeCount||1;
   const durConfig=VIDEO_MODEL_DURATIONS[draft.videoModel];
   const maxClip=durConfig?Math.max(...durConfig.options):15;
   const minClip=durConfig?Math.min(...durConfig.options):3;
 
-  const modal=document.getElementById("prodWizardModal");
-  modal.querySelector(".modal").innerHTML=`${wizardHeaderControls()}<div id="pwStatus" style="text-align:center;padding:30px 16px;color:var(--textm);font-size:12px">✍️ ${n===1?'Writing your episode…':`Splitting into ${n} episodes…`}</div>`;
+  const modal=silent?null:document.getElementById("prodWizardModal");
+  if(modal)modal.querySelector(".modal").innerHTML=`${wizardHeaderControls()}<div id="pwStatus" style="text-align:center;padding:30px 16px;color:var(--textm);font-size:12px">✍️ ${n===1?'Writing your episode…':`Splitting into ${n} episodes…`}</div>`;
 
   const continuityNote=draft.continuity==="narrative"?`All ${n} episode${n!==1?'s':''} must share consistent characters, setting, and world details — write them as direct narrative continuations of each other.`:
     draft.continuity==="visual"?`Episodes will be visually chained (each starts from the previous episode's last frame) — keep character/setting descriptions consistent so the visual handoff makes sense.`:
@@ -6556,12 +6570,16 @@ async function runPromptwriter(){
     );
     const parsed=parsePromptwriterOutput(reply,n,minClip,maxClip);
     if(!parsed)throw new Error("Couldn't parse Promptwriter output — try again");
-    createProduction(draft,parsed);
+    const prodId=createProduction(draft,parsed);
     logCost(draft.brainModel+"_promptwriter","Promptwriter: "+draft.concept.slice(0,40));
     S.pendingProductionDraft=null;
-    document.getElementById("prodWizardModal").remove();
-    toast(`✍️ Script ready — ${n} episode${n!==1?'s':''} assigned to Director ${parsed.persona}`,"success");
+    if(!silent){
+      document.getElementById("prodWizardModal").remove();
+      toast(`✍️ Script ready — ${n} episode${n!==1?'s':''} assigned to Director ${parsed.persona}`,"success");
+    }
+    return{prodId,parsed};
   }catch(err){
+    if(silent)throw err;
     modal.querySelector(".modal").innerHTML=`
       ${wizardHeaderControls()}<div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:10px">✍️ Promptwriter</div>
       <div style="font-size:12px;color:var(--red);background:rgba(239,68,68,0.08);border-radius:8px;padding:12px;margin-bottom:14px">❌ ${err.message}</div>
@@ -6618,10 +6636,12 @@ function createProduction(draft,parsed){
   S.productions.push(production);
   save("productions");
   openProductionDetail(production.id);
+  return production.id;
 }
 
 // ── PRODUCTION DETAIL VIEW ──
 function openProductionDetail(prodId){
+  if(S.mod!=="productionstudio")return; // don't hijack the screen if the user has navigated elsewhere (e.g. Director Chat) — this function's only job here is updating that screen's DOM, not forcing navigation to it
   const p=S.productions.find(x=>x.id===prodId);
   if(!p)return;
   const el=document.getElementById("moduleContent");
@@ -7244,6 +7264,254 @@ async function finalizeProductionToEditor(prodId){
   toast("🎞 All clips added to Video Editor, in sequence","success");
   switchMod('editor',document.querySelector('[data-mod=editor]'));
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// DIRECTOR CHAT — single-conversation orchestration layer over the
+// existing Production Pipeline. Deliberately does NOT reimplement any
+// generation logic: every step below calls the exact same functions the
+// Production Pipeline screens already use (runPromptwriter, generateCharacterSheet,
+// generateEpisodeScript/Storyboard/Scene, approve/rejectEpisodeStage). This
+// is a front-end/narration layer only — the underlying pipeline is untouched.
+// ══════════════════════════════════════════════════════════════════════
+function renderDirectorChatModule(el){
+  el.innerHTML=`
+    <div style="margin-bottom:10px">
+      <div style="font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--violet)">🎬 Director Chat</div>
+      <div style="font-size:11px;color:var(--textm);margin-top:2px">One conversation drives the whole pipeline — script, character sheet, storyboard, and scenes — with the same generation your Production Pipeline already uses.</div>
+    </div>
+    <div class="ig-chat-shell" style="min-height:60vh">
+      <div class="ig-chat-header">
+        <div><b onclick="DirectorChat.renameDirector()" style="cursor:pointer;text-decoration:underline dotted" title="Tap to rename">${S.directorChat.directorName}</b> <span style="font-size:10px;color:var(--textm)">· ${S.directorChat.productionId?'production in progress':'no active production'}</span></div>
+        <button class="btn btn-ghost btn-xs" onclick="DirectorChat.reset()">↻ New Chat</button>
+      </div>
+      <div class="ig-chat-thread" id="dcThread"></div>
+      <div class="ig-chat-inputbar">
+        <textarea class="ig-chat-textarea" id="dcInput" placeholder="Type your reply…" rows="1" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();DirectorChat.send();}"></textarea>
+        <button class="ig-send-btn" onclick="DirectorChat.send()">➤</button>
+      </div>
+    </div>
+  `;
+  if(!S.directorChat.messages.length)DirectorChat.reset();
+  else DirectorChat.renderThread();
+}
+
+const DirectorChat=(function(){
+  function save(){ window.save?window.save("directorChat"):localStorage.setItem("kk_director_chat",JSON.stringify(S.directorChat)); }
+  function push(role,content,extra={}){
+    S.directorChat.messages.push({role,content,...extra,ts:Date.now()});
+    save();
+    renderThread();
+  }
+  function renderThread(){
+    const thread=document.getElementById("dcThread");
+    if(!thread)return;
+    thread.innerHTML=S.directorChat.messages.map(m=>{
+      if(m.role==="user")return `<div class="ig-bubble-user">${m.content}</div>`;
+      let extra="";
+      if(m.checklist)extra=`<div class="dc-checklist">${m.checklist.map(c=>`<div class="dc-checklist-item ${c.done?'done':'pending'}">${c.done?'✅':'○'} ${c.label}</div>`).join('')}</div>`;
+      if(m.approval)extra=`<div class="dc-approval-card">
+        ${m.approval.images?`<div style="display:flex;gap:4px;overflow-x:auto">${m.approval.images.map(u=>`<img src="${u}" style="width:70px;height:70px;object-fit:cover;flex-shrink:0">`).join('')}</div>`:''}
+        ${m.approval.video?`<video src="${m.approval.video}" controls style="width:100%"></video>`:''}
+        ${m.approval.text?`<div style="font-size:11px;color:var(--text);white-space:pre-wrap">${m.approval.text}</div>`:''}
+        <div class="dc-approval-actions">
+          <button class="btn btn-primary btn-xs" onclick="DirectorChat.approve()">✅ Approve</button>
+          <button class="btn btn-danger btn-xs" onclick="DirectorChat.reject()">❌ Reject</button>
+        </div>
+      </div>`;
+      if(m.error)extra=`<div class="dc-error-card">❌ ${m.error}${m.retryable?`<div style="margin-top:6px"><button class="btn btn-outline btn-xs" onclick="DirectorChat.retry()">🔄 Retry</button></div>`:''}</div>`;
+      return `<div class="ig-bubble-assistant">${m.content}${extra}</div>`;
+    }).join('');
+    thread.scrollTop=thread.scrollHeight;
+  }
+  function reset(){
+    S.directorChat={active:true,productionId:null,directorName:S.directorChat.directorName||"Director",messages:[],stage:"awaiting_brief",currentEpisode:1,draft:null};
+    save();
+    renderThread();
+    push("agent",`Hey, I'm your ${S.directorChat.directorName}. Tell me the story you want to make — genre, setting, what happens. I'll plan it, write it, and build the character sheet, storyboard, and scenes from there. You approve or reject at each step.`);
+  }
+  function send(){
+    const input=document.getElementById("dcInput");
+    const text=input.value.trim();
+    if(!text)return;
+    input.value="";
+    push("user",text);
+    handleUserMessage(text);
+  }
+  async function handleUserMessage(text){
+    const stage=S.directorChat.stage;
+    if(stage==="awaiting_brief"){
+      const projectId=S.activeProject||(S.projects.find(p=>!p.archived)||{}).id;
+      if(!projectId){ push("agent","You'll need at least one Project first — head to Projects, create one, then come back and tell me the story again."); return; }
+      S.directorChat.draft={
+        projectId,concept:text.slice(0,200),imageModel:"fal-ai/flux/dev",videoModel:"bytedance/seedance-2.0/fast/text-to-video",
+        quality:"720p",aspectRatio:"16:9",clipLen:8,totalDurationRequested:8,totalDurationRounded:8,totalShots:1,shotsPerEp:1,
+        continuity:"narrative",brainModel:gs("ai_model","claude"),refImages:[],reviewedCharacterDesc:"",hasFullScript:false,fullScriptText:text,episodeCount:1,
+      };
+      save();
+      push("agent",`Got it. Going with sensible defaults so we can move — 1 episode, ~8s, Seedance 2.0 Fast, 720p, 16:9. Say "3 episodes" or "20 seconds" etc. before I start if you want different — otherwise just say "go" and I'll start planning.`);
+      S.directorChat.stage="confirm_plan";
+      save();
+      return;
+    }
+    if(stage==="confirm_plan"){
+      const lower=text.toLowerCase();
+      const epMatch=lower.match(/(\d+)\s*episodes?/);
+      const durMatch=lower.match(/(\d+)\s*(?:sec|second)/);
+      if(epMatch)S.directorChat.draft.episodeCount=parseInt(epMatch[1],10);
+      if(durMatch){S.directorChat.draft.totalDurationRequested=parseInt(durMatch[1],10);S.directorChat.draft.totalDurationRounded=parseInt(durMatch[1],10);}
+      if(!/^(go|start|yes|proceed|begin)/i.test(lower)&&!epMatch&&!durMatch){
+        push("agent",`Noted. Say "go" whenever you're ready to start.`);
+        return;
+      }
+      save();
+      beginPlanning();
+      return;
+    }
+    // During any generation stage, free-text input is treated as feedback for a rejection already in progress via the Reject button, so plain messages here just acknowledge.
+    push("agent","I'm mid-production right now — use Approve/Reject on the card above, or wait for the next step.");
+  }
+  async function beginPlanning(){
+    push("agent",`📋 Planning your production…`,{checklist:[{label:"Writing character description + episode breakdown",done:false}]});
+    S.pendingProductionDraft=S.directorChat.draft;
+    try{
+      const {prodId,parsed}=await runPromptwriter(true);
+      S.directorChat.productionId=prodId;
+      S.directorChat.stage="charsheet";
+      save();
+      push("agent",`✅ Plan ready — ${parsed.episodes.length} episode${parsed.episodes.length!==1?'s':''}, Director ${parsed.persona} assigned.\n\nCharacter: ${parsed.characterDesc.slice(0,200)}${parsed.characterDesc.length>200?'…':''}`);
+      await runCharacterSheetStep();
+    }catch(err){
+      push("agent","",{error:err.message,retryable:true});
+      S.directorChat._retryFn="beginPlanning";
+      save();
+    }
+  }
+  async function runCharacterSheetStep(){
+    push("agent",`🎨 Dispatching ${S.directorChat.directorName} — building the Character Sheet (front, back, side, 3/4, face, special features)…`);
+    try{
+      await generateCharacterSheet(S.directorChat.productionId);
+      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
+      const views=["front","threeQuarter","face"].map(k=>p.characterSheet&&p.characterSheet[k]).filter(Boolean);
+      push("agent","Character Sheet ready — take a look:",{approval:{images:views}});
+      S.directorChat.stage="approve_charsheet";
+      save();
+    }catch(err){
+      push("agent","",{error:err.message,retryable:true});
+      S.directorChat._retryFn="runCharacterSheetStep";
+      save();
+    }
+  }
+  async function runEpisodeScriptStep(epIndex){
+    push("agent",`✍️ Dispatching Episode ${epIndex}'s Director to write the shooting script…`);
+    try{
+      await generateEpisodeScript(S.directorChat.productionId,epIndex);
+      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
+      const e=getEpisode(p,epIndex);
+      push("agent",`Episode ${epIndex} script ready:`,{approval:{text:e.script}});
+      S.directorChat.stage="approve_script";
+      save();
+    }catch(err){
+      push("agent","",{error:err.message,retryable:true});
+      S.directorChat._retryFn="runEpisodeScriptStep";
+      save();
+    }
+  }
+  async function runStoryboardStep(epIndex){
+    push("agent",`🖼 Building Episode ${epIndex}'s storyboard from the approved Character Sheet…`);
+    try{
+      await generateEpisodeStoryboard(S.directorChat.productionId,epIndex);
+      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
+      const e=getEpisode(p,epIndex);
+      if(e.storyboardStatus==="pending"){ push("agent","",{error:"Storyboard generation failed — every shot errored out.",retryable:true}); S.directorChat._retryFn="runStoryboardStep"; save(); return; }
+      push("agent",`Episode ${epIndex} storyboard ready${e.storyboardStatus==='partial'?' (partial — some shots failed)':''}:`,{approval:{images:e.storyboard.map(s=>s.url)}});
+      S.directorChat.stage="approve_storyboard";
+      save();
+    }catch(err){
+      push("agent","",{error:err.message,retryable:true});
+      S.directorChat._retryFn="runStoryboardStep";
+      save();
+    }
+  }
+  async function runSceneStep(epIndex){
+    push("agent",`🎥 Rendering Episode ${epIndex}'s scene — this is the slow one, hang tight…`);
+    try{
+      await generateEpisodeScene(S.directorChat.productionId,epIndex);
+      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
+      const e=getEpisode(p,epIndex);
+      if(e.sceneStatus==="pending"){ push("agent","",{error:"Scene generation failed — every shot errored out.",retryable:true}); S.directorChat._retryFn="runSceneStep"; save(); return; }
+      const firstShot=e.shots&&e.shots[0];
+      push("agent",`Episode ${epIndex} scene ready${e.sceneStatus==='partial'?' (partial — some shots failed)':''}:`,{approval:{video:firstShot&&firstShot.videoUrl}});
+      S.directorChat.stage="approve_scene";
+      save();
+    }catch(err){
+      push("agent","",{error:err.message,retryable:true});
+      S.directorChat._retryFn="runSceneStep";
+      save();
+    }
+  }
+  async function approve(){
+    const stage=S.directorChat.stage;
+    const prodId=S.directorChat.productionId;
+    const ep=S.directorChat.currentEpisode;
+    if(stage==="approve_charsheet"){
+      approveCharacterSheet(prodId);
+      push("agent","✅ Character Sheet approved.");
+      await runEpisodeScriptStep(ep);
+    } else if(stage==="approve_script"){
+      approveEpisodeStage(prodId,ep,"script");
+      push("agent",`✅ Episode ${ep} script approved.`);
+      await runStoryboardStep(ep);
+    } else if(stage==="approve_storyboard"){
+      approveEpisodeStage(prodId,ep,"storyboard");
+      push("agent",`✅ Episode ${ep} storyboard approved.`);
+      await runSceneStep(ep);
+    } else if(stage==="approve_scene"){
+      approveEpisodeStage(prodId,ep,"scene");
+      const p=S.productions.find(x=>x.id===prodId);
+      if(ep<p.episodes.length){
+        S.directorChat.currentEpisode=ep+1;
+        save();
+        push("agent",`✅ Episode ${ep} complete. Moving to Episode ${ep+1}.`);
+        await runEpisodeScriptStep(ep+1);
+      } else {
+        push("agent",`🎉 All ${p.episodes.length} episode${p.episodes.length!==1?'s':''} complete! Head to Production Pipeline to finalize this to the Video Editor.`);
+        S.directorChat.stage="done";
+        save();
+      }
+    }
+  }
+  async function reject(){
+    const stage=S.directorChat.stage;
+    const prodId=S.directorChat.productionId;
+    const ep=S.directorChat.currentEpisode;
+    const stageKey=stage==="approve_charsheet"?null:stage==="approve_script"?"script":stage==="approve_storyboard"?"storyboard":"scene";
+    if(stage==="approve_charsheet"){
+      push("agent","🔄 Regenerating the Character Sheet…");
+      await runCharacterSheetStep();
+      return;
+    }
+    await rejectEpisodeStage(prodId,ep,stageKey);
+    push("agent",`↩️ Rejected — redoing Episode ${ep}'s ${stageKey}…`);
+    if(stageKey==="script")await runEpisodeScriptStep(ep);
+    else if(stageKey==="storyboard")await runStoryboardStep(ep);
+    else await runSceneStep(ep);
+  }
+  function retry(){
+    const fn=S.directorChat._retryFn;
+    if(fn==="beginPlanning")beginPlanning();
+    else if(fn==="runCharacterSheetStep")runCharacterSheetStep();
+    else if(fn==="runEpisodeScriptStep")runEpisodeScriptStep(S.directorChat.currentEpisode);
+    else if(fn==="runStoryboardStep")runStoryboardStep(S.directorChat.currentEpisode);
+    else if(fn==="runSceneStep")runSceneStep(S.directorChat.currentEpisode);
+  }
+  async function renameDirector(){
+    const name=await showPromptDialog("Name your Director","Director")||"Director";
+    S.directorChat.directorName=name;
+    save();
+    renderModule("directorchat");
+  }
+  return{send,approve,reject,retry,reset,renderThread,renameDirector};
+})();
 
 // ── DIRECTOR HIERARCHY: Showrunner -> Episode Director -> Assistant Director -> Prompt Writer ──
 function renderHierarchyPanel(projectId,activeAssistantId,allDirectors){
