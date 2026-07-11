@@ -7291,12 +7291,34 @@ function renderDirectorChatModule(el){
       </div>
     </div>
   `;
-  if(!S.directorChat.messages.length||S.directorChat.tasks===undefined)DirectorChat.reset();
+  if(!S.directorChat.messages.length||S.directorChat.tasks===undefined){
+    DirectorChat.reset();
+    DirectorChat.loadFromCloud(); // may replace the fresh-reset greeting if a shared session exists (e.g. resuming from another device)
+  }
   else DirectorChat.renderThread();
 }
 
 const DirectorChat=(function(){
-  function save(){ window.save?window.save("directorChat"):localStorage.setItem("kk_director_chat",JSON.stringify(S.directorChat)); }
+  function save(){
+    window.save?window.save("directorChat"):localStorage.setItem("kk_director_chat",JSON.stringify(S.directorChat));
+    clearTimeout(_cloudSyncTimer);
+    _cloudSyncTimer=setTimeout(syncToCloud,1200); // debounced — not every single message/task update
+  }
+  let _cloudSyncTimer=null;
+  async function syncToCloud(){
+    try{ await fbDB.collection("public").doc("kosmicEngineChat").set({chat:S.directorChat,updatedAt:Date.now()}); }
+    catch(err){ console.warn("Kosmic Engine cloud sync failed — kept locally only:",err.message); }
+  }
+  async function loadFromCloud(){
+    try{
+      const doc=await fbDB.collection("public").doc("kosmicEngineChat").get();
+      if(doc.exists&&doc.data().chat&&doc.data().chat.messages&&doc.data().chat.messages.length){
+        S.directorChat=doc.data().chat;
+        window.save?window.save("directorChat"):localStorage.setItem("kk_director_chat",JSON.stringify(S.directorChat));
+        renderThread();
+      }
+    }catch(err){ console.warn("Couldn't load shared Kosmic Engine chat from cloud — showing local state:",err.message); }
+  }
   function push(role,content,extra={}){
     S.directorChat.messages.push({role,content,...extra,ts:Date.now()});
     save();
@@ -7318,6 +7340,58 @@ const DirectorChat=(function(){
   // real continuity logic — not on that episode's full storyboard+scene,
   // which is real headroom for future pipelining even though this pass
   // still runs the approval UI one card at a time for clarity.
+  // ── Normalized failure messages ─────────────────────────────────────
+  // Raw provider errors are inconsistent junk to read (fal.ai's JSON detail
+  // arrays, OpenAI's error codes, Gemini's own format, etc). This maps common
+  // failure SHAPES (not provider-specific strings) to one consistent,
+  // human-readable message + suggested action, regardless of which provider
+  // actually threw it.
+  function classifyError(message){
+    const m=(message||"").toLowerCase();
+    if(/insufficient|quota|credit|balance|payment required|402/.test(m))return{category:"credits",label:"Out of credits"};
+    if(/rate limit|429|too many requests/.test(m))return{category:"rate_limit",label:"Rate limited"};
+    if(/unauthoriz|invalid.*key|401|forbidden|403/.test(m))return{category:"auth",label:"API key problem"};
+    if(/content polic|flagged|safety|moderation/.test(m))return{category:"content_policy",label:"Content flagged"};
+    if(/timeout|timed out/.test(m))return{category:"timeout",label:"Timed out"};
+    if(/network|fetch failed|failed to fetch/.test(m))return{category:"network",label:"Network error"};
+    return{category:"unknown",label:"Generation failed"};
+  }
+  async function checkFalBalance(){
+    // fal.ai's real documented billing endpoint (api.fal.ai/v1/account/billing)
+    // — requires an admin-scoped key, which the regular key saved in Settings
+    // may or may not have. Fails silently and just omits the balance rather
+    // than guessing or showing a scary error about a feature that's optional.
+    const key=gs("api_falai","");
+    if(!key)return null;
+    try{
+      const res=await fetch("https://api.fal.ai/v1/account/billing?expand=credits",{headers:{"Authorization":"Key "+key}});
+      if(!res.ok)return null;
+      const data=await res.json();
+      return data.credits?`${data.credits.current_balance} ${data.credits.currency}`:null;
+    }catch(err){ return null; }
+  }
+  async function normalizeError(rawMessage,provider){
+    const cls=classifyError(rawMessage);
+    let suffix="";
+    if(cls.category==="credits"&&provider==="fal"){
+      const bal=await checkFalBalance();
+      suffix=bal?` — fal.ai balance: ${bal}`:" — check your fal.ai balance at fal.ai/dashboard/billing";
+    } else if(cls.category==="credits"){
+      suffix=" — check your provider's billing dashboard";
+    } else if(cls.category==="rate_limit"){
+      suffix=" — wait a bit and retry";
+    } else if(cls.category==="auth"){
+      suffix=" — check the API key in Settings";
+    }
+    return `${cls.label}${suffix}\n\n${rawMessage}`;
+  }
+  function guessProvider(task){
+    if(task.type==="charsheet_view")return "fal";
+    if(task.type==="script"||task.type==="plan")return "brain";
+    if(task.type==="storyboard"||task.type==="scene")return "fal";
+    return "unknown";
+  }
+
   function findTask(id){ return (S.directorChat.tasks||[]).find(t=>t.id===id); }
   function depsSatisfied(t){ return (t.deps||[]).every(id=>{const d=findTask(id);return d&&d.status==="done";}); }
 
@@ -7429,7 +7503,10 @@ const DirectorChat=(function(){
       }));
       save();
       const failed=parallelReady.filter(t=>t.status==="error");
-      if(failed.length)push("agent","",{error:`${failed.length} of ${parallelReady.length} parallel task(s) failed: ${failed.map(t=>t.label+' — '+t.error).join('; ')}`,retryable:true,retryTaskIds:failed.map(t=>t.id)});
+      if(failed.length){
+        const lines=await Promise.all(failed.map(async t=>`${t.label}: ${await normalizeError(t.error,guessProvider(t))}`));
+        push("agent","",{error:`${failed.length} of ${parallelReady.length} parallel task(s) failed —\n\n${lines.join('\n\n')}`,retryable:true,retryTaskIds:failed.map(t=>t.id)});
+      }
       await dispatchTasks();
       return;
     }
@@ -7456,7 +7533,8 @@ const DirectorChat=(function(){
         t.status="error";
         t.error=err.message;
         save();
-        push("agent","",{error:err.message,retryable:true,retryTaskIds:[t.id]});
+        const normalized=await normalizeError(err.message,guessProvider(t));
+        push("agent","",{error:normalized,retryable:true,retryTaskIds:[t.id]});
         return;
       }
       await dispatchTasks();
@@ -7590,7 +7668,7 @@ const DirectorChat=(function(){
     save();
     renderModule("directorchat");
   }
-  return{send,approve,reject,retry,reset,renderThread,renameDirector};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud};
 })();
 
 // ── DIRECTOR HIERARCHY: Showrunner -> Episode Director -> Assistant Director -> Prompt Writer ──
