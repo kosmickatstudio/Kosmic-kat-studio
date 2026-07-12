@@ -432,15 +432,10 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 .nc-node[data-status="error"]{border-color:var(--red);background-image:linear-gradient(var(--glass-solid),var(--glass-solid))}
 @keyframes nc-pulse{0%,100%{box-shadow:0 4px 16px rgba(0,0,0,0.10)}50%{box-shadow:0 4px 24px var(--glow-ice)}}
 
-/* Name tab: fully filled glossy gradient (same technique as the toolbar
-   buttons) — a filled shape has no border to lose on the clipped diagonal
-   edges, which is what was happening with the earlier thin-outline version.
-   Sits at a lower z-index than node bodies so it tucks behind a neighboring
-   node instead of floating on top and blocking it. */
-.nc-node-tab{position:absolute;z-index:0;top:-13px;left:10px;padding:4px 14px 16px;font-size:9.5px;font-weight:800;letter-spacing:0.03em;color:#fff;text-transform:uppercase;text-shadow:0 1px 2px rgba(0,0,0,0.25);
-  background:linear-gradient(150deg,color-mix(in srgb,var(--nc-color,#888) 80%,white 35%),var(--nc-color,#888) 55%,color-mix(in srgb,var(--nc-color,#888) 80%,black 20%));
-  box-shadow:0 -2px 10px color-mix(in srgb,var(--nc-color,#888) 40%,transparent),inset 0 1px 0 rgba(255,255,255,0.4);
-  clip-path:polygon(8% 0%,92% 0%,100% 100%,0% 100%);white-space:nowrap;cursor:grab;user-select:none;display:flex;align-items:center;gap:4px;touch-action:none}
+/* Name label: plain text in the node's own theme color, sitting clearly
+   outside the box in the top-left corner (not clipped/filled, no trapezoid) —
+   replaces the earlier glossy trapezoid tab per request. */
+.nc-node-tab{position:absolute;z-index:2;top:-22px;left:2px;font-size:10.5px;font-weight:800;letter-spacing:0.04em;color:var(--nc-color,#888);text-transform:uppercase;white-space:nowrap;cursor:grab;user-select:none;display:flex;align-items:center;gap:4px;touch-action:none}
 .nc-node-tab:active{cursor:grabbing}
 
 .nc-node-body{position:relative;z-index:1;padding:9px;font-size:11px;background:var(--glass-solid);border-radius:11px}
@@ -4526,35 +4521,59 @@ function updateVcShotTotal(){
 S.klingVoices=S.klingVoices||gs("kling_voices",[])||[];
 S.klingSelectedVoices=S.klingSelectedVoices||[];
 
+// fal's file-input fields accept base64 data URIs directly, but fal's own docs
+// flag this as risky for larger files ("can impact request performance") and
+// recommend uploading to their storage first. A 5-30s audio sample is a much
+// bigger payload than the small image data URIs used elsewhere in this app —
+// this was very likely why voice cloning wasn't completing. Uses fal's real
+// 2-step upload protocol: get a short-lived storage token, then upload the
+// raw file to get back a lightweight hosted URL.
+async function uploadToFalStorage(file,apiKey){
+  const authRes=await fetch("https://rest.alpha.fal.ai/storage/auth/token?storage_type=fal-cdn-v3",{method:"POST",headers:{"Authorization":"Key "+apiKey}});
+  if(!authRes.ok)throw new Error("Couldn't get a storage upload token from fal.ai — check your API key");
+  const authData=await authRes.json();
+  if(!authData.token||!authData.base_url)throw new Error("fal.ai's storage auth response didn't include a token — its upload API may have changed");
+  const uploadRes=await fetch(`${authData.base_url}/files/upload`,{method:"POST",headers:{"Authorization":"Bearer "+authData.token,"Content-Type":file.type||"application/octet-stream"},body:file});
+  if(!uploadRes.ok)throw new Error("Uploading the voice sample to fal.ai failed ("+uploadRes.status+")");
+  const uploadData=await uploadRes.json();
+  if(!uploadData.access_url)throw new Error("fal.ai didn't return a file URL after upload — its response shape may have changed");
+  return uploadData.access_url;
+}
+
 function handleVoiceSampleUpload(event){
   const file=event.target.files[0];
   if(!file)return;
   event.target.value="";
-  const reader=new FileReader();
-  reader.onload=async(e)=>{
-    const dataUrl=e.target.result;
-    // Rough client-side duration check where possible (audio only — video
-    // sample duration is validated server-side since we can't probe it
-    // cheaply client-side without extra decoding work).
-    if(file.type.startsWith("audio/")){
-      const audioEl=new Audio(dataUrl);
-      await new Promise(res=>{audioEl.onloadedmetadata=res;audioEl.onerror=res;});
+  // Duration check uses a lightweight local object URL — no need to read the
+  // whole file into a base64 string just to probe its length.
+  const objectUrl=URL.createObjectURL(file);
+  const finish=async()=>{
+    URL.revokeObjectURL(objectUrl);
+    createKlingVoice(file,file.name);
+  };
+  if(file.type.startsWith("audio/")){
+    const audioEl=new Audio(objectUrl);
+    audioEl.onloadedmetadata=()=>{
       if(audioEl.duration&&(audioEl.duration<5||audioEl.duration>30)){
+        URL.revokeObjectURL(objectUrl);
         toast(`Sample is ${audioEl.duration.toFixed(1)}s — Kling needs 5–30s of clean, single-voice audio`,"error");
         return;
       }
-    }
-    createKlingVoice(dataUrl,file.name);
-  };
-  reader.readAsDataURL(file);
+      finish();
+    };
+    audioEl.onerror=finish; // couldn't probe duration client-side — let fal's own server-side validation catch it
+  } else {
+    finish();
+  }
 }
 
-async function createKlingVoice(dataUrl,fileName){
+async function createKlingVoice(file,fileName){
   const apiKey=gs("api_falai","");
   if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
-  toast("🎙️ Cloning voice…","");
+  toast("🎙️ Uploading and cloning voice…","");
   try{
-    const submitRes=await fetch("https://queue.fal.run/fal-ai/kling-video/create-voice",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify({voice_url:dataUrl})});
+    const hostedUrl=await uploadToFalStorage(file,apiKey);
+    const submitRes=await fetch("https://queue.fal.run/fal-ai/kling-video/create-voice",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify({voice_url:hostedUrl})});
     const submitData=await submitRes.json();
     if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
     const requestId=submitData.request_id;
@@ -11400,23 +11419,51 @@ const NodeCanvas=(function(){
     const apiKey=gs("api_falai","");
     if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
 
-    // Only Seedance's reference-to-video endpoints actually accept
-    // image_urls/video_urls/audio_urls on fal — Kling and Veo in this app
-    // are plain text-to-video, so refs connected to those get dropped with
-    // a clear warning rather than silently ignored or sent to an endpoint
-    // that will just reject them.
     const isSeedance=node.data.model.includes("seedance");
+    const isKling=node.data.model.startsWith("fal-ai/kling-video");
+    const klingCap=VIDEO_MODEL_CAPABILITIES[node.data.model];
     const totalFiles=imageUrls.length+videoUrls.length+audioUrls.length;
-    if(!isSeedance&&totalFiles>0)toast(`⚠️ ${node.data.model.split('/')[1]||node.data.model} doesn't support reference inputs — connected refs are being ignored. Switch to a Seedance model to use them.`,"error");
-    if(isSeedance&&totalFiles>12)throw new Error(`Too many references connected (${totalFiles}) — Seedance 2.0 allows up to 12 total files across images, videos, and audio combined`);
 
-    const body={prompt:prompt||"Continue the scene naturally.",aspect_ratio:node.data.aspectRatio||"16:9",duration:String(node.data.duration||5),resolution:node.data.resolution||"720p"};
-    if(isSeedance){
-      if(imageUrls.length)body.image_urls=imageUrls;
-      if(videoUrls.length)body.video_urls=videoUrls;
-      if(audioUrls.length)body.audio_urls=audioUrls;
+    // Kling v3 Standard/Pro and O3 Pro genuinely support reference images (and,
+    // for O3, reference videos too) via the same IMAGE_TO_VIDEO_MAP/elements
+    // mechanism Video Canvas already uses — this used to be flatly "no refs"
+    // for every Kling tier, which was accurate when it was written but not
+    // anymore. v2.1/v2.6 only ever confirmed a single image_url field, so
+    // those stay limited to exactly one connected reference image.
+    if(!isSeedance&&!isKling&&totalFiles>0)toast(`⚠️ ${node.data.model.split('/')[1]||node.data.model} doesn't support reference inputs — connected refs are being ignored.`,"error");
+    if(isSeedance&&totalFiles>12)throw new Error(`Too many references connected (${totalFiles}) — Seedance 2.0 allows up to 12 total files across images, videos, and audio combined`);
+    if(isKling&&audioUrls.length>0)toast("⚠️ Kling doesn't accept reference audio here — connected audio is being ignored.","error");
+
+    let videoUrl,lastFrameUrl;
+    if(klingCap&&klingCap.provider==="kling-o3-ref"){
+      if(!imageUrls.length&&!videoUrls.length)throw new Error("Kling O3 Pro needs at least one connected reference image or video");
+      if((imageUrls.length+videoUrls.length)>6)throw new Error(`Too many references connected (${imageUrls.length+videoUrls.length}) — O3 Pro allows up to 4 images + 2 videos`);
+      videoUrl=await genViaKlingO3Reference(prompt||"Continue the scene naturally.",node.data.aspectRatio||"16:9",node.data.duration||5,imageUrls,videoUrls);
+      lastFrameUrl=imageUrls[0]||null;
+    } else {
+      const body={prompt:prompt||"Continue the scene naturally.",aspect_ratio:node.data.aspectRatio||"16:9",duration:String(node.data.duration||5),resolution:node.data.resolution||"720p"};
+      let endpoint=node.data.model;
+      if(isSeedance){
+        if(imageUrls.length)body.image_urls=imageUrls;
+        if(videoUrls.length)body.video_urls=videoUrls;
+        if(audioUrls.length)body.audio_urls=audioUrls;
+      } else if(isKling){
+        delete body.resolution; // Kling's resolution is fixed per tier — not a real field on any Kling endpoint
+        if(imageUrls.length){
+          const i2v=IMAGE_TO_VIDEO_MAP[node.data.model];
+          if(klingCap&&klingCap.elements&&imageUrls.length>1){
+            if(i2v)endpoint=i2v.endpoint;
+            body.elements=imageUrls.map(u=>({frontal_image_url:u}));
+          } else if(i2v){
+            endpoint=i2v.endpoint;
+            body[i2v.field]=imageUrls[0];
+            if(imageUrls.length>1)toast(`ℹ️ This Kling tier only uses the first connected image — the rest were ignored. Switch to 3.0 Standard/Pro for multi-reference.`,"error");
+          }
+        }
+      }
+      const result=await ncFalVideoSubmitAndPoll(endpoint,body);
+      videoUrl=result.videoUrl;lastFrameUrl=result.lastFrameUrl;
     }
-    const {videoUrl,lastFrameUrl}=await ncFalVideoSubmitAndPoll(node.data.model,body);
     node.data.resultUrl=videoUrl;
     node.data.lastFrameUrl=lastFrameUrl||imageUrls[0]||null;
     const est=estimateVideoCost(node.data.model,node.data.duration||5,node.data.resolution||"720p",videoUrls.length>0);
@@ -11563,23 +11610,29 @@ const NodeCanvas=(function(){
         const vidCount=node.inputs.filter(p=>p.portId.startsWith("in_vid_")&&p.connectedEdgeId).length;
         const audCount=node.inputs.filter(p=>p.portId.startsWith("in_aud_")&&p.connectedEdgeId).length;
         const isSeedance=node.data.model.includes("seedance");
+        const ncCap=VIDEO_MODEL_CAPABILITIES[node.data.model]||{};
+        const hasRealRefs=isSeedance||ncCap.provider==="kling-o3-ref"||!!IMAGE_TO_VIDEO_MAP[node.data.model];
+        const resOptions=VIDEO_MODEL_RESOLUTIONS[node.data.model];
         return `${node.data.resultUrl?`<video src="${node.data.resultUrl}" controls></video>`:''}<textarea placeholder="Manual prompt (used if nothing connected)" onchange="NodeCanvas.updateNodeData('${node.id}','manualPrompt',this.value)">${node.data.manualPrompt||''}</textarea>
         <label class="nc-field-label">Video Model</label>
         <select onchange="NodeCanvas.setVideoModel('${node.id}',this.value)">
           <option value="bytedance/seedance-2.0/reference-to-video" ${node.data.model==='bytedance/seedance-2.0/reference-to-video'?'selected':''}>Seedance 2.0 — up to 9 img/3 vid/3 aud</option>
           <option value="bytedance/seedance-2.0/fast/reference-to-video" ${node.data.model==='bytedance/seedance-2.0/fast/reference-to-video'?'selected':''}>Seedance 2.0 Fast — up to 9 img/3 vid/3 aud</option>
-          <option value="fal-ai/kling-video/v2.1/master/text-to-video" ${node.data.model==='fal-ai/kling-video/v2.1/master/text-to-video'?'selected':''}>Kling 2.1 Master — no refs</option>
-          <option value="fal-ai/kling-video/v2.6/pro/text-to-video" ${node.data.model==='fal-ai/kling-video/v2.6/pro/text-to-video'?'selected':''}>Kling 2.6 Pro — no refs</option>
-          <option value="fal-ai/kling-video/v3/standard/text-to-video" ${node.data.model==='fal-ai/kling-video/v3/standard/text-to-video'?'selected':''}>Kling 3.0 Standard — no refs</option>
-          <option value="fal-ai/kling-video/v3/pro/text-to-video" ${node.data.model==='fal-ai/kling-video/v3/pro/text-to-video'?'selected':''}>Kling 3.0 Pro — no refs</option>
+          <option value="fal-ai/kling-video/v2.1/master/text-to-video" ${node.data.model==='fal-ai/kling-video/v2.1/master/text-to-video'?'selected':''}>Kling 2.1 Master — 1 ref image</option>
+          <option value="fal-ai/kling-video/v2.6/pro/text-to-video" ${node.data.model==='fal-ai/kling-video/v2.6/pro/text-to-video'?'selected':''}>Kling 2.6 Pro — 1 ref image</option>
+          <option value="fal-ai/kling-video/v3/standard/text-to-video" ${node.data.model==='fal-ai/kling-video/v3/standard/text-to-video'?'selected':''}>Kling 3.0 Standard — up to 4 ref images</option>
+          <option value="fal-ai/kling-video/v3/pro/text-to-video" ${node.data.model==='fal-ai/kling-video/v3/pro/text-to-video'?'selected':''}>Kling 3.0 Pro — up to 4 ref images</option>
+          <option value="fal-ai/kling-video/o3/pro/reference-to-video" ${node.data.model==='fal-ai/kling-video/o3/pro/reference-to-video'?'selected':''}>Kling O3 Pro — up to 4 img + 2 vid</option>
           <option value="fal-ai/veo3.1" ${node.data.model==='fal-ai/veo3.1'?'selected':''}>Veo 3.1 — no refs</option>
         </select>
-        <div style="font-size:9px;color:${(!isSeedance&&(imgCount+vidCount+audCount)>0)?'var(--red)':'var(--textm)'};margin-top:3px">
+        <div style="font-size:9px;color:${(!hasRealRefs&&(imgCount+vidCount+audCount)>0)?'var(--red)':'var(--textm)'};margin-top:3px">
           ${isSeedance?`${imgCount}/9 images · ${vidCount}/3 videos · ${audCount}/3 audio${(imgCount+vidCount+audCount)>12?' — over the 12-file combined limit':''}`
+            :ncCap.provider==="kling-o3-ref"?`${imgCount}/4 images · ${vidCount}/2 videos${audCount?' · audio connected but ignored':''}`
+            :IMAGE_TO_VIDEO_MAP[node.data.model]?`${imgCount} image(s) connected${(ncCap.elements?imgCount>4:imgCount>1)?' — extra ones will be ignored':(!ncCap.elements&&imgCount>1)?' — only the first is used on this tier':''}`
             :(imgCount+vidCount+audCount)>0?`⚠️ ${imgCount+vidCount+audCount} ref(s) connected but this model ignores them`:'This model uses prompt only, no references'}
         </div>
         <div class="nc-inline-row">
-          <div style="flex:1"><label class="nc-field-label">Res</label><select onchange="NodeCanvas.updateNodeData('${node.id}','resolution',this.value)">${(VIDEO_MODEL_RESOLUTIONS[node.data.model]||["480p","720p"]).map(r=>`<option value="${r}" ${node.data.resolution===r?'selected':''}>${r}</option>`).join('')}</select></div>
+          ${resOptions?`<div style="flex:1"><label class="nc-field-label">Res</label><select onchange="NodeCanvas.updateNodeData('${node.id}','resolution',this.value)">${resOptions.map(r=>`<option value="${r}" ${node.data.resolution===r?'selected':''}>${r}</option>`).join('')}</select></div>`:''}
           <div style="flex:1"><label class="nc-field-label">Duration</label><select onchange="NodeCanvas.updateNodeData('${node.id}','duration',parseInt(this.value))">${(VIDEO_MODEL_DURATIONS[node.data.model]?.options||[4,5,6,8]).map(d=>`<option value="${d}" ${node.data.duration===d?'selected':''}>${d}s</option>`).join('')}</select></div>
           <div style="flex:1"><label class="nc-field-label">Aspect</label><select onchange="NodeCanvas.updateNodeData('${node.id}','aspectRatio',this.value)">${["16:9","9:16","1:1","4:3","3:4"].map(r=>`<option value="${r}" ${(node.data.aspectRatio||"16:9")===r?'selected':''}>${r}</option>`).join('')}</select></div>
         </div>`;
