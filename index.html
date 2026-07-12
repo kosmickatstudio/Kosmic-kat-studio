@@ -4625,6 +4625,22 @@ function dataUrlToBlob(dataUrl){
 // "COMPLETED" with no video — which is exactly what "No video returned" with
 // no other explanation looks like. Uploading to hosted URLs first (same real
 // fal storage protocol used for voice cloning) removes this as a variable.
+// fal treats @Element1/@Element2 and @Image1/@Image2 as two genuinely
+// separate things: @ElementN resolves against the `elements` array,
+// @ImageN resolves against a completely different `image_urls` field (style/
+// mood references, not identity-preserving character reference). This app
+// only ever builds `elements` — it never sends image_urls — so a prompt
+// written with @Image1/@Image2 fails with "Invalid reference index N...
+// Only 0 images provided" even though real reference images were attached
+// and uploaded correctly. Since elements is the right field for what people
+// actually want here (consistent character identity across shots, not just
+// style/mood), this normalizes @ImageN to @ElementN rather than building a
+// second, semantically-different upload path just to support the tag people
+// happen to type.
+function normalizeElementTags(text){
+  return (text||"").replace(/@Image(\d+)/gi,"@Element$1");
+}
+
 async function uploadRefsToFal(items,apiKey){
   return Promise.all(items.map(async(i,idx)=>{
     if(!i.dataUrl||typeof i.dataUrl!=="string"){
@@ -5429,7 +5445,12 @@ async function sendVcMultiShotPrompt(){
   const shotType=document.getElementById("vcShotType").value;
   const negPrompt=document.getElementById("vcNegPrompt")?.value.trim()||"";
   const directorStyle=getActiveDirectorPrompt();
-  const shotsPayload=validShots.map(s=>({prompt:directorStyle?`${s.prompt}, ${directorStyle}`:s.prompt,duration:s.duration}));
+  const shouldNormalize=(cap.provider==="kling-o3-ref"&&(S.vcMultiImages.length||S.vcMultiVideos.length))||(cap.elements&&S.vcMultiImages.length>1);
+  const shotsPayload=validShots.map(s=>{
+    let p=directorStyle?`${s.prompt}, ${directorStyle}`:s.prompt;
+    if(shouldNormalize)p=normalizeElementTags(p);
+    return{prompt:p,duration:s.duration};
+  });
 
   const userMsgId="vcUser_"+Date.now();
   pushVcChatMessage({id:userMsgId,role:"user",content:`🎬 Multi-shot storyboard — ${validShots.length} shots, ${totalDuration}s total`,genSettings:{
@@ -5595,9 +5616,10 @@ async function sendVcChatPrompt(){
   const rawPrompt=inputEl.value.trim();
   if(!rawPrompt){toast("Type a prompt first","error");return;}
   const directorStyle=getActiveDirectorPrompt();
-  const prompt=directorStyle?`${rawPrompt}, ${directorStyle}`:rawPrompt;
+  let prompt=directorStyle?`${rawPrompt}, ${directorStyle}`:rawPrompt;
   const model=document.getElementById("vcModel").value;
   const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
+  if((cap.provider==="kling-o3-ref"&&(S.vcMultiImages.length||S.vcMultiVideos.length))||(cap.elements&&S.vcMultiImages.length>1))prompt=normalizeElementTags(prompt);
   const ratio=document.getElementById("vcRatio").value;
   const duration=document.getElementById("vcDuration").value;
   const negPrompt=document.getElementById("vcNegPrompt")?.value.trim()||"";
@@ -11766,10 +11788,11 @@ const NodeCanvas=(function(){
     if(klingCap&&klingCap.provider==="kling-o3-ref"){
       if(!imageUrls.length&&!videoUrls.length)throw new Error("Kling O3 Pro needs at least one connected reference image or video");
       if((imageUrls.length+videoUrls.length)>6)throw new Error(`Too many references connected (${imageUrls.length+videoUrls.length}) — O3 Pro allows up to 4 images + 2 videos`);
-      videoUrl=await genViaKlingO3Reference(prompt||"Continue the scene naturally.",node.data.aspectRatio||"16:9",node.data.duration||5,imageUrls,videoUrls);
+      videoUrl=await genViaKlingO3Reference(normalizeElementTags(prompt||"Continue the scene naturally."),node.data.aspectRatio||"16:9",node.data.duration||5,imageUrls,videoUrls);
       lastFrameUrl=imageUrls[0]||null;
     } else {
-      const body={prompt:prompt||"Continue the scene naturally.",aspect_ratio:node.data.aspectRatio||"16:9",duration:String(node.data.duration||5),resolution:node.data.resolution||"720p"};
+      const promptForBody=(isKling&&klingCap&&klingCap.elements&&imageUrls.length>1)?normalizeElementTags(prompt||"Continue the scene naturally."):(prompt||"Continue the scene naturally.");
+      const body={prompt:promptForBody,aspect_ratio:node.data.aspectRatio||"16:9",duration:String(node.data.duration||5),resolution:node.data.resolution||"720p"};
       let endpoint=node.data.model;
       if(isSeedance){
         if(imageUrls.length)body.image_urls=imageUrls;
