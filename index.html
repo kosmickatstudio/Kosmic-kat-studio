@@ -4983,10 +4983,23 @@ function refreshMotionBrushVisibility(){
 function renderVcMultiPreview(previewId,arr,isAudio){
   const wrap=document.getElementById(previewId);
   if(!wrap)return;
-  const tagPrefix=previewId==="vcMultiImagePreview"?"Image":previewId==="vcMultiVideoPreview"?"Video":"Audio";
+  // The label shown here needs to match what actually gets sent in the
+  // prompt tag, not a fixed guess. Seedance genuinely has separate
+  // image_urls/video_urls/audio_urls fields, so @Image1/@Video1/@Audio1
+  // independently is correct there. Kling (v3/O3) only ever builds one
+  // `elements` array, referenced as @Element1/@Element2/etc — and for O3
+  // specifically, images and videos share ONE continuous sequence in that
+  // array (images first, then videos), not two independently-numbered ones.
+  const model=document.getElementById("vcModel")?.value;
+  const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
+  const usesElements=cap.elements||cap.provider==="kling-o3-ref";
+  // For O3's video preview, numbering continues after however many images
+  // are already attached — matches their real combined position in `elements`.
+  const indexOffset=(usesElements&&previewId==="vcMultiVideoPreview")?S.vcMultiImages.length:0;
+  const tagFor=i=>usesElements?`@Element${indexOffset+i+1}`:`@${previewId==="vcMultiImagePreview"?"Image":previewId==="vcMultiVideoPreview"?"Video":"Audio"}${i+1}`;
   if(isAudio){
     wrap.innerHTML=arr.map((a,i)=>`<div style="display:flex;align-items:center;gap:6px;font-size:11px;background:var(--lav);border-radius:6px;padding:6px 8px">
-      <span style="font-weight:700;color:var(--violet);flex-shrink:0">@${tagPrefix}${i+1}</span>
+      <span style="font-weight:700;color:var(--violet);flex-shrink:0">${tagFor(i)}</span>
       <input value="${(a.name||'').replace(/"/g,'&quot;')}" oninput="renameVcMultiItem('${previewId}',${i},this.value)" style="flex:1;border:none;background:transparent;font-size:11px;color:var(--textm);min-width:0" placeholder="Name this clip…">
       <span style="cursor:pointer;color:var(--red);flex-shrink:0" onclick="removeVcMultiItem('${previewId}',${i})">✕</span>
     </div>`).join('');
@@ -4994,7 +5007,7 @@ function renderVcMultiPreview(previewId,arr,isAudio){
     wrap.innerHTML=arr.map((a,i)=>`<div style="width:70px">
       <div style="position:relative;width:70px;height:70px">
         ${a.dataUrl.startsWith("data:video")?`<video src="${a.dataUrl}" style="width:70px;height:70px;border-radius:8px;object-fit:cover"></video>`:`<img src="${a.dataUrl}" style="width:70px;height:70px;border-radius:8px;object-fit:cover">`}
-        <div style="position:absolute;bottom:2px;left:2px;right:2px;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;font-size:8px;font-weight:700;color:#fff;text-align:center;pointer-events:none">@${tagPrefix}${i+1}</div>
+        <div style="position:absolute;bottom:2px;left:2px;right:2px;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;font-size:8px;font-weight:700;color:#fff;text-align:center;pointer-events:none">${tagFor(i)}</div>
         <button onclick="removeVcMultiItem('${previewId}',${i})" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;cursor:pointer;line-height:1">✕</button>
       </div>
       <input value="${(a.name||'').replace(/"/g,'&quot;')}" oninput="renameVcMultiItem('${previewId}',${i},this.value)" placeholder="Rename…" style="width:70px;border:1px solid var(--border);border-radius:5px;font-size:9px;padding:2px 4px;margin-top:3px;color:var(--textm);box-sizing:border-box">
