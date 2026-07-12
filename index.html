@@ -4928,7 +4928,15 @@ function updateVcModelUI(){
     toast(`This model only supports ${cap.maxVideos} reference video${cap.maxVideos===1?'':'s'} — removed the last ${removedV}`,"error");
   }
   const isKling=model.startsWith("fal-ai/kling-video");
-  document.getElementById("vcMotionBrushWrap").style.display=(cap.multiImage&&S.vcMultiImages.length>0)?"block":"none";
+  const motionBrushApplicable=cap.multiImage&&S.vcMultiImages.length>0&&S.vcMultiImages.length<=1;
+  document.getElementById("vcMotionBrushWrap").style.display=motionBrushApplicable?"block":"none";
+  if(!motionBrushApplicable&&S.vcMotionBrush){
+    // Was set for a single-image use case that no longer applies (model
+    // switched to something that doesn't support it, or a 2nd+ reference
+    // image just got attached) — clearing it here instead of leaving it to
+    // silently persist and potentially hijack a later, unrelated generation.
+    S.vcMotionBrush=null;
+  }
   // Multi-shot storyboarding (multi_prompt/shot_type) was added in Kling v3 —
   // v2.1/v2.6 don't support it, so this now gates on the real multiShot flag
   // instead of piggybacking on multiImage (which older tiers also have).
@@ -4988,8 +4996,16 @@ function refreshMotionBrushVisibility(){
   const wrap=document.getElementById("vcMotionBrushWrap");
   if(!modelEl||!wrap)return;
   const cap=VIDEO_MODEL_CAPABILITIES[modelEl.value]||{};
-  wrap.style.display=(cap.multiImage&&S.vcMultiImages.length>0)?"block":"none";
-  if(!S.vcMultiImages.length)clearMotionBrush();
+  const motionBrushApplicable=cap.multiImage&&S.vcMultiImages.length>0&&S.vcMultiImages.length<=1;
+  wrap.style.display=motionBrushApplicable?"block":"none";
+  // Clear on 0 images (nothing to base it on) AND on 2+ images (Motion Brush
+  // is single-image only — attaching a 2nd/3rd/4th reference on top of an
+  // existing Motion Brush setup used to leave it set silently, and it would
+  // then hijack generation later even though the person clearly moved on to
+  // multi-image reference mode. Confirmed as the cause of a real failure:
+  // 4 references correctly attached, but the request never built `elements`
+  // because leftover Motion Brush state took over instead.
+  if(!motionBrushApplicable&&S.vcMotionBrush)clearMotionBrush();
   updateVcAttachmentBar();
 }
 
@@ -5585,6 +5601,12 @@ async function startNewVcChat(){
   }
   S.vcChatHistory=[];
   saveSetting("vc_chat_history",[]);
+  // Motion Brush state isn't tied to chat messages at all — it's easy to
+  // assume "New Chat" means a clean slate and not realize it's still set
+  // from earlier. Clearing it here too, on top of the model-switch and
+  // image-count triggers, so there's no path left where it silently
+  // survives past when someone reasonably expects a fresh start.
+  if(S.vcMotionBrush)clearMotionBrush();
   renderVcChatThread();
   toast("✨ New chat started — your last one is saved in History","success");
 }
@@ -5728,9 +5750,20 @@ async function sendVcChatPrompt(){
         if(negPrompt)body.negative_prompt=negPrompt;
         if(S.klingSelectedVoices.length)body.voice_ids=S.klingSelectedVoices;
         const i2v=IMAGE_TO_VIDEO_MAP[model];
-        if(S.vcMotionBrush){
-          // Motion Brush requires a single base image + masks + trajectory on the
-          // real image-to-video endpoint — these are mutually exclusive modes.
+        if(S.vcMotionBrush&&S.vcMultiImages.length<=1){
+          // Motion Brush is fundamentally a single-base-image mode (one image
+          // + a painted motion path) — it must never take priority over a
+          // genuine multi-image elements request. This used to check only
+          // S.vcMotionBrush's truthiness, with no regard for how many images
+          // were actually attached: since Motion Brush state persists
+          // globally until manually cleared (never auto-reset on a new chat,
+          // model switch, or by attaching more references), a real bug
+          // report traced back to exactly this — 4 images correctly
+          // attached and uploaded, but this branch silently took over
+          // anyway, using only the first image and never building `elements`
+          // at all, which is why fal reported "0 elements provided" despite
+          // 4 real images being present and correctly referenced in the
+          // prompt via @Element1-4.
           if(i2v){endpoint=i2v.endpoint;body[i2v.field]=hostedImages[0];}
           body.dynamic_masks=[{mask_url:S.vcMotionBrush.dynamicMaskUrl,trajectories:S.vcMotionBrush.trajectories}];
           if(S.vcMotionBrush.staticMaskUrl)body.static_mask_url=S.vcMotionBrush.staticMaskUrl;
