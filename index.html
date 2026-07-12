@@ -4932,7 +4932,8 @@ function updateVcModelUI(){
   const tagHint=document.getElementById("vcTagHint");
   if(cap.tagSyntax){
     tagHint.style.display="block";
-    tagHint.textContent=`Reference your uploads in the prompt using ${cap.tagSyntax} — e.g. "@Image1 walks down a neon street".`;
+    const exampleTag=(cap.tagSyntax.match(/@\w+\d+/)||["@Element1"])[0];
+    tagHint.textContent=`Reference your uploads in the prompt using ${cap.tagSyntax} — e.g. "${exampleTag} walks down a neon street".`;
   } else tagHint.style.display="none";
 
   if(cap.multiRef||cap.multiImage){
@@ -4983,20 +4984,12 @@ function refreshMotionBrushVisibility(){
 function renderVcMultiPreview(previewId,arr,isAudio){
   const wrap=document.getElementById(previewId);
   if(!wrap)return;
-  // The label shown here needs to match what actually gets sent in the
-  // prompt tag, not a fixed guess. Seedance genuinely has separate
-  // image_urls/video_urls/audio_urls fields, so @Image1/@Video1/@Audio1
-  // independently is correct there. Kling (v3/O3) only ever builds one
-  // `elements` array, referenced as @Element1/@Element2/etc — and for O3
-  // specifically, images and videos share ONE continuous sequence in that
-  // array (images first, then videos), not two independently-numbered ones.
-  const model=document.getElementById("vcModel")?.value;
-  const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
-  const usesElements=cap.elements||cap.provider==="kling-o3-ref";
-  // For O3's video preview, numbering continues after however many images
-  // are already attached — matches their real combined position in `elements`.
-  const indexOffset=(usesElements&&previewId==="vcMultiVideoPreview")?S.vcMultiImages.length:0;
-  const tagFor=i=>usesElements?`@Element${indexOffset+i+1}`:`@${previewId==="vcMultiImagePreview"?"Image":previewId==="vcMultiVideoPreview"?"Video":"Audio"}${i+1}`;
+  // Pulls from the same single source of truth the @ autocomplete uses
+  // (vcTagList) instead of recomputing this independently — that's exactly
+  // how the thumbnail labels and autocomplete drifted out of sync before.
+  const list=vcTagList();
+  const tagArr=previewId==="vcMultiImagePreview"?list.images:previewId==="vcMultiVideoPreview"?list.videos:list.audios;
+  const tagFor=i=>`@${tagArr[i]||"?"}`;
   if(isAudio){
     wrap.innerHTML=arr.map((a,i)=>`<div style="display:flex;align-items:center;gap:6px;font-size:11px;background:var(--lav);border-radius:6px;padding:6px 8px">
       <span style="font-weight:700;color:var(--violet);flex-shrink:0">${tagFor(i)}</span>
@@ -5072,12 +5065,30 @@ function toggleVcSettings(){
   if(backdrop)backdrop.classList.toggle("show",opening);
 }
 
+// Single source of truth for what each attached reference file is actually
+// addressable as in a prompt. Used by both the thumbnail labels
+// (renderVcMultiPreview) and the @ autocomplete (getVcAvailableTags) — this
+// used to be computed independently in each place and drifted out of sync
+// (thumbnails said @Element1 while autocomplete still suggested @Image1).
+function vcTagList(){
+  const model=document.getElementById("vcModel")?.value;
+  const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
+  const usesElements=cap.elements||cap.provider==="kling-o3-ref";
+  const images=[],videos=[],audios=[];
+  if(usesElements){
+    let n=0;
+    S.vcMultiImages.forEach(()=>images.push("Element"+(++n)));
+    S.vcMultiVideos.forEach(()=>videos.push("Element"+(++n)));
+  } else {
+    S.vcMultiImages.forEach((_,i)=>images.push("Image"+(i+1)));
+    S.vcMultiVideos.forEach((_,i)=>videos.push("Video"+(i+1)));
+    S.vcMultiAudios.forEach((_,i)=>audios.push("Audio"+(i+1)));
+  }
+  return{usesElements,images,videos,audios,all:[...images,...videos,...audios]};
+}
+
 function getVcAvailableTags(){
-  const tags=[];
-  S.vcMultiImages.forEach((_,i)=>tags.push("Image"+(i+1)));
-  S.vcMultiVideos.forEach((_,i)=>tags.push("Video"+(i+1)));
-  S.vcMultiAudios.forEach((_,i)=>tags.push("Audio"+(i+1)));
-  return tags;
+  return vcTagList().all;
 }
 
 function checkVcTagAutocomplete(){
