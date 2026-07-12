@@ -473,10 +473,6 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 .nc-minimap-node{position:absolute;background:var(--violet);border-radius:2px;opacity:0.6}
 .nc-minimap-viewport{position:absolute;border:1.5px solid var(--gold);border-radius:2px;pointer-events:none}
 .nc-cost-readout{position:absolute;bottom:10px;left:10px;z-index:20;background:var(--glass-solid);backdrop-filter:blur(14px);border:1px solid var(--glass-brd);border-radius:10px;padding:6px 12px;font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--gold);box-shadow:0 4px 16px rgba(0,0,0,0.1)}/* ── DIRECTOR CHAT ── */
-.dc-checklist{background:var(--glass);border:1px solid var(--glass-brd);border-radius:10px;padding:8px 12px;font-size:11px;color:var(--textm);margin:4px 0}
-.dc-checklist-item{display:flex;align-items:center;gap:6px;padding:3px 0}
-.dc-checklist-item.done{color:var(--green)}
-.dc-checklist-item.pending{opacity:0.5}
 .dc-approval-card{background:var(--glass-solid);border:1px solid var(--glass-brd);border-radius:12px;padding:10px;margin-top:6px}
 .dc-approval-card img,.dc-approval-card video{border-radius:8px;margin-bottom:4px}
 .dc-approval-actions{display:flex;gap:8px;margin-top:8px}
@@ -6631,6 +6627,7 @@ function createProduction(draft,parsed){
     characterSheet:null,
     persona:parsed.persona,
     personaId:parsed.personaId,
+    locations:parsed.locations||[], // from Promptwriter's own LOCATIONS: section — Kosmic Engine's loc_plan reuses this instead of re-deriving locations from scratch with a second AI call
     status:"active",
     created:new Date().toISOString(),
     episodes:parsed.episodes.map((ep,i)=>({
@@ -7540,13 +7537,22 @@ const DirectorChat=(function(){
     }
     if(task.type==="loc_plan"){
       const p=S.productions.find(x=>x.id===S.directorChat.productionId);
-      const epContent=p.episodes.map(e=>e.masterPrompt).join("\n").slice(0,4000);
-      const reply=await callAiSimple(
-        `From this story content, list the 1-3 most important recurring LOCATIONS. Format EXACTLY, one per line, nothing else:\nLOCATION: <short name> | <one-line vivid visual description for an establishing shot>\n\nStory:\n${epContent}`,
-        "You are a production designer. Follow the format exactly.",
-        p.brainModel
-      );
-      const locs=[...reply.matchAll(/LOCATION:\s*([^|]+)\|(.+)/g)].map(m=>({name:m[1].trim(),desc:m[2].trim()})).slice(0,3);
+      let locs;
+      if(p.locations&&p.locations.length){
+        // Reuse the Promptwriter's own LOCATIONS: section — it already saw the
+        // full story and named these places once. Re-deriving them with a
+        // second independent AI call risks different names/descriptions for
+        // the same location, wasting a call for no benefit.
+        locs=p.locations.slice(0,3).map(l=>({name:l.name,desc:l.desc||l.name}));
+      } else {
+        const epContent=p.episodes.map(e=>e.masterPrompt).join("\n").slice(0,4000);
+        const reply=await callAiSimple(
+          `From this story content, list the 1-3 most important recurring LOCATIONS. Format EXACTLY, one per line, nothing else:\nLOCATION: <short name> | <one-line vivid visual description for an establishing shot>\n\nStory:\n${epContent}`,
+          "You are a production designer. Follow the format exactly.",
+          p.brainModel
+        );
+        locs=[...reply.matchAll(/LOCATION:\s*([^|]+)\|(.+)/g)].map(m=>({name:m[1].trim(),desc:m[2].trim()})).slice(0,3);
+      }
       if(!locs.length)throw new Error("Couldn't identify locations from the story — retry");
       // World memory recall: if a newly-identified location word-overlaps one we
       // already have an approved reference for, reuse its canon desc + image
@@ -7697,10 +7703,9 @@ const DirectorChat=(function(){
   function renderThread(){
     const thread=document.getElementById("dcThread");
     if(!thread)return;
-    thread.innerHTML=S.directorChat.messages.map(m=>{
+    thread.innerHTML=S.directorChat.messages.map((m,i)=>{
       if(m.role==="user")return `<div class="ig-bubble-user">${m.content}</div>`;
       let extra="";
-      if(m.checklist)extra=`<div class="dc-checklist">${m.checklist.map(c=>`<div class="dc-checklist-item ${c.done?'done':'pending'}">${c.done?'✅':'○'} ${c.label}</div>`).join('')}</div>`;
       if(m.approval)extra=`<div class="dc-approval-card">
         ${m.approval.images?`<div style="display:flex;gap:4px;overflow-x:auto">${m.approval.images.map(u=>`<img src="${u}" style="width:70px;height:70px;object-fit:cover;flex-shrink:0">`).join('')}</div>`:''}
         ${m.approval.video?`<video src="${m.approval.video}" controls style="width:100%"></video>`:''}
@@ -7711,7 +7716,14 @@ const DirectorChat=(function(){
           <button class="btn btn-danger btn-xs" onclick="DirectorChat.reject()">❌ Reject</button>
         </div>
       </div>`;
-      if(m.error)extra=`<div class="dc-error-card">❌ ${m.error}${m.retryable?`<div style="margin-top:6px"><button class="btn btn-outline btn-xs" onclick="DirectorChat.retry()">🔄 Retry</button></div>`:''}</div>`;
+      if(m.error){
+        // Only show Retry if the specific task(s) THIS card is about are still
+        // actually in error status right now — an old card whose task was
+        // already retried and resolved (or superseded) shouldn't offer a
+        // button that would silently act on a different, unrelated task.
+        const stillPending=m.retryable&&m.retryTaskIds&&m.retryTaskIds.some(id=>{const t=findTask(id);return t&&t.status==="error";});
+        extra=`<div class="dc-error-card">❌ ${m.error}${stillPending?`<div style="margin-top:6px"><button class="btn btn-outline btn-xs" onclick="DirectorChat.retry(${i})">🔄 Retry</button></div>`:''}</div>`;
+      }
       return `<div class="ig-bubble-assistant">${m.content}${extra}</div>`;
     }).join('');
     thread.scrollTop=thread.scrollHeight;
@@ -7851,11 +7863,12 @@ const DirectorChat=(function(){
     push("agent",`↩️ Rejected — redoing Episode ${task.epIndex}'s ${stageKey}…`);
     await dispatchTasks();
   }
-  function retry(){
-    const lastMsg=[...S.directorChat.messages].reverse().find(m=>m.error);
-    const ids=(lastMsg&&lastMsg.retryTaskIds)||[];
+  function retry(msgIndex){
+    const msg=S.directorChat.messages[msgIndex];
+    const ids=(msg&&msg.retryTaskIds)||[];
     ids.forEach(id=>{const t=findTask(id);if(t){t.status="pending";t.error=null;}});
     save();
+    renderThread(); // re-render so this card's now-resolved Retry button disappears immediately
     dispatchTasks();
   }
   async function renameDirector(){
