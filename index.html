@@ -1107,7 +1107,7 @@ function save(k){
   }catch(e){
     console.error("Storage error:",e);
     if(e.name==="QuotaExceededError"){
-      toast("⚠️ Storage full — try removing a character's reference image or an old project to free up space","error");
+      toast("⚠️ Storage full — open Chat History in Video/Image Canvas and tap Clear All, or remove an old project/reference image","error");
     }else{
       toast("⚠️ Save failed: "+e.message,"error");
     }
@@ -3053,6 +3053,11 @@ async function startNewIgChat(){
   if(S.igChatHistory.length){
     const session={id:"sess_"+Date.now(),title:generateSessionTitle(S.igChatHistory),messages:S.igChatHistory,createdAt:new Date().toISOString()};
     S.igChatSessions.unshift(session);
+    // This array had no cap at all - every "New Chat" permanently archived the
+    // full previous conversation forever, unlike igChatHistory which is
+    // bounded. That's a real, likely primary cause of hitting localStorage's
+    // quota over time, worse now that messages can carry more data.
+    if(S.igChatSessions.length>15)S.igChatSessions=S.igChatSessions.slice(0,15);
     saveSetting("ig_chat_sessions",S.igChatSessions);
   }
   S.igChatHistory=[];
@@ -3072,6 +3077,7 @@ function openIgChatHistory(){
         <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">☰ Chat History</div>
         <button class="ig-icon-btn" onclick="document.getElementById('igChatHistoryModal').remove()">✕</button>
       </div>
+      ${sessions.length?`<button class="btn btn-outline btn-xs" style="align-self:flex-end;margin-bottom:8px;color:var(--red)" onclick="clearAllIgChatSessions()">🗑️ Clear All (frees up storage)</button>`:''}
       <div style="overflow-y:auto;flex:1">
         ${sessions.length===0?`<div class="empty-desc">No past chats yet — start a new chat and your current one will be saved here.</div>`
         :sessions.map(s=>`<div style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
@@ -3086,12 +3092,21 @@ function openIgChatHistory(){
   document.body.appendChild(overlay);
 }
 
+async function clearAllIgChatSessions(){
+  if(!(await showConfirmDialog(`Delete all ${S.igChatSessions.length} saved chats permanently? This cannot be undone.`,{danger:true,okLabel:"Delete All"})))return;
+  S.igChatSessions=[];
+  saveSetting("ig_chat_sessions",[]);
+  document.getElementById("igChatHistoryModal")?.remove();
+  toast("🗑️ Cleared","success");
+}
+
 async function loadIgChatSession(sessionId){
   const session=S.igChatSessions.find(s=>s.id===sessionId);
   if(!session)return;
   if(S.igChatHistory.length){
     const current={id:"sess_"+Date.now(),title:generateSessionTitle(S.igChatHistory),messages:S.igChatHistory,createdAt:new Date().toISOString()};
     S.igChatSessions.unshift(current);
+    if(S.igChatSessions.length>15)S.igChatSessions=S.igChatSessions.slice(0,15);
   }
   S.igChatSessions=S.igChatSessions.filter(s=>s.id!==sessionId);
   S.igChatHistory=session.messages;
@@ -5446,6 +5461,12 @@ async function startNewVcChat(){
   if(S.vcChatHistory.length){
     const session={id:"sess_"+Date.now(),title:generateSessionTitle(S.vcChatHistory),messages:S.vcChatHistory,createdAt:new Date().toISOString()};
     S.vcChatSessions.unshift(session);
+    // Same unbounded-growth issue as igChatSessions — no cap meant every
+    // "New Chat" permanently archived the full previous conversation forever.
+    // Now that messages carry Edit/Retry generation-setting snapshots
+    // (reference URLs, shot lists, etc.) this grows meaningfully faster than
+    // it used to, making it a much more likely real cause of quota errors.
+    if(S.vcChatSessions.length>15)S.vcChatSessions=S.vcChatSessions.slice(0,15);
     saveSetting("vc_chat_sessions",S.vcChatSessions);
   }
   S.vcChatHistory=[];
@@ -5465,6 +5486,7 @@ function openVcChatHistory(){
         <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">☰ Chat History</div>
         <button class="ig-icon-btn" onclick="document.getElementById('vcChatHistoryModal').remove()">✕</button>
       </div>
+      ${sessions.length?`<button class="btn btn-outline btn-xs" style="align-self:flex-end;margin-bottom:8px;color:var(--red)" onclick="clearAllVcChatSessions()">🗑️ Clear All (frees up storage)</button>`:''}
       <div style="overflow-y:auto;flex:1">
         ${sessions.length===0?`<div class="empty-desc">No past chats yet — start a new chat and your current one will be saved here.</div>`
         :sessions.map(s=>`<div style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
@@ -5479,12 +5501,21 @@ function openVcChatHistory(){
   document.body.appendChild(overlay);
 }
 
+async function clearAllVcChatSessions(){
+  if(!(await showConfirmDialog(`Delete all ${S.vcChatSessions.length} saved chats permanently? This cannot be undone.`,{danger:true,okLabel:"Delete All"})))return;
+  S.vcChatSessions=[];
+  saveSetting("vc_chat_sessions",[]);
+  document.getElementById("vcChatHistoryModal")?.remove();
+  toast("🗑️ Cleared","success");
+}
+
 async function loadVcChatSession(sessionId){
   const session=S.vcChatSessions.find(s=>s.id===sessionId);
   if(!session)return;
   if(S.vcChatHistory.length){
     const current={id:"sess_"+Date.now(),title:generateSessionTitle(S.vcChatHistory),messages:S.vcChatHistory,createdAt:new Date().toISOString()};
     S.vcChatSessions.unshift(current);
+    if(S.vcChatSessions.length>15)S.vcChatSessions=S.vcChatSessions.slice(0,15);
   }
   S.vcChatSessions=S.vcChatSessions.filter(s=>s.id!==sessionId);
   S.vcChatHistory=session.messages;
