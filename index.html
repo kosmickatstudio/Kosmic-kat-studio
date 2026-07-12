@@ -4641,6 +4641,18 @@ function normalizeElementTags(text){
   return (text||"").replace(/@Image(\d+)/gi,"@Element$1");
 }
 
+// Bolds and highlights @Element/@Image/@Video/@AudioN mentions once a
+// message is sent, so they're easy to spot when scanning back through a
+// long prompt. Deliberately only applied here (rendered, static HTML) and
+// not to the live compose textarea — genuinely highlighting substrings
+// inside an editable textarea while typing requires an invisible-text-over-
+// styled-overlay technique that has to match font metrics pixel-for-pixel;
+// getting that wrong would make the primary input look broken, which is a
+// worse outcome than not having live highlighting at all.
+function highlightVcTags(text){
+  return (text||"").replace(/@(Element|Image|Video|Audio)(\d+)/g,'<b style="color:var(--gold);background:rgba(212,175,55,0.16);border-radius:4px;padding:0 3px">@$1$2</b>');
+}
+
 async function uploadRefsToFal(items,apiKey){
   return Promise.all(items.map(async(i,idx)=>{
     if(!i.dataUrl||typeof i.dataUrl!=="string"){
@@ -4993,7 +5005,7 @@ function renderVcMultiPreview(previewId,arr,isAudio){
   if(isAudio){
     wrap.innerHTML=arr.map((a,i)=>`<div style="display:flex;align-items:center;gap:6px;font-size:11px;background:var(--lav);border-radius:6px;padding:6px 8px">
       <span style="font-weight:700;color:var(--violet);flex-shrink:0">${tagFor(i)}</span>
-      <input value="${(a.name||'').replace(/"/g,'&quot;')}" oninput="renameVcMultiItem('${previewId}',${i},this.value)" style="flex:1;border:none;background:transparent;font-size:11px;color:var(--textm);min-width:0" placeholder="Name this clip…">
+      <span style="flex:1;color:var(--textm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">${(a.name||'').replace(/</g,'&lt;')}</span>
       <span style="cursor:pointer;color:var(--red);flex-shrink:0" onclick="removeVcMultiItem('${previewId}',${i})">✕</span>
     </div>`).join('');
   } else {
@@ -5003,15 +5015,8 @@ function renderVcMultiPreview(previewId,arr,isAudio){
         <div style="position:absolute;bottom:2px;left:2px;right:2px;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;font-size:8px;font-weight:700;color:#fff;text-align:center;pointer-events:none">${tagFor(i)}</div>
         <button onclick="removeVcMultiItem('${previewId}',${i})" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;cursor:pointer;line-height:1">✕</button>
       </div>
-      <input value="${(a.name||'').replace(/"/g,'&quot;')}" oninput="renameVcMultiItem('${previewId}',${i},this.value)" placeholder="Rename…" style="width:70px;border:1px solid var(--border);border-radius:5px;font-size:9px;padding:2px 4px;margin-top:3px;color:var(--textm);box-sizing:border-box">
     </div>`).join('');
   }
-}
-
-function renameVcMultiItem(previewId,i,newName){
-  const map={vcMultiImagePreview:S.vcMultiImages,vcMultiVideoPreview:S.vcMultiVideos,vcMultiAudioPreview:S.vcMultiAudios};
-  const arr=map[previewId];
-  if(arr&&arr[i])arr[i].name=newName;
 }
 
 function removeVcMultiItem(previewId,i){
@@ -5074,17 +5079,17 @@ function vcTagList(){
   const model=document.getElementById("vcModel")?.value;
   const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
   const usesElements=cap.elements||cap.provider==="kling-o3-ref";
-  const images=[],videos=[],audios=[];
+  const images=[],videos=[],audios=[],descriptors=[];
   if(usesElements){
     let n=0;
-    S.vcMultiImages.forEach(()=>images.push("Element"+(++n)));
-    S.vcMultiVideos.forEach(()=>videos.push("Element"+(++n)));
+    S.vcMultiImages.forEach(item=>{const tag="Element"+(++n);images.push(tag);descriptors.push({tag,dataUrl:item.dataUrl,isVideo:false,isAudio:false,name:item.name});});
+    S.vcMultiVideos.forEach(item=>{const tag="Element"+(++n);videos.push(tag);descriptors.push({tag,dataUrl:item.dataUrl,isVideo:true,isAudio:false,name:item.name});});
   } else {
-    S.vcMultiImages.forEach((_,i)=>images.push("Image"+(i+1)));
-    S.vcMultiVideos.forEach((_,i)=>videos.push("Video"+(i+1)));
-    S.vcMultiAudios.forEach((_,i)=>audios.push("Audio"+(i+1)));
+    S.vcMultiImages.forEach((item,i)=>{const tag="Image"+(i+1);images.push(tag);descriptors.push({tag,dataUrl:item.dataUrl,isVideo:false,isAudio:false,name:item.name});});
+    S.vcMultiVideos.forEach((item,i)=>{const tag="Video"+(i+1);videos.push(tag);descriptors.push({tag,dataUrl:item.dataUrl,isVideo:true,isAudio:false,name:item.name});});
+    S.vcMultiAudios.forEach((item,i)=>{const tag="Audio"+(i+1);audios.push(tag);descriptors.push({tag,dataUrl:item.dataUrl,isVideo:false,isAudio:true,name:item.name});});
   }
-  return{usesElements,images,videos,audios,all:[...images,...videos,...audios]};
+  return{usesElements,images,videos,audios,all:[...images,...videos,...audios],descriptors};
 }
 
 function getVcAvailableTags(){
@@ -5100,10 +5105,21 @@ function checkVcTagAutocomplete(){
   const match=textBeforeCursor.match(/@(\w*)$/);
   if(!match){hideVcTagAutocomplete();return;}
   const partial=match[1].toLowerCase();
-  const allTags=getVcAvailableTags();
-  const matches=allTags.filter(t=>t.toLowerCase().startsWith(partial));
+  const matches=vcTagList().descriptors.filter(d=>d.tag.toLowerCase().startsWith(partial));
   if(!matches.length){hideVcTagAutocomplete();return;}
-  dropdown.innerHTML=matches.map(t=>`<div onclick="insertVcTag('${t}')" style="padding:8px 12px;font-size:12px;font-weight:700;color:var(--violet);cursor:pointer;border-bottom:1px solid var(--borderl)">@${t}</div>`).join('');
+  // Shows the actual attached reference (thumbnail for image/video, an icon
+  // for audio) next to its tag, not just plain text — makes it possible to
+  // tell at a glance which real file @Element2 is before inserting it,
+  // instead of having to remember the upload order.
+  dropdown.innerHTML=matches.map(d=>`<div onclick="insertVcTag('${d.tag}')" style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;border-bottom:1px solid var(--borderl)">
+    ${d.isAudio?`<div style="width:28px;height:28px;border-radius:6px;background:var(--lav);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px">🎙️</div>`
+      :d.isVideo?`<video src="${d.dataUrl}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0"></video>`
+      :`<img src="${d.dataUrl}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0">`}
+    <div style="min-width:0">
+      <div style="font-size:12px;font-weight:700;color:var(--violet)">@${d.tag}</div>
+      ${d.name?`<div style="font-size:9px;color:var(--textm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${d.name}</div>`:''}
+    </div>
+  </div>`).join('');
   dropdown.style.display="block";
 }
 
@@ -5174,7 +5190,7 @@ function renderVcChatThread(){
     if(msg.role==="user"){
       const canRestore=msg.id&&msg.genSettings;
       return `<div style="align-self:flex-end;max-width:82%;display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-        <div class="ig-bubble-user" style="align-self:stretch;max-width:none">${msg.content}</div>
+        <div class="ig-bubble-user" style="align-self:stretch;max-width:none">${highlightVcTags(msg.content)}</div>
         <div style="display:flex;gap:10px;padding:0 4px">
           ${canRestore?`<button class="ig-msg-action" onclick="editVcUserMessage('${msg.id}')" title="Edit">✏️ Edit</button>`:''}
           <button class="ig-msg-action" onclick="copyVcUserMessage('${msg.id||''}')" title="Copy">📋 Copy</button>
