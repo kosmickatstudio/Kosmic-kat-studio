@@ -3978,6 +3978,11 @@ async function genViaKlingO3Reference(prompt,ratio,duration,imageUrls,videoUrls,
   // entries (video_url) — verified against fal's O3 4K reference-to-video
   // docs, which show exactly this mixed shape. Images first, then videos,
   // so @Element1/@Element2/etc match the order shown in the upload UI.
+  const missingImg=imageUrls.map((u,i)=>!u?`image ${i+1}`:null).filter(Boolean);
+  const missingVid=(videoUrls||[]).map((u,i)=>!u?`video ${i+1}`:null).filter(Boolean);
+  if(missingImg.length||missingVid.length){
+    throw new Error(`Reference ${[...missingImg,...missingVid].join(", ")} has no usable URL — remove and re-attach it, then try again`);
+  }
   const elements=[
     ...imageUrls.map(u=>({frontal_image_url:u})),
     ...(videoUrls||[]).map(u=>({video_url:u})),
@@ -5470,7 +5475,16 @@ async function sendVcMultiShotPrompt(){
         // Real elements array for multi-character consistency across shots —
         // replaces the old single image_url field, which silently only ever
         // used the FIRST uploaded image and ignored the rest.
-        if(i2v)endpoint=i2v.endpoint;
+        //
+        // Deliberately NOT swapping to the image-to-video endpoint here.
+        // Confirmed by a real failure: that endpoint requires start_image_url
+        // unconditionally, even when elements are provided — but pure
+        // multi-reference mode (no single start frame) has nothing to put
+        // there. fal's own docs show elements + multi_prompt working
+        // directly on the text-to-video endpoint without a start frame, so
+        // this stays on the originally selected model/endpoint instead.
+        const missing=hostedImages.map((u,i)=>!u?i+1:null).filter(Boolean);
+        if(missing.length)throw new Error(`Reference image ${missing.join(", ")} has no usable URL — remove and re-attach it, then try again`);
         body.elements=hostedImages.map(u=>({frontal_image_url:u}));
       } else if(S.vcMultiImages.length&&i2v){
         endpoint=i2v.endpoint;
@@ -5664,7 +5678,15 @@ async function sendVcChatPrompt(){
           // previous version of this sent a flat input_image_urls array, which
           // is a real fal field but belongs to an unrelated v1.6-only endpoint —
           // sending it here would have been silently ignored by v2.x/v3.
-          if(i2v)endpoint=i2v.endpoint;
+          //
+          // Deliberately NOT swapping to the image-to-video endpoint here —
+          // same reasoning as the multi-shot branch: that endpoint requires
+          // start_image_url unconditionally (confirmed by a real failure),
+          // which pure multi-reference mode has no value for. Stays on the
+          // originally selected text-to-video endpoint, which fal's docs
+          // confirm supports elements + prompt directly.
+          const missing=hostedImages.map((u,i)=>!u?i+1:null).filter(Boolean);
+          if(missing.length)throw new Error(`Reference image ${missing.join(", ")} has no usable URL — remove and re-attach it, then try again`);
           body.elements=hostedImages.map(u=>({frontal_image_url:u}));
         } else if(i2v&&S.vcMultiImages.length){
           // Exactly 1 reference image — swap to the real image-to-video endpoint
@@ -11758,7 +11780,13 @@ const NodeCanvas=(function(){
         if(imageUrls.length){
           const i2v=IMAGE_TO_VIDEO_MAP[node.data.model];
           if(klingCap&&klingCap.elements&&imageUrls.length>1){
-            if(i2v)endpoint=i2v.endpoint;
+            // Deliberately NOT swapping to the image-to-video endpoint here —
+            // confirmed by a real failure that it requires start_image_url
+            // unconditionally, which pure multi-reference mode has nothing
+            // to put there. Stays on the text-to-video endpoint, which fal's
+            // docs confirm supports elements directly.
+            const missing=imageUrls.map((u,i)=>!u?i+1:null).filter(Boolean);
+            if(missing.length)throw new Error(`Reference image ${missing.join(", ")} has no usable URL`);
             body.elements=imageUrls.map(u=>({frontal_image_url:u}));
           } else if(i2v){
             endpoint=i2v.endpoint;
