@@ -474,6 +474,20 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 .nc-minimap-viewport{position:absolute;border:1.5px solid var(--gold);border-radius:2px;pointer-events:none}
 .nc-cost-readout{position:absolute;bottom:10px;left:10px;z-index:20;background:var(--glass-solid);backdrop-filter:blur(14px);border:1px solid var(--glass-brd);border-radius:10px;padding:6px 12px;font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--gold);box-shadow:0 4px 16px rgba(0,0,0,0.1)}/* ── DIRECTOR CHAT ── */
 .dc-approval-card{background:var(--glass-solid);border:1px solid var(--glass-brd);border-radius:12px;padding:10px;margin-top:6px}
+/* ── VIDEO CANVAS MULTI-SHOT — segmented control replaces a native <select>
+   (which renders as an unstyleable OS sheet on mobile) with a real themed
+   toggle, and shot cards get the same premium panel treatment used elsewhere
+   (Cinzel numerals, gold/violet gradient border) instead of a plain box. ── */
+.vc-shottype-toggle{display:flex;gap:6px;background:var(--pearl2);border:1.5px solid var(--glass-brd);border-radius:10px;padding:3px;margin-bottom:4px}
+.vc-shottype-btn{flex:1;padding:8px 10px;border:none;border-radius:8px;background:transparent;color:var(--textm);font-family:'Inter',sans-serif;font-size:11px;font-weight:700;line-height:1.35;cursor:pointer;transition:all 0.15s ease;text-align:center}
+.vc-shottype-btn.active{background:linear-gradient(135deg,var(--violet),var(--vm));color:#fff;box-shadow:0 3px 10px var(--glow-ice)}
+.vc-shottype-note{font-size:10px;color:var(--textm);margin-bottom:10px;padding:0 2px}
+.vc-shot-card{border:1.5px solid var(--glass-brd);border-radius:12px;padding:10px 12px;background:linear-gradient(180deg,var(--glass-solid),var(--pearl));position:relative;overflow:hidden}
+.vc-shot-card::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--gold),var(--violet))}
+.vc-shot-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.vc-shot-num{font-family:'Cinzel',serif;font-size:11px;font-weight:700;color:var(--violet);letter-spacing:0.04em}
+.vc-shot-dur-wrap.paced{opacity:0.55}
+.vc-shot-dur-label{font-size:9px;color:var(--gold);font-weight:700;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:3px;display:block}
 .dc-approval-card img,.dc-approval-card video{border-radius:8px;margin-bottom:4px}
 .dc-approval-actions{display:flex;gap:8px;margin-top:8px}
 .dc-error-card{background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:10px;padding:10px;font-size:11px;color:var(--red);margin-top:6px}
@@ -4126,10 +4140,15 @@ function renderVideoCanvas(el){
               <span class="f-label" style="margin:0">🎬 Multi-Shot Storyboard <span style="font-weight:400;color:var(--texts)">(up to 6 shots, one generation)</span></span>
             </label>
             <div id="vcMultiShotBuilder" style="display:none">
-              <div class="f-group"><label class="f-label">Shot Type</label><select class="f-select" id="vcShotType">
-                <option value="customize">Customize — set each shot's prompt & duration</option>
-                <option value="intelligent">Intelligent — model auto-paces the shots</option>
-              </select></div>
+              <div class="f-group">
+                <label class="f-label">Shot Type</label>
+                <div class="vc-shottype-toggle">
+                  <button type="button" class="vc-shottype-btn active" data-val="customize" onclick="setVcShotType('customize')">Customize<br>set each shot's prompt &amp; duration</button>
+                  <button type="button" class="vc-shottype-btn" data-val="intelligent" onclick="setVcShotType('intelligent')">Intelligent<br>model auto-paces the shots</button>
+                </div>
+                <input type="hidden" id="vcShotType" value="customize">
+                <div class="vc-shottype-note" id="vcShotTypeNote">You control exactly when each shot starts and ends.</div>
+              </div>
               <div id="vcShotList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px"></div>
               <button type="button" class="btn btn-outline btn-sm" onclick="addVcShot()">+ Add Shot</button>
               <div id="vcShotTotalInfo" style="font-size:11px;color:var(--textm);margin-top:8px"></div>
@@ -4420,6 +4439,20 @@ function clearMotionBrush(){
 // ── KLING MULTI-SHOT STORYBOARD — real multi_prompt/shot_type schema ──
 S.vcShots=S.vcShots||[];
 
+// Intelligent mode means fal's own model decides shot pacing/boundaries rather
+// than strictly following the per-shot durations you set — so those duration
+// pickers become advisory in that mode, not a hard promise. This function is
+// what makes selecting Customize vs Intelligent actually visibly do something,
+// instead of just changing a value nothing reads until submit.
+function setVcShotType(val){
+  document.getElementById("vcShotType").value=val;
+  document.querySelectorAll(".vc-shottype-btn").forEach(b=>b.classList.toggle("active",b.dataset.val===val));
+  document.getElementById("vcShotTypeNote").textContent=val==="intelligent"
+    ?"The model paces and times the shots itself — durations below are a rough guide, not a guarantee."
+    :"You control exactly when each shot starts and ends.";
+  renderVcShotList();
+}
+
 function toggleMultiShotMode(){
   const on=document.getElementById("vcMultiShotToggle").checked;
   document.getElementById("vcMultiShotBuilder").style.display=on?"block":"none";
@@ -4440,14 +4473,18 @@ function renderVcShotList(){
   const wrap=document.getElementById("vcShotList");
   if(!wrap)return;
   const durOptions=VIDEO_MODEL_DURATIONS[document.getElementById("vcModel").value]?.options||[3,4,5,6,7,8,9,10,11,12,13,14,15];
+  const isIntelligent=document.getElementById("vcShotType")?.value==="intelligent";
   wrap.innerHTML=S.vcShots.map((s,i)=>`
-    <div style="border:1px solid var(--border);border-radius:8px;padding:8px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <span style="font-size:11px;font-weight:700;color:var(--violet)">Shot ${i+1}</span>
-        ${S.vcShots.length>1?`<button type="button" onclick="removeVcShot(${i})" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:12px">✕ Remove</button>`:''}
+    <div class="vc-shot-card">
+      <div class="vc-shot-card-head">
+        <span class="vc-shot-num">Shot ${i+1}</span>
+        ${S.vcShots.length>1?`<button type="button" onclick="removeVcShot(${i})" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:11px;font-weight:600">✕ Remove</button>`:''}
       </div>
-      <textarea class="f-textarea" style="min-height:44px;margin-bottom:6px" placeholder="Describe this shot…" oninput="updateVcShotField(${i},'prompt',this.value)">${s.prompt}</textarea>
-      <select class="f-select" onchange="updateVcShotField(${i},'duration',this.value)">${durOptions.map(d=>`<option value="${d}" ${s.duration==String(d)?'selected':''}>${d}s</option>`).join('')}</select>
+      <textarea class="f-textarea" style="min-height:44px;margin-bottom:8px" placeholder="Describe this shot…" oninput="updateVcShotField(${i},'prompt',this.value)">${s.prompt}</textarea>
+      <div class="vc-shot-dur-wrap ${isIntelligent?'paced':''}">
+        <span class="vc-shot-dur-label">${isIntelligent?'Approx. duration':'Duration'}</span>
+        <select class="f-select" onchange="updateVcShotField(${i},'duration',this.value)">${durOptions.map(d=>`<option value="${d}" ${s.duration==String(d)?'selected':''}>${d}s</option>`).join('')}</select>
+      </div>
     </div>`).join('');
   updateVcShotTotal();
 }
