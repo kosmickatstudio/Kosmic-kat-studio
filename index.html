@@ -4621,7 +4621,14 @@ function dataUrlToBlob(dataUrl){
 // no other explanation looks like. Uploading to hosted URLs first (same real
 // fal storage protocol used for voice cloning) removes this as a variable.
 async function uploadRefsToFal(items,apiKey){
-  return Promise.all(items.map(async i=>{
+  return Promise.all(items.map(async(i,idx)=>{
+    if(!i.dataUrl||typeof i.dataUrl!=="string"){
+      // Catch this here, immediately, with a clear message — instead of
+      // silently sending an empty/malformed element and finding out 30+
+      // seconds later, after a wasted generation attempt, via a cryptic
+      // per-field validation error from fal.
+      throw new Error(`Reference file ${idx+1}${i.name?` ("${i.name}")`:""} has no data — remove it and re-attach, then try again`);
+    }
     if(!i.dataUrl.startsWith("data:"))return i.dataUrl; // already a hosted URL (e.g. restored via Edit/Retry) — nothing to upload
     const blob=dataUrlToBlob(i.dataUrl);
     return uploadToFalStorage(blob,apiKey);
@@ -9389,46 +9396,56 @@ async function downloadAssetsZip(){
   }
 }
 
-function handleAssetUpload(event){
+// The Asset Library used to store every uploaded image/audio file as a full
+// base64 data URI directly in localStorage, permanently — unlike most other
+// uploads in this app (which are one-off, e.g. a project thumbnail), this
+// one is specifically designed to accumulate forever as a growing library.
+// Images already got resized/compressed, but that only reduces the size per
+// file, not the fact that they never leave localStorage — audio wasn't
+// compressed at all, and a single file up to the 10MB cap becomes ~13MB of
+// base64 on its own. This is very likely the dominant real driver of hitting
+// the browser's storage quota over time. Now uploads to Firebase Storage
+// (already configured and used elsewhere in this app for exactly this kind
+// of thing) and stores the lightweight hosted URL instead.
+async function handleAssetUpload(event){
   const files=Array.from(event.target.files||[]);
   if(!files.length)return;
   let processed=0;
-  files.forEach(file=>{
+  for(const file of files){
     const isImage=file.type.startsWith("image/");
     const isAudio=file.type.startsWith("audio/");
-    if(!isImage&&!isAudio){toast(`Skipped ${file.name} — only images and audio supported`,"error");processed++;return;}
-    if(file.size>10*1024*1024){toast(`Skipped ${file.name} — max 10MB`,"error");processed++;return;}
-    const reader=new FileReader();
-    reader.onload=e=>{
+    if(!isImage&&!isAudio){toast(`Skipped ${file.name} — only images and audio supported`,"error");processed++;continue;}
+    if(file.size>10*1024*1024){toast(`Skipped ${file.name} — max 10MB`,"error");processed++;continue;}
+    try{
+      let uploadBlob=file,ext=file.name.split(".").pop()||"bin";
       if(isImage){
-        // Resize/compress images same as character refs
-        const img=new Image();
-        img.onload=()=>{
-          const maxDim=800;
-          let w=img.width,h=img.height;
-          if(w>h&&w>maxDim){h=Math.round(h*(maxDim/w));w=maxDim;}
-          else if(h>maxDim){w=Math.round(w*(maxDim/h));h=maxDim;}
-          const canvas=document.createElement("canvas");
-          canvas.width=w;canvas.height=h;
-          const ctx=canvas.getContext("2d");
-          ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);
-          ctx.drawImage(img,0,0,w,h);
-          const dataUrl=canvas.toDataURL("image/jpeg",0.85);
-          addUpload({id:"upload_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),name:file.name,kind:"image",data:dataUrl,created:new Date().toISOString()});
-          processed++;
-          if(processed===files.length)renderAssets(document.getElementById("moduleContent"));
-        };
-        img.onerror=()=>{toast(`Couldn't read ${file.name}`,"error");processed++;};
-        img.src=e.target.result;
-      } else {
-        addUpload({id:"upload_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),name:file.name,kind:"audio",data:e.target.result,created:new Date().toISOString()});
-        processed++;
-        if(processed===files.length)renderAssets(document.getElementById("moduleContent"));
+        // Resize/compress before upload — smaller file, faster upload, same
+        // as before, just no longer the thing that gets stored forever locally.
+        const dataUrl=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.target.result);r.onerror=rej;r.readAsDataURL(file);});
+        const img=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=dataUrl;});
+        const maxDim=800;
+        let w=img.width,h=img.height;
+        if(w>h&&w>maxDim){h=Math.round(h*(maxDim/w));w=maxDim;}
+        else if(h>maxDim){w=Math.round(w*(maxDim/h));h=maxDim;}
+        const canvas=document.createElement("canvas");
+        canvas.width=w;canvas.height=h;
+        const ctx=canvas.getContext("2d");
+        ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);
+        ctx.drawImage(img,0,0,w,h);
+        uploadBlob=await new Promise(res=>canvas.toBlob(res,"image/jpeg",0.85));
+        ext="jpg";
       }
-    };
-    reader.onerror=()=>{toast(`Failed to read ${file.name}`,"error");processed++;};
-    reader.readAsDataURL(file);
-  });
+      const path=`asset-library/${Date.now()}_${Math.random().toString(36).slice(2,6)}.${ext}`;
+      const ref=fbStorage.ref(path);
+      await ref.put(uploadBlob);
+      const hostedUrl=await ref.getDownloadURL();
+      addUpload({id:"upload_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),name:file.name,kind:isImage?"image":"audio",data:hostedUrl,created:new Date().toISOString()});
+    }catch(err){
+      toast(`Couldn't upload ${file.name}: ${err.message}`,"error");
+    }
+    processed++;
+  }
+  if(processed===files.length)renderAssets(document.getElementById("moduleContent"));
 }
 
 function addUpload(u){
