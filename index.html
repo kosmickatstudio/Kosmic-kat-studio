@@ -1134,6 +1134,9 @@ const COST_TABLE={
   "fal-ai/kling-video/v2.6/pro/image-to-video":0.90,
   "fal-ai/kling-video/v3/standard/text-to-video":0.70,
   "fal-ai/kling-video/v3/standard/image-to-video":0.70,
+  "fal-ai/kling-video/v3/pro/text-to-video":1.10,
+  "fal-ai/kling-video/v3/pro/image-to-video":1.10,
+  "fal-ai/kling-video/o3/pro/reference-to-video":1.10,
   "fal-ai/veo3.1":2.00,
   "fal-ai/veo3.1/image-to-video":2.00,
   "fal-ai/esrgan":0.01,
@@ -1393,6 +1396,8 @@ const MODEL_BANNERS={
   "fal-ai/kling-video/v2.1/master/text-to-video":"linear-gradient(135deg,#1E1B2E,#6D28D9)",
   "fal-ai/kling-video/v2.6/pro/text-to-video":"linear-gradient(135deg,#18181B,#52525B)",
   "fal-ai/kling-video/v3/standard/text-to-video":"linear-gradient(135deg,#1E293B,#475569)",
+  "fal-ai/kling-video/v3/pro/text-to-video":"linear-gradient(135deg,#1E1B2E,#3B82F6)",
+  "fal-ai/kling-video/o3/pro/reference-to-video":"linear-gradient(135deg,#1E1B2E,#8B5CF6)",
   "fal-ai/veo3.1":"linear-gradient(135deg,#1E1B4B,#4338CA)",
 };
 const DIRECTOR_BANNERS={
@@ -1504,6 +1509,8 @@ function renderHome(el){
           {id:"fal-ai/kling-video/v2.1/master/text-to-video",label:"Kling 2.1 Master"},
           {id:"fal-ai/kling-video/v2.6/pro/text-to-video",label:"Kling 2.6 Pro"},
           {id:"fal-ai/kling-video/v3/standard/text-to-video",label:"Kling 3.0 Standard"},
+          {id:"fal-ai/kling-video/v3/pro/text-to-video",label:"Kling 3.0 Pro"},
+          {id:"fal-ai/kling-video/o3/pro/reference-to-video",label:"Kling O3 Pro (Multi-Reference)"},
           {id:"fal-ai/veo3.1",label:"Veo 3.1"},
         ].map(m=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:10px 10px;border-radius:8px;background:${MODEL_BANNERS[m.id]||'linear-gradient(135deg,#1A2E1F,#2D5A3D)'};position:relative;overflow:hidden;min-height:20px">
           <div style="position:absolute;inset:0;background:rgba(10,5,20,0.42)"></div>
@@ -3204,6 +3211,8 @@ const MODEL_LOGOS={
   "fal-ai/kling-video/v2.1/master/text-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/kling-video/v2.6/pro/text-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/kling-video/v3/standard/text-to-video":{mono:"K",bg:"#1B5EFF"},
+  "fal-ai/kling-video/v3/pro/text-to-video":{mono:"K",bg:"#1B5EFF"},
+  "fal-ai/kling-video/o3/pro/reference-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/veo3.1":{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
   "fal-ai/veo3.1/reference-to-video":{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
 };
@@ -3884,15 +3893,19 @@ const LENS_PRESETS=[
   {label:"Fisheye",value:"fisheye lens distortion"},
 ];
 // Every model here has a directly-verified image-to-video endpoint + field name —
-// nothing in this map is guessed. Kling's schema is NOT consistent across tiers
-// (v3 Pro uses start_image_url, not image_url) so each entry was checked individually
-// rather than assumed from a sibling endpoint.
+// nothing in this map is guessed. Kling's schema is NOT consistent across tiers:
+// v2.1/v2.6 use image_url, but v3 (Standard AND Pro) use start_image_url — this
+// was previously wrong (v3/standard was incorrectly mapped to image_url, meaning
+// the field silently got ignored by fal since it isn't part of v3's schema, and
+// reference images were never actually applied). Verified against fal's actual
+// v3 API docs before fixing.
 const IMAGE_TO_VIDEO_MAP={
   "bytedance/seedance-2.0/fast/text-to-video":{endpoint:"bytedance/seedance-2.0/fast/image-to-video",field:"image_url"},
   "bytedance/seedance-2.0/text-to-video":{endpoint:"bytedance/seedance-2.0/image-to-video",field:"image_url"},
   "fal-ai/kling-video/v2.1/master/text-to-video":{endpoint:"fal-ai/kling-video/v2.1/master/image-to-video",field:"image_url"},
   "fal-ai/kling-video/v2.6/pro/text-to-video":{endpoint:"fal-ai/kling-video/v2.6/pro/image-to-video",field:"image_url"},
-  "fal-ai/kling-video/v3/standard/text-to-video":{endpoint:"fal-ai/kling-video/v3/standard/image-to-video",field:"image_url"},
+  "fal-ai/kling-video/v3/standard/text-to-video":{endpoint:"fal-ai/kling-video/v3/standard/image-to-video",field:"start_image_url"},
+  "fal-ai/kling-video/v3/pro/text-to-video":{endpoint:"fal-ai/kling-video/v3/pro/image-to-video",field:"start_image_url"},
   "fal-ai/veo3.1":{endpoint:"fal-ai/veo3.1/image-to-video",field:"image_url"},
 };
 
@@ -3918,6 +3931,35 @@ async function genViaVeoReference(prompt,ratio,duration,imageUrls){
   if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
   const model="fal-ai/veo3.1/reference-to-video";
   const body={prompt,image_urls:imageUrls,audio:true};
+  const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
+  const submitData=await submitRes.json();
+  if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
+  return pollFalVideoResult(model,submitData,apiKey);
+}
+
+// ── KLING O3 PRO REFERENCE-TO-VIDEO — real endpoint, verified against fal's
+// actual O3 API docs. Each uploaded image becomes its own `elements` entry
+// (frontal_image_url), referenced in the prompt as @Element1, @Element2, etc —
+// this is the real multi-character consistency mechanism, not a flat image
+// array (that field, input_image_urls, belongs to an unrelated older v1.6-only
+// endpoint and doesn't exist on O3 — a previous version of this code sent it
+// to the wrong endpoint entirely, which fal would have silently ignored).
+async function genViaKlingO3Reference(prompt,ratio,duration,imageUrls,multiShots,shotType){
+  const apiKey=gs("api_falai","");
+  if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+  const model="fal-ai/kling-video/o3/pro/reference-to-video";
+  const body={
+    prompt:multiShots&&multiShots.length?undefined:prompt, // prompt and multi_prompt are mutually exclusive per fal's schema
+    elements:imageUrls.map(u=>({frontal_image_url:u})),
+    aspect_ratio:ratio,
+    generate_audio:true,
+  };
+  if(multiShots&&multiShots.length){
+    body.multi_prompt=multiShots.map(s=>({prompt:s.prompt,duration:String(s.duration)}));
+    body.shot_type=shotType||"customize";
+  } else {
+    body.duration=String(duration);
+  }
   const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
   const submitData=await submitRes.json();
   if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
@@ -3982,11 +4024,25 @@ const VIDEO_MODEL_CAPABILITIES={
   "bytedance/seedance-2.0/text-to-video":{},
   "bytedance/seedance-2.0/fast/reference-to-video":{multiRef:true,maxImages:9,maxVideos:3,maxAudio:3,provider:"seedance-ref",tagSyntax:"@Image1 / @Video1 / @Audio1"},
   "bytedance/seedance-2.0/reference-to-video":{multiRef:true,maxImages:9,maxVideos:3,maxAudio:3,provider:"seedance-ref",tagSyntax:"@Image1 / @Video1 / @Audio1"},
-  "fal-ai/kling-video/v2.1/master/text-to-video":{multiImage:true,maxImages:4,negPrompt:true},
-  "fal-ai/kling-video/v2.6/pro/text-to-video":{multiImage:true,maxImages:4,negPrompt:true},
-  "fal-ai/kling-video/v3/standard/text-to-video":{multiImage:true,maxImages:4,negPrompt:true},
+  // v2.1/v2.6 only have a confirmed single-image reference endpoint (image_url) —
+  // no dedicated multi-image/elements endpoint exists for these tiers on fal, so
+  // maxImages is capped at 1 rather than silently sending images that get ignored.
+  "fal-ai/kling-video/v2.1/master/text-to-video":{multiImage:true,maxImages:1,negPrompt:true},
+  "fal-ai/kling-video/v2.6/pro/text-to-video":{multiImage:true,maxImages:1,negPrompt:true},
+  // v3 (Standard/Pro) genuinely supports both: single start_image_url for a
+  // first-frame reference, OR a real elements array (frontal_image_url per
+  // character) for multi-character consistency — verified against fal's v3
+  // API docs, not assumed from the v2.x pattern. multiShot: multi_prompt/
+  // shot_type storyboarding was added in v3 and isn't supported pre-v3.
+  "fal-ai/kling-video/v3/standard/text-to-video":{multiImage:true,maxImages:4,negPrompt:true,multiShot:true,elements:true,tagSyntax:"@Element1 (when 2+ reference images)"},
+  "fal-ai/kling-video/v3/pro/text-to-video":{multiImage:true,maxImages:4,negPrompt:true,multiShot:true,elements:true,tagSyntax:"@Element1 (when 2+ reference images)"},
   "fal-ai/veo3.1":{},
   "fal-ai/veo3.1/reference-to-video":{multiRef:true,maxImages:3,provider:"veo-ref"},
+  // Kling O3 Pro has no plain text-to-video form — it's reference-first by
+  // design (fal: "O3 is best for reference-heavy workflows with character
+  // consistency"), so it's wired the same way as Seedance/Veo's ref models:
+  // a dedicated provider path that requires at least one image.
+  "fal-ai/kling-video/o3/pro/reference-to-video":{multiRef:true,maxImages:4,provider:"kling-o3-ref",multiShot:true,tagSyntax:"@Element1"},
 };
 
 function renderVideoCanvas(el){
@@ -4030,6 +4086,8 @@ function renderVideoCanvas(el){
                 <option value="fal-ai/kling-video/v2.1/master/text-to-video">Kling 2.1 Master</option>
                 <option value="fal-ai/kling-video/v2.6/pro/text-to-video">Kling 2.6 Pro</option>
                 <option value="fal-ai/kling-video/v3/standard/text-to-video">Kling 3.0 Standard</option>
+                <option value="fal-ai/kling-video/v3/pro/text-to-video">Kling 3.0 Pro</option>
+                <option value="fal-ai/kling-video/o3/pro/reference-to-video">Kling O3 Pro — Multi-Reference (up to 4 characters)</option>
               </optgroup>
               <optgroup label="Veo (Google DeepMind)">
                 <option value="fal-ai/veo3.1">Veo 3.1</option>
@@ -4040,7 +4098,7 @@ function renderVideoCanvas(el){
           </div>
           <div class="f-row">
             <div class="f-group" id="vcResWrap"><label class="f-label">Resolution</label><select class="f-select" id="vcRes" onchange="updateVcCostHint()"></select></div>
-            <div class="f-group"><label class="f-label">Aspect Ratio</label><select class="f-select" id="vcRatio"><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option><option value="4:3">4:3</option><option value="3:4">3:4</option></select></div>
+            <div class="f-group"><label class="f-label">Aspect Ratio</label><select class="f-select" id="vcRatio"></select></div>
           </div>
           <div class="f-group"><label class="f-label">Duration <span id="vcDurationLabel" style="font-weight:400;color:var(--texts)"></span></label>
             <input type="range" id="vcDurationSlider" min="0" max="0" step="1" value="0" style="width:100%" oninput="updateVcDurationFromSlider()">
@@ -4597,6 +4655,8 @@ const VIDEO_PRICING={
   "fal-ai/kling-video/v2.1/master/text-to-video":{perSec:0.112},
   "fal-ai/kling-video/v2.6/pro/text-to-video":{perSec:0.112},
   "fal-ai/kling-video/v3/standard/text-to-video":{perSec:0.084},
+  "fal-ai/kling-video/v3/pro/text-to-video":{perSec:0.28},
+  "fal-ai/kling-video/o3/pro/reference-to-video":{perSec:0.14},
   "fal-ai/veo3.1":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
   "fal-ai/veo3.1/reference-to-video":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
 };
@@ -4655,6 +4715,7 @@ function updateVcModelUI(){
   slider.value=0;
   updateVcDurationFromSlider();
   populateResolutionSelect("vcRes","vcResWrap",model);
+  updateVcRatioSelect(model);
   updateVcCostHint();
 
   document.getElementById("vcNegPromptWrap").style.display=cap.negPrompt?"block":"none";
@@ -4665,11 +4726,15 @@ function updateVcModelUI(){
     renderVcMultiPreview("vcMultiImagePreview",S.vcMultiImages,false);
     toast(`This model only supports ${cap.maxImages} reference images — removed the last ${removed}`,"error");
   }
+  const isKling=model.startsWith("fal-ai/kling-video");
   document.getElementById("vcMotionBrushWrap").style.display=(cap.multiImage&&S.vcMultiImages.length>0)?"block":"none";
-  document.getElementById("vcMultiShotWrap").style.display=cap.multiImage?"block":"none";
-  document.getElementById("vcVoiceWrap").style.display=cap.multiImage?"block":"none";
-  if(cap.multiImage)renderVcVoiceList();
-  if(!cap.multiImage){document.getElementById("vcMultiShotToggle").checked=false;toggleMultiShotMode();}
+  // Multi-shot storyboarding (multi_prompt/shot_type) was added in Kling v3 —
+  // v2.1/v2.6 don't support it, so this now gates on the real multiShot flag
+  // instead of piggybacking on multiImage (which older tiers also have).
+  document.getElementById("vcMultiShotWrap").style.display=cap.multiShot?"block":"none";
+  document.getElementById("vcVoiceWrap").style.display=isKling?"block":"none";
+  if(isKling)renderVcVoiceList();
+  if(!cap.multiShot){document.getElementById("vcMultiShotToggle").checked=false;toggleMultiShotMode();}
   document.getElementById("vcMultiVideoWrap").style.display=(cap.multiRef&&cap.maxVideos)?"block":"none";
   document.getElementById("vcMultiAudioWrap").style.display=(cap.multiRef&&cap.maxAudio)?"block":"none";
   const tagHint=document.getElementById("vcTagHint");
@@ -4686,7 +4751,9 @@ function updateVcModelUI(){
   if(KLING_FIXED_RESOLUTION_NOTE[model])note.textContent=KLING_FIXED_RESOLUTION_NOTE[model];
   else if(cap.provider==="seedance-ref")note.textContent="Real multi-modal: combine images, video, and audio references in one generation.";
   else if(cap.provider==="veo-ref")note.textContent="Real reference-based generation — keeps a character/product/object consistent across the shot.";
-  else if(cap.multiImage)note.textContent="Up to 4 images for multi-image generation, plus negative prompt support.";
+  else if(cap.provider==="kling-o3-ref")note.textContent="Real multi-character reference generation — each uploaded image locks in one character/object across the whole clip.";
+  else if(cap.elements)note.textContent=`1 image = first-frame reference. 2+ images = real multi-character reference (up to ${cap.maxImages}), plus negative prompt support.`;
+  else if(cap.multiImage)note.textContent=`Up to ${cap.maxImages} reference image${cap.maxImages===1?'':'s'}, plus negative prompt support.`;
   else note.textContent="";
   updateVcAttachmentBar();
 }
@@ -5043,10 +5110,16 @@ async function sendVcMultiShotPrompt(){
   if(totalDuration>15){toast("Total duration exceeds Kling's 15s max — trim a shot","error");return;}
 
   const model=document.getElementById("vcModel").value;
+  const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
+  // Multi-shot storyboarding (multi_prompt/shot_type) was added in Kling v3 —
+  // this UI is now hidden for v2.1/v2.6 via updateVcModelUI's multiShot gate,
+  // but guard here too in case this gets called some other way.
+  if(!cap.multiShot){toast("This model doesn't support multi-shot storyboarding — switch to Kling 3.0 Standard/Pro or O3 Pro.","error");return;}
   const ratio=document.getElementById("vcRatio").value;
   const shotType=document.getElementById("vcShotType").value;
   const negPrompt=document.getElementById("vcNegPrompt")?.value.trim()||"";
   const directorStyle=getActiveDirectorPrompt();
+  const shotsPayload=validShots.map(s=>({prompt:directorStyle?`${s.prompt}, ${directorStyle}`:s.prompt,duration:s.duration}));
 
   pushVcChatMessage({role:"user",content:`🎬 Multi-shot storyboard — ${validShots.length} shots, ${totalDuration}s total`});
   const loadingId="vcLoading_"+Date.now();
@@ -5055,21 +5128,38 @@ async function sendVcMultiShotPrompt(){
   sendBtn.disabled=true;
 
   try{
-    const apiKey=gs("api_falai","");
-    if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
-    const body={
-      multi_prompt:validShots.map(s=>({prompt:directorStyle?`${s.prompt}, ${directorStyle}`:s.prompt,duration:String(s.duration)})),
-      shot_type:shotType,
-      aspect_ratio:ratio,
-      generate_audio:true,
-    };
-    if(negPrompt)body.negative_prompt=negPrompt;
-    if(S.klingSelectedVoices.length)body.voice_ids=S.klingSelectedVoices;
-    if(S.vcMultiImages.length)body.image_url=S.vcMultiImages[0].dataUrl;
-    const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
-    const submitData=await submitRes.json();
-    if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
-    const videoUrl=await pollFalVideoResult(model,submitData,apiKey);
+    let videoUrl;
+    if(cap.provider==="kling-o3-ref"){
+      if(!S.vcMultiImages.length)throw new Error("Add at least 1 reference image (up to 4) — O3 Pro needs one to generate.");
+      videoUrl=await genViaKlingO3Reference(null,ratio,null,S.vcMultiImages.map(i=>i.dataUrl),shotsPayload,shotType);
+    } else {
+      const apiKey=gs("api_falai","");
+      if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+      let endpoint=model;
+      const body={
+        multi_prompt:shotsPayload.map(s=>({prompt:s.prompt,duration:String(s.duration)})),
+        shot_type:shotType,
+        aspect_ratio:ratio,
+        generate_audio:true,
+      };
+      if(negPrompt)body.negative_prompt=negPrompt;
+      if(S.klingSelectedVoices.length)body.voice_ids=S.klingSelectedVoices;
+      const i2v=IMAGE_TO_VIDEO_MAP[model];
+      if(S.vcMultiImages.length>1&&cap.elements){
+        // Real elements array for multi-character consistency across shots —
+        // replaces the old single image_url field, which silently only ever
+        // used the FIRST uploaded image and ignored the rest.
+        if(i2v)endpoint=i2v.endpoint;
+        body.elements=S.vcMultiImages.map(i=>({frontal_image_url:i.dataUrl}));
+      } else if(S.vcMultiImages.length&&i2v){
+        endpoint=i2v.endpoint;
+        body[i2v.field]=S.vcMultiImages[0].dataUrl;
+      }
+      const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
+      const submitData=await submitRes.json();
+      if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
+      videoUrl=await pollFalVideoResult(endpoint,submitData,apiKey);
+    }
     const multiShotPromptJoined=validShots.map(s=>s.prompt).join(" → ");
     const savedAssetMs=createVideoAsset(videoUrl,multiShotPromptJoined,"");
     replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:"Kling Multi-Shot",prompt:multiShotPromptJoined,assetId:savedAssetMs.id}});
@@ -5181,35 +5271,54 @@ async function sendVcChatPrompt(){
       pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with reference images…"});
       videoUrl=await genViaVeoReference(prompt,ratio,duration,S.vcMultiImages.map(i=>i.dataUrl));
       providerLabel="Veo 3.1 Reference-to-Video";costKey=model;
+    } else if(cap.provider==="kling-o3-ref"){
+      if(!S.vcMultiImages.length)throw new Error("Add at least 1 reference image (up to 4) — this model needs one to generate.");
+      pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with reference images…"});
+      videoUrl=await genViaKlingO3Reference(prompt,ratio,duration,S.vcMultiImages.map(i=>i.dataUrl));
+      providerLabel="Kling O3 Pro Reference-to-Video";costKey=model;
     } else {
       pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating…"});
       const apiKey=gs("api_falai","");
       if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
       let body={prompt,aspect_ratio:ratio};
+      let endpoint=model; // may get swapped below to the real image-to-video endpoint for this tier
       const durationConfig=VIDEO_MODEL_DURATIONS[model];
       const formattedDuration=durationConfig?durationConfig.format(duration):duration;
       if(model.startsWith("fal-ai/kling-video")){
         body.duration=formattedDuration;body.generate_audio=true;
         if(negPrompt)body.negative_prompt=negPrompt;
         if(S.klingSelectedVoices.length)body.voice_ids=S.klingSelectedVoices;
+        const i2v=IMAGE_TO_VIDEO_MAP[model];
         if(S.vcMotionBrush){
-          // Motion Brush requires a single base image (image_url) + masks + trajectory,
-          // not the multi-image array — these are mutually exclusive modes of the same endpoint.
-          body.image_url=S.vcMultiImages[0].dataUrl;
+          // Motion Brush requires a single base image + masks + trajectory on the
+          // real image-to-video endpoint — these are mutually exclusive modes.
+          if(i2v){endpoint=i2v.endpoint;body[i2v.field]=S.vcMultiImages[0].dataUrl;}
           body.dynamic_masks=[{mask_url:S.vcMotionBrush.dynamicMaskUrl,trajectories:S.vcMotionBrush.trajectories}];
           if(S.vcMotionBrush.staticMaskUrl)body.static_mask_url=S.vcMotionBrush.staticMaskUrl;
-        } else if(cap.multiImage&&S.vcMultiImages.length){
-          body.input_image_urls=S.vcMultiImages.map(i=>i.dataUrl);
+        } else if(cap.elements&&S.vcMultiImages.length>1){
+          // 2+ reference images on a v3+ tier — real elements array (verified
+          // schema), addressed in the prompt as @Element1/@Element2/etc. The
+          // previous version of this sent a flat input_image_urls array, which
+          // is a real fal field but belongs to an unrelated v1.6-only endpoint —
+          // sending it here would have been silently ignored by v2.x/v3.
+          if(i2v)endpoint=i2v.endpoint;
+          body.elements=S.vcMultiImages.map(i=>({frontal_image_url:i.dataUrl}));
+        } else if(i2v&&S.vcMultiImages.length){
+          // Exactly 1 reference image — swap to the real image-to-video endpoint
+          // and use that tier's actual field name (image_url or start_image_url —
+          // these genuinely differ between v2.x and v3, see IMAGE_TO_VIDEO_MAP).
+          endpoint=i2v.endpoint;
+          body[i2v.field]=S.vcMultiImages[0].dataUrl;
         }
       } else if(model==="fal-ai/veo3.1"){
         body.duration=formattedDuration;body.audio=true;body.resolution=document.getElementById("vcRes").value;
       } else {
         body.duration=formattedDuration;body.resolution=document.getElementById("vcRes").value;
       }
-      const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
+      const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
       const submitData=await submitRes.json();
       if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
-      videoUrl=await pollFalVideoResult(model,submitData,apiKey);
+      videoUrl=await pollFalVideoResult(endpoint,submitData,apiKey);
       providerLabel=model.includes("kling")?"Kling":model.includes("veo")?"Veo 3.1":"Seedance 2.0";costKey=model;
     }
     const savedAssetVc=createVideoAsset(videoUrl,prompt,"");
@@ -5292,6 +5401,7 @@ function openShotEditor(projectId,shotId=null){
             <option value="fal-ai/kling-video/v2.1/master/text-to-video" ${!s||s?.model==="fal-ai/kling-video/v2.1/master/text-to-video"?'selected':''}>Kling 2.1 Master</option>
             <option value="fal-ai/kling-video/v2.6/pro/text-to-video" ${s?.model==="fal-ai/kling-video/v2.6/pro/text-to-video"?'selected':''}>Kling 2.6 Pro</option>
             <option value="fal-ai/kling-video/v3/standard/text-to-video" ${s?.model==="fal-ai/kling-video/v3/standard/text-to-video"?'selected':''}>Kling 3.0 Standard</option>
+            <option value="fal-ai/kling-video/v3/pro/text-to-video" ${s?.model==="fal-ai/kling-video/v3/pro/text-to-video"?'selected':''}>Kling 3.0 Pro</option>
             <option value="fal-ai/veo3.1" ${s?.model==="fal-ai/veo3.1"?'selected':''}>Veo 3.1</option>
           </select>
         </div>
@@ -5623,6 +5733,8 @@ const VIDEO_MODEL_DURATIONS={
   "fal-ai/kling-video/v2.1/master/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/v2.6/pro/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/v3/standard/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
+  "fal-ai/kling-video/v3/pro/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
+  "fal-ai/kling-video/o3/pro/reference-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/veo3.1":{options:[4,6,8],format:n=>`${n}s`},
   "fal-ai/veo3.1/reference-to-video":{options:[4,6,8],format:n=>`${n}s`},
 };
@@ -5646,11 +5758,15 @@ const VIDEO_MODEL_RESOLUTIONS={
   "fal-ai/kling-video/v2.1/master/text-to-video":null,
   "fal-ai/kling-video/v2.6/pro/text-to-video":null,
   "fal-ai/kling-video/v3/standard/text-to-video":null,
+  "fal-ai/kling-video/v3/pro/text-to-video":null,
+  "fal-ai/kling-video/o3/pro/reference-to-video":null,
 };
 const KLING_FIXED_RESOLUTION_NOTE={
   "fal-ai/kling-video/v2.1/master/text-to-video":"Kling 2.1 Master renders at a fixed resolution — no manual selection on fal.",
   "fal-ai/kling-video/v2.6/pro/text-to-video":"Kling 2.6 Pro renders at a fixed 1080p — no manual selection on fal.",
   "fal-ai/kling-video/v3/standard/text-to-video":"Kling 3.0 renders at a fixed resolution up to 1080p — no manual selection on fal.",
+  "fal-ai/kling-video/v3/pro/text-to-video":"Kling 3.0 Pro renders at a fixed resolution up to 1080p — no manual selection on fal.",
+  "fal-ai/kling-video/o3/pro/reference-to-video":"Kling O3 Pro renders at a fixed resolution up to 1080p — no manual selection on fal.",
 };
 
 // Shared across Video Canvas, Shot Editor, and Production Studio: shows only
@@ -5767,6 +5883,8 @@ const PD_ASPECT_RATIOS={
   "fal-ai/kling-video/v2.1/master/text-to-video":["16:9","9:16","1:1","4:3","3:4"],
   "fal-ai/kling-video/v2.6/pro/text-to-video":["16:9","9:16","1:1","4:3","3:4"],
   "fal-ai/kling-video/v3/standard/text-to-video":["16:9","9:16","1:1","4:3","3:4"],
+  "fal-ai/kling-video/v3/pro/text-to-video":["16:9","9:16","1:1","4:3","3:4"],
+  "fal-ai/kling-video/o3/pro/reference-to-video":["16:9","9:16","1:1"],
   "fal-ai/veo3.1":["16:9","9:16"],
 };
 const PD_ASPECT_RATIO_LABELS={"16:9":"16:9 Widescreen","9:16":"9:16 Vertical (Shorts/TikTok)","1:1":"1:1 Square","4:3":"4:3 Classic","3:4":"3:4 Portrait","21:9":"21:9 Cinematic Ultra-wide"};
@@ -5777,6 +5895,20 @@ function updatePdAspectRatioOptions(){
   const sel=document.getElementById("pdAspectRatio");
   const prevValue=sel.value;
   sel.innerHTML=ratios.map(r=>`<option value="${r}">${PD_ASPECT_RATIO_LABELS[r]||r}</option>`).join('');
+  sel.value=ratios.includes(prevValue)?prevValue:ratios[0];
+}
+
+// Video Canvas's ratio picker used to be a static 5-option list regardless of
+// model — harmless for models that genuinely support all 5, but would have let
+// someone pick an aspect ratio Kling O3 Pro doesn't actually support (O3 is
+// confirmed 16:9/9:16/1:1 only, not the full 5-option set). Reuses the same
+// verified PD_ASPECT_RATIOS map the Production Wizard already relies on.
+function updateVcRatioSelect(model){
+  const ratios=PD_ASPECT_RATIOS[model]||["16:9","9:16","1:1","4:3","3:4"];
+  const sel=document.getElementById("vcRatio");
+  if(!sel)return;
+  const prevValue=sel.value;
+  sel.innerHTML=ratios.map(r=>`<option value="${r}">${r}</option>`).join('');
   sel.value=ratios.includes(prevValue)?prevValue:ratios[0];
 }
 
@@ -5906,7 +6038,7 @@ function renderPdSharedFields(){
         <option value="bytedance/seedance-2.0/fast/reference-to-video">Seedance 2.0 Fast — Multi-Reference</option>
         <option value="bytedance/seedance-2.0/image-to-video">Seedance 2.0 — Start→End Frame</option>
         <option value="fal-ai/kling-video/v2.1/master/text-to-video">Kling 2.1 Master</option><option value="fal-ai/kling-video/v2.6/pro/text-to-video">Kling 2.6 Pro</option>
-        <option value="fal-ai/kling-video/v3/standard/text-to-video">Kling 3.0 Standard</option><option value="fal-ai/veo3.1">Veo 3.1</option>
+        <option value="fal-ai/kling-video/v3/standard/text-to-video">Kling 3.0 Standard</option><option value="fal-ai/kling-video/v3/pro/text-to-video">Kling 3.0 Pro</option><option value="fal-ai/veo3.1">Veo 3.1</option>
       </select></div>
       <div class="f-row">
         <div class="f-group" id="pdQualityWrap"><label class="f-label">3. Video Quality</label><select class="f-select" id="pdQuality"></select></div>
@@ -11382,6 +11514,7 @@ const NodeCanvas=(function(){
           <option value="fal-ai/kling-video/v2.1/master/text-to-video" ${node.data.model==='fal-ai/kling-video/v2.1/master/text-to-video'?'selected':''}>Kling 2.1 Master — no refs</option>
           <option value="fal-ai/kling-video/v2.6/pro/text-to-video" ${node.data.model==='fal-ai/kling-video/v2.6/pro/text-to-video'?'selected':''}>Kling 2.6 Pro — no refs</option>
           <option value="fal-ai/kling-video/v3/standard/text-to-video" ${node.data.model==='fal-ai/kling-video/v3/standard/text-to-video'?'selected':''}>Kling 3.0 Standard — no refs</option>
+          <option value="fal-ai/kling-video/v3/pro/text-to-video" ${node.data.model==='fal-ai/kling-video/v3/pro/text-to-video'?'selected':''}>Kling 3.0 Pro — no refs</option>
           <option value="fal-ai/veo3.1" ${node.data.model==='fal-ai/veo3.1'?'selected':''}>Veo 3.1 — no refs</option>
         </select>
         <div style="font-size:9px;color:${(!isSeedance&&(imgCount+vidCount+audCount)>0)?'var(--red)':'var(--textm)'};margin-top:3px">
