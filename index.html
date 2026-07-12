@@ -4029,7 +4029,10 @@ async function pollFalVideoResult(model,submitData,apiKey){
   }
   if(!finalData)throw new Error("Timed out — try again");
   const videoUrl=finalData.video&&finalData.video.url;
-  if(!videoUrl)throw new Error("No video returned");
+  if(!videoUrl){
+    const diag=finalData.detail||finalData.error||(finalData.video?JSON.stringify(finalData.video):null)||JSON.stringify(finalData).slice(0,300);
+    throw new Error("No video returned — fal.ai said: "+diag);
+  }
   return videoUrl;
 }
 
@@ -4538,6 +4541,31 @@ async function uploadToFalStorage(file,apiKey){
   const uploadData=await uploadRes.json();
   if(!uploadData.access_url)throw new Error("fal.ai didn't return a file URL after upload — its response shape may have changed");
   return uploadData.access_url;
+}
+
+function dataUrlToBlob(dataUrl){
+  const match=dataUrl.match(/^data:(.*?);base64,(.*)$/);
+  if(!match)throw new Error("Unexpected file format — couldn't prepare it for upload");
+  const bytes=atob(match[2]);
+  const arr=new Uint8Array(bytes.length);
+  for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
+  return new Blob([arr],{type:match[1]});
+}
+
+// Reference images/videos/audio were previously sent inline as base64 in the
+// same JSON request as everything else — fine for a single small image, but
+// multiple full-resolution phone photos (no client-side resizing anywhere in
+// this upload path) can easily push a 2-3 image request into 10-20+MB of
+// base64. fal's queue accepts the submission either way, but a job that fails
+// deep inside generation (oversized/malformed input) still reports back as
+// "COMPLETED" with no video — which is exactly what "No video returned" with
+// no other explanation looks like. Uploading to hosted URLs first (same real
+// fal storage protocol used for voice cloning) removes this as a variable.
+async function uploadRefsToFal(items,apiKey){
+  return Promise.all(items.map(async i=>{
+    const blob=dataUrlToBlob(i.dataUrl);
+    return uploadToFalStorage(blob,apiKey);
+  }));
 }
 
 function handleVoiceSampleUpload(event){
@@ -5205,12 +5233,17 @@ async function sendVcMultiShotPrompt(){
 
   try{
     let videoUrl;
+    const apiKey=gs("api_falai","");
+    if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+    if(S.vcMultiImages.length||S.vcMultiVideos.length)replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Uploading reference files…"});
+    const hostedImages=S.vcMultiImages.length?await uploadRefsToFal(S.vcMultiImages,apiKey):[];
+    const hostedVideos=S.vcMultiVideos.length?await uploadRefsToFal(S.vcMultiVideos,apiKey):[];
     if(cap.provider==="kling-o3-ref"){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length)throw new Error("Add at least 1 reference image or video — O3 Pro needs one to generate.");
-      videoUrl=await genViaKlingO3Reference(null,ratio,null,S.vcMultiImages.map(i=>i.dataUrl),S.vcMultiVideos.map(v=>v.dataUrl),shotsPayload,shotType);
+      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:`Generating ${validShots.length}-shot sequence…`});
+      videoUrl=await genViaKlingO3Reference(null,ratio,null,hostedImages,hostedVideos,shotsPayload,shotType);
     } else {
-      const apiKey=gs("api_falai","");
-      if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:`Generating ${validShots.length}-shot sequence…`});
       let endpoint=model;
       const body={
         multi_prompt:shotsPayload.map(s=>({prompt:s.prompt,duration:String(s.duration)})),
@@ -5226,10 +5259,10 @@ async function sendVcMultiShotPrompt(){
         // replaces the old single image_url field, which silently only ever
         // used the FIRST uploaded image and ignored the rest.
         if(i2v)endpoint=i2v.endpoint;
-        body.elements=S.vcMultiImages.map(i=>({frontal_image_url:i.dataUrl}));
+        body.elements=hostedImages.map(u=>({frontal_image_url:u}));
       } else if(S.vcMultiImages.length&&i2v){
         endpoint=i2v.endpoint;
-        body[i2v.field]=S.vcMultiImages[0].dataUrl;
+        body[i2v.field]=hostedImages[0];
       }
       const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
       const submitData=await submitRes.json();
@@ -5335,27 +5368,36 @@ async function sendVcChatPrompt(){
 
   try{
     let videoUrl,providerLabel,costKey;
+    const apiKeyEarly=gs("api_falai","");
+    if(!apiKeyEarly)throw new Error("Add a fal.ai API key in Settings first");
+    // Upload every attached reference file to a hosted URL before building any
+    // request — see uploadRefsToFal for why (large multi-image base64 payloads
+    // risk a job that "completes" with no video and no clear reason why).
+    const anyRefs=S.vcMultiImages.length||S.vcMultiVideos.length||S.vcMultiAudios.length;
+    if(anyRefs)pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Uploading reference files…"});
+    const hostedImages=S.vcMultiImages.length?await uploadRefsToFal(S.vcMultiImages,apiKeyEarly):[];
+    const hostedVideos=S.vcMultiVideos.length?await uploadRefsToFal(S.vcMultiVideos,apiKeyEarly):[];
+    const hostedAudios=S.vcMultiAudios.length?await uploadRefsToFal(S.vcMultiAudios,apiKeyEarly):[];
     if(cap.provider==="seedance-ref"){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length&&!S.vcMultiAudios.length){
         throw new Error("Add at least one reference image, video, or audio file — this model needs one to generate.");
       }
       pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"});
-      videoUrl=await genViaSeedanceReference(prompt,model,ratio,duration,S.vcMultiImages.map(i=>i.dataUrl),S.vcMultiVideos.map(v=>v.dataUrl),S.vcMultiAudios.map(a=>a.dataUrl));
+      videoUrl=await genViaSeedanceReference(prompt,model,ratio,duration,hostedImages,hostedVideos,hostedAudios);
       providerLabel="Seedance 2.0 Reference-to-Video";costKey=model;
     } else if(cap.provider==="veo-ref"){
       if(!S.vcMultiImages.length)throw new Error("Add at least 1 reference image (up to 3) — this model needs one to generate.");
       pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with reference images…"});
-      videoUrl=await genViaVeoReference(prompt,ratio,duration,S.vcMultiImages.map(i=>i.dataUrl));
+      videoUrl=await genViaVeoReference(prompt,ratio,duration,hostedImages);
       providerLabel="Veo 3.1 Reference-to-Video";costKey=model;
     } else if(cap.provider==="kling-o3-ref"){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length)throw new Error("Add at least 1 reference image or video — this model needs one to generate.");
       pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"});
-      videoUrl=await genViaKlingO3Reference(prompt,ratio,duration,S.vcMultiImages.map(i=>i.dataUrl),S.vcMultiVideos.map(v=>v.dataUrl));
+      videoUrl=await genViaKlingO3Reference(prompt,ratio,duration,hostedImages,hostedVideos);
       providerLabel="Kling O3 Pro Reference-to-Video";costKey=model;
     } else {
       pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating…"});
-      const apiKey=gs("api_falai","");
-      if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+      const apiKey=apiKeyEarly;
       let body={prompt,aspect_ratio:ratio};
       let endpoint=model; // may get swapped below to the real image-to-video endpoint for this tier
       const durationConfig=VIDEO_MODEL_DURATIONS[model];
@@ -5368,7 +5410,7 @@ async function sendVcChatPrompt(){
         if(S.vcMotionBrush){
           // Motion Brush requires a single base image + masks + trajectory on the
           // real image-to-video endpoint — these are mutually exclusive modes.
-          if(i2v){endpoint=i2v.endpoint;body[i2v.field]=S.vcMultiImages[0].dataUrl;}
+          if(i2v){endpoint=i2v.endpoint;body[i2v.field]=hostedImages[0];}
           body.dynamic_masks=[{mask_url:S.vcMotionBrush.dynamicMaskUrl,trajectories:S.vcMotionBrush.trajectories}];
           if(S.vcMotionBrush.staticMaskUrl)body.static_mask_url=S.vcMotionBrush.staticMaskUrl;
         } else if(cap.elements&&S.vcMultiImages.length>1){
@@ -5378,13 +5420,13 @@ async function sendVcChatPrompt(){
           // is a real fal field but belongs to an unrelated v1.6-only endpoint —
           // sending it here would have been silently ignored by v2.x/v3.
           if(i2v)endpoint=i2v.endpoint;
-          body.elements=S.vcMultiImages.map(i=>({frontal_image_url:i.dataUrl}));
+          body.elements=hostedImages.map(u=>({frontal_image_url:u}));
         } else if(i2v&&S.vcMultiImages.length){
           // Exactly 1 reference image — swap to the real image-to-video endpoint
           // and use that tier's actual field name (image_url or start_image_url —
           // these genuinely differ between v2.x and v3, see IMAGE_TO_VIDEO_MAP).
           endpoint=i2v.endpoint;
-          body[i2v.field]=S.vcMultiImages[0].dataUrl;
+          body[i2v.field]=hostedImages[0];
         }
       } else if(model==="fal-ai/veo3.1"){
         body.duration=formattedDuration;body.audio=true;body.resolution=document.getElementById("vcRes").value;
@@ -7342,7 +7384,10 @@ async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImag
   }
   if(!finalData)throw new Error("Timed out");
   const videoUrl=finalData.video&&finalData.video.url;
-  if(!videoUrl)throw new Error("No video returned");
+  if(!videoUrl){
+    const diag=finalData.detail||finalData.error||(finalData.video?JSON.stringify(finalData.video):null)||JSON.stringify(finalData).slice(0,300);
+    throw new Error("No video returned — fal.ai said: "+diag);
+  }
   return videoUrl;
 }
 
@@ -8658,7 +8703,10 @@ async function generateLipsync(){
     }
     if(!finalData)throw new Error("Timed out — check fal.ai dashboard, it may still complete");
     const videoUrl=finalData.video&&finalData.video.url;
-    if(!videoUrl)throw new Error("No video returned");
+    if(!videoUrl){
+      const diag=finalData.detail||finalData.error||(finalData.video?JSON.stringify(finalData.video):null)||JSON.stringify(finalData).slice(0,300);
+      throw new Error("No video returned — fal.ai said: "+diag);
+    }
     const savedAssetLip=createVideoAsset(videoUrl,"Lipsync video","");
     resultEl.innerHTML=`<video src="${videoUrl}" controls style="width:100%;border-radius:8px;margin-bottom:8px"></video>
       <div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Saved to Gallery automatically</div>
@@ -11038,7 +11086,10 @@ async function submitFlowProject(projectId){
         }
         if(!finalData)throw new Error("Timed out");
         const videoUrl=finalData.video&&finalData.video.url;
-        if(!videoUrl)throw new Error("No video returned");
+        if(!videoUrl){
+          const diag=finalData.detail||finalData.error||(finalData.video?JSON.stringify(finalData.video):null)||JSON.stringify(finalData).slice(0,300);
+          throw new Error("No video returned — fal.ai said: "+diag);
+        }
         shot.resultVideoUrl=videoUrl;
         shot.costUSD=computeFlowShotCost(p,shot);
         shot.status="done";
@@ -11520,7 +11571,10 @@ const NodeCanvas=(function(){
     }
     if(!finalData)throw new Error("Timed out waiting for render");
     const videoUrl=finalData.video&&finalData.video.url;
-    if(!videoUrl)throw new Error("No video returned");
+    if(!videoUrl){
+      const diag=finalData.detail||finalData.error||(finalData.video?JSON.stringify(finalData.video):null)||JSON.stringify(finalData).slice(0,300);
+      throw new Error("No video returned — fal.ai said: "+diag);
+    }
     return {videoUrl,lastFrameUrl:null}; // last-frame extraction reuses getChainedReferenceFrame at call sites that need it
   }
 
