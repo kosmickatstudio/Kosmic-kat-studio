@@ -131,6 +131,8 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .ig-chat-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;font-family:var(--font-display)}
 .ig-chat-thread{height:52vh;min-height:320px;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:18px}
 .ig-bubble-user{align-self:flex-end;max-width:82%;background:linear-gradient(135deg,var(--violet),var(--vm) 55%,var(--ice) 140%);color:#fff;padding:12px 17px;border-radius:20px 20px 5px 20px;font-size:13px;line-height:1.55;box-shadow:0 6px 22px rgba(61,31,122,0.32),0 0 0 1px rgba(255,255,255,0.06) inset;letter-spacing:0.01em;white-space:pre-wrap;word-break:break-word}
+.ig-msg-action{background:none;border:none;padding:0;font-size:10.5px;font-weight:600;color:var(--textm);cursor:pointer;display:flex;align-items:center;gap:3px;transition:color 0.15s}
+.ig-msg-action:active{color:var(--violet)}
 .ig-bubble-assistant{align-self:flex-start;max-width:88%;background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--glass-brd);padding:13px;border-radius:5px 20px 20px 20px;box-shadow:0 4px 18px rgba(0,0,0,0.10),inset 0 1px 0 rgba(255,255,255,0.05);position:relative}
 .ig-bubble-loading{align-self:flex-start;display:flex;align-items:center;gap:9px;background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--glass-brd);padding:11px 17px;border-radius:5px 20px 20px 20px;font-size:12px;color:var(--textm);font-family:var(--font-mono)}
 .ig-dot{width:6px;height:6px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--glow-gold);animation:ig-pulse 1.2s ease-in-out infinite}
@@ -4578,6 +4580,7 @@ function dataUrlToBlob(dataUrl){
 // fal storage protocol used for voice cloning) removes this as a variable.
 async function uploadRefsToFal(items,apiKey){
   return Promise.all(items.map(async i=>{
+    if(!i.dataUrl.startsWith("data:"))return i.dataUrl; // already a hosted URL (e.g. restored via Edit/Retry) — nothing to upload
     const blob=dataUrlToBlob(i.dataUrl);
     return uploadToFalStorage(blob,apiKey);
   }));
@@ -5042,7 +5045,17 @@ function renderVcChatThread(){
     return;
   }
   thread.innerHTML=S.vcChatHistory.map(msg=>{
-    if(msg.role==="user")return `<div class="ig-bubble-user">${msg.content}</div>`;
+    if(msg.role==="user"){
+      const canRestore=msg.id&&msg.genSettings;
+      return `<div style="align-self:flex-end;max-width:82%;display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <div class="ig-bubble-user" style="align-self:stretch;max-width:none">${msg.content}</div>
+        <div style="display:flex;gap:10px;padding:0 4px">
+          ${canRestore?`<button class="ig-msg-action" onclick="editVcUserMessage('${msg.id}')" title="Edit">✏️ Edit</button>`:''}
+          <button class="ig-msg-action" onclick="copyVcUserMessage('${msg.id||''}')" title="Copy">📋 Copy</button>
+          ${canRestore?`<button class="ig-msg-action" onclick="retryVcUserMessage('${msg.id}')" title="Retry with the same settings">🔄 Retry</button>`:''}
+        </div>
+      </div>`;
+    }
     if(msg.type==="loading")return `<div class="ig-bubble-loading" id="${msg.id}"><span class="ig-dot"></span><span class="ig-dot"></span><span class="ig-dot"></span>&nbsp;${msg.content}</div>`;
     if(msg.type==="error")return `<div class="ig-bubble-assistant" style="color:var(--red)">❌ ${msg.content}</div>`;
     if(msg.type==="video"){
@@ -5067,6 +5080,98 @@ function renderVcChatThread(){
     return '';
   }).join('');
   thread.scrollTop=thread.scrollHeight;
+}
+
+function patchVcUserMessageRefs(msgId,hostedImages,hostedVideos,hostedAudios){
+  const msg=S.vcChatHistory.find(m=>m.id===msgId);
+  if(!msg||!msg.genSettings)return;
+  msg.genSettings.refImages=hostedImages;
+  msg.genSettings.refVideos=hostedVideos;
+  msg.genSettings.refAudios=hostedAudios;
+  saveSetting("vc_chat_history",S.vcChatHistory);
+}
+
+// Restores every control that affects a generation to match a past message's
+// exact snapshot — model, duration, ratio, resolution, negative prompt,
+// director style, voices, and the reference files themselves (reusing their
+// already-hosted URLs, so this doesn't re-upload anything). Used by both
+// Edit (restore + let the person review before sending) and Retry (restore +
+// send immediately) so the two can't drift out of sync with each other.
+function restoreVcGenSettings(g){
+  document.getElementById("vcModel").value=g.model;
+  updateVcModelUI(); // cascades duration/ratio/resolution option lists + multiShot/voice/ref UI for this model — this resets values to defaults, which is why everything below re-applies the real ones afterward
+  const durConfig=VIDEO_MODEL_DURATIONS[g.model];
+  if(durConfig&&g.duration!=null){
+    const idx=durConfig.options.indexOf(parseInt(g.duration,10));
+    document.getElementById("vcDurationSlider").value=idx>=0?idx:0;
+    updateVcDurationFromSlider();
+  }
+  const ratioSel=document.getElementById("vcRatio");
+  if(ratioSel&&g.ratio&&[...ratioSel.options].some(o=>o.value===g.ratio))ratioSel.value=g.ratio;
+  if(g.resolution)populateResolutionSelect("vcRes","vcResWrap",g.model,g.resolution);
+  const negEl=document.getElementById("vcNegPrompt");
+  if(negEl)negEl.value=g.negPrompt||"";
+  S.klingSelectedVoices=[...(g.klingVoices||[])];
+  saveSetting("active_director",g.directorId||"");
+  if(document.getElementById("vcVoiceWrap").style.display!=="none")renderVcVoiceList();
+
+  S.vcMultiImages=(g.refImages||[]).map(u=>({dataUrl:u,name:""}));
+  S.vcMultiVideos=(g.refVideos||[]).map(u=>({dataUrl:u,name:""}));
+  S.vcMultiAudios=(g.refAudios||[]).map(u=>({dataUrl:u,name:""}));
+  renderVcMultiPreview("vcMultiImagePreview",S.vcMultiImages,false);
+  renderVcMultiPreview("vcMultiVideoPreview",S.vcMultiVideos,false);
+  renderVcMultiPreview("vcMultiAudioPreview",S.vcMultiAudios,true);
+  refreshMotionBrushVisibility();
+  updateVcAttachmentBar();
+
+  const msToggle=document.getElementById("vcMultiShotToggle");
+  if(g.multiShotOn){
+    msToggle.checked=true;
+    S.vcShots=JSON.parse(JSON.stringify(g.shots||[{prompt:"",duration:"5"}]));
+    toggleMultiShotMode();
+    setVcShotType(g.shotType||"customize");
+  } else if(msToggle.checked){
+    msToggle.checked=false;
+    toggleMultiShotMode();
+  }
+}
+
+function editVcUserMessage(msgId){
+  const msg=S.vcChatHistory.find(m=>m.id===msgId);
+  if(!msg||!msg.genSettings)return;
+  restoreVcGenSettings(msg.genSettings);
+  if(msg.genSettings.multiShotOn){
+    toast("Settings and shots restored — review them below, then tap Send when ready.","success");
+  } else {
+    const inputEl=document.getElementById("vcChatInput");
+    inputEl.value=msg.content;
+    inputEl.style.height="auto";inputEl.style.height=Math.min(inputEl.scrollHeight,240)+"px";
+    inputEl.focus();
+    toast("Settings restored — edit the prompt above, then tap Send.","success");
+  }
+  document.getElementById("vcChatThread")?.scrollIntoView({behavior:"smooth",block:"end"});
+}
+
+function retryVcUserMessage(msgId){
+  const msg=S.vcChatHistory.find(m=>m.id===msgId);
+  if(!msg||!msg.genSettings)return;
+  restoreVcGenSettings(msg.genSettings);
+  if(msg.genSettings.multiShotOn){
+    sendVcMultiShotPrompt();
+  } else {
+    const inputEl=document.getElementById("vcChatInput");
+    inputEl.value=msg.content;
+    sendVcChatPrompt();
+  }
+}
+
+function copyVcUserMessage(msgId){
+  const msg=S.vcChatHistory.find(m=>m.id===msgId);
+  if(!msg)return;
+  navigator.clipboard.writeText(msg.content).then(
+    ()=>toast("📋 Copied","success"),
+    ()=>toast("Couldn't copy — your browser may be blocking clipboard access","error")
+  );
 }
 
 function pushVcChatMessage(msg){
@@ -5240,7 +5345,17 @@ async function sendVcMultiShotPrompt(){
   const directorStyle=getActiveDirectorPrompt();
   const shotsPayload=validShots.map(s=>({prompt:directorStyle?`${s.prompt}, ${directorStyle}`:s.prompt,duration:s.duration}));
 
-  pushVcChatMessage({role:"user",content:`🎬 Multi-shot storyboard — ${validShots.length} shots, ${totalDuration}s total`});
+  const userMsgId="vcUser_"+Date.now();
+  pushVcChatMessage({id:userMsgId,role:"user",content:`🎬 Multi-shot storyboard — ${validShots.length} shots, ${totalDuration}s total`,genSettings:{
+    model,ratio,duration:null,resolution:"",negPrompt,directorId:gs("active_director",""),
+    klingVoices:[...S.klingSelectedVoices],
+    refImages:S.vcMultiImages.map(i=>i.dataUrl),
+    refVideos:S.vcMultiVideos.map(v=>v.dataUrl),
+    refAudios:[],
+    multiShotOn:true,
+    shotType,
+    shots:JSON.parse(JSON.stringify(validShots)),
+  }});
   const loadingId="vcLoading_"+Date.now();
   pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:`Generating ${validShots.length}-shot sequence…`});
   const sendBtn=document.getElementById("vcSendBtn");
@@ -5253,6 +5368,7 @@ async function sendVcMultiShotPrompt(){
     if(S.vcMultiImages.length||S.vcMultiVideos.length)replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Uploading reference files…"});
     const hostedImages=S.vcMultiImages.length?await uploadRefsToFal(S.vcMultiImages,apiKey):[];
     const hostedVideos=S.vcMultiVideos.length?await uploadRefsToFal(S.vcMultiVideos,apiKey):[];
+    patchVcUserMessageRefs(userMsgId,hostedImages,hostedVideos,[]);
     if(cap.provider==="kling-o3-ref"){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length)throw new Error("Add at least 1 reference image or video — O3 Pro needs one to generate.");
       replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:`Generating ${validShots.length}-shot sequence…`});
@@ -5374,8 +5490,21 @@ async function sendVcChatPrompt(){
   const ratio=document.getElementById("vcRatio").value;
   const duration=document.getElementById("vcDuration").value;
   const negPrompt=document.getElementById("vcNegPrompt")?.value.trim()||"";
+  const resolution=document.getElementById("vcRes")?.value||"";
 
-  pushVcChatMessage({role:"user",content:rawPrompt});
+  const userMsgId="vcUser_"+Date.now();
+  // Snapshot everything a regenerate needs to be exact, not approximate —
+  // model, duration, ratio, resolution, negative prompt, director style, and
+  // the reference files themselves (so @Image1/@Element1 tags still point at
+  // the same files on Retry, not whatever happens to be attached later).
+  pushVcChatMessage({id:userMsgId,role:"user",content:rawPrompt,genSettings:{
+    model,ratio,duration,resolution,negPrompt,directorId:gs("active_director",""),
+    klingVoices:[...S.klingSelectedVoices],
+    refImages:S.vcMultiImages.map(i=>i.dataUrl),
+    refVideos:S.vcMultiVideos.map(v=>v.dataUrl),
+    refAudios:S.vcMultiAudios.map(a=>a.dataUrl),
+    multiShotOn:false,
+  }});
   inputEl.value="";inputEl.style.height="auto";
   const loadingId="vcLoading_"+Date.now();
   const sendBtn=document.getElementById("vcSendBtn");
@@ -5393,6 +5522,10 @@ async function sendVcChatPrompt(){
     const hostedImages=S.vcMultiImages.length?await uploadRefsToFal(S.vcMultiImages,apiKeyEarly):[];
     const hostedVideos=S.vcMultiVideos.length?await uploadRefsToFal(S.vcMultiVideos,apiKeyEarly):[];
     const hostedAudios=S.vcMultiAudios.length?await uploadRefsToFal(S.vcMultiAudios,apiKeyEarly):[];
+    // Patch the snapshot with the lightweight hosted URLs instead of the raw
+    // base64 originally captured above — keeps chat history storage small
+    // and means a future Retry reuses these directly instead of re-uploading.
+    patchVcUserMessageRefs(userMsgId,hostedImages,hostedVideos,hostedAudios);
     if(cap.provider==="seedance-ref"){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length&&!S.vcMultiAudios.length){
         throw new Error("Add at least one reference image, video, or audio file — this model needs one to generate.");
