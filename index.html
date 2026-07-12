@@ -2863,7 +2863,7 @@ function renderImageGen(el){
 
     <div class="ig-settings-backdrop" id="igSettingsBackdrop" onclick="toggleIgSettings()"></div>
     <div class="ig-settings-sheet" id="igSettingsPanel">
-      <div class="ig-sheet-handle"></div>
+      <div class="ig-sheet-handle" ontouchstart="sheetSwipeStart(event)" ontouchmove="sheetSwipeMove(event,'igSettingsPanel')" ontouchend="sheetSwipeEnd(event,'igSettingsPanel','toggleIgSettings')"></div>
       <div class="ig-sheet-header">
         <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">⚙ Settings</div>
         <button class="ig-icon-btn" onclick="toggleIgSettings()" title="Close">✕</button>
@@ -4129,7 +4129,7 @@ function renderVideoCanvas(el){
         <div id="vcGalleryView" style="display:none"></div>
 
         <div id="vcSettingsPanel" class="ig-settings-sheet">
-          <div class="ig-sheet-handle"></div>
+          <div class="ig-sheet-handle" ontouchstart="sheetSwipeStart(event)" ontouchmove="sheetSwipeMove(event,'vcSettingsPanel')" ontouchend="sheetSwipeEnd(event,'vcSettingsPanel','toggleVcSettings')"></div>
           <div class="ig-sheet-header">
             <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">⚙ Settings</div>
             <button class="ig-icon-btn" onclick="toggleVcSettings()" title="Close">✕</button>
@@ -4996,6 +4996,38 @@ function removeVcMultiItem(previewId,i){
   updateVcAttachmentBar();
 }
 
+
+// The little bar at the top of a bottom sheet (.ig-sheet-handle) looked like
+// a standard mobile drag-to-dismiss handle but had no touch handling behind
+// it at all — pulling down did nothing, only the ✕ button or tapping the
+// backdrop actually closed it. This makes the gesture real: follows the
+// finger while dragging (matching the sheet's own CSS transform approach,
+// just driven by touch instead of the open/closed class), and closes for
+// real past a distance threshold on release.
+let _sheetDragStartY=null;
+function sheetSwipeStart(e){
+  _sheetDragStartY=e.touches[0].clientY;
+}
+function sheetSwipeMove(e,panelId){
+  if(_sheetDragStartY===null)return;
+  const panel=document.getElementById(panelId);
+  if(!panel)return;
+  const dy=e.touches[0].clientY-_sheetDragStartY;
+  if(dy<=0)return; // only drag downward — don't let it go past fully-open
+  panel.style.transition="none";
+  panel.style.transform=`translateY(${dy}px)`;
+  e.preventDefault();
+}
+function sheetSwipeEnd(e,panelId,closeFnName){
+  if(_sheetDragStartY===null)return;
+  const panel=document.getElementById(panelId);
+  const dy=e.changedTouches[0].clientY-_sheetDragStartY;
+  _sheetDragStartY=null;
+  if(!panel)return;
+  panel.style.transition=""; // hand control back to the normal CSS transition
+  panel.style.transform=""; // let the .open class's transform take over again
+  if(dy>90)window[closeFnName]();
+}
 
 function toggleVcSettings(){
   const panel=document.getElementById("vcSettingsPanel");
