@@ -4526,21 +4526,36 @@ S.klingSelectedVoices=S.klingSelectedVoices||[];
 
 // fal's file-input fields accept base64 data URIs directly, but fal's own docs
 // flag this as risky for larger files ("can impact request performance") and
-// recommend uploading to their storage first. A 5-30s audio sample is a much
-// bigger payload than the small image data URIs used elsewhere in this app —
-// this was very likely why voice cloning wasn't completing. Uses fal's real
-// 2-step upload protocol: get a short-lived storage token, then upload the
-// raw file to get back a lightweight hosted URL.
+// recommend uploading to their storage first, which is what this does.
+//
+// This implementation is extracted directly from the actual shipped
+// @fal-ai/client npm package source (storage.js's createStorageClient/
+// initiateUpload), not reverse-engineered from documentation prose — an
+// earlier version of this function used a fabricated auth-token/Bearer flow
+// from an unreliable source and simply didn't work ("Couldn't get a storage
+// upload token" was really a wrong-endpoint bug, not an API key problem).
+// Real flow for files under 90MB (multipart upload exists for larger files
+// but nothing in this app's upload paths gets remotely close to that):
+//   1. POST /storage/upload/initiate — get a one-time upload_url + file_url
+//   2. PUT the raw file to upload_url (no auth header needed — presigned)
+//   3. file_url is the permanent, lightweight hosted URL to use in requests
 async function uploadToFalStorage(file,apiKey){
-  const authRes=await fetch("https://rest.alpha.fal.ai/storage/auth/token?storage_type=fal-cdn-v3",{method:"POST",headers:{"Authorization":"Key "+apiKey}});
-  if(!authRes.ok)throw new Error("Couldn't get a storage upload token from fal.ai — check your API key");
-  const authData=await authRes.json();
-  if(!authData.token||!authData.base_url)throw new Error("fal.ai's storage auth response didn't include a token — its upload API may have changed");
-  const uploadRes=await fetch(`${authData.base_url}/files/upload`,{method:"POST",headers:{"Authorization":"Bearer "+authData.token,"Content-Type":file.type||"application/octet-stream"},body:file});
-  if(!uploadRes.ok)throw new Error("Uploading the voice sample to fal.ai failed ("+uploadRes.status+")");
-  const uploadData=await uploadRes.json();
-  if(!uploadData.access_url)throw new Error("fal.ai didn't return a file URL after upload — its response shape may have changed");
-  return uploadData.access_url;
+  const contentType=file.type||"application/octet-stream";
+  const fileName=file.name||`${Date.now()}.${(contentType.split("/")[1]||"bin").split(/[-;]/)[0]}`;
+  const initRes=await fetch("https://rest.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3",{
+    method:"POST",
+    headers:{"Authorization":"Key "+apiKey,"Content-Type":"application/json"},
+    body:JSON.stringify({content_type:contentType,file_name:fileName}),
+  });
+  if(!initRes.ok){
+    const errBody=await initRes.text().catch(()=>"");
+    throw new Error(`Couldn't start the file upload to fal.ai (${initRes.status}) — ${errBody.slice(0,150)||"check your API key"}`);
+  }
+  const initData=await initRes.json();
+  if(!initData.upload_url||!initData.file_url)throw new Error("fal.ai's upload-initiate response didn't include the expected URLs — its API may have changed");
+  const putRes=await fetch(initData.upload_url,{method:"PUT",headers:{"Content-Type":contentType},body:file});
+  if(!putRes.ok)throw new Error(`Uploading the file to fal.ai's storage failed (${putRes.status})`);
+  return initData.file_url;
 }
 
 function dataUrlToBlob(dataUrl){
