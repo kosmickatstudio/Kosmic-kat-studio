@@ -4017,6 +4017,33 @@ function sanitizeFilenamePart(text){
   return (text||"").trim().replace(/[^a-zA-Z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,40)||"media";
 }
 
+// fal's error responses aren't always a plain string. The most common real
+// shape for a rejected/failed job is FastAPI-style validation errors:
+// detail: [{loc:[...], msg:"...", type:"..."}, ...] — one entry per invalid
+// field. Naively concatenating that array into an error message just calls
+// Array.toString(), which calls toString() on each plain object and joins
+// them with commas — producing exactly "[object Object],[object Object],..."
+// with zero actual information. This extracts the real msg (and which field
+// it's about, if given) from each entry instead.
+function formatFalDiag(finalData){
+  const d=finalData&&finalData.detail;
+  if(Array.isArray(d)){
+    if(!d.length)return "validation failed (no further detail given)";
+    return d.map(e=>{
+      if(typeof e==="string")return e;
+      if(e&&typeof e==="object"){
+        const field=Array.isArray(e.loc)?e.loc.filter(p=>p!=="body").join("."):"";
+        return field?`${field}: ${e.msg||JSON.stringify(e)}`:(e.msg||JSON.stringify(e));
+      }
+      return String(e);
+    }).join("; ");
+  }
+  if(typeof d==="string"&&d)return d;
+  if(finalData&&finalData.error)return typeof finalData.error==="string"?finalData.error:JSON.stringify(finalData.error);
+  if(finalData&&finalData.video)return JSON.stringify(finalData.video);
+  return JSON.stringify(finalData).slice(0,300);
+}
+
 async function pollFalVideoResult(model,submitData,apiKey){
   const requestId=submitData.request_id;
   const statusUrl=submitData.status_url||`https://queue.fal.run/${model}/requests/${requestId}/status`;
@@ -4032,7 +4059,7 @@ async function pollFalVideoResult(model,submitData,apiKey){
   if(!finalData)throw new Error("Timed out — try again");
   const videoUrl=finalData.video&&finalData.video.url;
   if(!videoUrl){
-    const diag=finalData.detail||finalData.error||(finalData.video?JSON.stringify(finalData.video):null)||JSON.stringify(finalData).slice(0,300);
+    const diag=formatFalDiag(finalData);
     throw new Error("No video returned — fal.ai said: "+diag);
   }
   return videoUrl;
@@ -7533,7 +7560,7 @@ async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImag
   if(!finalData)throw new Error("Timed out");
   const videoUrl=finalData.video&&finalData.video.url;
   if(!videoUrl){
-    const diag=finalData.detail||finalData.error||(finalData.video?JSON.stringify(finalData.video):null)||JSON.stringify(finalData).slice(0,300);
+    const diag=formatFalDiag(finalData);
     throw new Error("No video returned — fal.ai said: "+diag);
   }
   return videoUrl;
@@ -8852,7 +8879,7 @@ async function generateLipsync(){
     if(!finalData)throw new Error("Timed out — check fal.ai dashboard, it may still complete");
     const videoUrl=finalData.video&&finalData.video.url;
     if(!videoUrl){
-      const diag=finalData.detail||finalData.error||(finalData.video?JSON.stringify(finalData.video):null)||JSON.stringify(finalData).slice(0,300);
+      const diag=formatFalDiag(finalData);
       throw new Error("No video returned — fal.ai said: "+diag);
     }
     const savedAssetLip=createVideoAsset(videoUrl,"Lipsync video","");
@@ -11235,7 +11262,7 @@ async function submitFlowProject(projectId){
         if(!finalData)throw new Error("Timed out");
         const videoUrl=finalData.video&&finalData.video.url;
         if(!videoUrl){
-          const diag=finalData.detail||finalData.error||(finalData.video?JSON.stringify(finalData.video):null)||JSON.stringify(finalData).slice(0,300);
+          const diag=formatFalDiag(finalData);
           throw new Error("No video returned — fal.ai said: "+diag);
         }
         shot.resultVideoUrl=videoUrl;
@@ -11720,7 +11747,7 @@ const NodeCanvas=(function(){
     if(!finalData)throw new Error("Timed out waiting for render");
     const videoUrl=finalData.video&&finalData.video.url;
     if(!videoUrl){
-      const diag=finalData.detail||finalData.error||(finalData.video?JSON.stringify(finalData.video):null)||JSON.stringify(finalData).slice(0,300);
+      const diag=formatFalDiag(finalData);
       throw new Error("No video returned — fal.ai said: "+diag);
     }
     return {videoUrl,lastFrameUrl:null}; // last-frame extraction reuses getChainedReferenceFrame at call sites that need it
