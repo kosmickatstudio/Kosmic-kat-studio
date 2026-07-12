@@ -3958,13 +3958,21 @@ async function genViaVeoReference(prompt,ratio,duration,imageUrls){
 // array (that field, input_image_urls, belongs to an unrelated older v1.6-only
 // endpoint and doesn't exist on O3 — a previous version of this code sent it
 // to the wrong endpoint entirely, which fal would have silently ignored).
-async function genViaKlingO3Reference(prompt,ratio,duration,imageUrls,multiShots,shotType){
+async function genViaKlingO3Reference(prompt,ratio,duration,imageUrls,videoUrls,multiShots,shotType){
   const apiKey=gs("api_falai","");
   if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
   const model="fal-ai/kling-video/o3/pro/reference-to-video";
+  // Elements array can mix image-set entries (frontal_image_url) and video
+  // entries (video_url) — verified against fal's O3 4K reference-to-video
+  // docs, which show exactly this mixed shape. Images first, then videos,
+  // so @Element1/@Element2/etc match the order shown in the upload UI.
+  const elements=[
+    ...imageUrls.map(u=>({frontal_image_url:u})),
+    ...(videoUrls||[]).map(u=>({video_url:u})),
+  ];
   const body={
     prompt:multiShots&&multiShots.length?undefined:prompt, // prompt and multi_prompt are mutually exclusive per fal's schema
-    elements:imageUrls.map(u=>({frontal_image_url:u})),
+    elements,
     aspect_ratio:ratio,
     generate_audio:true,
   };
@@ -4056,7 +4064,7 @@ const VIDEO_MODEL_CAPABILITIES={
   // design (fal: "O3 is best for reference-heavy workflows with character
   // consistency"), so it's wired the same way as Seedance/Veo's ref models:
   // a dedicated provider path that requires at least one image.
-  "fal-ai/kling-video/o3/pro/reference-to-video":{multiRef:true,maxImages:4,provider:"kling-o3-ref",multiShot:true,tagSyntax:"@Element1"},
+  "fal-ai/kling-video/o3/pro/reference-to-video":{multiRef:true,maxImages:4,maxVideos:2,provider:"kling-o3-ref",multiShot:true,tagSyntax:"@Element1 (images and videos are numbered together, in upload order)"},
 };
 
 function renderVideoCanvas(el){
@@ -4162,7 +4170,7 @@ function renderVideoCanvas(el){
             <div id="vcVoiceHint" style="display:none;font-size:10px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px;margin-top:6px"></div>
           </div>
           <div class="f-group" id="vcMultiVideoWrap" style="display:none">
-            <label class="f-label">Reference Videos <span style="font-weight:400;color:var(--texts)">(up to 3)</span></label>
+            <label class="f-label" id="vcMultiVideoLabel">Reference Videos <span style="font-weight:400;color:var(--texts)">(up to 3)</span></label>
             <input type="file" accept="video/*" multiple id="vcMultiVideoFile" style="display:none" onchange="handleVcMultiVideoUpload(event)">
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px" id="vcMultiVideoPreview"></div>
             <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcMultiVideoFile').click()">📤 Add Videos</button>
@@ -4692,7 +4700,7 @@ const VIDEO_PRICING={
   "fal-ai/kling-video/v2.1/master/text-to-video":{perSec:0.112},
   "fal-ai/kling-video/v2.6/pro/text-to-video":{perSec:0.112},
   "fal-ai/kling-video/v3/standard/text-to-video":{perSec:0.084},
-  "fal-ai/kling-video/v3/pro/text-to-video":{perSec:0.28},
+  "fal-ai/kling-video/v3/pro/text-to-video":{perSec:0.168},
   "fal-ai/kling-video/o3/pro/reference-to-video":{perSec:0.14},
   "fal-ai/veo3.1":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
   "fal-ai/veo3.1/reference-to-video":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
@@ -4763,6 +4771,15 @@ function updateVcModelUI(){
     renderVcMultiPreview("vcMultiImagePreview",S.vcMultiImages,false);
     toast(`This model only supports ${cap.maxImages} reference images — removed the last ${removed}`,"error");
   }
+  // Videos now have per-model caps too (Seedance: 3, O3 Pro: 2) — previously
+  // only images got truncated on model switch since video refs used to be
+  // Seedance-only with one fixed cap, so this never came up.
+  if(cap.multiRef&&cap.maxVideos&&S.vcMultiVideos.length>cap.maxVideos){
+    const removedV=S.vcMultiVideos.length-cap.maxVideos;
+    S.vcMultiVideos=S.vcMultiVideos.slice(0,cap.maxVideos);
+    renderVcMultiPreview("vcMultiVideoPreview",S.vcMultiVideos,false);
+    toast(`This model only supports ${cap.maxVideos} reference video${cap.maxVideos===1?'':'s'} — removed the last ${removedV}`,"error");
+  }
   const isKling=model.startsWith("fal-ai/kling-video");
   document.getElementById("vcMotionBrushWrap").style.display=(cap.multiImage&&S.vcMultiImages.length>0)?"block":"none";
   // Multi-shot storyboarding (multi_prompt/shot_type) was added in Kling v3 —
@@ -4773,6 +4790,9 @@ function updateVcModelUI(){
   if(isKling)renderVcVoiceList();
   if(!cap.multiShot){document.getElementById("vcMultiShotToggle").checked=false;toggleMultiShotMode();}
   document.getElementById("vcMultiVideoWrap").style.display=(cap.multiRef&&cap.maxVideos)?"block":"none";
+  if(cap.multiRef&&cap.maxVideos){
+    document.getElementById("vcMultiVideoLabel").innerHTML=`Reference Videos <span style="font-weight:400;color:var(--texts)">(up to ${cap.maxVideos})</span>`;
+  }
   document.getElementById("vcMultiAudioWrap").style.display=(cap.multiRef&&cap.maxAudio)?"block":"none";
   const tagHint=document.getElementById("vcTagHint");
   if(cap.tagSyntax){
@@ -4796,7 +4816,7 @@ function updateVcModelUI(){
 }
 
 function handleVcMultiImageUpload(event){handleVcMultiUpload(event,S.vcMultiImages,"vcMultiImagePreview",VIDEO_MODEL_CAPABILITIES[document.getElementById("vcModel").value]?.maxImages||4);}
-function handleVcMultiVideoUpload(event){handleVcMultiUpload(event,S.vcMultiVideos,"vcMultiVideoPreview",3,true);}
+function handleVcMultiVideoUpload(event){handleVcMultiUpload(event,S.vcMultiVideos,"vcMultiVideoPreview",VIDEO_MODEL_CAPABILITIES[document.getElementById("vcModel").value]?.maxVideos||3,true);}
 function handleVcMultiAudioUpload(event){handleVcMultiUpload(event,S.vcMultiAudios,"vcMultiAudioPreview",3,false,true);}
 
 function handleVcMultiUpload(event,targetArr,previewId,max,isVideo,isAudio){
@@ -5167,8 +5187,8 @@ async function sendVcMultiShotPrompt(){
   try{
     let videoUrl;
     if(cap.provider==="kling-o3-ref"){
-      if(!S.vcMultiImages.length)throw new Error("Add at least 1 reference image (up to 4) — O3 Pro needs one to generate.");
-      videoUrl=await genViaKlingO3Reference(null,ratio,null,S.vcMultiImages.map(i=>i.dataUrl),shotsPayload,shotType);
+      if(!S.vcMultiImages.length&&!S.vcMultiVideos.length)throw new Error("Add at least 1 reference image or video — O3 Pro needs one to generate.");
+      videoUrl=await genViaKlingO3Reference(null,ratio,null,S.vcMultiImages.map(i=>i.dataUrl),S.vcMultiVideos.map(v=>v.dataUrl),shotsPayload,shotType);
     } else {
       const apiKey=gs("api_falai","");
       if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
@@ -5309,9 +5329,9 @@ async function sendVcChatPrompt(){
       videoUrl=await genViaVeoReference(prompt,ratio,duration,S.vcMultiImages.map(i=>i.dataUrl));
       providerLabel="Veo 3.1 Reference-to-Video";costKey=model;
     } else if(cap.provider==="kling-o3-ref"){
-      if(!S.vcMultiImages.length)throw new Error("Add at least 1 reference image (up to 4) — this model needs one to generate.");
-      pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with reference images…"});
-      videoUrl=await genViaKlingO3Reference(prompt,ratio,duration,S.vcMultiImages.map(i=>i.dataUrl));
+      if(!S.vcMultiImages.length&&!S.vcMultiVideos.length)throw new Error("Add at least 1 reference image or video — this model needs one to generate.");
+      pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"});
+      videoUrl=await genViaKlingO3Reference(prompt,ratio,duration,S.vcMultiImages.map(i=>i.dataUrl),S.vcMultiVideos.map(v=>v.dataUrl));
       providerLabel="Kling O3 Pro Reference-to-Video";costKey=model;
     } else {
       pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating…"});
