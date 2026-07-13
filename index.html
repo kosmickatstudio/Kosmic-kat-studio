@@ -5216,6 +5216,7 @@ function renderVcChatThread(){
     }
     if(msg.type==="loading")return `<div class="ig-bubble-loading" id="${msg.id}"><span class="ig-dot"></span><span class="ig-dot"></span><span class="ig-dot"></span>&nbsp;${msg.content}</div>`;
     if(msg.type==="error")return `<div class="ig-bubble-assistant" style="color:var(--red)">❌ ${msg.content}</div>`;
+    if(msg.type==="debug")return `<div class="ig-bubble-assistant" style="font-family:monospace;font-size:10.5px;white-space:pre-wrap;word-break:break-all;color:var(--textm);background:var(--pearl2);border:1px dashed var(--border)">${msg.content}</div>`;
     if(msg.type==="video"){
       const isVeo=(msg.meta.providerLabel||"").includes("Veo");
       const isKling=(msg.meta.providerLabel||"").includes("Kling");
@@ -5532,6 +5533,16 @@ async function sendVcMultiShotPrompt(){
     const hostedImages=S.vcMultiImages.length?await uploadRefsToFal(S.vcMultiImages,apiKey):[];
     const hostedVideos=S.vcMultiVideos.length?await uploadRefsToFal(S.vcMultiVideos,apiKey):[];
     patchVcUserMessageRefs(userMsgId,hostedImages,hostedVideos,[]);
+    if(cap.elements&&hostedImages.length>1){
+      // Real diagnostic visibility, not just fal's response — after several
+      // rounds where fal's own error kept saying elements were empty despite
+      // real uploads, the missing piece was seeing the ACTUAL URLs this app
+      // generated and sent, not just the eventual result. Logged as its own
+      // small message so it's easy to tap-and-hold to copy one and check it
+      // directly (paste into a new tab — a working reference image should
+      // just load).
+      pushVcChatMessage({role:"assistant",type:"debug",content:`🔎 Debug — URLs about to be sent as elements:\n${hostedImages.map((u,i)=>`${i+1}. ${u}`).join("\n")}`});
+    }
     if(cap.provider==="kling-o3-ref"){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length)throw new Error("Add at least 1 reference image or video — O3 Pro needs one to generate.");
       replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:`Generating ${validShots.length}-shot sequence…`});
@@ -5723,6 +5734,9 @@ async function sendVcChatPrompt(){
     // base64 originally captured above — keeps chat history storage small
     // and means a future Retry reuses these directly instead of re-uploading.
     patchVcUserMessageRefs(userMsgId,hostedImages,hostedVideos,hostedAudios);
+    if(cap.elements&&hostedImages.length>1){
+      pushVcChatMessage({role:"assistant",type:"debug",content:`🔎 Debug — URLs about to be sent as elements:\n${hostedImages.map((u,i)=>`${i+1}. ${u}`).join("\n")}`});
+    }
     if(cap.provider==="seedance-ref"){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length&&!S.vcMultiAudios.length){
         throw new Error("Add at least one reference image, video, or audio file — this model needs one to generate.");
