@@ -4344,7 +4344,12 @@ function renderVideoCanvas(el){
             <label class="f-label" id="vcMultiImageLabel">Reference Images</label>
             <input type="file" accept="image/*" multiple id="vcMultiImageFile" style="display:none" onchange="handleVcMultiImageUpload(event)">
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px" id="vcMultiImagePreview"></div>
-            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcMultiImageFile').click()">📤 Add Images</button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcMultiImageFile').click()">📤 Add Images</button>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openSaveCharacterPresetModal()">💾 Save as Preset</button>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openLoadCharacterPresetModal()">📁 Load Preset</button>
+            </div>
+            <div style="font-size:9.5px;color:var(--textm);margin-top:5px">Presets are saved in this app only, for fast reuse — not a registered Kling Element (fal doesn't expose Kling's own Element Library via its API).</div>
           </div>
           <div class="f-group" id="vcMotionBrushWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
             <label class="f-label">Motion Brush <span style="font-weight:400;color:var(--texts)">(optional — paint where motion happens)</span></label>
@@ -4471,6 +4476,15 @@ function renderVideoCanvas(el){
 
 // ── VIDEO CHAT UI — model-driven dynamic settings ──
 S.vcMultiImages=S.vcMultiImages||[];
+// Local, app-side saved character presets — NOT a registered Kling Element.
+// fal doesn't expose Kling's own persistent Element Library (create/name/
+// tag/save/reuse with AI-assisted angle generation and voice binding) via
+// its API at all — every fal doc for `elements` describes it as an inline
+// array re-sent on every request, never a saved library. This is the honest
+// alternative: a real, working way to quickly reuse a named group of
+// reference images in THIS app, without pretending to replicate Kling's
+// own native-app-only feature.
+S.characterPresets=S.characterPresets||gs("character_presets",[])||[];
 S.vcMultiVideos=S.vcMultiVideos||[];
 S.vcMultiAudios=S.vcMultiAudios||[];
 S.vcEndFrame=S.vcEndFrame||null; // single image, not an array — Kling v3's real End Frame feature
@@ -4710,6 +4724,124 @@ function removeVcEndFrame(){
   S.vcEndFrame=null;
   renderVcEndFramePreview();
   updateVcAttachmentBar();
+}
+
+// ── LOCAL CHARACTER PRESETS — save/reuse a named group of reference images
+// in this app. Uploads to Firebase Storage (same proven pattern as the
+// Asset Library fix) so presets store lightweight hosted URLs, not raw
+// base64 — avoiding the same localStorage bloat that caused real "Storage
+// full" problems earlier this session.
+function openSaveCharacterPresetModal(){
+  if(!S.vcMultiImages.length){toast("Attach at least 1 reference image first","error");return;}
+  document.getElementById("vcPresetSaveSheet")?.remove();
+  document.getElementById("vcPresetSaveBackdrop")?.remove();
+  const backdrop=document.createElement("div");
+  backdrop.id="vcPresetSaveBackdrop";
+  backdrop.className="ig-settings-backdrop show";
+  backdrop.onclick=closeSaveCharacterPresetModal;
+  document.body.appendChild(backdrop);
+  const sheet=document.createElement("div");
+  sheet.id="vcPresetSaveSheet";
+  sheet.className="ig-settings-sheet open";
+  sheet.innerHTML=`
+    <div class="ig-sheet-handle"></div>
+    <div style="padding:6px 20px 24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">Save Character Preset</div>
+        <button class="ig-icon-btn" onclick="closeSaveCharacterPresetModal()">✕</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+        ${S.vcMultiImages.map(i=>`<img src="${i.dataUrl}" style="width:52px;height:52px;border-radius:8px;object-fit:cover">`).join('')}
+      </div>
+      <label class="f-label">Name</label>
+      <input class="f-input" id="vcPresetNameInput" placeholder="e.g. Tina, Mercenary Woman…" style="margin-bottom:14px">
+      <button class="btn btn-primary" style="width:100%" onclick="saveCharacterPreset()">Save Preset</button>
+    </div>`;
+  document.body.appendChild(sheet);
+  setTimeout(()=>document.getElementById("vcPresetNameInput")?.focus(),100);
+}
+
+function closeSaveCharacterPresetModal(){
+  document.getElementById("vcPresetSaveSheet")?.remove();
+  document.getElementById("vcPresetSaveBackdrop")?.remove();
+}
+
+async function saveCharacterPreset(){
+  const name=document.getElementById("vcPresetNameInput")?.value.trim();
+  if(!name){toast("Give this preset a name","error");return;}
+  closeSaveCharacterPresetModal();
+  toast("Saving preset…","");
+  try{
+    const hostedUrls=await Promise.all(S.vcMultiImages.map(async img=>{
+      if(!img.dataUrl.startsWith("data:"))return img.dataUrl; // already hosted
+      const blob=dataUrlToBlob(img.dataUrl);
+      const path=`character-presets/${Date.now()}_${Math.random().toString(36).slice(2,6)}.jpg`;
+      const ref=fbStorage.ref(path);
+      await ref.put(blob);
+      return ref.getDownloadURL();
+    }));
+    S.characterPresets.push({id:"preset_"+Date.now(),name,images:hostedUrls,createdAt:new Date().toISOString()});
+    saveSetting("character_presets",S.characterPresets);
+    toast(`💾 "${name}" saved`,"success");
+  }catch(err){
+    toast("Couldn't save preset: "+err.message,"error");
+  }
+}
+
+function openLoadCharacterPresetModal(){
+  document.getElementById("vcPresetLoadSheet")?.remove();
+  document.getElementById("vcPresetLoadBackdrop")?.remove();
+  const backdrop=document.createElement("div");
+  backdrop.id="vcPresetLoadBackdrop";
+  backdrop.className="ig-settings-backdrop show";
+  backdrop.onclick=closeLoadCharacterPresetModal;
+  document.body.appendChild(backdrop);
+  const sheet=document.createElement("div");
+  sheet.id="vcPresetLoadSheet";
+  sheet.className="ig-settings-sheet open";
+  sheet.innerHTML=`
+    <div class="ig-sheet-handle"></div>
+    <div style="padding:6px 20px 24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">Load Character Preset</div>
+        <button class="ig-icon-btn" onclick="closeLoadCharacterPresetModal()">✕</button>
+      </div>
+      ${!S.characterPresets.length?`<div class="empty-desc">No saved presets yet — attach some reference images and tap "Save as Preset" first.</div>`
+      :S.characterPresets.map(p=>`<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
+        <div style="display:flex;gap:-8px;flex-shrink:0">${p.images.slice(0,3).map((u,i)=>`<img src="${u}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;margin-left:${i>0?'-10px':'0'};border:2px solid var(--card-bg)">`).join('')}</div>
+        <div style="flex:1;min-width:0;cursor:pointer" onclick="loadCharacterPreset('${p.id}')">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">${p.name}</div>
+          <div style="font-size:10px;color:var(--textm)">${p.images.length} image${p.images.length===1?'':'s'}</div>
+        </div>
+        <button onclick="deleteCharacterPreset('${p.id}')" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:14px;flex-shrink:0">✕</button>
+      </div>`).join('')}
+    </div>`;
+  document.body.appendChild(sheet);
+}
+
+function closeLoadCharacterPresetModal(){
+  document.getElementById("vcPresetLoadSheet")?.remove();
+  document.getElementById("vcPresetLoadBackdrop")?.remove();
+}
+
+function loadCharacterPreset(id){
+  const preset=S.characterPresets.find(p=>p.id===id);
+  if(!preset)return;
+  S.vcMultiImages=preset.images.map(u=>({dataUrl:u,name:preset.name}));
+  renderVcMultiPreview("vcMultiImagePreview",S.vcMultiImages,false);
+  refreshMotionBrushVisibility();
+  updateVcAttachmentBar();
+  closeLoadCharacterPresetModal();
+  toast(`📁 Loaded "${preset.name}" (${preset.images.length} image${preset.images.length===1?'':'s'})`,"success");
+}
+
+async function deleteCharacterPreset(id){
+  const preset=S.characterPresets.find(p=>p.id===id);
+  if(!preset)return;
+  if(!(await showConfirmDialog(`Delete "${preset.name}"? This can't be undone.`,{danger:true,okLabel:"Delete"})))return;
+  S.characterPresets=S.characterPresets.filter(p=>p.id!==id);
+  saveSetting("character_presets",S.characterPresets);
+  openLoadCharacterPresetModal(); // re-render the list with it removed
 }
 
 function setVcElementGroupMode(checked){
