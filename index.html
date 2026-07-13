@@ -1436,7 +1436,6 @@ const MODEL_BANNERS={
   "fal-ai/kling-video/v3/standard/text-to-video":"linear-gradient(135deg,#1E293B,#475569)",
   "fal-ai/kling-video/v3/pro/text-to-video":"linear-gradient(135deg,#1E1B2E,#3B82F6)",
   "fal-ai/kling-video/o3/pro/reference-to-video":"linear-gradient(135deg,#1E1B2E,#8B5CF6)",
-  "fal-ai/kling-video/v3/pro/motion-control":"linear-gradient(135deg,#1E1B2E,#22C55E)",
   "fal-ai/kling-video/o3/standard/image-to-video":"linear-gradient(135deg,#1E1B2E,#8B5CF6)",
   "fal-ai/kling-video/v3/4k/image-to-video":"linear-gradient(135deg,#0F0B1E,#F59E0B)",
   "fal-ai/veo3.1":"linear-gradient(135deg,#1E1B4B,#4338CA)",
@@ -3269,7 +3268,6 @@ const MODEL_LOGOS={
   "fal-ai/kling-video/v3/standard/text-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/kling-video/v3/pro/text-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/kling-video/o3/pro/reference-to-video":{mono:"K",bg:"#1B5EFF"},
-  "fal-ai/kling-video/v3/pro/motion-control":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/kling-video/o3/standard/image-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/kling-video/v3/4k/image-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/veo3.1":{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
@@ -4271,11 +4269,6 @@ const VIDEO_MODEL_CAPABILITIES={
   // Pro, not the dedicated always-reference provider path O3 Pro needs.
   "fal-ai/kling-video/o3/standard/image-to-video":{multiImage:true,maxImages:4,negPrompt:true,multiShot:true,elements:true,cfgScale:true,tagSyntax:"@Element1 (when 2+ reference images)"},
   "fal-ai/kling-video/v3/4k/image-to-video":{multiImage:true,maxImages:4,negPrompt:true,multiShot:true,elements:true,cfgScale:true,tagSyntax:"@Element1 (when 2+ reference images)"},
-  // Motion Control: real, separate endpoint - needs exactly 1 reference image
-  // (appearance) + 1 reference video (motion source), not the multi-
-  // character elements system. Reuses the existing Reference Images/Videos
-  // upload sections rather than building new ones, just capped at 1 each.
-  "fal-ai/kling-video/v3/pro/motion-control":{provider:"kling-motion-control",multiRef:true,maxImages:1,maxVideos:1,cfgScale:true,negPrompt:true,characterOrientation:true},
 };
 
 // ══════════════════════════════════════════════════════
@@ -4502,7 +4495,6 @@ function renderVideoCanvas(el){
                 <option value="fal-ai/kling-video/o3/pro/reference-to-video">Kling O3 Pro — Multi-Reference (up to 4 characters)</option>
                 <option value="fal-ai/kling-video/o3/standard/image-to-video">Kling O3 Standard — faster, cheaper reference (up to 4 characters)</option>
                 <option value="fal-ai/kling-video/v3/4k/image-to-video">Kling 3.0 4K — Native 4K Output</option>
-                <option value="fal-ai/kling-video/v3/pro/motion-control">Kling 3.0 Pro — Motion Control (video motion + image look)</option>
               </optgroup>
               <optgroup label="Veo (Google DeepMind)">
                 <option value="fal-ai/veo3.1">Veo 3.1</option>
@@ -4524,14 +4516,6 @@ function renderVideoCanvas(el){
             <label class="f-label">Prompt Adherence (CFG Scale) — <span id="vcCfgScaleLabel">0.5</span></label>
             <input type="range" id="vcCfgScaleSlider" min="0" max="1" step="0.05" value="0.5" style="width:100%" oninput="document.getElementById('vcCfgScaleLabel').textContent=this.value;updateRangeFill(this)">
             <div style="font-size:10px;color:var(--textm);margin-top:3px">Lower = more creative motion/variation. Higher = sticks closer to your exact prompt. Kling's own default is 0.5.</div>
-          </div>
-          <div class="f-group" id="vcCharOrientWrap" style="display:none">
-            <label class="f-label">Match Orientation To</label>
-            <div class="vc-shottype-toggle">
-              <button type="button" class="vc-shottype-btn active" data-val="image" onclick="setVcCharOrientation('image')">Reference Image<br>better for camera moves (max 10s)</button>
-              <button type="button" class="vc-shottype-btn" data-val="video" onclick="setVcCharOrientation('video')">Reference Video<br>better for complex motion (max 30s)</button>
-            </div>
-            <input type="hidden" id="vcCharOrientation" value="image">
           </div>
 
           <div class="f-group" id="vcMultiImageWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
@@ -5053,11 +5037,6 @@ function setVcElementGroupMode(checked){
     :"Kling's own Element system expects 2+ angle photos per character — turn this on if all your uploads are the same person/object from different angles.";
 }
 
-function setVcCharOrientation(val){
-  document.getElementById("vcCharOrientation").value=val;
-  document.querySelectorAll(".vc-shottype-btn").forEach(b=>{if(b.dataset.val==="image"||b.dataset.val==="video")b.classList.toggle("active",b.dataset.val===val);});
-}
-
 // ── KLING MULTI-SHOT STORYBOARD — real multi_prompt/shot_type schema ──
 S.vcShots=S.vcShots||[];
 
@@ -5556,7 +5535,6 @@ function updateVcModelUI(){
 
   document.getElementById("vcNegPromptWrap").style.display=cap.negPrompt?"block":"none";
   document.getElementById("vcCfgScaleWrap").style.display=cap.cfgScale?"block":"none";
-  document.getElementById("vcCharOrientWrap").style.display=cap.characterOrientation?"block":"none";
   document.getElementById("vcMultiImageWrap").style.display=(cap.multiRef||cap.multiImage)?"block":"none";
   if((cap.multiRef||cap.multiImage)&&cap.maxImages&&S.vcMultiImages.length>cap.maxImages){
     const removed=S.vcMultiImages.length-cap.maxImages;
@@ -5626,7 +5604,6 @@ function updateVcModelUI(){
   else if(cap.provider==="seedance-ref")note.textContent="Real multi-modal: combine images, video, and audio references in one generation.";
   else if(cap.provider==="veo-ref")note.textContent="Real reference-based generation — keeps a character/product/object consistent across the shot.";
   else if(cap.provider==="kling-o3-ref")note.textContent="Real multi-character reference generation — each uploaded image locks in one character/object across the whole clip.";
-  else if(cap.provider==="kling-motion-control")note.textContent="Real motion transfer — attach 1 reference image (the look) and 1 reference video (the motion). The character in your image performs the actions from your video.";
   else if(cap.elements)note.textContent=`1 image = first-frame reference. 2+ images = real multi-character reference (up to ${cap.maxImages}), plus negative prompt support.`;
   else if(cap.multiImage)note.textContent=`Up to ${cap.maxImages} reference image${cap.maxImages===1?'':'s'}, plus negative prompt support.`;
   else note.textContent="";
@@ -6513,14 +6490,6 @@ async function sendVcChatPrompt(){
       pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"});
       videoUrl=await genViaKlingO3Reference(prompt,ratio,duration,hostedImages,hostedVideos,undefined,undefined,S.vcElementGroupMode,document.getElementById("vcCfgScaleSlider")&&cap.cfgScale?parseFloat(document.getElementById("vcCfgScaleSlider").value):null);
       providerLabel="Kling O3 Pro Reference-to-Video";costKey=model;
-    } else if(cap.provider==="kling-motion-control"){
-      if(!S.vcMultiImages.length)throw new Error("Add 1 reference image (the look/appearance) — this model needs one to generate.");
-      if(!S.vcMultiVideos.length)throw new Error("Add 1 reference video (the motion to follow) — this model needs one to generate.");
-      pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with motion + appearance references…"});
-      const orientation=document.getElementById("vcCharOrientation")?.value||"image";
-      const cfgVal=document.getElementById("vcCfgScaleSlider")&&cap.cfgScale?parseFloat(document.getElementById("vcCfgScaleSlider").value):null;
-      videoUrl=await genViaKlingMotionControl(prompt,ratio,duration,hostedImages[0],hostedVideos[0],orientation,cfgVal,negPrompt);
-      providerLabel="Kling 3.0 Pro Motion Control";costKey=model;
     } else {
       pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating…"});
       const apiKey=apiKeyEarly;
@@ -7001,7 +6970,6 @@ const VIDEO_MODEL_DURATIONS={
   "fal-ai/kling-video/v3/standard/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/v3/pro/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/o3/pro/reference-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
-  "fal-ai/kling-video/v3/pro/motion-control":{options:[3,4,5,6,7,8,9,10],format:n=>String(n)},
   "fal-ai/kling-video/o3/standard/image-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/v3/4k/image-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/veo3.1":{options:[4,6,8],format:n=>`${n}s`},
@@ -7029,7 +6997,6 @@ const VIDEO_MODEL_RESOLUTIONS={
   "fal-ai/kling-video/v3/standard/text-to-video":null,
   "fal-ai/kling-video/v3/pro/text-to-video":null,
   "fal-ai/kling-video/o3/pro/reference-to-video":null,
-  "fal-ai/kling-video/v3/pro/motion-control":null,
   "fal-ai/kling-video/o3/standard/image-to-video":null,
   "fal-ai/kling-video/v3/4k/image-to-video":null,
 };
@@ -7039,7 +7006,6 @@ const KLING_FIXED_RESOLUTION_NOTE={
   "fal-ai/kling-video/v3/standard/text-to-video":"Kling 3.0 renders at a fixed resolution up to 1080p — no manual selection on fal.",
   "fal-ai/kling-video/v3/pro/text-to-video":"Kling 3.0 Pro renders at a fixed resolution up to 1080p — no manual selection on fal.",
   "fal-ai/kling-video/o3/pro/reference-to-video":"Kling O3 Pro renders at a fixed resolution up to 1080p — no manual selection on fal.",
-  "fal-ai/kling-video/v3/pro/motion-control":"Kling Motion Control renders at a fixed resolution up to 1080p — no manual selection on fal.",
   "fal-ai/kling-video/o3/standard/image-to-video":"Kling O3 Standard renders at a fixed resolution up to 1080p — no manual selection on fal.",
   "fal-ai/kling-video/v3/4k/image-to-video":"Always renders in native 4K — no manual resolution selection, and no upscaling step needed afterward.",
 };
@@ -7160,7 +7126,6 @@ const PD_ASPECT_RATIOS={
   "fal-ai/kling-video/v3/standard/text-to-video":["16:9","9:16","1:1","4:3","3:4"],
   "fal-ai/kling-video/v3/pro/text-to-video":["16:9","9:16","1:1","4:3","3:4"],
   "fal-ai/kling-video/o3/pro/reference-to-video":["16:9","9:16","1:1"],
-  "fal-ai/kling-video/v3/pro/motion-control":["16:9","9:16","1:1"],
   "fal-ai/kling-video/o3/standard/image-to-video":["16:9","9:16","1:1"],
   "fal-ai/kling-video/v3/4k/image-to-video":["16:9","9:16","1:1"],
   "fal-ai/veo3.1":["16:9","9:16"],
