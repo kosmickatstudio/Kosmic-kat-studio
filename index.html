@@ -132,6 +132,13 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .ig-chat-thread{height:52vh;min-height:320px;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:18px}
 .ig-bubble-user{align-self:flex-end;max-width:82%;background:linear-gradient(135deg,var(--violet),var(--vm) 55%,var(--ice) 140%);color:#fff;padding:12px 17px;border-radius:20px 20px 5px 20px;font-size:13px;line-height:1.55;box-shadow:0 6px 22px rgba(61,31,122,0.32),0 0 0 1px rgba(255,255,255,0.06) inset;letter-spacing:0.01em;white-space:pre-wrap;word-break:break-word}
 .ig-msg-action{background:none;border:none;padding:0;font-size:10.5px;font-weight:600;color:var(--textm);cursor:pointer;display:flex;align-items:center;gap:3px;transition:color 0.15s}
+/* Icon-only action row under generated video/image results — no emoji, no
+   text labels, just the icon (per request), consistent everywhere a result
+   card needs Download/Collection/Info. */
+.vc-result-actions{display:flex;gap:8px;margin-top:8px}
+.vc-result-icon-btn{width:34px;height:34px;border-radius:10px;border:1px solid var(--glass-brd);background:var(--glass);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--violet);transition:background 0.15s}
+.vc-result-icon-btn:active{background:var(--lav)}
+.vc-result-icon-btn svg{width:16px;height:16px}
 .ig-msg-action:active{color:var(--violet)}
 .ig-bubble-assistant{align-self:flex-start;max-width:88%;background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--glass-brd);padding:13px;border-radius:5px 20px 20px 20px;box-shadow:0 4px 18px rgba(0,0,0,0.10),inset 0 1px 0 rgba(255,255,255,0.05);position:relative}
 .ig-bubble-loading{align-self:flex-start;display:flex;align-items:center;gap:9px;background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--glass-brd);padding:11px 17px;border-radius:5px 20px 20px 20px;font-size:12px;color:var(--textm);font-family:var(--font-mono)}
@@ -245,6 +252,12 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 /* ── GRIDS / CARDS ── */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+/* Gallery cards carry a lot more per-item content (rating, approve/reject,
+   regenerate, select, collection, download, delete, info) than the simpler
+   grids elsewhere in the app (Character Sheet views, etc) that .grid3 was
+   originally built for. 3-per-row crushed all of that into ~110px on a
+   phone. 2 columns gives real room to actually tap things. */
+.grid-gallery{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .card{background:var(--glass);backdrop-filter:blur(12px);border:1.5px solid var(--glass-brd);border-radius:12px;padding:14px;transition:transform 0.15s cubic-bezier(0.4,0,0.2,1),box-shadow 0.15s ease,border-color 0.15s ease;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.05)}
 .card:active{transform:scale(0.97);box-shadow:0 1px 4px rgba(61,31,122,0.08)}
 .card:hover{border-color:var(--ice);box-shadow:0 8px 28px var(--glow-ice);transform:translateY(-2px)}
@@ -4028,9 +4041,67 @@ async function downloadWithName(url,filename){
     document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(blobUrl),1000);
   }catch(err){
+    // The direct blob download above needs the host to allow cross-origin
+    // fetch() reads — if it doesn't, this silently used to just open the
+    // file with zero explanation, which looked exactly like "downloading
+    // doesn't work" even though the file itself was fine. Now at least
+    // tells the person what to actually do next.
     console.warn("Custom-named download failed, opening directly instead:",err);
     window.open(url,"_blank");
+    toast("Opened in a new tab — long-press the video/image there and choose \"Download\" to save it","");
   }
+}
+
+// Reusable, no-emoji icon set for the Download/Collection/Info action row —
+// requested specifically as icons only, no text or emoji.
+const VC_RESULT_ICONS={
+  download:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>`,
+  collection:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>`,
+  info:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.5" r="0.6" fill="currentColor" stroke="none"/></svg>`,
+};
+
+// The glossy/transparent bottom sheet showing exactly what a generation was
+// made from — prompt, reference images, model, resolution — reusing the same
+// glass-sheet look as the Settings panel rather than inventing a new style.
+function openGenerationInfoModal(meta){
+  const existing=document.getElementById("vcInfoSheet");
+  if(existing)existing.remove();
+  const backdrop=document.createElement("div");
+  backdrop.id="vcInfoBackdrop";
+  backdrop.className="ig-settings-backdrop show";
+  backdrop.onclick=closeGenerationInfoModal;
+  document.body.appendChild(backdrop);
+  const sheet=document.createElement("div");
+  sheet.id="vcInfoSheet";
+  sheet.className="ig-settings-sheet open";
+  sheet.innerHTML=`
+    <div class="ig-sheet-handle" ontouchstart="sheetSwipeStart(event)" ontouchmove="sheetSwipeMove(event,'vcInfoSheet')" ontouchend="sheetSwipeEnd(event,'vcInfoSheet','closeGenerationInfoModal')"></div>
+    <div style="padding:6px 20px 24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">Generation Details</div>
+        <button class="ig-icon-btn" onclick="closeGenerationInfoModal()">✕</button>
+      </div>
+      <div class="f-label">Prompt</div>
+      <div style="font-size:12.5px;color:var(--text);line-height:1.5;background:var(--pearl2);border-radius:10px;padding:10px 12px;margin-bottom:14px;white-space:pre-wrap">${(meta.prompt||"—")}</div>
+      ${(meta.refImages&&meta.refImages.length)?`<div class="f-label">Reference Images</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${meta.refImages.map(u=>`<img src="${u}" style="width:52px;height:52px;border-radius:8px;object-fit:cover">`).join('')}</div>`:''}
+      <div class="f-label">Model</div>
+      <div style="font-size:12.5px;color:var(--text);margin-bottom:14px">${meta.providerLabel||meta.model||"—"}</div>
+      <div class="f-label">Resolution</div>
+      <div style="font-size:12.5px;color:var(--text)">${meta.resolution||"Fixed per model — no manual selection"}</div>
+    </div>`;
+  document.body.appendChild(sheet);
+}
+
+function showVcGenerationInfo(msgId){
+  const msg=S.vcChatHistory.find(m=>m.id===msgId);
+  if(!msg)return;
+  openGenerationInfoModal(msg.meta||{});
+}
+
+function closeGenerationInfoModal(){
+  document.getElementById("vcInfoSheet")?.remove();
+  document.getElementById("vcInfoBackdrop")?.remove();
 }
 
 function sanitizeFilenamePart(text){
@@ -5269,17 +5340,12 @@ function renderVcChatThread(){
     if(msg.type==="video"){
       const isVeo=(msg.meta.providerLabel||"").includes("Veo");
       const isKling=(msg.meta.providerLabel||"").includes("Kling");
-      const totalDur=msg.meta.totalDuration||8;
-      return `<div class="ig-bubble-assistant">
-        <video src="${msg.content}" controls style="width:100%;max-width:320px;border-radius:12px;display:block;margin-bottom:8px"></video>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
-          <span class="badge badge-gray">via ${msg.meta.providerLabel}</span>
-          ${isVeo?`<span class="badge badge-gray">~${totalDur}s total</span>`:''}
-          <span class="badge badge-green">✓ Saved</span>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-outline btn-xs" onclick="downloadWithName('${msg.content.replace(/'/g,"\\'")}','KosmicKat_${sanitizeFilenamePart(msg.meta.prompt)}.mp4')">⬇</button>
-          ${msg.meta.assetId?`<button class="btn btn-outline btn-xs" onclick="openCollectionPicker('asset','${msg.meta.assetId}')">📁 Collection</button>`:''}
+      return `<div class="ig-bubble-assistant" style="background:none;box-shadow:none;padding:0;border:none">
+        <video src="${msg.content}" controls style="width:100%;max-width:320px;border-radius:12px;display:block"></video>
+        <div class="vc-result-actions">
+          <button class="vc-result-icon-btn" title="Download" onclick="downloadWithName('${msg.content.replace(/'/g,"\\'")}','KosmicKat_${sanitizeFilenamePart(msg.meta.prompt)}.mp4')">${VC_RESULT_ICONS.download}</button>
+          ${msg.meta.assetId?`<button class="vc-result-icon-btn" title="Add to Collection" onclick="openCollectionPicker('asset','${msg.meta.assetId}')">${VC_RESULT_ICONS.collection}</button>`:''}
+          <button class="vc-result-icon-btn" title="Details" onclick="showVcGenerationInfo('${msg.id||''}')">${VC_RESULT_ICONS.info}</button>
           ${isVeo?`<button class="btn btn-outline btn-xs" onclick="extendVeoVideo('${msg.id||''}')">⏩ Extend</button>`:''}
           ${isKling?`<button class="btn btn-outline btn-xs" onclick="openLipSyncDialog('${msg.id||''}')">👄 Lip Sync</button>`:''}
         </div>
@@ -5489,7 +5555,7 @@ async function runLipSync(msgId){
     if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
     const videoUrl=await pollFalVideoResult(endpoint,submitData,apiKey);
     const savedAssetLs=createVideoAsset(videoUrl,msg.meta.prompt,"");
-    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:"Kling Lip-Sync",prompt:msg.meta.prompt,assetId:savedAssetLs.id}});
+    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:"Kling Lip-Sync",prompt:msg.meta.prompt,assetId:savedAssetLs.id,model:endpoint,resolution:"Fixed by model (up to 1080p)"}});
     logCost(endpoint,"Lip-sync");
     toast("✨ Lip-synced video ready!","success");
   }catch(err){
@@ -5526,7 +5592,7 @@ async function extendVeoVideo(msgId){
     if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
     const videoUrl=await pollFalVideoResult(model,submitData,apiKey);
     const savedAssetExt=createVideoAsset(videoUrl,continuation,"");
-    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:msg.meta.providerLabel,prompt:continuation,totalDuration:currentTotal+7,assetId:savedAssetExt.id}});
+    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:msg.meta.providerLabel,prompt:continuation,totalDuration:currentTotal+7,assetId:savedAssetExt.id,model,resolution:msg.meta.resolution||""}});
     logCost(model,"Extend: "+continuation.slice(0,50));
     toast("✨ Video extended!","success");
   }catch(err){
@@ -5604,7 +5670,7 @@ async function sendVcSequentialShots(){
       if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
       const videoUrl=await pollFalVideoResult(endpoint,submitData,apiKey);
       const savedAsset=createVideoAsset(videoUrl,shotPrompt,"");
-      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:`Sequential — Shot ${idx+1}/${validShots.length}`,prompt:shotPrompt,assetId:savedAsset.id}});
+      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:`Sequential — Shot ${idx+1}/${validShots.length}`,prompt:shotPrompt,assetId:savedAsset.id,model,resolution:"Fixed by model (up to 1080p)",refImages:refUrl?[refUrl]:[]}});
       logCost(model,`Sequential shot ${idx+1}/${validShots.length}`);
       successCount++;
     }catch(err){
@@ -5716,7 +5782,7 @@ async function sendVcMultiShotPrompt(){
     }
     const multiShotPromptJoined=validShots.map(s=>s.prompt).join(" → ");
     const savedAssetMs=createVideoAsset(videoUrl,multiShotPromptJoined,"");
-    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:"Kling Multi-Shot",prompt:multiShotPromptJoined,assetId:savedAssetMs.id}});
+    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:"Kling Multi-Shot",prompt:multiShotPromptJoined,assetId:savedAssetMs.id,model,resolution:"Fixed by model (up to 1080p)",refImages:hostedImages||[]}});
     logCost(model,`Multi-shot (${validShots.length} shots)`);
     toast(`✨ ${validShots.length}-shot video generated!`,"success");
   }catch(err){
@@ -5948,7 +6014,7 @@ async function sendVcChatPrompt(){
       providerLabel=model.includes("kling")?"Kling":model.includes("veo")?"Veo 3.1":"Seedance 2.0";costKey=model;
     }
     const savedAssetVc=createVideoAsset(videoUrl,prompt,"");
-    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel,prompt,totalDuration:parseInt(duration,10),assetId:savedAssetVc.id}});
+    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel,prompt,totalDuration:parseInt(duration,10),assetId:savedAssetVc.id,model,resolution:model.startsWith("fal-ai/kling-video")?"Fixed by model (up to 1080p)":(document.getElementById("vcRes")?.value||""),refImages:hostedImages}});
     logCost(costKey,prompt.slice(0,60));
     toast(`✨ Video generated via ${providerLabel}!`,"success");
   }catch(err){
@@ -9792,7 +9858,7 @@ function renderGallery(el){
       <button class="btn ${reviewFilter==='unreviewed'?'btn-primary':'btn-outline'} btn-xs" onclick="setGalleryReviewFilter('unreviewed')">⬜ Unreviewed</button>
     </div>
     ${filtered.length===0?`<div class="empty-state"><div class="empty-icon">🎞</div><div class="empty-title">${filter==='all'?'No Generations Yet':'Nothing matches this filter'}</div><div class="empty-desc">Generated images, videos, and voiceovers you save will appear here.</div></div>`
-    :`<div class="grid3">${filtered.map(a=>galleryCardHTML(a)).join('')}</div>`}
+    :`<div class="grid-gallery">${filtered.map(a=>galleryCardHTML(a)).join('')}</div>`}
   `;
 }
 
@@ -9830,8 +9896,9 @@ function galleryCardHTML(a){
       </div>
       <div style="display:flex;gap:3px;margin-top:3px">
         <button class="btn ${isSelected?'btn-primary':'btn-outline'} btn-xs" style="flex:1" onclick="toggleCompareSelect('${a.id}')">${isSelected?'✓ Selected':'Select'}</button>
-        <button class="btn btn-outline btn-xs" onclick="openCollectionPicker('asset','${a.id}')" title="Add to Collection">📁</button>
-        <a href="${a.url}" ${a.type!=='audio'?'target="_blank"':'download="voiceover.mp3"'} class="btn btn-outline btn-xs">⬇</a>
+        <button class="vc-result-icon-btn" style="width:28px;height:28px;border-radius:8px" title="Add to Collection" onclick="openCollectionPicker('asset','${a.id}')">${VC_RESULT_ICONS.collection}</button>
+        <button class="vc-result-icon-btn" style="width:28px;height:28px;border-radius:8px" title="Download" onclick="downloadWithName('${a.url.replace(/'/g,"\\'")}','KosmicKat_${sanitizeFilenamePart(a.prompt)}.${a.type==='video'?'mp4':a.type==='audio'?'mp3':'png'}')">${VC_RESULT_ICONS.download}</button>
+        <button class="vc-result-icon-btn" style="width:28px;height:28px;border-radius:8px" title="Details" onclick="openGenerationInfoModal({prompt:'${(a.prompt||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',providerLabel:a.type,resolution:''})">${VC_RESULT_ICONS.info}</button>
         <button class="btn btn-danger btn-xs" onclick="deleteAsset('${a.id}')">🗑</button>
       </div>
     </div>`;
