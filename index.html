@@ -1152,15 +1152,23 @@ const COST_TABLE={
   "bytedance/seedance-2.0/text-to-video":0.50,
   "bytedance/seedance-2.0/fast/image-to-video":0.25,
   "bytedance/seedance-2.0/image-to-video":0.50,
-  "fal-ai/kling-video/v2.1/master/text-to-video":1.40,
-  "fal-ai/kling-video/v2.1/master/image-to-video":1.40,
-  "fal-ai/kling-video/v2.6/pro/text-to-video":0.90,
-  "fal-ai/kling-video/v2.6/pro/image-to-video":0.90,
-  "fal-ai/kling-video/v3/standard/text-to-video":0.70,
-  "fal-ai/kling-video/v3/standard/image-to-video":0.70,
-  "fal-ai/kling-video/v3/pro/text-to-video":1.10,
-  "fal-ai/kling-video/v3/pro/image-to-video":1.10,
-  "fal-ai/kling-video/o3/pro/reference-to-video":1.10,
+  // These are flat, duration-unaware logging estimates (~8s reference clip),
+  // not the live per-generation calculation shown before you hit Generate —
+  // see VIDEO_PRICING/estimateVideoCost for that. Rebased on the same
+  // corrected per-second rates after a real reported discrepancy (estimate
+  // showed $1.26, actual balance dropped $1.89 — exactly the ratio between
+  // Kling's audio-off and audio-on rates, which this app always bills at
+  // since generate_audio is always true). Still an approximation by design,
+  // not a substitute for the real per-generation figure above.
+  "fal-ai/kling-video/v2.1/master/text-to-video":2.24,
+  "fal-ai/kling-video/v2.1/master/image-to-video":2.24,
+  "fal-ai/kling-video/v2.6/pro/text-to-video":1.12,
+  "fal-ai/kling-video/v2.6/pro/image-to-video":1.12,
+  "fal-ai/kling-video/v3/standard/text-to-video":1.01,
+  "fal-ai/kling-video/v3/standard/image-to-video":1.01,
+  "fal-ai/kling-video/v3/pro/text-to-video":1.34,
+  "fal-ai/kling-video/v3/pro/image-to-video":1.34,
+  "fal-ai/kling-video/o3/pro/reference-to-video":1.12,
   "fal-ai/veo3.1":2.00,
   "fal-ai/veo3.1/image-to-video":2.00,
   "fal-ai/esrgan":0.01,
@@ -5002,7 +5010,9 @@ function updateVcCostHint(){
   const seconds=parseFloat(document.getElementById("vcDuration").value)||0;
   const resEl=document.getElementById("vcRes");
   const resolution=resEl?resEl.value:"720p";
-  const est=estimateVideoCost(model,seconds,resolution,!!(S.vcMultiVideos&&S.vcMultiVideos.length));
+  const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
+  const usesElements=!!(cap.elements&&S.vcMultiImages.length>1);
+  const est=estimateVideoCost(model,seconds,resolution,!!(S.vcMultiVideos&&S.vcMultiVideos.length),usesElements);
   const hint=document.getElementById("vcCostHint");
   if(hint)hint.textContent=est?formatCostLine(est):"";
 }
@@ -5032,15 +5042,38 @@ const VIDEO_PRICING={
   "bytedance/seedance-2.0/fast/reference-to-video":{perSec:0.2419,audioIncluded:true,videoRefMultiplier:0.6},
   "bytedance/seedance-2.0/reference-to-video":{standard:true,audioIncluded:true,videoRefMultiplier:0.6},
   "bytedance/seedance-2.0/image-to-video":{standard:true,audioIncluded:true},
-  "fal-ai/kling-video/v2.1/master/text-to-video":{perSec:0.112},
-  "fal-ai/kling-video/v2.6/pro/text-to-video":{perSec:0.112},
-  "fal-ai/kling-video/v3/standard/text-to-video":{perSec:0.084},
-  "fal-ai/kling-video/v3/pro/text-to-video":{perSec:0.168},
+  // Kling rates below corrected against fal's own model pages after a real
+  // discrepancy was reported: estimate showed $1.26, actual balance dropped
+  // by $1.89 — an exact 1.5x ratio, matching precisely the ratio between
+  // Kling's audio-off and audio-on rates. This app always sends
+  // generate_audio:true, so every Kling rate here needs to be the audio-ON
+  // price, not audio-off — v3 Standard was the confirmed exact match, and
+  // checking the rest against fal's own pages turned up the same mistake on
+  // v2.6 Pro too.
+  // v2.1 Master: no dedicated fal pricing page found with a clean
+  // breakdown — this number comes from consistent (but secondary/comparison-
+  // page) sources citing "$1.40 for 5s" ($0.28/s), lower confidence than the
+  // others below but still likely more accurate than the old value, which
+  // was just copied from v2.6 Pro's rate rather than independently verified.
+  "fal-ai/kling-video/v2.1/master/text-to-video":{perSec:0.28},
+  // Confirmed directly, twice, on fal's own v2.6 Pro model pages:
+  // $0.07/s audio off, $0.14/s audio on.
+  "fal-ai/kling-video/v2.6/pro/text-to-video":{perSec:0.14},
+  // Confirmed via the same source that reported the discrepancy: v3
+  // Standard is $0.084/s audio off — audio-on (what we actually always
+  // send) is 1.5x that, same ratio fal confirms for the Pro tier below.
+  "fal-ai/kling-video/v3/standard/text-to-video":{perSec:0.126,elementsMultiplier:2},
+  // Confirmed directly, multiple times, on fal's own v3 Pro model pages:
+  // $0.112/s audio off, $0.168/s audio on, $0.196/s with voice control.
+  // elementsMultiplier: fal explicitly states image-to-video WITH elements
+  // costs exactly 2x the plain rate ($0.336/s audio-on) — a real, separate
+  // pricing tier this app's estimate never accounted for at all before now.
+  "fal-ai/kling-video/v3/pro/text-to-video":{perSec:0.168,elementsMultiplier:2},
   "fal-ai/kling-video/o3/pro/reference-to-video":{perSec:0.14},
   "fal-ai/veo3.1":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
   "fal-ai/veo3.1/reference-to-video":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
 };
-function estimateVideoCost(model,seconds,resolution,hasVideoRefs){
+function estimateVideoCost(model,seconds,resolution,hasVideoRefs,usesElements){
   const p=VIDEO_PRICING[model];
   if(!p||!seconds)return null;
   if(p.standard){
@@ -5052,6 +5085,7 @@ function estimateVideoCost(model,seconds,resolution,hasVideoRefs){
   }
   let rate=(resolution==="4k"&&p.perSec4k)?p.perSec4k:p.perSec;
   if(p.audioSurcharge)rate=rate*p.audioSurcharge; // Veo bills audio-on by default in this app (generate_audio true)
+  if(usesElements&&p.elementsMultiplier)rate=rate*p.elementsMultiplier;
   const cost=rate*seconds;
   return{cost,approx:!p.audioIncluded||resolution!=="720p"};
 }
@@ -12214,7 +12248,7 @@ const NodeCanvas=(function(){
     }
     node.data.resultUrl=videoUrl;
     node.data.lastFrameUrl=lastFrameUrl||imageUrls[0]||null;
-    const est=estimateVideoCost(node.data.model,node.data.duration||5,node.data.resolution||"720p",videoUrls.length>0);
+    const est=estimateVideoCost(node.data.model,node.data.duration||5,node.data.resolution||"720p",videoUrls.length>0,!!(klingCap&&klingCap.elements&&imageUrls.length>1));
     node.meta.model=node.data.model;
     node.meta.cost=est?est.cost:0;
     logCost(node.data.model,"Node Canvas — Video Clip");
