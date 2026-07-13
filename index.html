@@ -4196,6 +4196,15 @@ function renderVideoCanvas(el){
             </label>
             <div id="vcMultiShotBuilder" style="display:none">
               <div class="f-group">
+                <label class="f-label">Generation Mode</label>
+                <div class="vc-shottype-toggle">
+                  <button type="button" class="vc-shottype-btn active" data-val="combined" onclick="setVcShotMode('combined')">Combined<br>one video, all shots at once</button>
+                  <button type="button" class="vc-shottype-btn" data-val="sequential" onclick="setVcShotMode('sequential')">Sequential<br>one clip per shot, own reference each</button>
+                </div>
+                <input type="hidden" id="vcShotMode" value="combined">
+                <div class="vc-shottype-note" id="vcShotModeNote">Real multi-character reference in one call — needs 2+ attached images.</div>
+              </div>
+              <div class="f-group" id="vcShotTypeWrap">
                 <label class="f-label">Shot Type</label>
                 <div class="vc-shottype-toggle">
                   <button type="button" class="vc-shottype-btn active" data-val="customize" onclick="setVcShotType('customize')">Customize<br>set each shot's prompt &amp; duration</button>
@@ -4494,6 +4503,24 @@ function clearMotionBrush(){
 // ── KLING MULTI-SHOT STORYBOARD — real multi_prompt/shot_type schema ──
 S.vcShots=S.vcShots||[];
 
+// Sequential mode exists because Combined mode's real multi-character
+// elements array has had persistent, unresolved failures even with
+// completely valid, verified reference URLs — likely something on fal's
+// own side handling multi-element requests, not fixable from request
+// shape alone. Sequential sidesteps it entirely: each shot gets its own
+// single reference image and its own real, proven-working image-to-video
+// call (start_image_url), generated one at a time as separate clips
+// instead of one combined video. Trades "one file" for "actually works".
+function setVcShotMode(val){
+  document.getElementById("vcShotMode").value=val;
+  document.querySelectorAll(".vc-shottype-btn").forEach(b=>{if(b.dataset.val==="combined"||b.dataset.val==="sequential")b.classList.toggle("active",b.dataset.val===val);});
+  document.getElementById("vcShotModeNote").textContent=val==="sequential"
+    ?"Generates one real clip per shot, each with its own single reference image — download and stitch them together afterward."
+    :"Real multi-character reference in one call — needs 2+ attached images.";
+  document.getElementById("vcShotTypeWrap").style.display=val==="sequential"?"none":"block";
+  renderVcShotList();
+}
+
 // Intelligent mode means fal's own model decides shot pacing/boundaries rather
 // than strictly following the per-shot durations you set — so those duration
 // pickers become advisory in that mode, not a hard promise. This function is
@@ -4529,6 +4556,7 @@ function renderVcShotList(){
   if(!wrap)return;
   const durOptions=VIDEO_MODEL_DURATIONS[document.getElementById("vcModel").value]?.options||[3,4,5,6,7,8,9,10,11,12,13,14,15];
   const isIntelligent=document.getElementById("vcShotType")?.value==="intelligent";
+  const isSequential=document.getElementById("vcShotMode")?.value==="sequential";
   wrap.innerHTML=S.vcShots.map((s,i)=>`
     <div class="vc-shot-card">
       <div class="vc-shot-card-head">
@@ -4536,8 +4564,15 @@ function renderVcShotList(){
         ${S.vcShots.length>1?`<button type="button" onclick="removeVcShot(${i})" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:11px;font-weight:600">✕ Remove</button>`:''}
       </div>
       <textarea class="f-textarea" style="min-height:44px;margin-bottom:8px" placeholder="Describe this shot…" oninput="updateVcShotField(${i},'prompt',this.value)">${s.prompt}</textarea>
-      <div class="vc-shot-dur-wrap ${isIntelligent?'paced':''}">
-        <span class="vc-shot-dur-label">${isIntelligent?'Approx. duration':'Duration'}</span>
+      ${isSequential?`<div style="margin-bottom:8px">
+        <span class="vc-shot-dur-label" style="display:block;margin-bottom:5px">Reference for this shot</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <div onclick="updateVcShotField(${i},'refIndex',null)" style="width:44px;height:44px;border-radius:8px;border:2px solid ${s.refIndex==null?'var(--violet)':'var(--border)'};display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--textm);cursor:pointer;text-align:center;line-height:1.1">None</div>
+          ${S.vcMultiImages.map((img,ii)=>`<img src="${img.dataUrl}" onclick="updateVcShotField(${i},'refIndex',${ii})" style="width:44px;height:44px;border-radius:8px;object-fit:cover;border:2px solid ${s.refIndex===ii?'var(--violet)':'var(--border)'};cursor:pointer">`).join('')}
+        </div>
+      </div>`:''}
+      <div class="vc-shot-dur-wrap ${isIntelligent&&!isSequential?'paced':''}">
+        <span class="vc-shot-dur-label">${isIntelligent&&!isSequential?'Approx. duration':'Duration'}</span>
         <select class="f-select" onchange="updateVcShotField(${i},'duration',this.value)">${durOptions.map(d=>`<option value="${d}" ${s.duration==String(d)?'selected':''}>${d}s</option>`).join('')}</select>
       </div>
     </div>`).join('');
@@ -4558,6 +4593,7 @@ function removeVcShot(i){
 function updateVcShotField(i,field,value){
   S.vcShots[i][field]=value;
   if(field==="duration")updateVcShotTotal();
+  if(field==="refIndex")renderVcShotList();
 }
 
 function updateVcShotTotal(){
@@ -5301,6 +5337,7 @@ function restoreVcGenSettings(g){
     msToggle.checked=true;
     S.vcShots=JSON.parse(JSON.stringify(g.shots||[{prompt:"",duration:"5"}]));
     toggleMultiShotMode();
+    setVcShotMode(g.shotMode||"combined");
     setVcShotType(g.shotType||"customize");
   } else if(msToggle.checked){
     msToggle.checked=false;
@@ -5329,7 +5366,7 @@ function retryVcUserMessage(msgId){
   if(!msg||!msg.genSettings)return;
   restoreVcGenSettings(msg.genSettings);
   if(msg.genSettings.multiShotOn){
-    sendVcMultiShotPrompt();
+    msg.genSettings.shotMode==="sequential"?sendVcSequentialShots():sendVcMultiShotPrompt();
   } else {
     const inputEl=document.getElementById("vcChatInput");
     inputEl.value=msg.content;
@@ -5497,6 +5534,85 @@ async function extendVeoVideo(msgId){
     toast("❌ "+err.message,"error");
   }
   if(sendBtn)sendBtn.disabled=false;
+}
+
+// Sequential shot generation — built as a working fallback after Combined
+// mode's real multi-character elements array had persistent, unresolved
+// failures (verified valid URLs, verified correct request construction,
+// still rejected — likely something on fal's own side handling multi-
+// element requests). This sidesteps `elements` entirely: each shot gets at
+// most ONE reference image, using start_image_url/image_url — the single-
+// reference mechanism that's actually proven to work in this app. Produces
+// separate video clips, one per shot, instead of one combined file.
+async function sendVcSequentialShots(){
+  const validShots=S.vcShots.filter(s=>s.prompt.trim());
+  if(!validShots.length){toast("Add at least one shot with a prompt","error");return;}
+  const model=document.getElementById("vcModel").value;
+  const i2v=IMAGE_TO_VIDEO_MAP[model];
+  const ratio=document.getElementById("vcRatio").value;
+  const negPrompt=document.getElementById("vcNegPrompt")?.value.trim()||"";
+  const directorStyle=getActiveDirectorPrompt();
+  const apiKey=gs("api_falai","");
+  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
+
+  const userMsgId="vcUser_"+Date.now();
+  pushVcChatMessage({id:userMsgId,role:"user",content:`🎬 Sequential storyboard — ${validShots.length} shots, own reference each`,genSettings:{
+    model,ratio,duration:null,resolution:"",negPrompt,directorId:gs("active_director",""),
+    klingVoices:[...S.klingSelectedVoices],
+    refImages:S.vcMultiImages.map(i=>i.dataUrl),
+    refVideos:[],refAudios:[],
+    multiShotOn:true,shotMode:"sequential",shotType:"customize",
+    shots:JSON.parse(JSON.stringify(validShots)),
+  }});
+
+  const sendBtn=document.getElementById("vcSendBtn");
+  sendBtn.disabled=true;
+
+  let hostedImages=[];
+  if(S.vcMultiImages.length){
+    const uploadId="vcLoading_"+Date.now();
+    pushVcChatMessage({id:uploadId,role:"assistant",type:"loading",content:"Uploading reference files…"});
+    try{
+      hostedImages=await uploadRefsToFal(S.vcMultiImages,apiKey);
+      patchVcUserMessageRefs(userMsgId,hostedImages,[],[]);
+      replaceVcLoadingBubble(uploadId,{role:"assistant",type:"debug",content:`✅ ${hostedImages.length} reference image${hostedImages.length===1?'':'s'} ready — generating shots one at a time below.`});
+    }catch(err){
+      replaceVcLoadingBubble(uploadId,{role:"assistant",type:"error",content:err.message});
+      toast("❌ "+err.message,"error");
+      sendBtn.disabled=false;
+      return;
+    }
+  }
+
+  let successCount=0;
+  for(let idx=0;idx<validShots.length;idx++){
+    const shot=validShots[idx];
+    const loadingId="vcLoading_"+Date.now()+"_"+idx;
+    pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:`Generating shot ${idx+1} of ${validShots.length}…`});
+    try{
+      const shotPrompt=directorStyle?`${shot.prompt}, ${directorStyle}`:shot.prompt;
+      const refUrl=(shot.refIndex!=null&&hostedImages[shot.refIndex])?hostedImages[shot.refIndex]:null;
+      const durationConfig=VIDEO_MODEL_DURATIONS[model];
+      const formattedDuration=durationConfig?durationConfig.format(parseInt(shot.duration,10)):shot.duration;
+      let endpoint=model;
+      const body={prompt:shotPrompt,aspect_ratio:ratio,duration:formattedDuration,generate_audio:true};
+      if(negPrompt)body.negative_prompt=negPrompt;
+      if(S.klingSelectedVoices.length)body.voice_ids=S.klingSelectedVoices;
+      if(refUrl&&i2v){endpoint=i2v.endpoint;body[i2v.field]=refUrl;}
+      const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
+      const submitData=await submitRes.json();
+      if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
+      const videoUrl=await pollFalVideoResult(endpoint,submitData,apiKey);
+      const savedAsset=createVideoAsset(videoUrl,shotPrompt,"");
+      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:`Sequential — Shot ${idx+1}/${validShots.length}`,prompt:shotPrompt,assetId:savedAsset.id}});
+      logCost(model,`Sequential shot ${idx+1}/${validShots.length}`);
+      successCount++;
+    }catch(err){
+      replaceVcLoadingBubble(loadingId,{role:"assistant",type:"error",content:`Shot ${idx+1} failed: ${err.message}`});
+    }
+  }
+  toast(`✨ ${successCount}/${validShots.length} shots generated`,successCount===validShots.length?"success":"error");
+  sendBtn.disabled=false;
 }
 
 async function sendVcMultiShotPrompt(){
@@ -5698,7 +5814,10 @@ async function deleteVcChatSession(sessionId){
 
 async function sendVcChatPrompt(){
   const multiShotOn=document.getElementById("vcMultiShotToggle")?.checked;
-  if(multiShotOn)return sendVcMultiShotPrompt();
+  if(multiShotOn){
+    const shotMode=document.getElementById("vcShotMode")?.value;
+    return shotMode==="sequential"?sendVcSequentialShots():sendVcMultiShotPrompt();
+  }
 
   const inputEl=document.getElementById("vcChatInput");
   const rawPrompt=inputEl.value.trim();
