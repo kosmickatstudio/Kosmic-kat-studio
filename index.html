@@ -3989,7 +3989,7 @@ async function genViaVeoReference(prompt,ratio,duration,imageUrls){
 // array (that field, input_image_urls, belongs to an unrelated older v1.6-only
 // endpoint and doesn't exist on O3 — a previous version of this code sent it
 // to the wrong endpoint entirely, which fal would have silently ignored).
-async function genViaKlingO3Reference(prompt,ratio,duration,imageUrls,videoUrls,multiShots,shotType){
+async function genViaKlingO3Reference(prompt,ratio,duration,imageUrls,videoUrls,multiShots,shotType,groupAsOneElement){
   const apiKey=gs("api_falai","");
   if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
   const model="fal-ai/kling-video/o3/pro/reference-to-video";
@@ -4002,10 +4002,17 @@ async function genViaKlingO3Reference(prompt,ratio,duration,imageUrls,videoUrls,
   if(missingImg.length||missingVid.length){
     throw new Error(`Reference ${[...missingImg,...missingVid].join(", ")} has no usable URL — remove and re-attach it, then try again`);
   }
-  const elements=[
-    ...imageUrls.map(u=>({frontal_image_url:u})),
-    ...(videoUrls||[]).map(u=>({video_url:u})),
-  ];
+  // groupAsOneElement: Kling's own Element Library docs specify an element
+  // needs AT LEAST 2 reference images (1 main + 1+ additional angle) — every
+  // element this app ever sent had exactly 1 image, below that documented
+  // minimum. When the images uploaded are multiple angles of the SAME
+  // subject (not different characters), bundling them into one element
+  // (frontal_image_url + reference_image_urls) matches how Kling's element
+  // system actually expects to receive a subject, instead of one
+  // under-provisioned element per photo.
+  const elements=groupAsOneElement&&imageUrls.length>1
+    ?[{frontal_image_url:imageUrls[0],reference_image_urls:imageUrls.slice(1)},...(videoUrls||[]).map(u=>({video_url:u}))]
+    :[...imageUrls.map(u=>({frontal_image_url:u})),...(videoUrls||[]).map(u=>({video_url:u}))];
   const body={
     prompt:multiShots&&multiShots.length?undefined:prompt, // prompt and multi_prompt are mutually exclusive per fal's schema
     elements,
@@ -4320,6 +4327,13 @@ function renderVideoCanvas(el){
             <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px" id="vcMultiAudioPreview"></div>
             <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcMultiAudioFile').click()">📤 Add Audio</button>
           </div>
+          <div class="f-group" id="vcElementGroupWrap" style="display:none">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="vcElementGroupToggle" onchange="setVcElementGroupMode(this.checked)">
+              <span class="f-label" style="margin:0">These are multiple angles of ONE character <span style="font-weight:400;color:var(--texts);text-transform:none;letter-spacing:0">(off = each image is a different character)</span></span>
+            </label>
+            <div style="font-size:10px;color:var(--textm);margin-top:4px" id="vcElementGroupNote">Kling's own Element system expects 2+ angle photos per character — turn this on if all your uploads are the same person/object from different angles.</div>
+          </div>
           <div id="vcTagHint" style="display:none;font-size:10px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px;margin-top:6px"></div>
           </div>
         </div>
@@ -4379,6 +4393,7 @@ S.vcMultiImages=S.vcMultiImages||[];
 S.vcMultiVideos=S.vcMultiVideos||[];
 S.vcMultiAudios=S.vcMultiAudios||[];
 S.vcEndFrame=S.vcEndFrame||null; // single image, not an array — Kling v3's real End Frame feature
+S.vcElementGroupMode=S.vcElementGroupMode||false; // O3: treat all reference images as multiple angles of one character
 S.vcChatHistory=S.vcChatHistory||gs("vc_chat_history",[])||[];
 
 // ══════════════════════════════════════════════════════
@@ -4614,6 +4629,14 @@ function removeVcEndFrame(){
   S.vcEndFrame=null;
   renderVcEndFramePreview();
   updateVcAttachmentBar();
+}
+
+function setVcElementGroupMode(checked){
+  S.vcElementGroupMode=checked;
+  const note=document.getElementById("vcElementGroupNote");
+  if(note)note.textContent=checked
+    ?"All uploaded images will be sent as one character's multiple angles — @Element1 refers to that one character."
+    :"Kling's own Element system expects 2+ angle photos per character — turn this on if all your uploads are the same person/object from different angles.";
 }
 
 // ── KLING MULTI-SHOT STORYBOARD — real multi_prompt/shot_type schema ──
@@ -5109,6 +5132,14 @@ function updateVcModelUI(){
   document.getElementById("vcEndFrameWrap").style.display=endFrameApplicable?"block":"none";
   if(!endFrameApplicable&&S.vcEndFrame){S.vcEndFrame=null;}
   renderVcEndFramePreview();
+  const groupApplicable=cap.provider==="kling-o3-ref"&&S.vcMultiImages.length>1;
+  const groupWrap=document.getElementById("vcElementGroupWrap");
+  if(groupWrap){
+    groupWrap.style.display=groupApplicable?"block":"none";
+    if(!groupApplicable)S.vcElementGroupMode=false;
+    const groupToggle=document.getElementById("vcElementGroupToggle");
+    if(groupToggle)groupToggle.checked=S.vcElementGroupMode;
+  }
   // Multi-shot storyboarding (multi_prompt/shot_type) was added in Kling v3 —
   // v2.1/v2.6 don't support it, so this gates on the real multiShot flag
   // instead of piggybacking on multiImage (which older tiers also have).
@@ -5183,6 +5214,14 @@ function refreshMotionBrushVisibility(){
     const endFrameApplicable=!!IMAGE_TO_VIDEO_MAP[modelEl.value]?.endField&&S.vcMultiImages.length===1;
     endFrameWrap.style.display=endFrameApplicable?"block":"none";
     if(!endFrameApplicable&&S.vcEndFrame)removeVcEndFrame();
+  }
+  const groupWrap=document.getElementById("vcElementGroupWrap");
+  if(groupWrap){
+    const groupApplicable=cap.provider==="kling-o3-ref"&&S.vcMultiImages.length>1;
+    groupWrap.style.display=groupApplicable?"block":"none";
+    if(!groupApplicable)S.vcElementGroupMode=false;
+    const groupToggle=document.getElementById("vcElementGroupToggle");
+    if(groupToggle)groupToggle.checked=S.vcElementGroupMode;
   }
   updateVcAttachmentBar();
 }
@@ -5801,7 +5840,7 @@ async function sendVcMultiShotPrompt(){
     if(cap.provider==="kling-o3-ref"){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length)throw new Error("Add at least 1 reference image or video — O3 Pro needs one to generate.");
       replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:`Generating ${validShots.length}-shot sequence…`});
-      videoUrl=await genViaKlingO3Reference(null,ratio,null,hostedImages,hostedVideos,shotsPayload,shotType);
+      videoUrl=await genViaKlingO3Reference(null,ratio,null,hostedImages,hostedVideos,shotsPayload,shotType,S.vcElementGroupMode);
     } else {
       replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:`Generating ${validShots.length}-shot sequence…`});
       let endpoint=model;
@@ -6011,7 +6050,7 @@ async function sendVcChatPrompt(){
     } else if(cap.provider==="kling-o3-ref"){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length)throw new Error("Add at least 1 reference image or video — this model needs one to generate.");
       pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"});
-      videoUrl=await genViaKlingO3Reference(prompt,ratio,duration,hostedImages,hostedVideos);
+      videoUrl=await genViaKlingO3Reference(prompt,ratio,duration,hostedImages,hostedVideos,undefined,undefined,S.vcElementGroupMode);
       providerLabel="Kling O3 Pro Reference-to-Video";costKey=model;
     } else {
       pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating…"});
