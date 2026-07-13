@@ -4654,7 +4654,8 @@ function highlightVcTags(text){
 }
 
 async function uploadRefsToFal(items,apiKey){
-  return Promise.all(items.map(async(i,idx)=>{
+  let uploadedFreshCount=0;
+  const results=await Promise.all(items.map(async(i,idx)=>{
     if(!i.dataUrl||typeof i.dataUrl!=="string"){
       // Catch this here, immediately, with a clear message — instead of
       // silently sending an empty/malformed element and finding out 30+
@@ -4663,9 +4664,21 @@ async function uploadRefsToFal(items,apiKey){
       throw new Error(`Reference file ${idx+1}${i.name?` ("${i.name}")`:""} has no data — remove it and re-attach, then try again`);
     }
     if(!i.dataUrl.startsWith("data:"))return i.dataUrl; // already a hosted URL (e.g. restored via Edit/Retry) — nothing to upload
+    uploadedFreshCount++;
     const blob=dataUrlToBlob(i.dataUrl);
     return uploadToFalStorage(blob,apiKey);
   }));
+  // A freshly uploaded file's PUT can return success before it's actually
+  // fetchable everywhere on fal's infrastructure yet — including, it turned
+  // out, by fal's own Kling generation backend moments later. This produced
+  // exactly the confusing symptom that took a long back-and-forth to pin
+  // down: URLs that were completely valid (loaded fine when checked
+  // separately) but got reported by fal as "must be provided" when used
+  // near-instantly in the very next request. Only waits when something was
+  // actually freshly uploaded this call — reused already-hosted URLs (e.g.
+  // from Retry) skip this since there's nothing new to propagate.
+  if(uploadedFreshCount>0)await new Promise(r=>setTimeout(r,2500));
+  return results;
 }
 
 function handleVoiceSampleUpload(event){
