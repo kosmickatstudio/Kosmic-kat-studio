@@ -3943,8 +3943,14 @@ const IMAGE_TO_VIDEO_MAP={
   "bytedance/seedance-2.0/text-to-video":{endpoint:"bytedance/seedance-2.0/image-to-video",field:"image_url"},
   "fal-ai/kling-video/v2.1/master/text-to-video":{endpoint:"fal-ai/kling-video/v2.1/master/image-to-video",field:"image_url"},
   "fal-ai/kling-video/v2.6/pro/text-to-video":{endpoint:"fal-ai/kling-video/v2.6/pro/image-to-video",field:"image_url"},
-  "fal-ai/kling-video/v3/standard/text-to-video":{endpoint:"fal-ai/kling-video/v3/standard/image-to-video",field:"start_image_url"},
-  "fal-ai/kling-video/v3/pro/text-to-video":{endpoint:"fal-ai/kling-video/v3/pro/image-to-video",field:"start_image_url"},
+  // endField: Kling v3's real, separate "Start/End Frame" feature — confirmed
+  // via a real hands-on review of Kling's own app using this exact mechanism
+  // ("Start/End frames feature in Kling 3 Pro"), distinct from the Reference
+  // Elements/multi-character system. Simple single-field interpolation
+  // between two images, not the multi-step element registration that
+  // Elements appears to actually require.
+  "fal-ai/kling-video/v3/standard/text-to-video":{endpoint:"fal-ai/kling-video/v3/standard/image-to-video",field:"start_image_url",endField:"end_image_url"},
+  "fal-ai/kling-video/v3/pro/text-to-video":{endpoint:"fal-ai/kling-video/v3/pro/image-to-video",field:"start_image_url",endField:"end_image_url"},
   "fal-ai/veo3.1":{endpoint:"fal-ai/veo3.1/image-to-video",field:"image_url"},
 };
 
@@ -4260,6 +4266,12 @@ function renderVideoCanvas(el){
               <button type="button" class="btn btn-ghost btn-sm" id="vcMotionBrushClearBtn" style="display:none" onclick="clearMotionBrush()">✕ Clear</button>
             </div>
           </div>
+          <div class="f-group" id="vcEndFrameWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+            <label class="f-label">End Frame <span style="font-weight:400;color:var(--texts)">(optional — Kling interpolates from your reference image to this one)</span></label>
+            <input type="file" accept="image/*" id="vcEndFrameFile" style="display:none" onchange="handleVcEndFrameUpload(event)">
+            <div id="vcEndFramePreview" style="margin-bottom:8px"></div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcEndFrameFile').click()">📤 Add End Frame</button>
+          </div>
           <div class="f-group" id="vcMultiShotWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">
               <input type="checkbox" id="vcMultiShotToggle" onchange="toggleMultiShotMode()">
@@ -4366,6 +4378,7 @@ function renderVideoCanvas(el){
 S.vcMultiImages=S.vcMultiImages||[];
 S.vcMultiVideos=S.vcMultiVideos||[];
 S.vcMultiAudios=S.vcMultiAudios||[];
+S.vcEndFrame=S.vcEndFrame||null; // single image, not an array — Kling v3's real End Frame feature
 S.vcChatHistory=S.vcChatHistory||gs("vc_chat_history",[])||[];
 
 // ══════════════════════════════════════════════════════
@@ -4568,6 +4581,38 @@ function clearMotionBrush(){
   if(statusEl)statusEl.textContent="Not set — uses the first reference image above as the base.";
   const clearBtn=document.getElementById("vcMotionBrushClearBtn");
   if(clearBtn)clearBtn.style.display="none";
+  updateVcAttachmentBar();
+}
+
+// ── KLING END FRAME — real, separate feature from Motion Brush and from
+// Reference Elements. Simple two-image interpolation (start_image_url ->
+// end_image_url), confirmed via a real hands-on review of Kling's own app
+// using this exact "Start/End frames" mechanism.
+function handleVcEndFrameUpload(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  event.target.value="";
+  const reader=new FileReader();
+  reader.onload=e=>{
+    S.vcEndFrame={dataUrl:e.target.result,name:file.name};
+    renderVcEndFramePreview();
+    updateVcAttachmentBar();
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderVcEndFramePreview(){
+  const wrap=document.getElementById("vcEndFramePreview");
+  if(!wrap)return;
+  wrap.innerHTML=S.vcEndFrame?`<div style="position:relative;width:70px;height:70px">
+    <img src="${S.vcEndFrame.dataUrl}" style="width:70px;height:70px;border-radius:8px;object-fit:cover">
+    <button onclick="removeVcEndFrame()" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;cursor:pointer;line-height:1">✕</button>
+  </div>`:'';
+}
+
+function removeVcEndFrame(){
+  S.vcEndFrame=null;
+  renderVcEndFramePreview();
   updateVcAttachmentBar();
 }
 
@@ -5057,8 +5102,15 @@ function updateVcModelUI(){
     // silently persist and potentially hijack a later, unrelated generation.
     S.vcMotionBrush=null;
   }
+  // End Frame pairs with a single start frame (real Kling interpolation
+  // feature), not with multi-element mode — same single-image gating logic
+  // as Motion Brush, and cleared the same way when it stops applying.
+  const endFrameApplicable=!!IMAGE_TO_VIDEO_MAP[model]?.endField&&S.vcMultiImages.length===1;
+  document.getElementById("vcEndFrameWrap").style.display=endFrameApplicable?"block":"none";
+  if(!endFrameApplicable&&S.vcEndFrame){S.vcEndFrame=null;}
+  renderVcEndFramePreview();
   // Multi-shot storyboarding (multi_prompt/shot_type) was added in Kling v3 —
-  // v2.1/v2.6 don't support it, so this now gates on the real multiShot flag
+  // v2.1/v2.6 don't support it, so this gates on the real multiShot flag
   // instead of piggybacking on multiImage (which older tiers also have).
   document.getElementById("vcMultiShotWrap").style.display=cap.multiShot?"block":"none";
   document.getElementById("vcVoiceWrap").style.display=isKling?"block":"none";
@@ -5126,6 +5178,12 @@ function refreshMotionBrushVisibility(){
   // 4 references correctly attached, but the request never built `elements`
   // because leftover Motion Brush state took over instead.
   if(!motionBrushApplicable&&S.vcMotionBrush)clearMotionBrush();
+  const endFrameWrap=document.getElementById("vcEndFrameWrap");
+  if(endFrameWrap){
+    const endFrameApplicable=!!IMAGE_TO_VIDEO_MAP[modelEl.value]?.endField&&S.vcMultiImages.length===1;
+    endFrameWrap.style.display=endFrameApplicable?"block":"none";
+    if(!endFrameApplicable&&S.vcEndFrame)removeVcEndFrame();
+  }
   updateVcAttachmentBar();
 }
 
@@ -5392,9 +5450,11 @@ function restoreVcGenSettings(g){
   S.vcMultiImages=(g.refImages||[]).map(u=>({dataUrl:u,name:""}));
   S.vcMultiVideos=(g.refVideos||[]).map(u=>({dataUrl:u,name:""}));
   S.vcMultiAudios=(g.refAudios||[]).map(u=>({dataUrl:u,name:""}));
+  S.vcEndFrame=g.endFrame?{dataUrl:g.endFrame,name:""}:null;
   renderVcMultiPreview("vcMultiImagePreview",S.vcMultiImages,false);
   renderVcMultiPreview("vcMultiVideoPreview",S.vcMultiVideos,false);
   renderVcMultiPreview("vcMultiAudioPreview",S.vcMultiAudios,true);
+  renderVcEndFramePreview();
   refreshMotionBrushVisibility();
   updateVcAttachmentBar();
 
@@ -5909,6 +5969,7 @@ async function sendVcChatPrompt(){
     refImages:S.vcMultiImages.map(i=>i.dataUrl),
     refVideos:S.vcMultiVideos.map(v=>v.dataUrl),
     refAudios:S.vcMultiAudios.map(a=>a.dataUrl),
+    endFrame:S.vcEndFrame?S.vcEndFrame.dataUrl:null,
     multiShotOn:false,
   }});
   inputEl.value="";inputEl.style.height="auto";
@@ -6001,6 +6062,10 @@ async function sendVcChatPrompt(){
           // these genuinely differ between v2.x and v3, see IMAGE_TO_VIDEO_MAP).
           endpoint=i2v.endpoint;
           body[i2v.field]=hostedImages[0];
+          if(i2v.endField&&S.vcEndFrame){
+            const hostedEndFrame=await uploadRefsToFal([S.vcEndFrame],apiKeyEarly);
+            body[i2v.endField]=hostedEndFrame[0];
+          }
         }
       } else if(model==="fal-ai/veo3.1"){
         body.duration=formattedDuration;body.audio=true;body.resolution=document.getElementById("vcRes").value;
@@ -9877,7 +9942,7 @@ function galleryCardHTML(a){
   const icon=a.type==='image'?'🖼':a.type==='video'?'🎬':'🎵';
   let media="";
   if(a.type==='image')media=`<img src="${a.url}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover">`;
-  else if(a.type==='video')media=`<video src="${a.url}" controls style="width:100%;border-radius:8px;aspect-ratio:16/9"></video>`;
+  else if(a.type==='video')media=`<video src="${a.url}" controls preload="metadata" style="width:100%;max-height:160px;border-radius:8px;aspect-ratio:16/9;object-fit:cover;background:#000;display:block"></video>`;
   else media=`<div style="background:rgba(61,31,122,0.06);border-radius:8px;padding:16px;display:flex;align-items:center;justify-content:center;font-size:28px">🎵</div><audio src="${a.url}" controls style="width:100%;margin-top:6px;height:32px"></audio>`;
   const review=a.review||{status:null,rating:0};
   const isSelected=(S.gallerySelectedForCompare||[]).includes(a.id);
