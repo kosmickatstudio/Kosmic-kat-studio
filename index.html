@@ -1431,6 +1431,7 @@ const MODEL_BANNERS={
   "fal-ai/kling-video/v3/pro/text-to-video":"linear-gradient(135deg,#1E1B2E,#3B82F6)",
   "fal-ai/kling-video/o3/pro/reference-to-video":"linear-gradient(135deg,#1E1B2E,#8B5CF6)",
   "fal-ai/kling-video/v3/pro/motion-control":"linear-gradient(135deg,#1E1B2E,#22C55E)",
+  "fal-ai/kling-video/o3/standard/image-to-video":"linear-gradient(135deg,#1E1B2E,#8B5CF6)",
   "fal-ai/veo3.1":"linear-gradient(135deg,#1E1B4B,#4338CA)",
 };
 const DIRECTOR_BANNERS={
@@ -3262,6 +3263,7 @@ const MODEL_LOGOS={
   "fal-ai/kling-video/v3/pro/text-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/kling-video/o3/pro/reference-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/kling-video/v3/pro/motion-control":{mono:"K",bg:"#1B5EFF"},
+  "fal-ai/kling-video/o3/standard/image-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/veo3.1":{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
   "fal-ai/veo3.1/reference-to-video":{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
 };
@@ -3961,6 +3963,14 @@ const IMAGE_TO_VIDEO_MAP={
   // Elements appears to actually require.
   "fal-ai/kling-video/v3/standard/text-to-video":{endpoint:"fal-ai/kling-video/v3/standard/image-to-video",field:"start_image_url",endField:"end_image_url"},
   "fal-ai/kling-video/v3/pro/text-to-video":{endpoint:"fal-ai/kling-video/v3/pro/image-to-video",field:"start_image_url",endField:"end_image_url"},
+  // O3 Standard — a real, separate, cheaper/faster tier from O3 Pro
+  // ($0.084/s audio off vs O3 Pro's dedicated reference-to-video pricing).
+  // Unlike v2.x/v3, this dropdown value IS ALREADY the image-to-video
+  // endpoint (there's no separate text-to-video variant to swap from), so
+  // this entry self-references — field is confirmed as image_url, NOT
+  // start_image_url like v3 ("Note: this endpoint uses image_url — this
+  // differs from v3 endpoints"). end_image_url confirmed supported too.
+  "fal-ai/kling-video/o3/standard/image-to-video":{endpoint:"fal-ai/kling-video/o3/standard/image-to-video",field:"image_url",endField:"end_image_url"},
   "fal-ai/veo3.1":{endpoint:"fal-ai/veo3.1/image-to-video",field:"image_url"},
 };
 
@@ -4242,6 +4252,11 @@ const VIDEO_MODEL_CAPABILITIES={
   // consistency"), so it's wired the same way as Seedance/Veo's ref models:
   // a dedicated provider path that requires at least one image.
   "fal-ai/kling-video/o3/pro/reference-to-video":{multiRef:true,maxImages:4,maxVideos:2,provider:"kling-o3-ref",multiShot:true,cfgScale:true,tagSyntax:"@Element1 (images and videos are numbered together, in upload order)"},
+  // O3 Standard: unlike O3 Pro (always reference-first, no plain mode), O3
+  // Standard genuinely has its own single-image mode (optionally with an end
+  // frame) PLUS elements for extra characters — same shape as v3 Standard/
+  // Pro, not the dedicated always-reference provider path O3 Pro needs.
+  "fal-ai/kling-video/o3/standard/image-to-video":{multiImage:true,maxImages:4,negPrompt:true,multiShot:true,elements:true,cfgScale:true,tagSyntax:"@Element1 (when 2+ reference images)"},
   // Motion Control: real, separate endpoint - needs exactly 1 reference image
   // (appearance) + 1 reference video (motion source), not the multi-
   // character elements system. Reuses the existing Reference Images/Videos
@@ -4292,6 +4307,7 @@ function renderVideoCanvas(el){
                 <option value="fal-ai/kling-video/v3/standard/text-to-video">Kling 3.0 Standard</option>
                 <option value="fal-ai/kling-video/v3/pro/text-to-video">Kling 3.0 Pro</option>
                 <option value="fal-ai/kling-video/o3/pro/reference-to-video">Kling O3 Pro — Multi-Reference (up to 4 characters)</option>
+                <option value="fal-ai/kling-video/o3/standard/image-to-video">Kling O3 Standard — faster, cheaper reference (up to 4 characters)</option>
                 <option value="fal-ai/kling-video/v3/pro/motion-control">Kling 3.0 Pro — Motion Control (video motion + image look)</option>
               </optgroup>
               <optgroup label="Veo (Google DeepMind)">
@@ -5135,6 +5151,9 @@ const VIDEO_PRICING={
   // Motion Control: confirmed $0.168/second directly from fal's own
   // Seedance-vs-Kling comparison article ("Motion control: $0.168/second").
   "fal-ai/kling-video/v3/pro/motion-control":{perSec:0.168},
+  // Confirmed directly on fal's own O3 Standard model page: $0.084/s audio
+  // off, $0.112/s audio on.
+  "fal-ai/kling-video/o3/standard/image-to-video":{perSec:0.112},
   "fal-ai/veo3.1":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
   "fal-ai/veo3.1/reference-to-video":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
 };
@@ -6645,6 +6664,7 @@ const VIDEO_MODEL_DURATIONS={
   "fal-ai/kling-video/v3/pro/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/o3/pro/reference-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/v3/pro/motion-control":{options:[3,4,5,6,7,8,9,10],format:n=>String(n)},
+  "fal-ai/kling-video/o3/standard/image-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/veo3.1":{options:[4,6,8],format:n=>`${n}s`},
   "fal-ai/veo3.1/reference-to-video":{options:[4,6,8],format:n=>`${n}s`},
 };
@@ -6671,6 +6691,7 @@ const VIDEO_MODEL_RESOLUTIONS={
   "fal-ai/kling-video/v3/pro/text-to-video":null,
   "fal-ai/kling-video/o3/pro/reference-to-video":null,
   "fal-ai/kling-video/v3/pro/motion-control":null,
+  "fal-ai/kling-video/o3/standard/image-to-video":null,
 };
 const KLING_FIXED_RESOLUTION_NOTE={
   "fal-ai/kling-video/v2.1/master/text-to-video":"Kling 2.1 Master renders at a fixed resolution — no manual selection on fal.",
@@ -6679,6 +6700,7 @@ const KLING_FIXED_RESOLUTION_NOTE={
   "fal-ai/kling-video/v3/pro/text-to-video":"Kling 3.0 Pro renders at a fixed resolution up to 1080p — no manual selection on fal.",
   "fal-ai/kling-video/o3/pro/reference-to-video":"Kling O3 Pro renders at a fixed resolution up to 1080p — no manual selection on fal.",
   "fal-ai/kling-video/v3/pro/motion-control":"Kling Motion Control renders at a fixed resolution up to 1080p — no manual selection on fal.",
+  "fal-ai/kling-video/o3/standard/image-to-video":"Kling O3 Standard renders at a fixed resolution up to 1080p — no manual selection on fal.",
 };
 
 // Shared across Video Canvas, Shot Editor, and Production Studio: shows only
@@ -6798,6 +6820,7 @@ const PD_ASPECT_RATIOS={
   "fal-ai/kling-video/v3/pro/text-to-video":["16:9","9:16","1:1","4:3","3:4"],
   "fal-ai/kling-video/o3/pro/reference-to-video":["16:9","9:16","1:1"],
   "fal-ai/kling-video/v3/pro/motion-control":["16:9","9:16","1:1"],
+  "fal-ai/kling-video/o3/standard/image-to-video":["16:9","9:16","1:1"],
   "fal-ai/veo3.1":["16:9","9:16"],
 };
 const PD_ASPECT_RATIO_LABELS={"16:9":"16:9 Widescreen","9:16":"9:16 Vertical (Shorts/TikTok)","1:1":"1:1 Square","4:3":"4:3 Classic","3:4":"3:4 Portrait","21:9":"21:9 Cinematic Ultra-wide"};
