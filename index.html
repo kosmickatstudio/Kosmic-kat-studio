@@ -585,6 +585,10 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
         <span class="mod-icon">▶</span><span class="mod-label">Video</span>
         <span class="mod-badge pro">PRO</span>
       </button>
+      <button class="mod-btn" data-mod="motioncontrol" onclick="switchMod('motioncontrol',this)">
+        <span class="mod-icon">🎯</span><span class="mod-label">Motion Control</span>
+        <span class="mod-badge new">NEW</span>
+      </button>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label">Production House</div>
@@ -1303,6 +1307,7 @@ const MOD_TABS = {
   characters:["All","Create","Import"],
   imagegen:["Generate","Gallery"],
   videocanvas:["Generate","Gallery"],
+  motioncontrol:["Generate"],
   directors:["All Directors","Active"],
   adstudio:["Create Ad","Templates","Analytics"],
   audio:["Generate","Voice Clone","Library"],
@@ -1390,6 +1395,7 @@ function renderModule(mod){
     audio:renderAudio,
     assets:renderAssets,
     gallery:renderGallery,
+    motioncontrol:renderMotionControl,
     editor:renderEditor,
     upscaler:renderUpscaler,
     costs:renderCosts,
@@ -4264,6 +4270,185 @@ const VIDEO_MODEL_CAPABILITIES={
   "fal-ai/kling-video/v3/pro/motion-control":{provider:"kling-motion-control",multiRef:true,maxImages:1,maxVideos:1,cfgScale:true,negPrompt:true,characterOrientation:true},
 };
 
+// ══════════════════════════════════════════════════════
+// MOTION CONTROL — its own standalone module, not buried in Video Canvas's
+// dropdown. A real, separate Kling 3.0 Pro endpoint: character actions come
+// from a reference video, visual appearance comes from a reference image.
+// ══════════════════════════════════════════════════════
+function renderMotionControl(el){
+  const hasKey=gs("api_falai");
+  el.innerHTML=`
+    <div style="padding:16px;max-width:540px;margin:0 auto">
+      <div style="margin-bottom:16px">
+        <div style="font-family:'Cinzel',serif;font-size:19px;font-weight:700;color:var(--violet)">🎯 Motion Control</div>
+        <div style="font-size:12px;color:var(--textm);margin-top:4px">Character actions come from your reference video. Visual appearance comes from your reference image. Real Kling 3.0 Pro motion-control endpoint — not simulated on top of a general reference model.</div>
+      </div>
+      ${!hasKey?`<div style="background:rgba(230,126,34,0.12);border:1px solid rgba(230,126,34,0.3);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--textm);margin-bottom:14px">⚠️ Add a fal.ai API key in Settings to generate.</div>`:''}
+
+      <div class="f-group">
+        <label class="f-label">Reference Image <span style="font-weight:400;color:var(--texts)">(the look/appearance)</span></label>
+        <input type="file" accept="image/*" id="mcImageFile" style="display:none" onchange="handleMcImageUpload(event)">
+        <div id="mcImagePreview" style="margin-bottom:8px"></div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('mcImageFile').click()">📤 ${S.mcImage?'Change':'Add'} Image</button>
+      </div>
+
+      <div class="f-group">
+        <label class="f-label">Reference Video <span style="font-weight:400;color:var(--texts)">(the motion to follow)</span></label>
+        <input type="file" accept="video/*" id="mcVideoFile" style="display:none" onchange="handleMcVideoUpload(event)">
+        <div id="mcVideoPreview" style="margin-bottom:8px"></div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('mcVideoFile').click()">📤 ${S.mcVideo?'Change':'Add'} Video</button>
+      </div>
+
+      <div class="f-group">
+        <label class="f-label">Match Orientation To</label>
+        <div class="vc-shottype-toggle">
+          <button type="button" class="vc-shottype-btn active" data-val="image" onclick="setMcOrientation('image')">Reference Image<br>better for camera moves (max 10s)</button>
+          <button type="button" class="vc-shottype-btn" data-val="video" onclick="setMcOrientation('video')">Reference Video<br>better for complex motion (max 30s)</button>
+        </div>
+        <input type="hidden" id="mcOrientation" value="image">
+      </div>
+
+      <div class="f-group">
+        <label class="f-label">Prompt</label>
+        <textarea class="f-textarea" id="mcPrompt" placeholder="Describe the scene, mood, camera style…"></textarea>
+      </div>
+
+      <div class="f-group">
+        <label class="f-label">Negative Prompt <span style="font-weight:400;color:var(--texts)">(optional)</span></label>
+        <input class="f-input" id="mcNegPrompt" placeholder="e.g. blur, distort, low quality">
+      </div>
+
+      <div class="f-group">
+        <label class="f-label">Prompt Adherence (CFG Scale) — <span id="mcCfgLabel">0.5</span></label>
+        <input type="range" id="mcCfgSlider" min="0" max="1" step="0.05" value="0.5" style="width:100%" oninput="document.getElementById('mcCfgLabel').textContent=this.value;updateRangeFill(this)">
+        <div style="font-size:10px;color:var(--textm);margin-top:3px">Lower = more creative motion/variation. Higher = sticks closer to your exact prompt.</div>
+      </div>
+
+      <div class="f-group">
+        <label class="f-label">Aspect Ratio</label>
+        <select class="f-select" id="mcRatio">
+          <option value="16:9">16:9</option>
+          <option value="9:16">9:16</option>
+          <option value="1:1">1:1</option>
+        </select>
+      </div>
+
+      <div class="f-group">
+        <label class="f-label">Duration</label>
+        <select class="f-select" id="mcDuration">
+          ${[3,4,5,6,7,8,9,10].map(n=>`<option value="${n}" ${n===5?'selected':''}>${n}s</option>`).join('')}
+        </select>
+      </div>
+
+      <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="sendMotionControlGen()" ${!hasKey?'disabled':''}>🎯 Generate</button>
+      <div id="mcCostHint" style="font-size:11px;color:var(--gold);margin-top:6px;text-align:center"></div>
+
+      <div id="mcResultsWrap" style="margin-top:20px;display:flex;flex-direction:column;gap:16px"></div>
+    </div>`;
+  renderMcImagePreview();
+  renderMcVideoPreview();
+  renderMcResults();
+  document.getElementById("mcRatio")?.addEventListener("change",updateMcCostHint);
+  document.getElementById("mcDuration")?.addEventListener("change",updateMcCostHint);
+  updateMcCostHint();
+}
+
+function updateMcCostHint(){
+  const seconds=parseFloat(document.getElementById("mcDuration")?.value)||5;
+  const est=estimateVideoCost("fal-ai/kling-video/v3/pro/motion-control",seconds,"720p",false);
+  const hint=document.getElementById("mcCostHint");
+  if(hint)hint.textContent=est?formatCostLine(est):"";
+}
+
+function handleMcImageUpload(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  event.target.value="";
+  const reader=new FileReader();
+  reader.onload=e=>{S.mcImage={dataUrl:e.target.result,name:file.name};renderMcImagePreview();};
+  reader.readAsDataURL(file);
+}
+
+function renderMcImagePreview(){
+  const wrap=document.getElementById("mcImagePreview");
+  if(!wrap)return;
+  wrap.innerHTML=S.mcImage?`<div style="position:relative;width:80px;height:80px">
+    <img src="${S.mcImage.dataUrl}" style="width:80px;height:80px;border-radius:10px;object-fit:cover">
+    <button onclick="removeMcImage()" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:10px;cursor:pointer;line-height:1">✕</button>
+  </div>`:'';
+}
+
+function removeMcImage(){S.mcImage=null;renderMcImagePreview();}
+
+function handleMcVideoUpload(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  event.target.value="";
+  const reader=new FileReader();
+  reader.onload=e=>{S.mcVideo={dataUrl:e.target.result,name:file.name};renderMcVideoPreview();};
+  reader.readAsDataURL(file);
+}
+
+function renderMcVideoPreview(){
+  const wrap=document.getElementById("mcVideoPreview");
+  if(!wrap)return;
+  wrap.innerHTML=S.mcVideo?`<div style="position:relative;width:120px">
+    <video src="${S.mcVideo.dataUrl}" controls style="width:120px;border-radius:10px;display:block"></video>
+    <button onclick="removeMcVideo()" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:10px;cursor:pointer;line-height:1;z-index:2">✕</button>
+  </div>`:'';
+}
+
+function removeMcVideo(){S.mcVideo=null;renderMcVideoPreview();}
+
+function setMcOrientation(val){
+  document.getElementById("mcOrientation").value=val;
+  document.querySelectorAll(".vc-shottype-btn").forEach(b=>{if(b.dataset.val==="image"||b.dataset.val==="video")b.classList.toggle("active",b.dataset.val===val);});
+}
+
+function renderMcResults(){
+  const wrap=document.getElementById("mcResultsWrap");
+  if(!wrap)return;
+  wrap.innerHTML=S.mcResults.slice().reverse().map(r=>`<div>
+    <video src="${r.url}" controls style="width:100%;border-radius:12px;display:block"></video>
+    <div class="vc-result-actions">
+      <button class="vc-result-icon-btn" title="Download" onclick="downloadWithName('${r.url.replace(/'/g,"\\'")}','KosmicKat_MotionControl_${sanitizeFilenamePart(r.prompt)}.mp4')">${VC_RESULT_ICONS.download}</button>
+      ${r.assetId?`<button class="vc-result-icon-btn" title="Add to Collection" onclick="openCollectionPicker('asset','${r.assetId}')">${VC_RESULT_ICONS.collection}</button>`:''}
+      <button class="vc-result-icon-btn" title="Details" onclick="openGenerationInfoModal({prompt:'${(r.prompt||'').replace(/'/g,"\\'").replace(/\n/g," ")}',providerLabel:'Kling 3.0 Pro Motion Control',resolution:'Fixed by model (up to 1080p)'})">${VC_RESULT_ICONS.info}</button>
+    </div>
+  </div>`).join('');
+}
+
+async function sendMotionControlGen(){
+  const apiKey=gs("api_falai","");
+  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
+  if(!S.mcImage){toast("Add a reference image first","error");return;}
+  if(!S.mcVideo){toast("Add a reference video first","error");return;}
+  const prompt=document.getElementById("mcPrompt")?.value.trim();
+  if(!prompt){toast("Describe the scene first","error");return;}
+  const negPrompt=document.getElementById("mcNegPrompt")?.value.trim()||"";
+  const cfgScale=parseFloat(document.getElementById("mcCfgSlider")?.value)||0.5;
+  const orientation=document.getElementById("mcOrientation")?.value||"image";
+  const ratio=document.getElementById("mcRatio")?.value||"16:9";
+  const duration=document.getElementById("mcDuration")?.value||"5";
+  toast("Uploading references…","");
+  try{
+    const [hostedImage,hostedVideo]=await Promise.all([
+      S.mcImage.dataUrl.startsWith("data:")?uploadToFalStorage(dataUrlToBlob(S.mcImage.dataUrl),apiKey):S.mcImage.dataUrl,
+      S.mcVideo.dataUrl.startsWith("data:")?uploadToFalStorage(dataUrlToBlob(S.mcVideo.dataUrl),apiKey):S.mcVideo.dataUrl,
+    ]);
+    toast("Generating — this can take a few minutes…","");
+    const videoUrl=await genViaKlingMotionControl(prompt,ratio,duration,hostedImage,hostedVideo,orientation,cfgScale,negPrompt);
+    const savedAsset=createVideoAsset(videoUrl,prompt,"");
+    S.mcResults.push({url:videoUrl,prompt,assetId:savedAsset.id,createdAt:new Date().toISOString()});
+    saveSetting("mc_results",S.mcResults);
+    logCost("fal-ai/kling-video/v3/pro/motion-control","Motion Control");
+    renderMcResults();
+    toast("✨ Generated","success");
+  }catch(err){
+    toast("❌ "+err.message,"error");
+  }
+}
+
 function renderVideoCanvas(el){
   const hasKey=gs("api_falai");
   const project=S.vcActiveProject?S.projects.find(p=>p.id===S.vcActiveProject):null;
@@ -4476,6 +4661,13 @@ function renderVideoCanvas(el){
 
 // ── VIDEO CHAT UI — model-driven dynamic settings ──
 S.vcMultiImages=S.vcMultiImages||[];
+// ── MOTION CONTROL MODULE — its own standalone state, separate from Video
+// Canvas's shared reference-image system, since this module needs exactly
+// 1 image + 1 video with fixed roles (appearance + motion), not a general
+// multi-reference array.
+S.mcImage=S.mcImage||null;
+S.mcVideo=S.mcVideo||null;
+S.mcResults=S.mcResults||gs("mc_results",[])||[];
 // Local, app-side saved character presets — NOT a registered Kling Element.
 // fal doesn't expose Kling's own persistent Element Library (create/name/
 // tag/save/reuse with AI-assisted angle generation and voice binding) via
