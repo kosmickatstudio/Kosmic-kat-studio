@@ -5549,19 +5549,21 @@ async function sendVcMultiShotPrompt(){
       if(S.klingSelectedVoices.length)body.voice_ids=S.klingSelectedVoices;
       const i2v=IMAGE_TO_VIDEO_MAP[model];
       if(S.vcMultiImages.length>1&&cap.elements){
-        // Real elements array for multi-character consistency across shots —
-        // replaces the old single image_url field, which silently only ever
-        // used the FIRST uploaded image and ignored the rest.
-        //
-        // Deliberately NOT swapping to the image-to-video endpoint here.
-        // Confirmed by a real failure: that endpoint requires start_image_url
-        // unconditionally, even when elements are provided — but pure
-        // multi-reference mode (no single start frame) has nothing to put
-        // there. fal's own docs show elements + multi_prompt working
-        // directly on the text-to-video endpoint without a start frame, so
-        // this stays on the originally selected model/endpoint instead.
+        // CORRECTED: a previous version of this kept the request on the
+        // text-to-video endpoint, reasoning that fal's docs listed `elements`
+        // as a valid field there. That was an incomplete read — text-to-
+        // video's own docs specifically say element binding there supports
+        // only 1 element and requires character_orientation:'video' (a field
+        // this app never sets), which is why 4 real elements were being
+        // treated as unsupported/effectively empty. Every actually-confirmed
+        // working multi-element example uses the image-to-video endpoint
+        // with both start_image_url AND a full elements array together —
+        // swapping back to that, and including start_image_url (the first
+        // reference image) alongside elements, matching those examples
+        // exactly instead of assuming elements works standalone.
         const missing=hostedImages.map((u,i)=>!u?i+1:null).filter(Boolean);
         if(missing.length)throw new Error(`Reference image ${missing.join(", ")} has no usable URL — remove and re-attach it, then try again`);
+        if(i2v){endpoint=i2v.endpoint;body[i2v.field]=hostedImages[0];}
         body.elements=hostedImages.map(u=>({frontal_image_url:u}));
       } else if(S.vcMultiImages.length&&i2v){
         endpoint=i2v.endpoint;
@@ -5768,20 +5770,18 @@ async function sendVcChatPrompt(){
           body.dynamic_masks=[{mask_url:S.vcMotionBrush.dynamicMaskUrl,trajectories:S.vcMotionBrush.trajectories}];
           if(S.vcMotionBrush.staticMaskUrl)body.static_mask_url=S.vcMotionBrush.staticMaskUrl;
         } else if(cap.elements&&S.vcMultiImages.length>1){
-          // 2+ reference images on a v3+ tier — real elements array (verified
-          // schema), addressed in the prompt as @Element1/@Element2/etc. The
-          // previous version of this sent a flat input_image_urls array, which
-          // is a real fal field but belongs to an unrelated v1.6-only endpoint —
-          // sending it here would have been silently ignored by v2.x/v3.
-          //
-          // Deliberately NOT swapping to the image-to-video endpoint here —
-          // same reasoning as the multi-shot branch: that endpoint requires
-          // start_image_url unconditionally (confirmed by a real failure),
-          // which pure multi-reference mode has no value for. Stays on the
-          // originally selected text-to-video endpoint, which fal's docs
-          // confirm supports elements + prompt directly.
+          // CORRECTED: a previous version kept this on the text-to-video
+          // endpoint. That was wrong — text-to-video's own docs specifically
+          // limit element binding there to 1 element and require
+          // character_orientation:'video' (never set by this app), so 4 real
+          // elements were being treated as effectively unsupported. Every
+          // confirmed working multi-element example uses the image-to-video
+          // endpoint with both start_image_url AND elements together —
+          // swapping back to that and setting start_image_url to the first
+          // reference image, matching those examples exactly.
           const missing=hostedImages.map((u,i)=>!u?i+1:null).filter(Boolean);
           if(missing.length)throw new Error(`Reference image ${missing.join(", ")} has no usable URL — remove and re-attach it, then try again`);
+          if(i2v){endpoint=i2v.endpoint;body[i2v.field]=hostedImages[0];}
           body.elements=hostedImages.map(u=>({frontal_image_url:u}));
         } else if(i2v&&S.vcMultiImages.length){
           // Exactly 1 reference image — swap to the real image-to-video endpoint
@@ -11876,13 +11876,14 @@ const NodeCanvas=(function(){
         if(imageUrls.length){
           const i2v=IMAGE_TO_VIDEO_MAP[node.data.model];
           if(klingCap&&klingCap.elements&&imageUrls.length>1){
-            // Deliberately NOT swapping to the image-to-video endpoint here —
-            // confirmed by a real failure that it requires start_image_url
-            // unconditionally, which pure multi-reference mode has nothing
-            // to put there. Stays on the text-to-video endpoint, which fal's
-            // docs confirm supports elements directly.
+            // CORRECTED: previously stayed on text-to-video. Text-to-video's
+            // own docs specifically limit element binding to 1 element and
+            // require character_orientation:'video' (never set here) — every
+            // confirmed working multi-element example uses image-to-video
+            // with both start_image_url and elements together instead.
             const missing=imageUrls.map((u,i)=>!u?i+1:null).filter(Boolean);
             if(missing.length)throw new Error(`Reference image ${missing.join(", ")} has no usable URL`);
+            if(i2v){endpoint=i2v.endpoint;body[i2v.field]=imageUrls[0];}
             body.elements=imageUrls.map(u=>({frontal_image_url:u}));
           } else if(i2v){
             endpoint=i2v.endpoint;
