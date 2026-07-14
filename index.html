@@ -1142,7 +1142,105 @@ function save(k){
       toast("⚠️ Save failed: "+e.message,"error");
     }
   }
+  // Mirror to the signed-in account's cloud state so this shows up on
+  // every device signed into the same Google account. No-ops silently for
+  // guests/signed-out sessions — those stay local-only by definition.
+  if(typeof CloudSync!=="undefined")CloudSync.schedulePush(k);
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// CLOUD SYNC — mirrors the localStorage-only S keys below to Firestore
+// under users/{uid}/appState/{key}, one small doc per key (matches the
+// existing Node Canvas / Director Chat pattern rather than one giant
+// document, so a big `assets` or `uploads` array can't blow past
+// Firestore's 1MB/doc limit and doesn't get rewritten every time an
+// unrelated key like `settings` changes).
+//
+// Guest mode (authGuest()) never syncs — S.user.uid is only set by real
+// Firebase/Google sign-in, and every function here treats a missing uid
+// as "local-only, do nothing." This is intentional: Guest was always
+// meant to be a no-account, this-device-only mode.
+// ══════════════════════════════════════════════════════════════════════
+const CLOUD_SYNC_KEYS=["settings","projects","characters","shots","episodes","assets","uploads","editorSequence","costLog","team","activityLog","productions","collections","igChatHistory","flowProjects","assetRegistry","worldMemory"];
+const CloudSync=(function(){
+  const pushTimers={};
+  function docRef(key){ return fbDB.collection("users").doc(S.user.uid).collection("appState").doc(key); }
+  function schedulePush(key){
+    if(!CLOUD_SYNC_KEYS.includes(key))return;
+    if(!S.user||!S.user.uid)return; // guest / signed-out — nothing to push
+    clearTimeout(pushTimers[key]);
+    pushTimers[key]=setTimeout(()=>pushKey(key),1500);
+  }
+  async function pushKey(key){
+    if(!S.user||!S.user.uid)return;
+    try{ await docRef(key).set({value:S[key],updatedAt:Date.now()}); }
+    catch(err){ console.warn(`Cloud sync failed for ${key} — kept locally only:`,err.message); }
+  }
+  async function pullKey(key){
+    if(!S.user||!S.user.uid)return undefined;
+    try{
+      const doc=await docRef(key).get();
+      return doc.exists?doc.data().value:undefined;
+    }catch(err){ console.warn(`Couldn't load ${key} from cloud:`,err.message); return undefined; }
+  }
+  // Arrays merge by `.id`: whichever copy of a given id has the newer
+  // updatedAt/updated/createdAt/created timestamp wins, everything else
+  // from both sides is kept. This is what makes it safe to sign in on a
+  // second device without silently deleting whatever's only on device A
+  // or only on device B.
+  function mergeArrays(local,cloud){
+    if(!Array.isArray(cloud))return local;
+    if(!Array.isArray(local)||!local.length)return cloud;
+    if(!cloud.length)return local;
+    const ts=x=>x&&(x.updatedAt||x.updated||x.createdAt||x.created||0);
+    const byId=new Map();
+    for(const item of cloud)if(item&&item.id)byId.set(item.id,item);
+    for(const item of local){
+      if(!item||!item.id)continue;
+      const existing=byId.get(item.id);
+      if(!existing||ts(item)>=ts(existing))byId.set(item.id,item);
+    }
+    const withoutId=[...local,...cloud].filter(x=>x&&!x.id);
+    return [...byId.values(),...withoutId];
+  }
+  // Plain-object keys (settings, worldMemory) merge field-by-field —
+  // a non-empty local value wins over cloud, so an API key just typed in
+  // on this device is never clobbered by an older/blank cloud copy, but
+  // any field only present in the cloud (e.g. a key added on the other
+  // device) still comes through.
+  function mergeObject(local,cloud){
+    if(!cloud||typeof cloud!=="object")return local||{};
+    if(!local||typeof local!=="object")return cloud;
+    const out={...cloud};
+    for(const k in local)if(local[k]!==undefined&&local[k]!=="")out[k]=local[k];
+    return out;
+  }
+  async function onSignIn(){
+    if(!S.user||!S.user.uid)return;
+    let anyPulled=false;
+    const results=await Promise.all(CLOUD_SYNC_KEYS.map(async key=>[key,await pullKey(key)]));
+    for(const[key,cloudVal]of results){
+      if(cloudVal===undefined){
+        // Nothing in the cloud yet for this key on this account — push up
+        // whatever's local so a device that's been working offline/local
+        // becomes the seed instead of silently staying invisible forever.
+        schedulePush(key);
+        continue;
+      }
+      const merged=Array.isArray(S[key])?mergeArrays(S[key],cloudVal):mergeObject(S[key],cloudVal);
+      const changed=JSON.stringify(merged)!==JSON.stringify(S[key]);
+      S[key]=merged;
+      save(key);
+      if(changed)anyPulled=true;
+    }
+    if(anyPulled){
+      toast("☁️ Synced your data from the cloud","success");
+      if(typeof renderModule==="function"&&S.mod)renderModule(S.mod);
+    }
+  }
+  function reset(){ Object.values(pushTimers).forEach(clearTimeout); }
+  return{schedulePush,onSignIn,reset};
+})();
 function saveSetting(k,v){S.settings[k]=v;save("settings");}
 function gs(k,d=""){return S.settings[k]??d;}
 
@@ -11823,6 +11921,7 @@ function authWithGoogle(){
       updateUserUI();
       closeAuth();
       toast(`✅ Signed in as ${maskEmail(email)}`,"success");
+      CloudSync.onSignIn();
     })
     .catch(err=>{
       console.error("Auth error:",err);
@@ -11837,6 +11936,7 @@ function authGuest(){
 
 function signOut(){
   fbAuth.signOut().then(()=>{
+    CloudSync.reset();
     S.user=null;updateUserUI();toast("Signed out","");closeSettings();
   });
 }
@@ -11894,29 +11994,20 @@ function updateUserUI(){
 // bookkeeping, not a separate AI model), and Render Queue + Budget Guardrail.
 // ══════════════════════════════════════════════════════════════════════
 
-// ── Cloud sync (same pattern as Home display content / Character Sheets:
-// Firestore mirror with a localStorage fallback if Storage/Firestore isn't
-// enabled yet) ──
-async function syncFlowProjectsToCloud(){
-  try{ await fbDB.collection("public").doc("flowProjects").set({items:S.flowProjects,updatedAt:Date.now()}); }
-  catch(err){ console.warn("Flow cloud sync failed — saved locally only:",err.message); }
-}
-async function loadFlowProjectsFromCloud(){
-  try{
-    const doc=await fbDB.collection("public").doc("flowProjects").get();
-    if(doc.exists&&Array.isArray(doc.data().items)){ S.flowProjects=doc.data().items; save("flowProjects"); }
-  }catch(err){ console.warn("Couldn't load shared Flow projects from cloud — showing local cache:",err.message); }
-}
-async function syncAssetRegistryToCloud(){
-  try{ await fbDB.collection("public").doc("assetRegistry").set({items:S.assetRegistry,updatedAt:Date.now()}); }
-  catch(err){ console.warn("Asset registry cloud sync failed — saved locally only:",err.message); }
-}
-async function loadAssetRegistryFromCloud(){
-  try{
-    const doc=await fbDB.collection("public").doc("assetRegistry").get();
-    if(doc.exists&&Array.isArray(doc.data().items)){ S.assetRegistry=doc.data().items; save("assetRegistry"); }
-  }catch(err){ console.warn("Couldn't load shared asset registry from cloud — showing local cache:",err.message); }
-}
+// ── Cloud sync ──
+// These used to write Flow Projects and the Asset Registry to a single
+// shared Firestore doc ("public"/flowProjects, "public"/assetRegistry) —
+// meaning every visitor to the site read and wrote the SAME list, not a
+// per-account one. `flowProjects` and `assetRegistry` are both in
+// CLOUD_SYNC_KEYS now, so plain save("flowProjects")/save("assetRegistry")
+// already mirrors them to this signed-in account's own
+// users/{uid}/appState doc. These four are kept as harmless no-ops only so
+// any remaining call site doesn't throw; the real sync happens in
+// CloudSync/onSignIn.
+async function syncFlowProjectsToCloud(){}
+async function loadFlowProjectsFromCloud(){}
+async function syncAssetRegistryToCloud(){}
+async function loadAssetRegistryFromCloud(){}
 
 // ── Flow project list ──
 function renderFlow(el){
@@ -13743,10 +13834,18 @@ function init(){
   fbAuth.onAuthStateChanged(async user=>{
     if(user){
       S.user={email:user.email,provider:"google",uid:user.uid,name:user.displayName||"",photo:user.photoURL,isFounder:await isFounderEmail(user.email)};
+      updateUserUI();
+      // Runs on EVERY restored session, not just a fresh sign-in click —
+      // this is what actually pulls your data down the first time this
+      // browser/device sees this Google account (e.g. opening the site on
+      // desktop already signed in from a previous visit).
+      CloudSync.onSignIn();
     } else if(S.user&&S.user.provider!=="guest"){
       S.user=null;
+      updateUserUI();
+    } else {
+      updateUserUI();
     }
-    updateUserUI();
   });
 
   // Hide loader — fast, with safety fallback
