@@ -1330,12 +1330,12 @@ const MOD_TABS = {
   videocanvas:["Generate","Gallery"],
   motioncontrol:["Generate"],
   directors:["All Directors","Active"],
-  adstudio:["Create Ad","Templates","Analytics"],
+  adstudio:["Create Ad"],
   audio:["Generate","Voice Clone","Library"],
   assets:["All Assets","Upload","Collections"],
   gallery:["Recent","Starred","Shared"],
-  editor:["Timeline","Color","Audio","Export"],
-  upscaler:["Upscale","Batch","History"],
+  editor:["Timeline"],
+  upscaler:["Upscale","Batch"],
   costs:["Overview","Breakdown","Export"],
   team:["Members","Roles","Invites"],
 };
@@ -1393,6 +1393,23 @@ function handleTabSwitch(mod,name){
   if(mod==="videocanvas"){
     if(name==="Gallery"){showVcGalleryView();return;}
     if(name==="Generate"){showVcChatView();}
+  }
+  if(mod==="upscaler"){
+    // Real toggle that already existed (S.upscaleMode/setUpscaleMode) but was
+    // never connected to these top-level tabs — tapping them did nothing.
+    setUpscaleMode(name==="Batch"?"batch":"single");
+  }
+  if(mod==="audio"){
+    // No separate pages exist for these — Voiceover/Music/SFX/Lipsync/Voice
+    // Cloning/Recent are all on one long scrollable page by design. Rather
+    // than fake separate views, each tab scrolls to the real section it
+    // actually refers to.
+    const anchors={"Generate":"audioGenerateAnchor","Voice Clone":"audioVoiceCloneAnchor","Library":"audioLibraryAnchor"};
+    document.getElementById(anchors[name])?.scrollIntoView({behavior:"smooth",block:"start"});
+  }
+  if(mod==="costs"){
+    const anchors={"Overview":"costsOverviewAnchor","Breakdown":"costsBreakdownAnchor","Export":"costsExportAnchor"};
+    document.getElementById(anchors[name])?.scrollIntoView({behavior:"smooth",block:"start"});
   }
 }
 
@@ -9625,8 +9642,9 @@ async function generateAdBrief(){
 // ── AUDIO ──
 function renderAudio(el){
   const hasKey=gs("api_elevenlabs");
+  const clonedVoices=gs("cloned_voices",[])||[];
   el.innerHTML=`
-    <div class="panel">
+    <div class="panel" id="audioGenerateAnchor">
       <div class="panel-title">🎵 Voiceover ${hasKey?'<span class="badge badge-green">ACTIVE — ElevenLabs</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
       ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add an <b>ElevenLabs</b> API key in Settings to enable real voice generation. Free tier available at <a href="https://elevenlabs.io" target="_blank" style="color:var(--vm)">elevenlabs.io</a>.</div>`:''}
       <div class="f-group">
@@ -9643,6 +9661,7 @@ function renderAudio(el){
             <option value="TxGEqnHWrfWFTfGW9XjX">Josh (Male, Deep)</option>
             <option value="pNInz6obpgDQGcFmaJgB">Adam (Male, Narrator)</option>
             <option value="jsCqWAovK2LkecY7zXl4">Freya (Female, Energetic)</option>
+            ${clonedVoices.length?`<optgroup label="Your Cloned Voices">${clonedVoices.map(v=>`<option value="${v.id}">🎙️ ${v.name}</option>`).join('')}</optgroup>`:''}
           </select>
         </div>
         <div class="f-group">
@@ -9660,14 +9679,39 @@ function renderAudio(el){
       <div class="panel-title">🔊 Result</div>
       <div id="audioResultContent"></div>
     </div>
-    ${S.assets.filter(a=>a.type==='audio').length?`
-    <div class="panel" style="margin-top:14px">
+
+    <div class="panel" id="audioVoiceCloneAnchor" style="margin-top:14px">
+      <div class="panel-title">🎙️ Voice Cloning ${hasKey?'<span class="badge badge-green">ACTIVE — ElevenLabs</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Upload a clean audio sample (30s–a few minutes, one speaker, minimal background noise) and clone a real, reusable voice — it'll appear in the Voice dropdown above for any future voiceover.</div>
+      <div class="f-group">
+        <label class="f-label">Name this voice</label>
+        <input class="f-input" id="voiceCloneName" placeholder="e.g. Narrator - Deep Warm Male">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Audio sample</label>
+        <input type="file" accept="audio/*" id="voiceCloneFile" style="display:none" onchange="handleVoiceCloneFileUpload(event)">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('voiceCloneFile').click()">📤 Choose Audio Sample</button>
+        <span id="voiceCloneFileLabel" style="font-size:11px;color:var(--textm);margin-left:8px"></span>
+      </div>
+      <button class="btn btn-primary btn-full" id="voiceCloneBtn" ${!hasKey?'disabled':''} onclick="cloneVoiceFromSample()">${hasKey?'🎙️ Clone Voice':'🔑 Add API Key First'}</button>
+      ${clonedVoices.length?`<div style="margin-top:12px">
+        <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">Your Cloned Voices</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${clonedVoices.map((v,i)=>`<div style="display:flex;align-items:center;gap:8px;background:rgba(61,31,122,0.04);border-radius:8px;padding:8px 10px;font-size:12px">
+            <span style="flex:1;color:var(--text);font-weight:600">🎙️ ${v.name}</span>
+            <button class="pc-menu-btn" onclick="deleteClonedVoice(${i})">🗑</button>
+          </div>`).join('')}
+        </div>
+      </div>`:''}
+    </div>
+
+    <div class="panel" id="audioLibraryAnchor" style="margin-top:14px">
       <div class="panel-title">🎧 Recent Voiceovers</div>
-      <div id="audioRecentList" style="display:flex;flex-direction:column;gap:8px">${S.assets.filter(a=>a.type==='audio').slice(-6).reverse().map(a=>`
+      ${S.assets.filter(a=>a.type==='audio').length?`<div id="audioRecentList" style="display:flex;flex-direction:column;gap:8px">${S.assets.filter(a=>a.type==='audio').slice(-6).reverse().map(a=>`
         <div style="display:flex;align-items:center;gap:10px;background:rgba(61,31,122,0.04);border-radius:8px;padding:8px">
           <audio src="${a.url}" controls style="flex:1;height:32px"></audio>
-        </div>`).join('')}</div>
-    </div>`:''}
+        </div>`).join('')}</div>`:`<div style="font-size:11px;color:var(--textm)">Generated voiceovers will show up here.</div>`}
+    </div>
 
     <div class="panel" style="margin-top:14px">
       <div class="panel-title">🎼 Music Generation <span class="badge ${gs('api_falai')?'badge-green':'badge-red'}">${gs('api_falai')?'ACTIVE — fal.ai':'NO KEY'}</span></div>
@@ -9998,6 +10042,70 @@ function audioBufferToWav(buffer){
 function applyCharVoice(){
   const sel=document.getElementById("audioCharVoice");
   if(sel.value)document.getElementById("audioVoice").value=sel.value;
+}
+
+// ── VOICE CLONING — real ElevenLabs endpoint, genuinely missing before now.
+// The "Voice Clone" tab existed in the UI but had zero functionality behind
+// it — tapping it did nothing, and no cloning feature existed anywhere in
+// the app. This is the real thing: POST an audio sample to ElevenLabs'
+// actual /v1/voices/add endpoint, get back a real, reusable voice_id that
+// then appears in the Voice dropdown above for any future voiceover.
+S.voiceCloneFile=null;
+function handleVoiceCloneFileUpload(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  S.voiceCloneFile=file;
+  document.getElementById("voiceCloneFileLabel").textContent=`✓ ${file.name}`;
+}
+
+async function cloneVoiceFromSample(){
+  const apiKey=gs("api_elevenlabs","");
+  if(!apiKey){toast("Add an ElevenLabs API key in Settings first","error");return;}
+  const name=document.getElementById("voiceCloneName")?.value.trim();
+  if(!name){toast("Name this voice first","error");return;}
+  if(!S.voiceCloneFile){toast("Choose an audio sample first","error");return;}
+  const btn=document.getElementById("voiceCloneBtn");
+  btn.disabled=true;btn.textContent="🎙️ Cloning…";
+  try{
+    const formData=new FormData();
+    formData.append("name",name);
+    formData.append("files",S.voiceCloneFile);
+    const res=await fetch("https://api.elevenlabs.io/v1/voices/add",{
+      method:"POST",
+      headers:{"xi-api-key":apiKey},
+      body:formData,
+    });
+    const data=await res.json();
+    if(!res.ok)throw new Error((data.detail&&(data.detail.message||data.detail))||"Voice cloning failed");
+    const voiceId=data.voice_id;
+    if(!voiceId)throw new Error("No voice_id returned");
+    const clonedVoices=gs("cloned_voices",[])||[];
+    clonedVoices.push({id:voiceId,name,created:new Date().toISOString()});
+    saveSetting("cloned_voices",clonedVoices);
+    S.voiceCloneFile=null;
+    toast(`🎙️ "${name}" cloned — now available in the Voice dropdown above`,"success");
+    renderAudio(document.getElementById("moduleContent"));
+  }catch(err){
+    toast("❌ "+err.message,"error");
+    if(btn){btn.disabled=false;btn.textContent="🎙️ Clone Voice";}
+  }
+}
+
+async function deleteClonedVoice(i){
+  const clonedVoices=gs("cloned_voices",[])||[];
+  const voice=clonedVoices[i];
+  if(!voice)return;
+  if(!(await showConfirmDialog(`Delete "${voice.name}"? This removes it from ElevenLabs too, not just this app.`,{danger:true,okLabel:"Delete"})))return;
+  const apiKey=gs("api_elevenlabs","");
+  try{
+    if(apiKey)await fetch(`https://api.elevenlabs.io/v1/voices/${voice.id}`,{method:"DELETE",headers:{"xi-api-key":apiKey}});
+  }catch(err){
+    console.warn("Couldn't delete from ElevenLabs, removing locally anyway:",err.message);
+  }
+  clonedVoices.splice(i,1);
+  saveSetting("cloned_voices",clonedVoices);
+  renderAudio(document.getElementById("moduleContent"));
+  toast("Voice removed","success");
 }
 
 async function generateAudio(){
@@ -10955,7 +11063,7 @@ function renderCosts(el){
   const nearBudget=budgetCap>0&&total>=budgetCap*0.8&&!overBudget;
 
   el.innerHTML=`
-    <div class="panel">
+    <div class="panel" id="costsOverviewAnchor">
       <div style="background:linear-gradient(135deg,var(--violet),var(--vm));border-radius:12px;padding:16px;color:#fff;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
         <div>
           <div style="font-size:10px;opacity:0.75;letter-spacing:0.06em;margin-bottom:2px">TOTAL SPENT (ESTIMATED)</div>
@@ -10994,7 +11102,7 @@ function renderCosts(el){
     </div>
 
     ${modelRows.length?`
-    <div class="panel" style="margin-top:14px">
+    <div class="panel" style="margin-top:14px" id="costsBreakdownAnchor">
       <div class="panel-title">📊 Spend by Model</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         ${modelRows.map(([key,amt])=>{
@@ -11010,7 +11118,13 @@ function renderCosts(el){
           </div>`;
         }).join('')}
       </div>
-    </div>` : `<div class="empty-state" style="margin-top:14px"><div class="empty-icon">📊</div><div class="empty-title">No Spend Yet</div><div class="empty-desc">Generate an image, video, or voiceover and real cost estimates will appear here.</div></div>`}
+    </div>` : `<div class="empty-state" style="margin-top:14px" id="costsBreakdownAnchor"><div class="empty-icon">📊</div><div class="empty-title">No Spend Yet</div><div class="empty-desc">Generate an image, video, or voiceover and real cost estimates will appear here.</div></div>`}
+
+    <div class="panel" style="margin-top:14px" id="costsExportAnchor">
+      <div class="panel-title">⬇️ Export Cost Log</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Download every logged generation (model, note, cost, date) as a real CSV file — useful for client billing or expense records.</div>
+      <button class="btn btn-outline btn-full" ${!(S.costLog||[]).length?'disabled':''} onclick="exportCostLogCsv()">⬇️ Download CSV (${(S.costLog||[]).length} row${(S.costLog||[]).length!==1?'s':''})</button>
+    </div>
 
     ${log.length?`
     <div class="panel" style="margin-top:14px">
@@ -11051,6 +11165,35 @@ function renderCosts(el){
       <div style="font-size:12px;color:var(--textm)">Connect Razorpay or Stripe in Settings to manage real billing for clients or team members.</div>
     </div>
   `;
+}
+
+// Real CSV export - genuinely missing feature, now built. Escapes fields
+// per standard CSV rules (wrap in quotes, double up any internal quotes)
+// since notes/model names can contain commas.
+function csvEscape(val){
+  const s=String(val==null?"":val);
+  return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;
+}
+
+function exportCostLogCsv(){
+  const rows=S.costLog||[];
+  if(!rows.length){toast("Nothing to export yet","error");return;}
+  const header=["Date","Model","Note","Cost (USD)"];
+  const lines=[header.map(csvEscape).join(",")];
+  rows.forEach(c=>{
+    lines.push([new Date(c.created).toLocaleString(),c.key,c.note||"",c.amt.toFixed(4)].map(csvEscape).join(","));
+  });
+  const csv=lines.join("\n");
+  const blob=new Blob([csv],{type:"text/csv"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=`KosmicKat_cost_log_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  toast(`⬇️ Exported ${rows.length} row${rows.length!==1?'s':''}`,"success");
 }
 
 function saveBudgetCap(){
