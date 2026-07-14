@@ -56,7 +56,20 @@ html[data-theme="dark"]{
   --glow-gold:rgba(240,198,116,0.30);--glow-ice:rgba(111,227,255,0.24);
 }
 html{scroll-behavior:smooth;overscroll-behavior-y:contain}
-body{font-family:'Inter',sans-serif;background:var(--pearl);color:var(--text);overflow:hidden;height:100vh;display:flex;flex-direction:column;overscroll-behavior-y:contain}
+body{font-family:'Inter',sans-serif;background:var(--pearl);color:var(--text);overflow:hidden;height:100vh;display:flex;flex-direction:column;overscroll-behavior-y:contain;position:relative}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 60% 50% at 0% 20%,rgba(98,64,176,0.10),transparent 60%),radial-gradient(ellipse 60% 50% at 100% 75%,rgba(94,210,225,0.09),transparent 60%);}
+/* Compact, no-color-banner model row — replaces the old bold gradient banner
+   per model with a minimal list style (dot + name + action), used on Home
+   where a dozen-plus rows of saturated color banners had no real purpose
+   beyond visual noise. */
+.home-model-row{display:flex;align-items:center;gap:8px;font-size:11.5px;padding:8px 10px;border-radius:8px;background:var(--pearl2);border:1px solid var(--borderl)}
+.home-model-row .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.home-model-row .name{flex:1;color:var(--text);font-weight:600}
+/* Glossy, borderless "premium" panel — same glass-sheet material as Settings
+   sheets/modals elsewhere in the app, no hard box edge. */
+.home-glass-panel{background:var(--glass-solid);backdrop-filter:blur(18px);border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 8px 32px rgba(61,31,122,0.10),inset 0 1px 0 rgba(255,255,255,0.5)}
+.home-director-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.home-mini-thumb{width:100%;aspect-ratio:1;border-radius:10px;object-fit:cover;flex-shrink:0}
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--lav2);border-radius:10px}
@@ -123,7 +136,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .module-area{flex:1;overflow:hidden;display:flex;flex-direction:column}
 .module-tabs{display:flex;align-items:center;padding:6px 16px;gap:6px;border-bottom:1px solid var(--glass-brd);background:var(--glass);backdrop-filter:blur(16px);overflow-x:auto;flex-shrink:0;height:48px}
 .module-tabs::-webkit-scrollbar{height:0}
-.module-content{flex:1;overflow-y:auto;padding:18px}
+.module-content{flex:1;overflow-y:auto;padding:18px;position:relative;z-index:1}
 .mc-reveal{opacity:0;transition:opacity 0.22s cubic-bezier(0.4,0,0.2,1)}
 .mc-reveal.in{opacity:1}
 .ig-chat-shell{display:flex;flex-direction:column;background:var(--glass-solid);border-radius:22px;border:1px solid var(--glass-brd);box-shadow:var(--shv),inset 0 1px 0 rgba(255,255,255,0.06);overflow:hidden;position:relative}
@@ -1458,6 +1471,8 @@ function renderHome(el){
   const defaultVideoModel=gs("default_video_model","bytedance/seedance-2.0/fast/text-to-video");
   const allDirectors=getAllDirectors();
   const activeDirId=gs("active_director","");
+  const recentImages=S.assets.filter(a=>a.type==="image").slice(-8).reverse();
+  const recentVideos=S.assets.filter(a=>a.type==="video").slice(-8).reverse();
 
   el.innerHTML=`
     <div class="panel" style="padding:0;overflow:hidden">
@@ -1476,8 +1491,7 @@ function renderHome(el){
       </div>
     </div>
 
-    <div class="panel" style="background:var(--glass-solid);border:1px solid var(--glass-brd);position:relative;overflow:hidden">
-      <div style="position:absolute;top:0;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,var(--glow-gold),transparent)"></div>
+    <div class="home-glass-panel">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
         <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--ice));display:flex;align-items:center;justify-content:center;box-shadow:0 3px 14px var(--glow-ice);flex-shrink:0">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4M22 5h-4M4 17v2M5 18H3"/></svg>
@@ -1497,23 +1511,36 @@ function renderHome(el){
 
     <div class="panel">
       <div class="panel-title">◆ Directors</div>
-      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Pick an Assistant Director's approach for your next generation, or talk through an idea with your AI Director.</div>
-      <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px">
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Pick an Assistant Director's approach for your next generation.</div>
+      <div class="home-director-grid">
         ${allDirectors.map(d=>{
           const bg=DIRECTOR_BANNERS[d.id]||"linear-gradient(135deg,#3D1F7A,#6240B0)";
-          return `<div onclick="selectDirectorQuick('${d.id}')" style="flex-shrink:0;width:92px;height:78px;text-align:center;cursor:pointer;border-radius:12px;border:1.5px solid ${activeDirId===d.id?'var(--violet)':'transparent'};background:${bg};position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center">
+          return `<div onclick="selectDirectorQuick('${d.id}')" style="height:52px;text-align:center;cursor:pointer;border-radius:10px;border:1.5px solid ${activeDirId===d.id?'var(--violet)':'transparent'};background:${bg};position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:6px">
           <div style="position:absolute;inset:0;background:rgba(10,5,20,0.38)"></div>
-          <div style="position:relative;font-size:18px;color:#fff">${d.icon||'●'}</div>
-          <div style="position:relative;font-size:10px;font-weight:700;color:#fff;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px;text-shadow:0 1px 3px rgba(0,0,0,0.5)">${d.name.replace('Director ','')}</div>
-          ${activeDirId===d.id?'<div style="position:relative;margin-top:2px"><span class="badge badge-green" style="font-size:8px">✓</span></div>':''}
+          <div style="position:relative;font-size:15px;color:#fff">${d.icon||'●'}</div>
+          <div style="position:relative;font-size:10.5px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 3px rgba(0,0,0,0.5)">${d.name.replace('Director ','')}</div>
+          ${activeDirId===d.id?'<span style="position:relative;font-size:11px;color:var(--green)">✓</span>':''}
         </div>`;}).join('')}
       </div>
       <button class="btn btn-outline btn-full" onclick="toggleAiPanel()">Open AI Director Chat</button>
     </div>
 
     <div class="panel">
-      <div class="panel-title">▭ Image Models <span class="badge ${hasFal||hasReplicate||hasOpenAI||gs("api_gemini")?'badge-green':'badge-red'}">${hasFal||hasReplicate||hasOpenAI||gs("api_gemini")?'READY':'NO KEY'}</span></div>
-      <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="panel-title">✦ Recent Work</div>
+      ${!recentImages.length&&!recentVideos.length?`<div style="font-size:11px;color:var(--textm)">Your generated images and videos will show up here.</div>`:''}
+      ${recentImages.length?`<div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">Images</div>
+      <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:${recentVideos.length?'14px':'0'}">
+        ${recentImages.map(a=>`<img src="${a.url}" class="home-mini-thumb" style="width:64px;height:64px;flex-shrink:0;cursor:pointer" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))" title="${(a.prompt||'').replace(/"/g,'&quot;')}">`).join('')}
+      </div>`:''}
+      ${recentVideos.length?`<div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">Videos</div>
+      <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px">
+        ${recentVideos.map(a=>`<video src="${a.url}" class="home-mini-thumb" style="width:96px;height:64px;flex-shrink:0;cursor:pointer;aspect-ratio:auto" muted onclick="switchMod('videocanvas',document.querySelector('[data-mod=videocanvas]'))" title="${(a.prompt||'').replace(/"/g,'&quot;')}"></video>`).join('')}
+      </div>`:''}
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Image Models <span class="badge ${hasFal||hasReplicate||hasOpenAI||gs("api_gemini")?'badge-green':'badge-red'}" style="font-size:9px">${hasFal||hasReplicate||hasOpenAI||gs("api_gemini")?'READY':'NO KEY'}</span></div>
+      <div style="display:flex;flex-direction:column;gap:5px">
         ${[
           {id:"fal-ai/flux/schnell",label:"FLUX Schnell",ready:hasFal},
           {id:"fal-ai/flux/dev",label:"FLUX Dev",ready:hasFal},
@@ -1530,19 +1557,18 @@ function renderHome(el){
           {id:"fal-ai/nano-banana-2",label:"Nano Banana 2 (via fal.ai)",ready:hasFal},
           {id:"fal-ai/nano-banana-pro",label:"Nano Banana Pro (via fal.ai)",ready:hasFal},
           {id:"openai/gpt-image-2",label:"GPT Image 2 (via fal.ai)",ready:hasFal},
-        ].map(m=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:10px 10px;border-radius:8px;background:${MODEL_BANNERS[m.id]||'linear-gradient(135deg,#2A2140,#3D1F7A)'};position:relative;overflow:hidden;min-height:20px">
-          <div style="position:absolute;inset:0;background:rgba(10,5,20,0.42)"></div>
-          <span style="position:relative;width:8px;height:8px;border-radius:50%;background:${m.ready?'var(--green)':'rgba(255,255,255,0.4)'};flex-shrink:0"></span>
-          <span style="position:relative;flex:1;color:#fff;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.5)">${m.label}</span>
-          <span style="position:relative">${defaultImageModel===m.id?'<span class="badge badge-violet">Default</span>':`<button class="btn btn-outline btn-xs" style="background:rgba(255,255,255,0.9)" onclick="setDefaultModel('image','${m.id}')">Set Default</button>`}</span>
+        ].map(m=>`<div class="home-model-row">
+          <span class="dot" style="background:${m.ready?'var(--green)':'var(--border)'}"></span>
+          <span class="name">${m.label}</span>
+          ${defaultImageModel===m.id?'<span class="badge badge-violet" style="font-size:9px">Default</span>':`<button class="btn btn-outline btn-xs" onclick="setDefaultModel('image','${m.id}')">Set Default</button>`}
         </div>`).join('')}
       </div>
       <div style="font-size:10px;color:var(--textm);margin-top:8px">FLUX.2 Flash Edit (multi-reference) not shown here — pick it directly in Image's Settings.</div>
     </div>
 
     <div class="panel">
-      <div class="panel-title">▶ Video Models <span class="badge ${hasFal?'badge-green':'badge-red'}">${hasFal?'READY':'NO KEY'}</span></div>
-      <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="panel-title">Video Models <span class="badge ${hasFal?'badge-green':'badge-red'}" style="font-size:9px">${hasFal?'READY':'NO KEY'}</span></div>
+      <div style="display:flex;flex-direction:column;gap:5px">
         ${[
           {id:"bytedance/seedance-2.0/fast/text-to-video",label:"Seedance 2.0 Fast"},
           {id:"bytedance/seedance-2.0/text-to-video",label:"Seedance 2.0"},
@@ -1552,11 +1578,10 @@ function renderHome(el){
           {id:"fal-ai/kling-video/v3/pro/text-to-video",label:"Kling 3.0 Pro"},
           {id:"fal-ai/kling-video/o3/pro/reference-to-video",label:"Kling O3 Pro (Multi-Reference)"},
           {id:"fal-ai/veo3.1",label:"Veo 3.1"},
-        ].map(m=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:10px 10px;border-radius:8px;background:${MODEL_BANNERS[m.id]||'linear-gradient(135deg,#1A2E1F,#2D5A3D)'};position:relative;overflow:hidden;min-height:20px">
-          <div style="position:absolute;inset:0;background:rgba(10,5,20,0.42)"></div>
-          <span style="position:relative;width:8px;height:8px;border-radius:50%;background:${hasFal?'var(--green)':'rgba(255,255,255,0.4)'};flex-shrink:0"></span>
-          <span style="position:relative;flex:1;color:#fff;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.5)">${m.label}</span>
-          <span style="position:relative">${defaultVideoModel===m.id?'<span class="badge badge-violet">Default</span>':`<button class="btn btn-outline btn-xs" style="background:rgba(255,255,255,0.9)" onclick="setDefaultModel('video','${m.id}')">Set Default</button>`}</span>
+        ].map(m=>`<div class="home-model-row">
+          <span class="dot" style="background:${hasFal?'var(--green)':'var(--border)'}"></span>
+          <span class="name">${m.label}</span>
+          ${defaultVideoModel===m.id?'<span class="badge badge-violet" style="font-size:9px">Default</span>':`<button class="btn btn-outline btn-xs" onclick="setDefaultModel('video','${m.id}')">Set Default</button>`}
         </div>`).join('')}
       </div>
     </div>
@@ -11222,11 +11247,15 @@ function handleDisplayUpload(event){
   const file=event.target.files[0];
   if(!file)return;
   S.dcUploadedFile=file;
+  const sizeMB=(file.size/(1024*1024)).toFixed(1);
+  if(file.size>20*1024*1024){
+    toast(`⚠️ ${sizeMB}MB — large file, this may take a while to upload on a slow connection`,"");
+  }
   const reader=new FileReader();
   reader.onload=e=>{
     S.dcUploadedDataUrl=e.target.result;
     S.dcUploadedType=file.type.startsWith("video/")?"video":"image";
-    document.getElementById("dcUploadLabel").textContent="✓ "+file.name;
+    document.getElementById("dcUploadLabel").textContent=`✓ ${file.name} (${sizeMB}MB)`;
   };
   reader.readAsDataURL(file);
 }
@@ -11239,10 +11268,24 @@ async function addDisplayContent(){
   if(type==="upload"){
     if(!S.dcUploadedFile){toast("Choose a file from your device first","error");return;}
     try{
-      if(addBtn){addBtn.disabled=true;addBtn.textContent="Uploading…";}
+      if(addBtn){addBtn.disabled=true;addBtn.textContent="Uploading… 0%";}
       const path=`home-display/${Date.now()}_${S.dcUploadedFile.name}`;
       const ref=fbStorage.ref(path);
-      await ref.put(S.dcUploadedFile);
+      // Real progress, not a static "Uploading…" label — on a slow connection
+      // a large video file with zero visible progress just looks frozen/
+      // broken, which is very likely what was actually happening rather than
+      // a genuine upload failure.
+      const uploadTask=ref.put(S.dcUploadedFile);
+      await new Promise((resolve,reject)=>{
+        uploadTask.on("state_changed",
+          snap=>{
+            const pct=Math.round((snap.bytesTransferred/snap.totalBytes)*100);
+            if(addBtn)addBtn.textContent=`Uploading… ${pct}%`;
+          },
+          err=>reject(err),
+          ()=>resolve()
+        );
+      });
       item.type=S.dcUploadedType;
       item.url=await ref.getDownloadURL();
       item.storagePath=path;
