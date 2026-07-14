@@ -11433,16 +11433,33 @@ async function addDisplayContent(){
       // broken, which is very likely what was actually happening rather than
       // a genuine upload failure.
       const uploadTask=ref.put(S.dcUploadedFile);
-      await new Promise((resolve,reject)=>{
-        uploadTask.on("state_changed",
-          snap=>{
-            const pct=Math.round((snap.bytesTransferred/snap.totalBytes)*100);
-            if(addBtn)addBtn.textContent=`Uploading… ${pct}%`;
-          },
-          err=>reject(err),
-          ()=>resolve()
-        );
-      });
+      let lastProgressAt=Date.now();
+      await Promise.race([
+        new Promise((resolve,reject)=>{
+          uploadTask.on("state_changed",
+            snap=>{
+              lastProgressAt=Date.now();
+              const pct=Math.round((snap.bytesTransferred/snap.totalBytes)*100);
+              if(addBtn)addBtn.textContent=`Uploading… ${pct}%`;
+            },
+            err=>reject(err),
+            ()=>resolve()
+          );
+        }),
+        // Watchdog: if genuinely stuck (no progress event at all, or none for
+        // 30s straight — a real network/permissions issue, not just a slow
+        // connection actually still moving), cancel and fail clearly instead
+        // of leaving this frozen at 0% forever with zero feedback.
+        new Promise((_,reject)=>{
+          const check=setInterval(()=>{
+            if(Date.now()-lastProgressAt>30000){
+              clearInterval(check);
+              uploadTask.cancel();
+              reject(new Error("Upload stalled for 30+ seconds with no progress — likely a network or storage permissions issue, not just slowness. Try again or check your connection."));
+            }
+          },2000);
+        }),
+      ]);
       item.type=S.dcUploadedType;
       item.url=await ref.getDownloadURL();
       item.storagePath=path;
