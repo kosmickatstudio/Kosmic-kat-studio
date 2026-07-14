@@ -268,10 +268,13 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 /* Gallery cards carry a lot more per-item content (rating, approve/reject,
    regenerate, select, collection, download, delete, info) than the simpler
    grids elsewhere in the app (Character Sheet views, etc) that .grid3 was
-   originally built for. 3-per-row crushed all of that into ~110px on a
-   phone. 2 columns gives real room to actually tap things. */
-.grid-gallery{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.card{background:var(--glass);backdrop-filter:blur(12px);border:1.5px solid var(--glass-brd);border-radius:12px;padding:14px;transition:transform 0.15s cubic-bezier(0.4,0,0.2,1),box-shadow 0.15s ease,border-color 0.15s ease;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.05)}
+   originally built for. A fixed 2-column track worked fine on a phone, but
+   on a wider screen each column (and the video inside it) ends up huge —
+   auto-fill with a sane min width keeps 2 columns on a phone while adding
+   more columns automatically as the screen gets wider, instead of just
+   stretching the same 2 columns bigger. */
+.grid-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.card{background:var(--glass);backdrop-filter:blur(12px);border:1.5px solid var(--glass-brd);border-radius:12px;padding:14px;transition:transform 0.15s cubic-bezier(0.4,0,0.2,1),box-shadow 0.15s ease,border-color 0.15s ease;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.05);min-width:0}
 .card:active{transform:scale(0.97);box-shadow:0 1px 4px rgba(61,31,122,0.08)}
 .card:hover{border-color:var(--ice);box-shadow:0 8px 28px var(--glow-ice);transform:translateY(-2px)}
 .card.selected{border-color:var(--gold);background:var(--glow-gold)}
@@ -10666,8 +10669,15 @@ function galleryCardHTML(a){
   const proj=a.projectId?S.projects.find(p=>p.id===a.projectId):null;
   const icon=a.type==='image'?'🖼':a.type==='video'?'🎬':'🎵';
   let media="";
-  if(a.type==='image')media=`<img src="${a.url}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover">`;
-  else if(a.type==='video')media=`<video src="${a.url}" controls preload="metadata" style="width:100%;max-height:160px;border-radius:8px;aspect-ratio:16/9;object-fit:cover;background:#000;display:block"></video>`;
+  if(a.type==='image')media=`<img src="${a.url}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover;display:block">`;
+  // `max-height` and `aspect-ratio` used to be set together here, which
+  // fight each other on a <video> element once the column gets wider than
+  // ~280px (a 16:9 box at 100% width naturally wants to be taller than
+  // 160px, so the two constraints disagreed on the real box height and
+  // the video rendered stretched/oversized instead of a clean 16:9 crop).
+  // aspect-ratio alone is enough — it already caps the height relative to
+  // whatever width the (now responsive) grid column gives it.
+  else if(a.type==='video')media=`<video src="${a.url}" controls preload="metadata" style="width:100%;border-radius:8px;aspect-ratio:16/9;object-fit:cover;background:#000;display:block"></video>`;
   else media=`<div style="background:rgba(61,31,122,0.06);border-radius:8px;padding:16px;display:flex;align-items:center;justify-content:center;font-size:28px">🎵</div><audio src="${a.url}" controls style="width:100%;margin-top:6px;height:32px"></audio>`;
   const review=a.review||{status:null,rating:0};
   const isSelected=(S.gallerySelectedForCompare||[]).includes(a.id);
