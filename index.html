@@ -1193,8 +1193,16 @@ const COST_TABLE={
   "elevenlabs_tts":0.02,
   "stable-audio-3":0.05,
   "sfx-generator":0.02,
+  // Two genuinely separate lipsync features exist in this app - Audio Tools'
+  // own standalone lipsync tool (sync-lipsync-v2) and Video Canvas's inline
+  // Lip Sync button on a generated result (fal-ai/kling-video/lipsync/
+  // audio-to-video). The latter was never in this table at all - every
+  // real generation there silently fell back to the generic $0.02 default
+  // instead of a realistic estimate, the whole time.
   "sync-lipsync-v2":3.00,
-  "fal-ai/flux-lora-fast-training":2.00
+  "fal-ai/kling-video/lipsync/audio-to-video":3.00,
+  "fal-ai/flux-lora-fast-training":2.00,
+  "fal-ai/kling-video/v3/pro/motion-control":1.34,
 };
 
 function logCost(key,note){
@@ -3570,7 +3578,7 @@ function handleBgRemove(event){
           <img src="${outUrl}" style="width:100%;max-width:300px;border-radius:8px;background:repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 50% / 16px 16px">
           <div style="font-size:11px;color:var(--green);margin-top:6px">✓ Saved to Gallery automatically</div>
           <div style="display:flex;gap:8px;margin-top:8px">
-            <a href="${outUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
+            <button class="btn btn-outline btn-sm" onclick="downloadWithName('${outUrl.replace(/'/g,"\\'")}','KosmicKat_bg_removed.png')">⬇ Download</button>
             <button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAsset.id}')">📁 Add to Collection</button>
           </div>`;
         toast("🧹 Background removed — saved to Gallery","success");
@@ -9745,7 +9753,7 @@ async function generateMusic(){
     const savedAssetMusic=createAudioAsset(url,prompt);
     resultEl.innerHTML=`<audio src="${url}" controls style="width:100%;margin-bottom:8px"></audio>
       <div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Saved to Gallery automatically</div>
-      <div style="display:flex;gap:8px"><a href="${url}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAssetMusic.id}')">📁 Add to Collection</button></div>`;
+      <div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" onclick="downloadWithName('${url.replace(/'/g,"\\'")}','KosmicKat_music.mp3')">⬇ Download</button><button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAssetMusic.id}')">📁 Add to Collection</button></div>`;
     logCost("stable-audio-3",prompt.slice(0,60));
     toast("🎼 Music generated — saved to Gallery!","success");
   }catch(err){
@@ -9776,7 +9784,7 @@ async function generateSFX(){
     const savedAssetSfx=createAudioAsset(url,"SFX: "+prompt);
     resultEl.innerHTML=`<audio src="${url}" controls style="width:100%;margin-bottom:8px"></audio>
       <div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Saved to Gallery automatically</div>
-      <div style="display:flex;gap:8px"><a href="${url}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAssetSfx.id}')">📁 Add to Collection</button></div>`;
+      <div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" onclick="downloadWithName('${url.replace(/'/g,"\\'")}','KosmicKat_sfx.mp3')">⬇ Download</button><button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAssetSfx.id}')">📁 Add to Collection</button></div>`;
     logCost("sfx-generator",prompt.slice(0,60));
     toast("💥 SFX generated — saved to Gallery!","success");
   }catch(err){
@@ -9860,7 +9868,7 @@ async function generateLipsync(){
     const savedAssetLip=createVideoAsset(videoUrl,"Lipsync video","");
     resultEl.innerHTML=`<video src="${videoUrl}" controls style="width:100%;border-radius:8px;margin-bottom:8px"></video>
       <div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Saved to Gallery automatically</div>
-      <div style="display:flex;gap:8px"><a href="${videoUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a><button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAssetLip.id}')">📁 Add to Collection</button></div>`;
+      <div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" onclick="downloadWithName('${videoUrl.replace(/'/g,"\\'")}','KosmicKat_lipsync.mp4')">⬇ Download</button><button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAssetLip.id}')">📁 Add to Collection</button></div>`;
     logCost("sync-lipsync-v2","Lipsync video");
     toast("👄 Lipsync generated — saved to Gallery!","success");
     notifyIfEnabled("Lipsync ready 👄","Your lipsync video finished generating");
@@ -10904,7 +10912,7 @@ async function runUpscale(){
       </div>
       <div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Saved to Gallery automatically</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <a href="${outUrl}" target="_blank" class="btn btn-outline btn-sm">⬇ Download</a>
+        <button class="btn btn-outline btn-sm" onclick="downloadWithName('${outUrl.replace(/'/g,"\\'")}','KosmicKat_upscaled.png')">⬇ Download</button>
         <button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedUpscaleAsset.id}')">📁 Add to Collection</button>
       </div>`;
     logCost(engine,"Upscale");
@@ -11017,18 +11025,24 @@ function renderCosts(el){
     </div>`:''}
 
     <div class="panel" style="margin-top:14px">
-      <div class="panel-title">💵 Model Cost Reference <span style="font-weight:400;color:var(--texts);font-size:11px">— what this app actually charges per generation</span></div>
+      <div class="panel-title">💵 Model Cost Reference <span style="font-weight:400;color:var(--texts);font-size:11px">— what this app actually charges per generation, live from the real pricing table</span></div>
       <div style="display:flex;flex-direction:column;gap:6px;font-size:11px">
-        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">FLUX Schnell (image)</span><span style="color:var(--text)">~$0.003</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">FLUX Dev (image)</span><span style="color:var(--text)">~$0.025</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">Seedance 2.0 Fast (video)</span><span style="color:var(--text)">~$0.25</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">Kling 2.1 Master (video)</span><span style="color:var(--text)">~$1.40</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">Kling 3.0 Standard (video)</span><span style="color:var(--text)">~$0.70</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">Veo 3.1 (video)</span><span style="color:var(--text)">~$2.00</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">Music (Stable Audio 3)</span><span style="color:var(--text)">~$0.05</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">SFX</span><span style="color:var(--text)">~$0.02</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">Lipsync</span><span style="color:var(--text)">~$3.00</span></div>
-        <div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">LoRA training</span><span style="color:var(--text)">~$2.00</span></div>
+        ${[
+          ["fal-ai/flux/schnell","FLUX Schnell (image)"],
+          ["fal-ai/flux/dev","FLUX Dev (image)"],
+          ["bytedance/seedance-2.0/fast/text-to-video","Seedance 2.0 Fast (video)"],
+          ["fal-ai/kling-video/v2.1/master/text-to-video","Kling 2.1 Master (video)"],
+          ["fal-ai/kling-video/v3/standard/text-to-video","Kling 3.0 Standard (video)"],
+          ["fal-ai/kling-video/v3/pro/text-to-video","Kling 3.0 Pro (video)"],
+          ["fal-ai/kling-video/o3/pro/reference-to-video","Kling O3 Pro (video)"],
+          ["fal-ai/veo3.1","Veo 3.1 (video)"],
+          ["fal-ai/kling-video/v3/pro/motion-control","Motion Control (video)"],
+          ["stable-audio-3","Music"],
+          ["fal-ai/kling-video/lipsync/audio-to-video","Lip-sync"],
+        ].filter(([key])=>COST_TABLE[key]!==undefined).map(([key,label])=>
+          `<div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">${label}</span><span style="color:var(--text)">~$${COST_TABLE[key].toFixed(3)}</span></div>`
+        ).join('')}
+        <div style="font-size:10px;color:var(--texts);margin-top:4px">These are flat, duration-unaware approximations for a typical clip — the actual per-generation cost hint you see before creating something in Video/Image Canvas is the accurate, duration-aware one.</div>
       </div>
     </div>
 
