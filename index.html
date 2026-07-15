@@ -1258,18 +1258,45 @@ const COST_TABLE={
   "fal-ai/stable-diffusion-v35-large":0.065,
   "replicate/flux-schnell":0.003,
   "openai/gpt-image-2":0.04,
-  "gemini-3.1-flash-image":0.08, // Nano Banana 2 — corrected from an earlier guess (0.02) with verified pricing
-  "gemini-3-pro-image":0.15, // Nano Banana Pro — verified
+  "gemini-3.1-flash-image":0.08, // Nano Banana 2 via direct Gemini API path (kept for any old logCost call using this key)
+  "gemini-3-pro-image":0.15, // Nano Banana Pro via direct Gemini API path (kept for any old logCost call using this key)
+  // The Image module's actual dropdown/logCost calls use the fal.ai proxy
+  // identifiers below, not the gemini-* keys above — those two entries were
+  // silently dead code, every real Nano Banana generation fell back to the
+  // generic $0.02 default. Confirmed current fal.ai pricing (fal.ai/models/
+  // fal-ai/nano-banana-2, July 2026): $0.08/image standard res for Nano
+  // Banana 2, $0.15/image for Nano Banana Pro. 2K/4K multiply by 1.5x/2x —
+  // not modeled here, this is the 1K baseline like the rest of this table.
+  "fal-ai/nano-banana-2":0.08,
+  "fal-ai/nano-banana-pro":0.15,
   "fal-ai/flux-2":0.012,
   "fal-ai/flux-2-pro":0.03,
   "fal-ai/flux-2/flash":0.01,
   "fal-ai/flux-2/flash/edit":0.01,
   "gpt-image-2":0.04,
   "fal-ai/imageutils/rembg":0.01,
-  "bytedance/seedance-2.0/fast/text-to-video":0.25,
-  "bytedance/seedance-2.0/text-to-video":0.50,
-  "bytedance/seedance-2.0/fast/image-to-video":0.25,
-  "bytedance/seedance-2.0/image-to-video":0.50,
+  // Confirmed current fal.ai per-second rates (fal.ai/models/bytedance/
+  // seedance-2.0/*, July 2026): fast tier $0.2419/s, standard tier $0.3034/s
+  // at 720p (audio included at no extra charge on either). The four values
+  // below were previously 0.25/0.50 flat — worked out to billing as if a
+  // clip were roughly 1 second long, when Seedance's minimum is 4s and typical
+  // production clips here run 5-15s. Rebased to the same "~8s reference
+  // clip" flat-estimate convention already used for the Kling rows further
+  // down: 8 × $0.2419 ≈ 1.94, 8 × $0.3034 ≈ 2.43. Real spend still varies
+  // with actual duration and resolution (1080p is billed at $0.682/s
+  // instead of $0.3034/s, well above this estimate).
+  "bytedance/seedance-2.0/fast/text-to-video":1.94,
+  "bytedance/seedance-2.0/text-to-video":2.43,
+  "bytedance/seedance-2.0/fast/image-to-video":1.94,
+  "bytedance/seedance-2.0/image-to-video":2.43,
+  // Multi-reference (up to 12 image/video/audio files) — these dropdown
+  // options had NO entry at all before, every multi-ref Seedance generation
+  // silently logged the generic $0.02 default. Confirmed fal.ai page states
+  // reference-to-video bills at the same per-second video rate as the base
+  // tier (image/video reference inputs add their own separate token cost on
+  // top, not modeled here), so using the same 8s estimate as above.
+  "bytedance/seedance-2.0/fast/reference-to-video":1.94,
+  "bytedance/seedance-2.0/reference-to-video":2.43,
   // These are flat, duration-unaware logging estimates (~8s reference clip),
   // not the live per-generation calculation shown before you hit Generate —
   // see VIDEO_PRICING/estimateVideoCost for that. Rebased on the same
@@ -1287,8 +1314,31 @@ const COST_TABLE={
   "fal-ai/kling-video/v3/pro/text-to-video":1.34,
   "fal-ai/kling-video/v3/pro/image-to-video":1.34,
   "fal-ai/kling-video/o3/pro/reference-to-video":1.12,
+  // O3 Standard — dropdown label calls it "faster, cheaper reference", and
+  // that's confirmed: fal.ai's own O3 Standard reference-to-video page
+  // states $0.112/s with audio (same per-second rate as O3 Pro's plain
+  // image-to-video, cheaper than Pro's reference-to-video rate above once
+  // Pro's extra reference-token overhead is added in). This key didn't
+  // exist before at all — every O3 Standard generation logged the generic
+  // $0.02 default. 8s estimate: 8 × $0.112 ≈ 0.90.
+  "fal-ai/kling-video/o3/standard/image-to-video":0.90,
+  // 4K — also had no entry at all before. fal.ai doesn't publish this exact
+  // endpoint's rate on its own model page; the most concrete figure found
+  // is a third-party breakdown citing 4K at 3x the Pro per-second rate.
+  // 3 × (8 × $0.168 Pro audio-on rate) ≈ 4.03. Treat this one as the least
+  // certain number in this table — worth checking your first real 4K
+  // generation's actual balance drop and adjusting this if it's off.
+  "fal-ai/kling-video/v3/4k/image-to-video":4.03,
   "fal-ai/veo3.1":2.00,
   "fal-ai/veo3.1/image-to-video":2.00,
+  // Multi-reference (up to 3 images) and Extend both had no entry — every
+  // one of these silently logged $0.02 instead of their real cost. fal.ai
+  // confirms both bill at the exact same $0.40/s (audio on, 720p/1080p) as
+  // the base model, so reusing the same 5s-based 2.00 estimate as above
+  // (Standard tier) and the Fast extend rate ($0.15/s) for its own row.
+  "fal-ai/veo3.1/reference-to-video":2.00,
+  "fal-ai/veo3.1/extend-video":2.00,
+  "fal-ai/veo3.1/fast/extend-video":0.75,
   "fal-ai/esrgan":0.01,
   "fal-ai/clarity-upscaler":0.03,
   "elevenlabs_tts":0.02,
