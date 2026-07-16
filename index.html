@@ -978,7 +978,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
   <div class="modal project-modal" style="position:relative">
     <div style="position:sticky;top:-36px;margin:-36px -36px 16px;padding:20px 36px 12px;background:#fff;display:flex;align-items:center;justify-content:space-between;z-index:5;border-bottom:1px solid var(--border);border-radius:24px 24px 0 0">
       <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)" id="charModalTitle">New Character</div>
-      <button onclick="closeCharModal()" aria-label="Close" style="width:28px;height:28px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">❌</button>
+      <button onclick="closeCharModal()" aria-label="Close" style="width:28px;height:28px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M6 18L18 6"/></svg></button>
     </div>
     <div class="f-group">
       <label class="f-label">Character Name *</label>
@@ -1015,31 +1015,27 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 
     <div class="f-group">
       <label class="f-label" style="display:flex;align-items:center;justify-content:space-between">
-        <span>🔒 Identity Lock <span style="font-weight:400;color:var(--texts)">(consistency prompt for image/video gen)</span></span>
-        <button type="button" class="btn btn-outline btn-xs" onclick="autoGenerateLock()">🪄 Auto-Generate</button>
+        <span style="display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> Identity Lock <span style="font-weight:400;color:var(--texts)">(consistency prompt for image/video gen)</span></span>
+        <button type="button" class="btn btn-outline btn-xs" onclick="autoGenerateLock()"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg> Auto-Generate</button>
       </label>
       <textarea class="f-textarea" id="cmLock" placeholder="e.g. silver tabby cat, galaxy-nebula fur pattern, gold eyes, bronze medallion collar…" style="min-height:50px"></textarea>
     </div>
     <div class="f-group">
-      <label class="f-label">🎙 Voice Profile <span style="font-weight:400;color:var(--texts)">(ElevenLabs voice ID, optional)</span></label>
+      <label class="f-label" style="display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4M9 21h6"/></svg> Voice Profile <span style="font-weight:400;color:var(--texts)">(ElevenLabs voice ID, optional)</span></label>
+      <div style="font-size:11px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px 10px;margin-bottom:8px;line-height:1.5">This only feeds the character-voice picker in <b>Audio Tools</b>' text-to-speech — Kling and Seedance video generation don't read this field at all. For voice inside a generated video, clone/select a voice separately in Video Canvas's own voice panel.</div>
+      ${(gs("cloned_voices",[])||[]).length?`<div class="f-group" style="margin-bottom:8px"><select class="f-select" id="cmVoiceGallery" onchange="if(this.value)document.getElementById('cmVoice').value=this.value;this.value=''"><option value="">Choose from your cloned voices…</option>${(gs("cloned_voices",[])||[]).map(v=>`<option value="${v.id}">${v.name}</option>`).join('')}</select></div>`
+        :`<div style="font-size:11px;color:var(--texts);margin-bottom:8px">No cloned voices yet — <a href="#" onclick="closeCharModal();switchMod('audio',document.querySelector('[data-mod=audio]'));return false" style="color:var(--vm)">clone one in Audio Tools</a>, then it'll show up here to pick from.</div>`}
       <input class="f-input" id="cmVoice" placeholder="e.g. 21m00Tcm4TlvDq8ikWAM">
     </div>
 
-    <div style="font-size:11px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.4px;margin:14px 0 8px">Reference Sheet <span style="font-weight:400;text-transform:none;color:var(--texts)">(Front/Side/Back/¾/Expression/Costume views)</span></div>
+    <div style="font-size:11px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.4px;margin:14px 0 8px">Reference Sheet <span style="font-weight:400;text-transform:none;color:var(--texts)">(Front/Side/Back/¾/Expression/Costume views — or one full composite sheet)</span></div>
     <input type="file" accept="image/*" id="cmRefImgFile" style="display:none" onchange="handleCharImageUpload(event)">
     <div id="cmRefGallery" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"></div>
+    <button type="button" class="btn btn-gold btn-sm" style="margin-bottom:6px" onclick="S.pendingRefTag='Full Sheet';document.getElementById('cmRefImgFile').click()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"/></svg> Upload Full Character Sheet (one image, all views)</button>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px" id="cmRefAddButtons"></div>
 
-    <div style="font-size:11px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.4px;margin:14px 0 8px">🕸 Relationships</div>
-    <div id="cmRelList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
-    <div style="display:flex;gap:6px">
-      <select class="f-select" id="cmRelTarget" style="flex:1"></select>
-      <input class="f-input" id="cmRelType" placeholder="relation (e.g. rival, ally)" style="flex:1">
-      <button type="button" class="btn btn-outline btn-sm" onclick="addRelationshipRow()">+ Add</button>
-    </div>
-
     <div style="position:sticky;bottom:-36px;margin:14px -36px -36px;padding:12px 36px;background:#fff;border-top:1px solid var(--border);display:flex;justify-content:flex-end;border-radius:0 0 24px 24px">
-      <button class="btn btn-primary btn-full" onclick="saveCharacter()">💾 Save Character</button>
+      <button class="btn btn-primary btn-full" onclick="saveCharacter()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v5h8V4"/><path d="M8 20v-6h8v6"/></svg> Save Character</button>
     </div>
   </div>
 </div>
@@ -2034,6 +2030,13 @@ const PI_PATHS={
   clipboard:'<rect x="6" y="4" width="12" height="16.5" rx="2"/><path d="M9.5 4V3a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1"/><path d="M9 10.5h6M9 14.5h6"/>',
   orbit:'<circle cx="12" cy="12" r="1.6"/><ellipse cx="12" cy="12" rx="9.5" ry="4" transform="rotate(28 12 12)"/>',
   doc:'<path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v4h4"/>',
+  lock:'<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  mic:'<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4M9 21h6"/>',
+  camera:'<path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.5"/>',
+  dna:'<path d="M6 3c0 6 12 12 12 18M18 3c0 6-12 12-12 18"/><path d="M7.5 8h9M7.5 16h9"/>',
+  rocket:'<path d="M12 2c3 2 5 6 5 10 0 2-1 4-2 5l-3 3-3-3c-1-1-2-3-2-5 0-4 2-8 5-10Z"/><circle cx="12" cy="10" r="1.6"/><path d="M9 17l-2 4M15 17l2 4"/>',
+  folder:'<path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"/>',
+  check:'<path d="M4 12l5 5L20 6"/>',
 };
 function pIcon(name,size){
   size=size||15;
@@ -2472,43 +2475,58 @@ async function deleteProject(id){
 
 // ── CHARACTERS ──
 function renderCharacters(el){
+  const unassigned=S.characters.filter(c=>!c.projectId||!S.projects.find(p=>p.id===c.projectId));
+  const grouped={};
+  S.characters.forEach(c=>{
+    const proj=c.projectId&&S.projects.find(p=>p.id===c.projectId);
+    if(proj)(grouped[proj.id]=grouped[proj.id]||{proj,chars:[]}).chars.push(c);
+  });
   el.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div>
         <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">Character Bible</div>
         <div style="font-size:11px;color:var(--textm);margin-top:2px">${S.characters.length} character${S.characters.length!==1?'s':''} · Soul ID & consistency system</div>
       </div>
-      <button class="btn btn-primary" onclick="openCharModal()">+ New Character</button>
+      <button class="btn btn-primary" onclick="openCharModal()">${pIcon('plus',13)} New Character</button>
     </div>
-    ${S.characters.length===0?`<div class="empty-state"><div class="empty-icon">🎭</div><div class="empty-title">No Characters Yet</div><div class="empty-desc">Create characters with identity locks to keep their look consistent across every generated shot.</div><button class="btn btn-primary" onclick="openCharModal()">+ Create Character</button></div>`
-    :`<div class="grid2">${S.characters.map(c=>charCardHTML(c)).join('')}</div>`}
+    ${S.characters.length===0?`<div class="empty-state"><div class="empty-icon">${pIcon('mask',32)}</div><div class="empty-title">No Characters Yet</div><div class="empty-desc">Create characters with identity locks to keep their look consistent across every generated shot.</div><button class="btn btn-primary" onclick="openCharModal()">${pIcon('plus',13)} Create Character</button></div>`
+    :`
+    ${unassigned.length?`<div class="grid2" style="margin-bottom:${Object.keys(grouped).length?'18px':'0'}">${unassigned.map(c=>charCardHTML(c)).join('')}</div>`:''}
+    ${Object.values(grouped).map(g=>`
+      <div style="display:flex;align-items:center;gap:7px;margin:0 0 8px">
+        <span style="width:9px;height:9px;border-radius:3px;background:${g.proj.color||'#7c3aed'};flex-shrink:0"></span>
+        <span style="font-family:'Cinzel',serif;font-size:12px;font-weight:700;color:var(--violet)">${g.proj.name}</span>
+        <span class="badge badge-gray">${g.chars.length}</span>
+      </div>
+      <div class="grid2" style="margin-bottom:18px">${g.chars.map(c=>charCardHTML(c)).join('')}</div>
+    `).join('')}
+    `}
   `;
 }
 
 function charCardHTML(c){
   const proj=S.projects.find(p=>p.id===c.projectId);
-  const relCount=(c.relationships||[]).length;
   const refCount=(c.refImages||[]).length;
   const loraReady=c.loraStatus&&c.loraStatus.state==="ready";
+  const borderColor=proj?(proj.color||'#7c3aed'):'var(--glass-brd)';
   return `
-    <div class="card" id="cc-${c.id}">
+    <div class="card" id="cc-${c.id}" style="border-color:${borderColor};${proj?'border-width:1.5px':''}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div style="font-size:28px;margin-bottom:8px">${c.refImg?`<img src="${c.refImg}" style="width:44px;height:44px;border-radius:8px;object-fit:cover" onerror="this.replaceWith(document.createTextNode('🎭'))">`:'🎭'}</div>
+        <div style="margin-bottom:8px">${c.refImg?`<img src="${c.refImg}" style="width:44px;height:44px;border-radius:10px;object-fit:cover" onerror="this.style.display='none'">`:`<div style="width:44px;height:44px;border-radius:10px;background:var(--lav);display:flex;align-items:center;justify-content:center;color:var(--violet)">${pIcon('mask',20)}</div>`}</div>
         <div style="display:flex;gap:4px">
-          <button class="pc-menu-btn" onclick="event.stopPropagation();openCharModal('${c.id}')" title="Edit">✏️</button>
-          <button class="pc-menu-btn" onclick="event.stopPropagation();deleteChar('${c.id}')" title="Delete">🗑</button>
+          <button class="pc-menu-btn" onclick="event.stopPropagation();openCharModal('${c.id}')" title="Edit">${pIcon('pencil',13)}</button>
+          <button class="pc-menu-btn" onclick="event.stopPropagation();deleteChar('${c.id}')" title="Delete">${pIcon('trash',13)}</button>
         </div>
       </div>
       <div onclick="openCharDetail('${c.id}')" style="cursor:pointer">
         <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet);margin-bottom:3px">${c.name}</div>
         <div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:4px">${c.role||'Character'}</div>
-        <div style="font-size:11px;color:var(--textm);margin-bottom:8px">${proj?'📂 '+proj.name:'No project linked'}</div>
+        <div style="font-size:11px;color:var(--textm);margin-bottom:8px">${proj?proj.name:'No project linked'}</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
-          ${c.lock?'<span class="badge badge-green">🔒 Identity Lock</span>':'<span class="badge badge-gray">No Lock</span>'}
-          ${c.voice?'<span class="badge badge-violet">🎙 Voice</span>':''}
-          ${refCount?`<span class="badge badge-gray">📷 ${refCount}</span>`:''}
-          ${relCount?`<span class="badge badge-gray">🕸 ${relCount}</span>`:''}
-          ${loraReady?'<span class="badge badge-green">🧬 LoRA Trained</span>':''}
+          ${c.lock?`<span class="badge badge-green">${pIcon('lock',10)} Identity Lock</span>`:'<span class="badge badge-gray">No Lock</span>'}
+          ${c.voice?`<span class="badge badge-violet">${pIcon('mic',10)} Voice</span>`:''}
+          ${refCount?`<span class="badge badge-gray">${pIcon('camera',10)} ${refCount}</span>`:''}
+          ${loraReady?`<span class="badge badge-green">${pIcon('dna',10)} LoRA Trained</span>`:''}
         </div>
       </div>
     </div>`;
@@ -2524,45 +2542,44 @@ function openCharDetail(id){
   const details=[c.height,c.faction,c.features,c.threat?c.threat+' threat':''].filter(Boolean);
   el.innerHTML=`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-      <button class="btn btn-ghost btn-sm" onclick="renderModule('characters')">← Characters</button>
+      <button class="btn btn-ghost btn-sm" onclick="renderModule('characters')">${pIcon('back')} Characters</button>
       <div style="flex:1">
         <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">${c.name}</div>
         <div style="font-size:11px;color:var(--gold);font-weight:700">${c.role||'Character'}${proj?' · '+proj.name:''}</div>
       </div>
-      <button class="btn btn-gold btn-sm" onclick="openCharModal('${c.id}')">✏ Edit</button>
-      <button class="btn btn-danger btn-sm" onclick="deleteChar('${c.id}')">🗑</button>
+      <button class="btn btn-gold btn-sm" onclick="openCharModal('${c.id}')">${pIcon('pencil',13)} Edit</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteChar('${c.id}')">${pIcon('trash',13)}</button>
     </div>
     <div class="grid2">
       <div class="panel">
-        <div class="panel-title">📋 Description</div>
+        <div class="panel-title">${pIcon('clipboard')} Description</div>
         <div style="font-size:13px;color:var(--textm);line-height:1.6">${c.desc||'No description yet.'}</div>
         ${details.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${details.map(d=>`<span class="badge badge-gray">${d}</span>`).join('')}</div>`:''}
       </div>
       <div class="panel">
-        <div class="panel-title">🔒 Identity Lock</div>
+        <div class="panel-title">${pIcon('lock')} Identity Lock</div>
         <div style="font-size:12px;color:var(--textm);line-height:1.6;background:rgba(61,31,122,0.05);border-radius:8px;padding:10px;font-family:monospace;min-height:50px">${c.lock||'No identity lock set — add one to keep this character visually consistent across image/video generations.'}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
-          ${c.voice?`<span class="badge badge-violet">🎙 Voice: ${c.voice}</span>`:'<span class="badge badge-gray">No voice profile</span>'}
+          ${c.voice?`<span class="badge badge-violet">${pIcon('mic',11)} Voice: ${c.voice}</span>`:'<span class="badge badge-gray">No voice profile</span>'}
         </div>
       </div>
     </div>
     <div class="panel">
-      <div class="panel-title">🖼 Reference Sheet (${refImages.length})</div>
+      <div class="panel-title">${pIcon('camera')} Reference Sheet (${refImages.length})</div>
       ${refImages.length?`<div style="display:flex;gap:10px;flex-wrap:wrap">${refImages.map(img=>`
         <div style="width:90px">
           <img src="${img.dataUrl}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:2px solid ${img.trainTag==='approved'?'var(--green)':img.trainTag==='rejected'?'var(--red)':'var(--border)'}">
           <div style="font-size:9px;text-align:center;font-weight:600;color:var(--textm);margin-top:2px">${img.tag}</div>
-        </div>`).join('')}</div>`:`<div class="empty-desc">No reference images yet — add Front/Side/Back/¾/Expression/Costume views via Edit.</div>`}
+        </div>`).join('')}</div>`:`<div class="empty-desc">No reference images yet — add Front/Side/Back/¾/Expression/Costume views, or a full sheet, via Edit.</div>`}
     </div>
-    ${renderRelationshipWebPanel(c)}
     ${renderTrainingDataPanel(c)}
     ${renderLoraPanel(c)}
     <div class="panel">
-      <div class="panel-title">🚀 Use This Character</div>
+      <div class="panel-title">${pIcon('rocket')} Use This Character</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" onclick="copyCharLock('${c.id}')">💉 Copy Lock to Clipboard</button>
-        <button class="btn btn-outline btn-sm" onclick="goToVideoCanvasFor('${c.projectId||''}')">🎬 Go to Video Canvas</button>
-        <button class="btn btn-outline btn-sm" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))">🖼 Go to Image Gen</button>
+        <button class="btn btn-primary btn-sm" onclick="copyCharLock('${c.id}')">${pIcon('clipboard',13)} Copy Lock to Clipboard</button>
+        <button class="btn btn-outline btn-sm" onclick="goToVideoCanvasFor('${c.projectId||''}')">${pIcon('film',13)} Go to Video Canvas</button>
+        <button class="btn btn-outline btn-sm" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))">${pIcon('image',13)} Go to Image Gen</button>
       </div>
     </div>
   `;
@@ -2871,8 +2888,6 @@ function openCharModal(editId=null){
   }
   renderCharRefGallery();
   renderCharRefAddButtons();
-  renderRelTargetOptions();
-  renderRelList();
   modal.classList.add("show");
 }
 
@@ -2919,7 +2934,7 @@ function handleCharImageUpload(event){
       const dataUrl=canvas.toDataURL("image/jpeg",0.82);
       S.editingCharRefImages.push({id:"ref_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),tag,dataUrl,trainTag:null});
       renderCharRefGallery();
-      toast(`📷 ${tag} view added — don't forget to Save`,"success");
+      toast(`${tag} added — don't forget to Save`,"success");
     };
     img.onerror=function(){toast("Couldn't read that image — try a different file","error");};
     img.src=e.target.result;
