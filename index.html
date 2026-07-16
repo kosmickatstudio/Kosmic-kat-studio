@@ -3108,6 +3108,128 @@ const STYLE_PRESETS=[
   {label:"Grunge/Sketchy",value:"gritty sketchy grunge illustration, rough pencil linework"},
 ];
 
+// ── IMAGE MODEL PICKER — a custom bottom-sheet replacing the plain native
+// <select>, which every phone renders with its own OS UI that HTML/CSS
+// can't restyle at all (no per-row imagery, no two-line layout, nothing).
+// Single source of truth for both the Image Gen and Production Pipeline
+// model pickers, so the two lists can't quietly drift apart from each
+// other the way two hand-duplicated <option> lists eventually do.
+//
+// Each row gets a colored gradient + a short monogram based on that
+// model's own provider's real brand colors — not a reproduction of any
+// company's actual marketing artwork/photography, which isn't something
+// this app should be hosting on a commercial, public site regardless of
+// how easy it'd be to grab.
+const IMAGE_MODEL_GROUPS=[
+  {label:"Fast / Standard",items:[
+    {value:"fal-ai/flux/schnell",name:"FLUX Schnell",sub:"Fast, ~2s"},
+    {value:"fal-ai/flux/dev",name:"FLUX Dev",sub:"Best Quality"},
+    {value:"fal-ai/flux-pro/v1.1",name:"FLUX 1.1 Pro",sub:"Premium"},
+    {value:"fal-ai/flux-pro/v1.1-ultra",name:"FLUX 1.1 Pro Ultra",sub:"up to 2K/4MP"},
+    {value:"fal-ai/ideogram/v3",name:"Ideogram V3",sub:"best for text/logos"},
+    {value:"fal-ai/recraft/v3/text-to-image",name:"Recraft V3",sub:"vector art, brand style"},
+    {value:"fal-ai/stable-diffusion-v35-large",name:"Stable Diffusion 3.5 Large",sub:""},
+  ]},
+  {label:"FLUX.2 (Black Forest Labs, new)",items:[
+    {value:"fal-ai/flux-2",name:"FLUX.2 Dev",sub:"open-weight"},
+    {value:"fal-ai/flux-2-pro",name:"FLUX.2 Pro",sub:"top quality"},
+    {value:"fal-ai/flux-2/flash",name:"FLUX.2 Flash",sub:"sub-second"},
+    {value:"fal-ai/flux-2/flash/edit",name:"FLUX.2 Flash Edit",sub:"multi-reference, up to 4 images"},
+  ]},
+  {label:"Seedream 5.0 (ByteDance, new)",items:[
+    {value:"fal-ai/bytedance/seedream/v5/pro/text-to-image",name:"Seedream 5.0 Pro",sub:"14-language text, dense layouts, up to 2K"},
+  ]},
+  {label:"Nano Banana (Google Gemini)",items:[
+    {value:"gemini-3.1-flash-image",name:"Nano Banana 2",sub:"fast, multi-reference"},
+    {value:"gemini-3-pro-image",name:"Nano Banana Pro",sub:"best reasoning, text-in-image"},
+  ]},
+  {label:"OpenAI",items:[
+    {value:"gpt-image-2",name:"GPT Image 2",sub:"batch up to 8"},
+  ]},
+  {label:"Via fal.ai (only your fal key needed)",items:[
+    {value:"fal-ai/nano-banana-2",name:"Nano Banana 2",sub:"via fal.ai"},
+    {value:"fal-ai/nano-banana-pro",name:"Nano Banana Pro",sub:"via fal.ai"},
+    {value:"openai/gpt-image-2",name:"GPT Image 2",sub:"via fal.ai"},
+  ]},
+  {label:"Structured / licensed-data (Bria)",items:[
+    {value:"bria/fibo/generate",name:"Bria FIBO",sub:"JSON-structured prompts, 100% licensed training data"},
+  ]},
+];
+function modelVisualMeta(value){
+  if(value.includes("flux-2"))return{grad:"linear-gradient(135deg,#ff6b1a,#1a1a1a)",mono:"F2"};
+  if(value.includes("flux"))return{grad:"linear-gradient(135deg,#ff9d5c,#3a2412)",mono:"FX"};
+  if(value.includes("ideogram"))return{grad:"linear-gradient(135deg,#00c2b8,#0a4f4a)",mono:"Id"};
+  if(value.includes("recraft"))return{grad:"linear-gradient(135deg,#a855f7,#5b21b6)",mono:"Rc"};
+  if(value.includes("stable-diffusion"))return{grad:"linear-gradient(135deg,#4d8dfa,#1e3a8a)",mono:"SD"};
+  if(value.includes("seedream")||value.includes("bytedance"))return{grad:"linear-gradient(135deg,#fe2c55,#161823)",mono:"Sd"};
+  if(value.includes("nano-banana")||value.includes("gemini"))return{grad:"linear-gradient(135deg,#ffd93d,#b8930a)",mono:"Nb"};
+  if(value.includes("gpt-image")||value.includes("openai"))return{grad:"linear-gradient(135deg,#10a37f,#054a3a)",mono:"AI"};
+  if(value.includes("bria"))return{grad:"linear-gradient(135deg,#7dd3c0,#3d1f7a)",mono:"Fb"};
+  return{grad:"linear-gradient(135deg,var(--vs),var(--violet))",mono:"?"};
+}
+function imageModelOptionsHTML(){
+  return IMAGE_MODEL_GROUPS.map(g=>`<optgroup label="${g.label}">${g.items.map(i=>`<option value="${i.value}">${i.name}${i.sub?' ('+i.sub+')':''}</option>`).join('')}</optgroup>`).join('')
+    +`${(gs("custom_image_models",[])||[]).map(m=>`<option value="${m.endpoint}">${m.label} (custom)</option>`).join('')}`;
+}
+function modelTriggerLabelHTML(selectId){
+  const sel=document.getElementById(selectId);
+  const value=sel?sel.value:"";
+  let found=null;
+  for(const g of IMAGE_MODEL_GROUPS)for(const i of g.items)if(i.value===value)found=i;
+  if(!found)return `<span style="font-size:13px;color:var(--textm)">Choose a model…</span>`;
+  const meta=modelVisualMeta(found.value);
+  return `<div style="width:30px;height:30px;border-radius:8px;background:${meta.grad};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0">${meta.mono}</div>
+    <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text)">${found.name}</div>${found.sub?`<div style="font-size:10px;color:var(--textm)">${found.sub}</div>`:''}</div>`;
+}
+function renderModelTrigger(selectId){
+  const trigger=document.getElementById(selectId+"Trigger");
+  if(trigger)trigger.innerHTML=modelTriggerLabelHTML(selectId);
+}
+function openModelPicker(selectId){
+  closeModelPicker();
+  const sel=document.getElementById(selectId);
+  const current=sel?sel.value:"";
+  const overlay=document.createElement("div");
+  overlay.id="modelPickerOverlay";
+  overlay.style.cssText="position:fixed;inset:0;background:rgba(20,10,40,0.45);z-index:400;display:flex;align-items:flex-end";
+  overlay.onclick=(e)=>{if(e.target===overlay)closeModelPicker();};
+  overlay.innerHTML=`
+    <div style="background:var(--surface);width:100%;max-height:78vh;border-radius:20px 20px 0 0;overflow-y:auto;box-shadow:var(--shv)">
+      <div style="position:sticky;top:0;background:var(--surface);padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;z-index:2">
+        <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">Choose Image Model</div>
+        <button onclick="closeModelPicker()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
+      </div>
+      <div style="padding:10px 14px 24px">
+        ${IMAGE_MODEL_GROUPS.map(g=>`
+          <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.4px;margin:14px 4px 6px">${g.label}</div>
+          ${g.items.map(i=>{
+            const meta=modelVisualMeta(i.value);
+            const selected=i.value===current;
+            return `<div onclick="selectModelOption('${selectId}','${i.value}')" style="display:flex;align-items:center;gap:11px;padding:10px 10px;border-radius:12px;cursor:pointer;margin-bottom:5px;border:1.5px solid ${selected?'var(--vs)':'transparent'};background:${selected?'var(--lav)':'transparent'}">
+              <div style="width:38px;height:38px;border-radius:10px;background:${meta.grad};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,0.15)">${meta.mono}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13.5px;font-weight:700;color:var(--text)">${i.name}</div>
+                ${i.sub?`<div style="font-size:11px;color:var(--textm);margin-top:1px">${i.sub}</div>`:''}
+              </div>
+              ${selected?`<div style="color:var(--violet)">${pIcon('check',16)}</div>`:''}
+            </div>`;
+          }).join('')}
+        `).join('')}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function selectModelOption(selectId,value){
+  const sel=document.getElementById(selectId);
+  if(sel){sel.value=value;sel.dispatchEvent(new Event("change"));}
+  renderModelTrigger(selectId);
+  closeModelPicker();
+}
+function closeModelPicker(){
+  const overlay=document.getElementById("modelPickerOverlay");
+  if(overlay)overlay.remove();
+}
+
 // ── IMAGE MODEL CAPABILITIES — drives which tools/fields actually show up
 // per model, since not every model supports the same features. Verified
 // each capability against real docs rather than assuming uniform support.
@@ -3198,43 +3320,10 @@ function renderImageGen(el){
         <div class="f-group"><label class="f-label">Negative Prompt <span style="font-weight:400;color:var(--texts)">(optional)</span></label><input class="f-input" id="igNegPrompt" placeholder="e.g. blurry, low quality, watermark"></div>
         <div class="f-group">
           <label class="f-label">Model</label>
-          <div class="model-select-row"><div class="model-badge" id="igModelBadge"></div>
-          <select class="f-select" id="igModel" onchange="updateIgModelUI()">
-            <optgroup label="Fast / Standard">
-              <option value="fal-ai/flux/schnell">FLUX Schnell (Fast, ~2s)</option>
-              <option value="fal-ai/flux/dev">FLUX Dev (Best Quality)</option>
-              <option value="fal-ai/flux-pro/v1.1">FLUX 1.1 Pro (Premium)</option>
-              <option value="fal-ai/flux-pro/v1.1-ultra">FLUX 1.1 Pro Ultra (up to 2K/4MP)</option>
-              <option value="fal-ai/ideogram/v3">Ideogram V3 (best for text/logos)</option>
-              <option value="fal-ai/recraft/v3/text-to-image">Recraft V3 (vector art, brand style)</option>
-              <option value="fal-ai/stable-diffusion-v35-large">Stable Diffusion 3.5 Large</option>
-            </optgroup>
-            <optgroup label="FLUX.2 (Black Forest Labs, new)">
-              <option value="fal-ai/flux-2">FLUX.2 Dev (open-weight)</option>
-              <option value="fal-ai/flux-2-pro">FLUX.2 Pro (top quality)</option>
-              <option value="fal-ai/flux-2/flash">FLUX.2 Flash (sub-second)</option>
-              <option value="fal-ai/flux-2/flash/edit">FLUX.2 Flash Edit (multi-reference, up to 4 images)</option>
-            </optgroup>
-            <optgroup label="Seedream 5.0 (ByteDance, new)">
-              <option value="fal-ai/bytedance/seedream/v5/pro/text-to-image">Seedream 5.0 Pro (14-language text, dense layouts, up to 2K)</option>
-            </optgroup>
-            <optgroup label="Nano Banana (Google Gemini)">
-              <option value="gemini-3.1-flash-image">Nano Banana 2 (fast, multi-reference)</option>
-              <option value="gemini-3-pro-image">Nano Banana Pro (best reasoning, text-in-image)</option>
-            </optgroup>
-            <optgroup label="OpenAI">
-              <option value="gpt-image-2">GPT Image 2 (batch up to 8)</option>
-            </optgroup>
-            <optgroup label="Via fal.ai (only your fal key needed — no separate Google/OpenAI account)">
-              <option value="fal-ai/nano-banana-2">Nano Banana 2 (via fal.ai)</option>
-              <option value="fal-ai/nano-banana-pro">Nano Banana Pro (via fal.ai)</option>
-              <option value="openai/gpt-image-2">GPT Image 2 (via fal.ai)</option>
-            </optgroup>
-            <optgroup label="Structured / licensed-data (Bria)">
-              <option value="bria/fibo/generate">Bria FIBO (JSON-structured prompts, 100% licensed training data)</option>
-            </optgroup>
-            ${(gs("custom_image_models",[])||[]).map(m=>`<option value="${m.endpoint}">${m.label} (custom)</option>`).join('')}
-          </select></div>
+          <select class="f-select" id="igModel" onchange="updateIgModelUI()" style="display:none">
+            ${imageModelOptionsHTML()}
+          </select>
+          <div id="igModelTrigger" onclick="openModelPicker('igModel')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
           <div id="igModelNote" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
         </div>
         ${S.projects.length?`<div class="f-group"><label class="f-label">Save to Project</label><select class="f-select" id="igProject"><option value="">No project</option>${S.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`:''}
@@ -3600,7 +3689,7 @@ function updateIgCostHint(){
 }
 function updateIgModelUI(){
   const model=document.getElementById("igModel").value;
-  setModelBadge("igModelBadge",model);
+  renderModelTrigger("igModel");
   updateIgCostHint();
   const cap=IMAGE_MODEL_CAPABILITIES[model]||{};
   const singleWrap=document.getElementById("igSingleRefWrap");
@@ -7569,19 +7658,10 @@ function renderPdSharedFields(){
       </div>
       <div id="pdRefImagesDisabledNote" style="display:none;font-size:11px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:10px;margin-bottom:14px"></div>
 
-      <div class="f-group"><label class="f-label">1. Image Model</label><select class="f-select" id="pdImageModel">
-        <option value="fal-ai/flux/schnell">FLUX Schnell</option><option value="fal-ai/flux/dev">FLUX Dev</option><option value="fal-ai/flux-pro/v1.1">FLUX 1.1 Pro</option><option value="fal-ai/flux-pro/v1.1-ultra">FLUX 1.1 Pro Ultra (up to 2K)</option>
-        <option value="fal-ai/ideogram/v3">Ideogram V3</option><option value="fal-ai/recraft/v3/text-to-image">Recraft V3</option><option value="fal-ai/stable-diffusion-v35-large">Stable Diffusion 3.5</option>
-        <option value="fal-ai/flux-2">FLUX.2 Dev</option><option value="fal-ai/flux-2-pro">FLUX.2 Pro</option><option value="fal-ai/flux-2/flash">FLUX.2 Flash</option>
-        <option value="fal-ai/bytedance/seedream/v5/pro/text-to-image">Seedream 5.0 Pro (14-language text)</option>
-        <option value="bria/fibo/generate">Bria FIBO (JSON-structured, licensed data)</option>
-        <option value="gemini-3.1-flash-image">Nano Banana 2 (Gemini 3.1 Flash Image)</option>
-        <option value="gemini-3-pro-image">Nano Banana Pro (Gemini 3 Pro Image)</option>
-        <option value="gpt-image-2">OpenAI GPT Image 2</option>
-        <option value="fal-ai/nano-banana-2">Nano Banana 2 (via fal.ai)</option>
-        <option value="fal-ai/nano-banana-pro">Nano Banana Pro (via fal.ai)</option>
-        <option value="openai/gpt-image-2">GPT Image 2 (via fal.ai)</option>
-      </select></div>
+      <div class="f-group"><label class="f-label">1. Image Model</label>
+        <select class="f-select" id="pdImageModel" onchange="renderModelTrigger('pdImageModel')" style="display:none">${imageModelOptionsHTML()}</select>
+        <div id="pdImageModelTrigger" onclick="openModelPicker('pdImageModel')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
       <div class="f-group"><label class="f-label">2. Video Model</label><select class="f-select" id="pdVideoModel" onchange="updateClipLenOptions();updatePdAspectRatioOptions()">
         <option value="bytedance/seedance-2.0/reference-to-video">Seedance 2.0 — Multi-Reference</option>
         <option value="bytedance/seedance-2.0/fast/reference-to-video">Seedance 2.0 Fast — Multi-Reference</option>
@@ -7607,6 +7687,7 @@ function renderPdSharedFields(){
 
 function initPdSharedFields(){
   document.getElementById("pdBrain").value=gs("ai_model","claude");
+  renderModelTrigger("pdImageModel");
   updatePdImageUploadAvailability();
   updatePdAspectRatioOptions();
   updateClipLenOptions();
