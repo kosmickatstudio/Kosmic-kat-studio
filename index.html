@@ -1023,8 +1023,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
     <div class="f-group">
       <label class="f-label" style="display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4M9 21h6"/></svg> Voice Profile <span style="font-weight:400;color:var(--texts)">(ElevenLabs voice ID, optional)</span></label>
       <div style="font-size:11px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px 10px;margin-bottom:8px;line-height:1.5">This only feeds the character-voice picker in <b>Audio Tools</b>' text-to-speech — Kling and Seedance video generation don't read this field at all. For voice inside a generated video, clone/select a voice separately in Video Canvas's own voice panel.</div>
-      ${(gs("cloned_voices",[])||[]).length?`<div class="f-group" style="margin-bottom:8px"><select class="f-select" id="cmVoiceGallery" onchange="if(this.value)document.getElementById('cmVoice').value=this.value;this.value=''"><option value="">Choose from your cloned voices…</option>${(gs("cloned_voices",[])||[]).map(v=>`<option value="${v.id}">${v.name}</option>`).join('')}</select></div>`
-        :`<div style="font-size:11px;color:var(--texts);margin-bottom:8px">No cloned voices yet — <a href="#" onclick="closeCharModal();switchMod('audio',document.querySelector('[data-mod=audio]'));return false" style="color:var(--vm)">clone one in Audio Tools</a>, then it'll show up here to pick from.</div>`}
+      <div id="cmVoiceGalleryWrap" style="margin-bottom:8px"></div>
       <input class="f-input" id="cmVoice" placeholder="e.g. 21m00Tcm4TlvDq8ikWAM">
     </div>
 
@@ -2888,7 +2887,22 @@ function openCharModal(editId=null){
   }
   renderCharRefGallery();
   renderCharRefAddButtons();
+  renderVoiceGalleryPicker();
   modal.classList.add("show");
+}
+
+function renderVoiceGalleryPicker(){
+  const wrap=document.getElementById("cmVoiceGalleryWrap");
+  if(!wrap)return;
+  const clonedVoices=gs("cloned_voices",[])||[];
+  if(clonedVoices.length){
+    wrap.innerHTML=`<select class="f-select" id="cmVoiceGallery" onchange="if(this.value)document.getElementById('cmVoice').value=this.value;this.value=''">
+      <option value="">Choose from your cloned voices…</option>
+      ${clonedVoices.map(v=>`<option value="${v.id}">${v.name}</option>`).join('')}
+    </select>`;
+  } else {
+    wrap.innerHTML=`<div style="font-size:11px;color:var(--texts)">No cloned voices yet — <a href="#" onclick="closeCharModal();switchMod('audio',document.querySelector('[data-mod=audio]'));return false" style="color:var(--vm)">clone one in Audio Tools</a>, then it'll show up here to pick from.</div>`;
+  }
 }
 
 function renderCharRefAddButtons(){
