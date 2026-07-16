@@ -2013,71 +2013,118 @@ function openProject(id){
   }
 }
 
+// ── LINE ICONS — a single consistent stroke-icon set for the Project
+// workspace, replacing emoji (which render differently per device/OS and
+// read as a placeholder rather than a designed UI). currentColor + no fill
+// so each icon inherits whatever text color surrounds it.
+const PI_PATHS={
+  back:'<path d="M15 18l-6-6 6-6"/>',
+  film:'<path d="M3 8.5h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11Z"/><path d="M3 8.5l1.4-4h3.6l-1 4M10.6 8.5l1-4h3.6l-1 4M17 8.5l1-4h2.6l-1 4"/>',
+  mask:'<circle cx="12" cy="8.5" r="4"/><path d="M4.5 21c0-4.1 3.4-7.5 7.5-7.5s7.5 3.4 7.5 7.5"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  tv:'<rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M8 21h8"/>',
+  calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
+  image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16.5l-5.5-5.5-9 9"/>',
+  pencil:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  archive:'<rect x="3" y="4" width="18" height="4.2" rx="1"/><path d="M5 8.5v9.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5"/><path d="M10 12.5h4"/>',
+  restore:'<path d="M3 10a9 9 0 1 1 2.6 6.3"/><path d="M3 4v6h6"/>',
+  trash:'<path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12.5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2L18 7"/><path d="M9 7V4.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V7"/>',
+  sparkle:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>',
+  upload:'<path d="M12 15.5V4M6.5 9.5L12 4l5.5 5.5"/><path d="M4.5 15.5v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3"/>',
+  clipboard:'<rect x="6" y="4" width="12" height="16.5" rx="2"/><path d="M9.5 4V3a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1"/><path d="M9 10.5h6M9 14.5h6"/>',
+  orbit:'<circle cx="12" cy="12" r="1.6"/><ellipse cx="12" cy="12" rx="9.5" ry="4" transform="rotate(28 12 12)"/>',
+  doc:'<path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v4h4"/>',
+};
+function pIcon(name,size){
+  size=size||15;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-3px;flex-shrink:0">${PI_PATHS[name]||''}</svg>`;
+}
+
 function renderProjectWorkspace(p){
   const el=document.getElementById("moduleContent");
   const shots=S.shots.filter(s=>s.projectId===p.id);
   const chars=S.characters.filter(c=>c.projectId===p.id);
   const episodes=S.episodes.filter(e=>e.projectId===p.id).sort((a,b)=>(a.number||0)-(b.number||0));
+  const heroStyle=p.thumbImage
+    ?`background:linear-gradient(180deg,rgba(10,5,20,0.05),rgba(10,5,20,0.45)),url('${p.thumbImage}') center/cover no-repeat`
+    :`background:radial-gradient(circle at 25% 20%,${p.color||'#7c3aed'}dd,${p.color||'#7c3aed'} 65%),radial-gradient(circle at 85% 80%,rgba(255,255,255,0.16),transparent 45%)`;
   el.innerHTML=`
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-      <button class="btn btn-ghost btn-sm" onclick="switchMod('projects',document.querySelector('[data-mod=projects]')||null)">← Projects</button>
-      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);flex:1">${p.name}${p.archived?' <span style="font-size:10px;color:var(--textm);font-family:inherit;font-weight:600">(ARCHIVED)</span>':''}</div>
-      ${p.universe?`<span class="badge badge-violet">🌌 ${p.universe}</span>`:''}
-      <span class="badge badge-gray">${p.status}</span>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="switchMod('projects',document.querySelector('[data-mod=projects]')||null)">${pIcon('back')} Projects</button>
     </div>
-    <div class="grid2" style="margin-bottom:14px">
-      <div class="panel" style="text-align:center;cursor:pointer" onclick="addShot('${p.id}')">
-        <div style="font-size:28px;margin-bottom:6px">🎬</div>
-        <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet)">${shots.length} Shots</div>
-        <div style="font-size:11px;color:var(--textm);margin-top:4px">+ Add Shot</div>
-      </div>
-      <div class="panel" style="text-align:center;cursor:pointer" onclick="addCharacter('${p.id}')">
-        <div style="font-size:28px;margin-bottom:6px">🎭</div>
-        <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet)">${chars.length} Characters</div>
-        <div style="font-size:11px;color:var(--textm);margin-top:4px">+ Add Character</div>
+    <div style="position:relative;border-radius:16px;overflow:hidden;height:88px;margin-bottom:14px;${heroStyle};box-shadow:var(--shv)">
+      <div style="position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:space-between;padding:12px 16px;gap:8px">
+        <div style="font-family:'Cinzel',serif;font-size:17px;font-weight:700;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.35)">${p.name}${p.archived?' <span style="font-size:10px;font-family:inherit;font-weight:600;opacity:0.85">(ARCHIVED)</span>':''}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          ${p.universe?`<span class="badge" style="background:rgba(255,255,255,0.22);color:#fff;backdrop-filter:blur(4px)">${pIcon('orbit',12)} ${p.universe}</span>`:''}
+          <span class="badge" style="background:rgba(255,255,255,0.22);color:#fff;backdrop-filter:blur(4px)">${p.status}</span>
+        </div>
       </div>
     </div>
+    ${chars.length?`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px" id="projCastStrip">
+      ${chars.map(c=>`
+        <div style="flex-shrink:0;text-align:center;cursor:pointer;width:52px" onclick="switchMod('characters',document.querySelector('[data-mod=characters]'));setTimeout(()=>openCharDetail('${c.id}'),50)">
+          ${c.refImg?`<img src="${c.refImg}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--surface);box-shadow:0 0 0 1.5px var(--vs)">`
+            :`<div style="width:44px;height:44px;border-radius:50%;background:var(--lav);border:2px solid var(--surface);box-shadow:0 0 0 1.5px var(--vs);display:flex;align-items:center;justify-content:center;color:var(--violet)">${pIcon('mask',18)}</div>`}
+          <div style="font-size:9px;color:var(--textm);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(c.name||'').slice(0,8)}</div>
+        </div>`).join('')}
+      <div style="flex-shrink:0;text-align:center;cursor:pointer;width:52px" onclick="addCharacter('${p.id}')">
+        <div style="width:44px;height:44px;border-radius:50%;border:1.5px dashed var(--vs);display:flex;align-items:center;justify-content:center;color:var(--vs)">${pIcon('plus',18)}</div>
+        <div style="font-size:9px;color:var(--textm);margin-top:3px">Add</div>
+      </div>
+    </div>`:''}
     <div class="panel">
-      <div class="panel-title">📋 Project Details</div>
+      <div class="panel-title">${pIcon('clipboard')} Project Details</div>
       <div class="f-group"><span class="f-label">Genre</span><span style="font-size:13px;color:var(--text)">${p.genre||'—'}</span></div>
       <div class="f-group"><span class="f-label">Description</span><span style="font-size:13px;color:var(--text)">${p.desc||'No description'}</span></div>
-      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" id="aiGenShotsBtn" onclick="aiGenerateShots('${p.id}')">🤖 AI Generate Shots</button>
-        <button class="btn btn-outline btn-sm" onclick="editProject('${p.id}')">✏️ Edit</button>
-        <button class="btn btn-outline btn-sm" onclick="toggleArchiveProject('${p.id}')">${p.archived?'📂 Restore':'🗄 Archive'}</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteProject('${p.id}')">🗑 Delete</button>
+      <div class="grid2" style="margin-top:10px">
+        <div style="display:flex;align-items:center;gap:8px;border:1.5px solid var(--border);border-radius:10px;padding:9px 10px;cursor:pointer" onclick="addShot('${p.id}')">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--lav);display:flex;align-items:center;justify-content:center;color:var(--violet)">${pIcon('film',16)}</div>
+          <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--violet)">${shots.length} Shots</div><div style="font-size:10px;color:var(--textm)">${pIcon('plus',10)} Add</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;border:1.5px solid var(--border);border-radius:10px;padding:9px 10px;cursor:pointer" onclick="addCharacter('${p.id}')">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--lav);display:flex;align-items:center;justify-content:center;color:var(--violet)">${pIcon('mask',16)}</div>
+          <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--violet)">${chars.length} Characters</div><div style="font-size:10px;color:var(--textm)">${pIcon('plus',10)} Add</div></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" id="aiGenShotsBtn" onclick="aiGenerateShots('${p.id}')">${pIcon('sparkle',14)} AI Generate Shots</button>
+        <button class="btn btn-outline btn-sm" onclick="editProject('${p.id}')">${pIcon('pencil',14)} Edit</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleArchiveProject('${p.id}')">${p.archived?pIcon('restore',14)+' Restore':pIcon('archive',14)+' Archive'}</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteProject('${p.id}')">${pIcon('trash',14)} Delete</button>
       </div>
     </div>
     <div class="panel">
-      <div class="panel-title">🖼 Reference Image</div>
+      <div class="panel-title">${pIcon('image')} Reference Image</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Stored only in this browser (this device) — never uploaded to any server. Any image format your browser can open is accepted.</div>
       ${p.refImage?`
         <div style="max-width:220px">
           <img src="${p.refImage}" alt="Reference" style="width:100%;border-radius:10px;border:1.5px solid var(--border);display:block" onerror="this.style.display='none';var fb=document.getElementById('refImgFallback');if(fb)fb.style.display='block'">
-          <div id="refImgFallback" style="display:none;padding:14px;border:1.5px dashed var(--border);border-radius:10px;font-size:11px;color:var(--textm);text-align:center">📄 ${(p.refImageName||'image').replace(/</g,'&lt;')}<br>This browser can't preview this file type, but it's saved.</div>
-          <label class="btn btn-outline btn-xs" style="cursor:pointer;display:inline-block;margin-top:8px">🔄 Replace<input type="file" accept="image/*" style="display:none" onchange="uploadProjectRefImage('${p.id}',event)"></label>
-          <button class="btn btn-danger btn-xs" style="margin-top:8px" onclick="removeProjectRefImage('${p.id}')">🗑 Remove</button>
+          <div id="refImgFallback" style="display:none;padding:14px;border:1.5px dashed var(--border);border-radius:10px;font-size:11px;color:var(--textm);text-align:center">${pIcon('doc',14)} ${(p.refImageName||'image').replace(/</g,'&lt;')}<br>This browser can't preview this file type, but it's saved.</div>
+          <label class="btn btn-outline btn-xs" style="cursor:pointer;display:inline-block;margin-top:8px">${pIcon('restore',12)} Replace<input type="file" accept="image/*" style="display:none" onchange="uploadProjectRefImage('${p.id}',event)"></label>
+          <button class="btn btn-danger btn-xs" style="margin-top:8px" onclick="removeProjectRefImage('${p.id}')">${pIcon('trash',12)} Remove</button>
         </div>
       `:`
-        <label class="btn btn-outline btn-sm" style="cursor:pointer;display:inline-block">📎 Upload Reference Image<input type="file" accept="image/*" style="display:none" onchange="uploadProjectRefImage('${p.id}',event)"></label>
+        <label class="btn btn-outline btn-sm" style="cursor:pointer;display:inline-block">${pIcon('upload',14)} Upload Reference Image<input type="file" accept="image/*" style="display:none" onchange="uploadProjectRefImage('${p.id}',event)"></label>
       `}
     </div>
     <div class="panel">
       <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between">
-        <span>📺 Episode Tracker (${episodes.length})</span>
-        <button class="btn btn-outline btn-xs" onclick="addEpisode('${p.id}')">+ Add Episode</button>
+        <span>${pIcon('tv')} Episode Tracker (${episodes.length})</span>
+        <button class="btn btn-outline btn-xs" onclick="addEpisode('${p.id}')">${pIcon('plus',11)} Add Episode</button>
       </div>
       ${episodes.length===0?`<div style="font-size:12px;color:var(--textm);padding:8px 0">No episodes yet — useful for series/multi-part projects. Skip this if your project is a single piece.</div>`:episodes.map(e=>episodeTileHTML(e)).join('')}
     </div>
     ${(episodes.length>0||shots.length>0)?`<div class="panel">
-      <div class="panel-title">📅 Production Timeline</div>
+      <div class="panel-title">${pIcon('calendar')} Production Timeline</div>
       ${renderProjectTimeline(p,episodes,shots)}
     </div>`:''}
-    ${shots.length>0?`<div class="panel"><div class="panel-title">🎬 Shots (${shots.length})</div>${shots.map(s=>`
+    ${shots.length>0?`<div class="panel"><div class="panel-title">${pIcon('film')} Shots (${shots.length})</div>${shots.map(s=>`
       <div class="shot-tile" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:10px;padding:10px;margin-bottom:7px">
-        <div style="width:40px;height:30px;background:var(--lav);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px">🎬</div>
+        <div style="width:40px;height:30px;background:var(--lav);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--violet)">${pIcon('film',15)}</div>
         <div style="flex:1"><div style="font-size:12px;font-weight:600;color:var(--text)">${s.name||'Shot '+s.id}</div><div style="font-size:11px;color:var(--textm)">${s.type||'Scene'}</div></div>
-        <button class="btn btn-danger btn-xs" onclick="deleteShot('${s.id}')">🗑</button>
+        <button class="btn btn-danger btn-xs" onclick="deleteShot('${s.id}')">${pIcon('trash',12)}</button>
       </div>`).join('')}</div>`:''}
   `;
 }
@@ -2097,7 +2144,7 @@ function episodeTileHTML(e){
       <select class="f-select" style="width:auto;padding:4px 8px;font-size:11px" onchange="updateEpisodeStatus('${e.id}',this.value)">
         ${Object.keys(EP_STATUS_COLOR).map(s=>`<option value="${s}" ${e.status===s?'selected':''}>${s}</option>`).join('')}
       </select>
-      <button class="btn btn-danger btn-xs" onclick="deleteEpisode('${e.id}')">🗑</button>
+      <button class="btn btn-danger btn-xs" onclick="deleteEpisode('${e.id}')">${pIcon('trash',12)}</button>
     </div>`;
 }
 
@@ -2109,7 +2156,7 @@ async function addEpisode(projectId){
   const ep={id:"ep_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),projectId,title,number,status:"Planned",created:new Date().toISOString()};
   S.episodes.push(ep);save("episodes");
   renderProjectWorkspace(S.projects.find(x=>x.id===projectId));
-  toast(`📺 Episode ${number} added: ${title}`,"success");
+  toast(`Episode ${number} added: ${title}`,"success");
 }
 
 function updateEpisodeStatus(id,status){
@@ -2131,8 +2178,8 @@ function deleteEpisode(id){
 // ── PRODUCTION TIMELINE ──
 function renderProjectTimeline(p,episodes,shots){
   const events=[
-    ...episodes.map(e=>({date:e.created,label:`E${e.number}: ${e.title}`,status:e.status,color:EP_STATUS_COLOR[e.status]||"var(--textm)",icon:"📺"})),
-    ...shots.map(s=>({date:s.created,label:s.name||'Shot',status:s.type||'Scene',color:"var(--blue)",icon:"🎬"}))
+    ...episodes.map(e=>({date:e.created,label:`E${e.number}: ${e.title}`,status:e.status,color:EP_STATUS_COLOR[e.status]||"var(--textm)",icon:"tv"})),
+    ...shots.map(s=>({date:s.created,label:s.name||'Shot',status:s.type||'Scene',color:"var(--blue)",icon:"film"}))
   ].filter(x=>x.date).sort((a,b)=>new Date(a.date)-new Date(b.date));
   if(events.length===0)return `<div style="font-size:12px;color:var(--textm)">No dated events yet.</div>`;
   return `<div style="position:relative;padding-left:18px;border-left:2px solid var(--border);margin-top:6px">
@@ -2140,7 +2187,7 @@ function renderProjectTimeline(p,episodes,shots){
       <div style="position:relative;padding-bottom:14px">
         <div style="position:absolute;left:-24px;top:2px;width:10px;height:10px;border-radius:50%;background:${ev.color};border:2px solid var(--panel)"></div>
         <div style="font-size:11px;color:var(--textm)">${new Date(ev.date).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</div>
-        <div style="font-size:12px;font-weight:600;color:var(--text)">${ev.icon} ${ev.label} <span style="font-weight:400;color:${ev.color}">— ${ev.status}</span></div>
+        <div style="font-size:12px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:5px">${pIcon(ev.icon,13)} ${ev.label} <span style="font-weight:400;color:${ev.color}">— ${ev.status}</span></div>
       </div>`).join('')}
   </div>`;
 }
