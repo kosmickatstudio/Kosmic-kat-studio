@@ -753,16 +753,16 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
   <div class="sp-section">
     <div class="sp-section-title">AI Director Brain</div>
     <div class="sp-section-body">
-      <div class="model-select-row">
-        <div class="model-badge" id="aiModelBadge"></div>
-        <select class="f-select" id="aiModelSelect" onchange="saveSetting('ai_model',this.value);updateAiModelLabel();updateAicreditsModelVisibility()">
-        <option value="claude">Claude (Anthropic) — Best Quality</option>
-        <option value="gemini">Google Gemini — Vision-capable, cheap</option>
-        <option value="groq">Groq Llama 3.3 — Free & Fast</option>
-        <option value="deepseek">DeepSeek V3 — Ultra Cheap</option>
-        <option value="openai">OpenAI GPT-4o</option>
-        <option value="aicredits">AICredits — Gateway (pick any model below)</option>
+      <div class="f-group">
+        <select class="f-select" id="aiModelSelect" onchange="saveSetting('ai_model',this.value);updateAiModelLabel();updateAicreditsModelVisibility();renderModelTrigger('aiModelSelect','brain')" style="display:none">
+        <option value="claude">Claude (Anthropic) (Best quality, supports images)</option>
+        <option value="gemini">Google Gemini (Vision-capable, cheap, supports images)</option>
+        <option value="openai">OpenAI GPT-4o (Supports images)</option>
+        <option value="groq">Groq Llama 3.3 (Free & fast, text only)</option>
+        <option value="deepseek">DeepSeek V3 (Ultra cheap, text only)</option>
+        <option value="aicredits">AICredits Gateway (Routes to whichever model you pick below, images if that model supports them)</option>
         </select>
+        <div id="aiModelSelectTrigger" onclick="openModelPicker('aiModelSelect','brain')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
       </div>
       <div class="f-group" id="aicreditsModelWrap" style="display:none;margin-top:8px">
         <label class="f-label">AICredits Model <span style="font-weight:400;color:var(--texts)">(300+ available — curated list below, or type any exact ID)</span></label>
@@ -3155,40 +3155,104 @@ const IMAGE_MODEL_GROUPS=[
     {value:"bria/fibo/generate",name:"Bria FIBO",sub:"JSON-structured prompts, 100% licensed training data"},
   ]},
 ];
+
+// Video and Brain model lists had the exact same problem images did: the
+// same options hand-typed in 4 different places (Video Canvas, Node
+// Canvas, Production Pipeline, plus a legacy shot-editor select) with
+// slightly different wording each time, and two of them — plain
+// "Seedance 2.0" and "Seedance 2.0 Fast" — had no explanation at all
+// while every other option did. One shared source fixes both problems.
+const VIDEO_MODEL_GROUPS=[
+  {label:"Seedance 2.0 (ByteDance)",items:[
+    {value:"bytedance/seedance-2.0/fast/text-to-video",name:"Seedance 2.0 Fast",sub:"Fast tier, lower cost, no reference images"},
+    {value:"bytedance/seedance-2.0/text-to-video",name:"Seedance 2.0",sub:"Standard tier, higher quality, no reference images"},
+    {value:"bytedance/seedance-2.0/fast/reference-to-video",name:"Seedance 2.0 Fast — Multi-Reference",sub:"Fast tier, up to 9 images/3 videos/3 audio refs"},
+    {value:"bytedance/seedance-2.0/reference-to-video",name:"Seedance 2.0 — Multi-Reference",sub:"Standard tier, up to 9 images/3 videos/3 audio refs"},
+    {value:"bytedance/seedance-2.0/image-to-video",name:"Seedance 2.0 — Start→End Frame",sub:"Anchors a first and last frame"},
+  ]},
+  {label:"Kling",items:[
+    {value:"fal-ai/kling-video/v2.1/master/text-to-video",name:"Kling 2.1 Master",sub:"1 reference image, older/cheaper tier"},
+    {value:"fal-ai/kling-video/v2.6/pro/text-to-video",name:"Kling 2.6 Pro",sub:"1 reference image"},
+    {value:"fal-ai/kling-video/v3/standard/text-to-video",name:"Kling 3.0 Standard",sub:"up to 4 reference images"},
+    {value:"fal-ai/kling-video/v3/pro/text-to-video",name:"Kling 3.0 Pro",sub:"up to 4 reference images, higher fidelity"},
+    {value:"fal-ai/kling-video/o3/pro/reference-to-video",name:"Kling O3 Pro",sub:"Multi-reference, up to 4 characters"},
+    {value:"fal-ai/kling-video/o3/standard/image-to-video",name:"Kling O3 Standard",sub:"faster, cheaper reference — up to 4 characters"},
+    {value:"fal-ai/kling-video/v3/4k/image-to-video",name:"Kling 3.0 4K",sub:"Native 4K output"},
+  ]},
+  {label:"Veo 3.1 (Google)",items:[
+    {value:"fal-ai/veo3.1",name:"Veo 3.1",sub:"No reference images"},
+    {value:"fal-ai/veo3.1/image-to-video",name:"Veo 3.1 — Image-to-Video",sub:"Animates a single starting image"},
+    {value:"fal-ai/veo3.1/reference-to-video",name:"Veo 3.1 — Multi-Reference",sub:"up to 3 images"},
+  ]},
+];
+const BRAIN_MODEL_GROUPS=[
+  {label:"AI Brain",items:[
+    {value:"claude",name:"Claude (Anthropic)",sub:"Best quality, supports images"},
+    {value:"gemini",name:"Google Gemini",sub:"Vision-capable, cheap, supports images"},
+    {value:"openai",name:"OpenAI GPT-4o",sub:"Supports images"},
+    {value:"groq",name:"Groq Llama 3.3",sub:"Free & fast, text only"},
+    {value:"deepseek",name:"DeepSeek V3",sub:"Ultra cheap, text only"},
+    {value:"aicredits",name:"AICredits Gateway",sub:"Routes to whichever model you pick below, images if that model supports them"},
+  ]},
+];
+const MODEL_PICKER_SOURCES={image:IMAGE_MODEL_GROUPS,video:VIDEO_MODEL_GROUPS,brain:BRAIN_MODEL_GROUPS};
+// Curated subsets for tools that don't offer every video model (e.g. no
+// multi-reference options where that tool has no reference-image input).
+const SE_MODEL_ALLOWED=["bytedance/seedance-2.0/fast/text-to-video","bytedance/seedance-2.0/text-to-video","fal-ai/kling-video/v2.1/master/text-to-video","fal-ai/kling-video/v2.6/pro/text-to-video","fal-ai/kling-video/v3/standard/text-to-video","fal-ai/kling-video/v3/pro/text-to-video","fal-ai/veo3.1"];
+const PD_VIDEO_MODEL_ALLOWED=["bytedance/seedance-2.0/reference-to-video","bytedance/seedance-2.0/fast/reference-to-video","bytedance/seedance-2.0/image-to-video","fal-ai/kling-video/v2.1/master/text-to-video","fal-ai/kling-video/v2.6/pro/text-to-video","fal-ai/kling-video/v3/standard/text-to-video","fal-ai/kling-video/v3/pro/text-to-video","fal-ai/veo3.1"];
 function modelVisualMeta(value){
   if(value.includes("flux-2"))return{grad:"linear-gradient(135deg,#ff6b1a,#1a1a1a)",mono:"F2"};
   if(value.includes("flux"))return{grad:"linear-gradient(135deg,#ff9d5c,#3a2412)",mono:"FX"};
   if(value.includes("ideogram"))return{grad:"linear-gradient(135deg,#00c2b8,#0a4f4a)",mono:"Id"};
   if(value.includes("recraft"))return{grad:"linear-gradient(135deg,#a855f7,#5b21b6)",mono:"Rc"};
   if(value.includes("stable-diffusion"))return{grad:"linear-gradient(135deg,#4d8dfa,#1e3a8a)",mono:"SD"};
-  if(value.includes("seedream")||value.includes("bytedance"))return{grad:"linear-gradient(135deg,#fe2c55,#161823)",mono:"Sd"};
-  if(value.includes("nano-banana")||value.includes("gemini"))return{grad:"linear-gradient(135deg,#ffd93d,#b8930a)",mono:"Nb"};
-  if(value.includes("gpt-image")||value.includes("openai"))return{grad:"linear-gradient(135deg,#10a37f,#054a3a)",mono:"AI"};
+  if(value.includes("seedream")||value.includes("bytedance/seedream"))return{grad:"linear-gradient(135deg,#fe2c55,#161823)",mono:"Sd"};
+  if(value.includes("seedance"))return{grad:"linear-gradient(135deg,#fe2c55,#161823)",mono:"Se"};
+  if(value.includes("nano-banana")||value.startsWith("gemini-3"))return{grad:"linear-gradient(135deg,#ffd93d,#b8930a)",mono:"Nb"};
+  if(value.includes("gpt-image")||value==="openai")return{grad:"linear-gradient(135deg,#10a37f,#054a3a)",mono:"AI"};
   if(value.includes("bria"))return{grad:"linear-gradient(135deg,#7dd3c0,#3d1f7a)",mono:"Fb"};
+  if(value.includes("kling"))return{grad:"linear-gradient(135deg,#4d8dff,#1b3fbf)",mono:"K"};
+  if(value.includes("veo"))return{grad:"linear-gradient(135deg,#4285F4,#0f5fb8)",mono:"Vo"};
+  if(value==="claude")return{grad:"linear-gradient(135deg,#e8926a,#b4573a)",mono:"Cl"};
+  if(value==="gemini")return{grad:"linear-gradient(135deg,#4285F4,#34a853)",mono:"Ge"};
+  if(value==="groq")return{grad:"linear-gradient(135deg,#f5744d,#c9401f)",mono:"Gq"};
+  if(value==="deepseek")return{grad:"linear-gradient(135deg,#6f86ff,#4d6bfe)",mono:"Ds"};
+  if(value==="aicredits")return{grad:"linear-gradient(135deg,#c4b5fd,#7c3aed)",mono:"AC"};
   return{grad:"linear-gradient(135deg,var(--vs),var(--violet))",mono:"?"};
 }
 function imageModelOptionsHTML(){
-  return IMAGE_MODEL_GROUPS.map(g=>`<optgroup label="${g.label}">${g.items.map(i=>`<option value="${i.value}">${i.name}${i.sub?' ('+i.sub+')':''}</option>`).join('')}</optgroup>`).join('')
+  return groupsForPicker("image").map(g=>`<optgroup label="${g.label}">${g.items.map(i=>`<option value="${i.value}">${i.name}${i.sub?' ('+i.sub+')':''}</option>`).join('')}</optgroup>`).join('')
     +`${(gs("custom_image_models",[])||[]).map(m=>`<option value="${m.endpoint}">${m.label} (custom)</option>`).join('')}`;
 }
-function modelTriggerLabelHTML(selectId){
+function groupsForPicker(kind,allowed){
+  const groups=MODEL_PICKER_SOURCES[kind]||[];
+  if(!allowed)return groups;
+  return groups.map(g=>({...g,items:g.items.filter(i=>allowed.includes(i.value))})).filter(g=>g.items.length);
+}
+function modelOptionsHTML(kind,allowed,selectedValue){
+  return groupsForPicker(kind,allowed).map(g=>`<optgroup label="${g.label}">${g.items.map(i=>`<option value="${i.value}" ${i.value===selectedValue?'selected':''}>${i.name}${i.sub?' ('+i.sub+')':''}</option>`).join('')}</optgroup>`).join('');
+}
+function modelTriggerLabelHTML(selectId,kind){
   const sel=document.getElementById(selectId);
   const value=sel?sel.value:"";
   let found=null;
-  for(const g of IMAGE_MODEL_GROUPS)for(const i of g.items)if(i.value===value)found=i;
+  for(const g of MODEL_PICKER_SOURCES[kind]||[])for(const i of g.items)if(i.value===value)found=i;
   if(!found)return `<span style="font-size:13px;color:var(--textm)">Choose a model…</span>`;
   const meta=modelVisualMeta(found.value);
   return `<div style="width:30px;height:30px;border-radius:8px;background:${meta.grad};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0">${meta.mono}</div>
     <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text)">${found.name}</div>${found.sub?`<div style="font-size:10px;color:var(--textm)">${found.sub}</div>`:''}</div>`;
 }
-function renderModelTrigger(selectId){
+function renderModelTrigger(selectId,kind){
   const trigger=document.getElementById(selectId+"Trigger");
-  if(trigger)trigger.innerHTML=modelTriggerLabelHTML(selectId);
+  if(trigger)trigger.innerHTML=modelTriggerLabelHTML(selectId,kind||trigger.dataset.kind||"image");
 }
-function openModelPicker(selectId){
+function openModelPicker(selectId,kind,allowed){
+  kind=kind||"image";
   closeModelPicker();
   const sel=document.getElementById(selectId);
   const current=sel?sel.value:"";
+  const groups=groupsForPicker(kind,allowed);
+  const titles={image:"Choose Image Model",video:"Choose Video Model",brain:"Choose AI Brain"};
   const overlay=document.createElement("div");
   overlay.id="modelPickerOverlay";
   overlay.style.cssText="position:fixed;inset:0;background:rgba(20,10,40,0.45);z-index:400;display:flex;align-items:flex-end";
@@ -3196,16 +3260,16 @@ function openModelPicker(selectId){
   overlay.innerHTML=`
     <div style="background:var(--surface);width:100%;max-height:78vh;border-radius:20px 20px 0 0;overflow-y:auto;box-shadow:var(--shv)">
       <div style="position:sticky;top:0;background:var(--surface);padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;z-index:2">
-        <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">Choose Image Model</div>
+        <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">${titles[kind]||"Choose Model"}</div>
         <button onclick="closeModelPicker()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
       </div>
       <div style="padding:10px 14px 24px">
-        ${IMAGE_MODEL_GROUPS.map(g=>`
+        ${groups.map(g=>`
           <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.4px;margin:14px 4px 6px">${g.label}</div>
           ${g.items.map(i=>{
             const meta=modelVisualMeta(i.value);
             const selected=i.value===current;
-            return `<div onclick="selectModelOption('${selectId}','${i.value}')" style="display:flex;align-items:center;gap:11px;padding:10px 10px;border-radius:12px;cursor:pointer;margin-bottom:5px;border:1.5px solid ${selected?'var(--vs)':'transparent'};background:${selected?'var(--lav)':'transparent'}">
+            return `<div onclick="selectModelOption('${selectId}','${i.value}','${kind}')" style="display:flex;align-items:center;gap:11px;padding:10px 10px;border-radius:12px;cursor:pointer;margin-bottom:5px;border:1.5px solid ${selected?'var(--vs)':'transparent'};background:${selected?'var(--lav)':'transparent'}">
               <div style="width:38px;height:38px;border-radius:10px;background:${meta.grad};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,0.15)">${meta.mono}</div>
               <div style="flex:1;min-width:0">
                 <div style="font-size:13.5px;font-weight:700;color:var(--text)">${i.name}</div>
@@ -3219,10 +3283,10 @@ function openModelPicker(selectId){
     </div>`;
   document.body.appendChild(overlay);
 }
-function selectModelOption(selectId,value){
+function selectModelOption(selectId,value,kind){
   const sel=document.getElementById(selectId);
   if(sel){sel.value=value;sel.dispatchEvent(new Event("change"));}
-  renderModelTrigger(selectId);
+  renderModelTrigger(selectId,kind);
   closeModelPicker();
 }
 function closeModelPicker(){
@@ -4869,28 +4933,8 @@ function renderVideoCanvas(el){
           ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:10px">Add a <b>fal.ai</b> API key in Settings — this one key powers Seedance, Kling, and Veo.</div>`:''}
           <div class="f-group">
             <label class="f-label">Model</label>
-            <div class="model-select-row"><div class="model-badge" id="vcModelBadge"></div>
-            <select class="f-select" id="vcModel" onchange="updateVcModelUI()">
-              <optgroup label="Seedance 2.0 (ByteDance)">
-                <option value="bytedance/seedance-2.0/fast/text-to-video">Seedance 2.0 Fast</option>
-                <option value="bytedance/seedance-2.0/text-to-video">Seedance 2.0</option>
-                <option value="bytedance/seedance-2.0/fast/reference-to-video">Seedance 2.0 Fast — Multi-Reference (img+video+audio)</option>
-                <option value="bytedance/seedance-2.0/reference-to-video">Seedance 2.0 — Multi-Reference (img+video+audio)</option>
-              </optgroup>
-              <optgroup label="Kling (Kuaishou)">
-                <option value="fal-ai/kling-video/v2.1/master/text-to-video">Kling 2.1 Master</option>
-                <option value="fal-ai/kling-video/v2.6/pro/text-to-video">Kling 2.6 Pro</option>
-                <option value="fal-ai/kling-video/v3/standard/text-to-video">Kling 3.0 Standard</option>
-                <option value="fal-ai/kling-video/v3/pro/text-to-video">Kling 3.0 Pro</option>
-                <option value="fal-ai/kling-video/o3/pro/reference-to-video">Kling O3 Pro — Multi-Reference (up to 4 characters)</option>
-                <option value="fal-ai/kling-video/o3/standard/image-to-video">Kling O3 Standard — faster, cheaper reference (up to 4 characters)</option>
-                <option value="fal-ai/kling-video/v3/4k/image-to-video">Kling 3.0 4K — Native 4K Output</option>
-              </optgroup>
-              <optgroup label="Veo (Google DeepMind)">
-                <option value="fal-ai/veo3.1">Veo 3.1</option>
-                <option value="fal-ai/veo3.1/reference-to-video">Veo 3.1 — Multi-Reference (up to 3 images)</option>
-              </optgroup>
-            </select></div>
+            <select class="f-select" id="vcModel" onchange="updateVcModelUI()" style="display:none">${modelOptionsHTML("video")}</select>
+            <div id="vcModelTrigger" onclick="openModelPicker('vcModel','video')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
             <div id="vcModelNote" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
           </div>
           <div class="f-row">
@@ -5915,7 +5959,7 @@ function formatCostLine(est){
 
 function updateVcModelUI(){
   const model=document.getElementById("vcModel").value;
-  setModelBadge("vcModelBadge",model);
+  renderModelTrigger("vcModel","video");
   const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
   const durConfig=VIDEO_MODEL_DURATIONS[model];
   const slider=document.getElementById("vcDurationSlider");
@@ -7023,15 +7067,8 @@ function openShotEditor(projectId,shotId=null){
 
       <div class="f-row">
         <div class="f-group"><label class="f-label">Model</label>
-          <select class="f-select" id="seModel" onchange="updateShotDurationOptions()">
-            <option value="bytedance/seedance-2.0/fast/text-to-video" ${s?.model==="bytedance/seedance-2.0/fast/text-to-video"?'selected':''}>Seedance 2.0 Fast</option>
-            <option value="bytedance/seedance-2.0/text-to-video" ${s?.model==="bytedance/seedance-2.0/text-to-video"?'selected':''}>Seedance 2.0</option>
-            <option value="fal-ai/kling-video/v2.1/master/text-to-video" ${!s||s?.model==="fal-ai/kling-video/v2.1/master/text-to-video"?'selected':''}>Kling 2.1 Master</option>
-            <option value="fal-ai/kling-video/v2.6/pro/text-to-video" ${s?.model==="fal-ai/kling-video/v2.6/pro/text-to-video"?'selected':''}>Kling 2.6 Pro</option>
-            <option value="fal-ai/kling-video/v3/standard/text-to-video" ${s?.model==="fal-ai/kling-video/v3/standard/text-to-video"?'selected':''}>Kling 3.0 Standard</option>
-            <option value="fal-ai/kling-video/v3/pro/text-to-video" ${s?.model==="fal-ai/kling-video/v3/pro/text-to-video"?'selected':''}>Kling 3.0 Pro</option>
-            <option value="fal-ai/veo3.1" ${s?.model==="fal-ai/veo3.1"?'selected':''}>Veo 3.1</option>
-          </select>
+          <select class="f-select" id="seModel" onchange="updateShotDurationOptions()" style="display:none">${modelOptionsHTML("video",SE_MODEL_ALLOWED,s?.model||"fal-ai/kling-video/v2.1/master/text-to-video")}</select>
+          <div id="seModelTrigger" onclick="openModelPicker('seModel','video',SE_MODEL_ALLOWED)" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
         </div>
         <div class="f-group"><label class="f-label">Duration</label>
           <select class="f-select" id="seDuration"></select>
@@ -7069,6 +7106,7 @@ function openShotEditor(projectId,shotId=null){
 
 function updateShotDurationOptions(preselectDuration,preselectResolution){
   const model=document.getElementById("seModel").value;
+  renderModelTrigger("seModel","video");
   const config=VIDEO_MODEL_DURATIONS[model];
   const sel=document.getElementById("seDuration");
   sel.innerHTML=config.options.map(c=>`<option value="${c}" ${String(preselectDuration)===String(c)?'selected':''}>${c}s</option>`).join('');
@@ -7627,14 +7665,8 @@ function renderPdSharedFields(){
   return `
       <div class="f-group">
         <label class="f-label">Select Brain <span style="font-weight:400;color:var(--texts)">(powers Director, Promptwriter, and all episode scripts for this production)</span></label>
-        <select class="f-select" id="pdBrain" onchange="updatePdImageUploadAvailability()">
-          <option value="claude">Claude (Anthropic) — Best Quality, supports images</option>
-          <option value="gemini">Google Gemini — Cheap, supports images</option>
-          <option value="openai">OpenAI GPT-4o — supports images</option>
-          <option value="groq">Groq Llama 3.3 — Free, text only</option>
-          <option value="deepseek">DeepSeek V3 — Ultra Cheap, text only</option>
-          <option value="aicredits">AICredits Gateway — supports images if your chosen model does (Claude/GPT-4o/Gemini)</option>
-        </select>
+        <select class="f-select" id="pdBrain" onchange="updatePdImageUploadAvailability();renderModelTrigger('pdBrain','brain')" style="display:none">${modelOptionsHTML("brain")}</select>
+        <div id="pdBrainTrigger" onclick="openModelPicker('pdBrain','brain')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
       </div>
 
       <div class="f-group" id="pdRefImagesWrap">
@@ -7662,13 +7694,10 @@ function renderPdSharedFields(){
         <select class="f-select" id="pdImageModel" onchange="renderModelTrigger('pdImageModel')" style="display:none">${imageModelOptionsHTML()}</select>
         <div id="pdImageModelTrigger" onclick="openModelPicker('pdImageModel')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
       </div>
-      <div class="f-group"><label class="f-label">2. Video Model</label><select class="f-select" id="pdVideoModel" onchange="updateClipLenOptions();updatePdAspectRatioOptions()">
-        <option value="bytedance/seedance-2.0/reference-to-video">Seedance 2.0 — Multi-Reference</option>
-        <option value="bytedance/seedance-2.0/fast/reference-to-video">Seedance 2.0 Fast — Multi-Reference</option>
-        <option value="bytedance/seedance-2.0/image-to-video">Seedance 2.0 — Start→End Frame</option>
-        <option value="fal-ai/kling-video/v2.1/master/text-to-video">Kling 2.1 Master</option><option value="fal-ai/kling-video/v2.6/pro/text-to-video">Kling 2.6 Pro</option>
-        <option value="fal-ai/kling-video/v3/standard/text-to-video">Kling 3.0 Standard</option><option value="fal-ai/kling-video/v3/pro/text-to-video">Kling 3.0 Pro</option><option value="fal-ai/veo3.1">Veo 3.1</option>
-      </select></div>
+      <div class="f-group"><label class="f-label">2. Video Model</label>
+        <select class="f-select" id="pdVideoModel" onchange="updateClipLenOptions();updatePdAspectRatioOptions();renderModelTrigger('pdVideoModel','video')" style="display:none">${modelOptionsHTML("video",PD_VIDEO_MODEL_ALLOWED)}</select>
+        <div id="pdVideoModelTrigger" onclick="openModelPicker('pdVideoModel','video',PD_VIDEO_MODEL_ALLOWED)" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
       <div class="f-row">
         <div class="f-group" id="pdQualityWrap"><label class="f-label">3. Video Quality</label><select class="f-select" id="pdQuality"></select></div>
         <div class="f-group"><label class="f-label">Aspect Ratio</label><select class="f-select" id="pdAspectRatio"></select></div>
@@ -7687,7 +7716,9 @@ function renderPdSharedFields(){
 
 function initPdSharedFields(){
   document.getElementById("pdBrain").value=gs("ai_model","claude");
+  renderModelTrigger("pdBrain","brain");
   renderModelTrigger("pdImageModel");
+  renderModelTrigger("pdVideoModel","video");
   updatePdImageUploadAvailability();
   updatePdAspectRatioOptions();
   updateClipLenOptions();
@@ -7705,47 +7736,14 @@ function openScriptWizard(projectId){
       <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Bring images, a script file, pasted text — whatever you've got, all optional. The Director works from your exact words.</div>
 
       <div class="f-group">
-        <label class="f-label">Select Brain <span style="font-weight:400;color:var(--texts)">(powers Director, Scriptwriter, and all episode scripts)</span></label>
-        <select class="f-select" id="pdBrain" onchange="updatePdImageUploadAvailability()">
-          <option value="claude">Claude (Anthropic) — Best Quality, supports images</option>
-          <option value="gemini">Google Gemini — Cheap, supports images</option>
-          <option value="openai">OpenAI GPT-4o — supports images</option>
-          <option value="groq">Groq Llama 3.3 — Free, text only</option>
-          <option value="deepseek">DeepSeek V3 — Ultra Cheap, text only</option>
-          <option value="aicredits">AICredits Gateway — supports images if your chosen model does (Claude/GPT-4o/Gemini)</option>
-        </select>
-      </div>
-
-      <div class="f-group" id="pdRefImagesWrap">
-        <label class="f-label">1. Images <span style="font-weight:400;color:var(--texts)">(optional, up to 9 — skip this and the Director will design characters from your script instead)</span></label>
-        <input type="file" accept="image/*" multiple id="pdRefUpload" style="display:none" onchange="handlePdRefUpload(event)">
-        <div style="display:flex;gap:10px;margin-bottom:8px">
-          <div onclick="document.getElementById('pdRefUpload').click()" style="flex:1;border:2px dashed var(--border);border-radius:14px;padding:16px 10px;text-align:center;cursor:pointer;background:rgba(61,31,122,0.02)">
-            <div style="font-size:22px">📤</div>
-            <div style="font-size:11px;font-weight:600;color:var(--violet);margin-top:4px">Browse Device</div>
-          </div>
-          ${(S.uploads||[]).filter(u=>u.kind==="image").length?`<div onclick="openPdLibraryPicker()" style="flex:1;border:2px dashed var(--border);border-radius:14px;padding:16px 10px;text-align:center;cursor:pointer;background:rgba(61,31,122,0.02)">
-            <div style="font-size:22px">📚</div>
-            <div style="font-size:11px;font-weight:600;color:var(--violet);margin-top:4px">Site Gallery</div>
-          </div>`:''}
-          ${S.characters&&S.characters.length?`<div onclick="openPdCharacterBiblePicker()" style="flex:1;border:2px dashed var(--border);border-radius:14px;padding:16px 10px;text-align:center;cursor:pointer;background:rgba(61,31,122,0.02)">
-            <div style="font-size:22px">🎭</div>
-            <div style="font-size:11px;font-weight:600;color:var(--violet);margin-top:4px">Character Bible</div>
-          </div>`:''}
-        </div>
-        <div id="pdRefPreview" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-      </div>
-      <div id="pdRefImagesDisabledNote" style="display:none;font-size:11px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:10px;margin-bottom:14px"></div>
-
-      <div class="f-group">
-        <label class="f-label">2. Upload Script File <span style="font-weight:400;color:var(--texts)">(optional — .docx, .pdf, .html, .txt)</span></label>
+        <label class="f-label">Upload Script File <span style="font-weight:400;color:var(--texts)">(optional — .docx, .pdf, .html, .txt)</span></label>
         <input type="file" accept=".docx,.pdf,.html,.htm,.txt" id="pdScriptFile" style="display:none" onchange="handleScriptFileUpload(event)">
         <button type="button" class="btn btn-outline btn-full" onclick="document.getElementById('pdScriptFile').click()">📤 Choose Script File</button>
         <div id="pdScriptFileStatus" style="font-size:11px;color:var(--textm);margin-top:6px"></div>
       </div>
 
       <div class="f-group">
-        <label class="f-label">3. Or Paste Your Script <span style="font-weight:400;color:var(--texts)">(optional — a file upload above will fill this in too, review/edit freely)</span></label>
+        <label class="f-label">Or Paste Your Script <span style="font-weight:400;color:var(--texts)">(optional — a file upload above will fill this in too, review/edit freely)</span></label>
         <textarea class="f-textarea" id="pdScriptText" style="min-height:140px" placeholder="Paste your script here…"></textarea>
       </div>
 
@@ -13841,7 +13839,6 @@ function toggleAiPanel(){
 
 function updateAiModelLabel(){
   const model=gs("ai_model","claude");
-  setModelBadge("aiModelBadge",model);
   const modelNames={claude:"Claude (Anthropic)",gemini:"Google Gemini",groq:"Groq Llama 3.3",deepseek:"DeepSeek V3",openai:"OpenAI GPT-4o",aicredits:"AICredits ("+(gs("aicredits_model","")||"no model set")+")"};
   const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
   const hasKey=!!gs(apiKeyMap[model],"");
@@ -14072,6 +14069,7 @@ function init(){
   const model=gs("ai_model","claude");
   const sel=document.getElementById("aiModelSelect");
   if(sel)sel.value=model;
+  renderModelTrigger("aiModelSelect","brain");
   restoreAicreditsModelUI();
   updateAicreditsModelVisibility();
   applyTheme(gs("theme","auto"));
