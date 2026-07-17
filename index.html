@@ -241,7 +241,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 .toggle-label{font-size:12px;color:var(--textm)}
 .badge{font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:0.06em;text-transform:uppercase;display:inline-block}
 .badge-violet{background:rgba(98,64,176,0.12);color:var(--vm)}
-.subgenre-chip{font-size:11px;font-weight:600;padding:5px 11px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface);color:var(--textm);cursor:pointer;transition:all 0.15s}
+.subgenre-chip{font-size:10px;font-weight:600;padding:4px 9px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface);color:var(--textm);cursor:pointer;transition:all 0.15s;white-space:nowrap}
 .subgenre-chip.selected{border-color:var(--violet);background:var(--lav);color:var(--violet)}
 .badge-gold{background:rgba(201,151,42,0.12);color:var(--gold)}
 .badge-green{background:rgba(16,185,129,0.12);color:var(--green)}
@@ -928,23 +928,16 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
       <label class="f-label">Project Name *</label>
       <input class="f-input" id="pmName" placeholder="e.g. Lil Bot, New Age…">
     </div>
-    <div class="f-row">
-      <div class="f-group">
-        <label class="f-label">Genre</label>
-        <select class="f-select" id="pmGenre">
-          <option>Sci-fi</option><option>Action</option><option>Adventure</option><option>Thriller</option><option>Mystery</option><option>Crime</option><option>Horror</option><option>Fantasy</option><option>Romance</option><option>Comedy</option><option>Drama</option><option>Musical</option><option>Western</option><option>War</option><option>Historical</option><option>Biography</option><option>Documentary</option><option>Family</option><option>Sports</option><option>Superhero</option><option>Animation</option>
-        </select>
-      </div>
-      <div class="f-group">
-        <label class="f-label">Status <span style="font-weight:400;color:var(--texts);font-size:10px">(auto-advances as work happens)</span></label>
-        <select class="f-select" id="pmStatus">
-          <option value="Development">Development</option><option value="Pre-production">Pre-production</option><option value="Production">Production</option><option value="Post">Post</option><option value="Complete">Complete</option><option value="Released">Released</option>
-        </select>
-      </div>
+    <div class="f-group">
+      <label class="f-label">Genre</label>
+      <select class="f-select" id="pmGenre" onchange="renderSimpleTrigger('pmGenre')" style="display:none">
+        <option>Sci-fi</option><option>Action</option><option>Adventure</option><option>Thriller</option><option>Mystery</option><option>Crime</option><option>Horror</option><option>Fantasy</option><option>Romance</option><option>Comedy</option><option>Drama</option><option>Musical</option><option>Western</option><option>War</option><option>Historical</option><option>Biography</option><option>Documentary</option><option>Family</option><option>Sports</option><option>Superhero</option><option>Animation</option>
+      </select>
+      <div id="pmGenreTrigger" onclick="openSimplePicker('pmGenre','Choose Genre')" style="display:flex;align-items:center;gap:8px;border:1.5px solid var(--border);border-radius:12px;padding:10px 12px;cursor:pointer;background:var(--surface)"></div>
     </div>
     <div class="f-group">
       <label class="f-label" style="font-size:10px">Sub-genre <span style="font-weight:400;color:var(--texts)">(optional, pick as many as fit)</span></label>
-      <div id="pmSubgenreWrap" style="display:flex;flex-wrap:wrap;gap:5px">
+      <div id="pmSubgenreWrap" style="display:flex;flex-wrap:wrap;gap:4px">
         <button type="button" class="subgenre-chip" data-val="Cyberpunk" onclick="toggleSubgenreChip(this)">Cyberpunk</button>
         <button type="button" class="subgenre-chip" data-val="Post-Apocalyptic" onclick="toggleSubgenreChip(this)">Post-Apocalyptic</button>
         <button type="button" class="subgenre-chip" data-val="Space Opera" onclick="toggleSubgenreChip(this)">Space Opera</button>
@@ -966,6 +959,13 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
         <button type="button" class="subgenre-chip" data-val="Anthology" onclick="toggleSubgenreChip(this)">Anthology</button>
         <button type="button" class="subgenre-chip" data-val="Satire" onclick="toggleSubgenreChip(this)">Satire</button>
       </div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Status <span style="font-weight:400;color:var(--texts);font-size:10px">(auto-advances as work happens)</span></label>
+      <select class="f-select" id="pmStatus" onchange="renderSimpleTrigger('pmStatus')" style="display:none">
+        <option value="Development">Development</option><option value="Pre-production">Pre-production</option><option value="Production">Production</option><option value="Post">Post</option><option value="Complete">Complete</option><option value="Released">Released</option>
+      </select>
+      <div id="pmStatusTrigger" onclick="openSimplePicker('pmStatus','Choose Status')" style="display:flex;align-items:center;gap:8px;border:1.5px solid var(--border);border-radius:12px;padding:10px 12px;cursor:pointer;background:var(--surface)"></div>
     </div>
     <div class="f-group">
       <label class="f-label">Universe <span style="color:var(--textm);font-weight:400">(optional — group projects that share lore/characters)</span></label>
@@ -2214,6 +2214,7 @@ const PI_PATHS={
   rocket:'<path d="M12 2c3 2 5 6 5 10 0 2-1 4-2 5l-3 3-3-3c-1-1-2-3-2-5 0-4 2-8 5-10Z"/><circle cx="12" cy="10" r="1.6"/><path d="M9 17l-2 4M15 17l2 4"/>',
   folder:'<path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"/>',
   check:'<path d="M4 12l5 5L20 6"/>',
+  chevron:'<path d="M6 9l6 6 6-6"/>',
 };
 function pIcon(name,size){
   size=size||15;
@@ -2532,6 +2533,8 @@ function openProjectModal(editId=null){
   document.querySelectorAll(".color-swatch").forEach(sw=>{
     sw.style.borderColor=(!S.thumbImage&&sw.dataset.color===S.thumbColor)?"var(--violet)":"transparent";
   });
+  renderSimpleTrigger("pmGenre");
+  renderSimpleTrigger("pmStatus");
   if(S.thumbImage){
     document.getElementById("pmThumbPreview").src=S.thumbImage;
     document.getElementById("pmThumbPreviewWrap").style.display="flex";
@@ -3500,6 +3503,53 @@ function selectModelOption(selectId,value,kind){
 function closeModelPicker(){
   const overlay=document.getElementById("modelPickerOverlay");
   if(overlay)overlay.remove();
+}
+
+// ── SIMPLE LIST PICKER — same bottom-sheet chrome as the model picker, for
+// plain flat option lists (Genre, Status) that don't need per-option colors/
+// subtitles. Works from static HTML too: the hidden <select> just needs its
+// <option> values/text to already exist in the page (hand-written, since
+// this is called from non-templated markup in some places).
+function renderSimpleTrigger(selectId){
+  const sel=document.getElementById(selectId);
+  const trigger=document.getElementById(selectId+"Trigger");
+  if(!sel||!trigger)return;
+  const opt=sel.options[sel.selectedIndex];
+  trigger.innerHTML=`<span style="flex:1;font-size:13px;font-weight:600;color:var(--text)">${opt?opt.textContent:'Choose…'}</span><span style="color:var(--textm)">${pIcon('chevron',14)}</span>`;
+}
+function openSimplePicker(selectId,title){
+  closeModelPicker();
+  const sel=document.getElementById(selectId);
+  if(!sel)return;
+  const current=sel.value;
+  const overlay=document.createElement("div");
+  overlay.id="modelPickerOverlay";
+  overlay.style.cssText="position:fixed;inset:0;background:rgba(20,10,40,0.45);z-index:400;display:flex;align-items:flex-end";
+  overlay.onclick=(e)=>{if(e.target===overlay)closeModelPicker();};
+  const opts=[...sel.options].map(o=>({value:o.value,label:o.textContent}));
+  overlay.innerHTML=`
+    <div style="background:var(--surface);width:100%;max-height:78vh;border-radius:20px 20px 0 0;overflow-y:auto;box-shadow:var(--shv)">
+      <div style="position:sticky;top:0;background:var(--surface);padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;z-index:2">
+        <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">${title}</div>
+        <button onclick="closeModelPicker()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
+      </div>
+      <div style="padding:10px 14px 24px">
+        ${opts.map(o=>{
+          const selected=o.value===current;
+          return `<div onclick="selectSimpleOption('${selectId}','${o.value.replace(/'/g,"\\'")}')" style="display:flex;align-items:center;justify-content:space-between;padding:12px 12px;border-radius:12px;cursor:pointer;margin-bottom:3px;border:1.5px solid ${selected?'var(--vs)':'transparent'};background:${selected?'var(--lav)':'transparent'}">
+            <span style="font-size:13.5px;font-weight:${selected?'700':'500'};color:${selected?'var(--violet)':'var(--text)'}">${o.label}</span>
+            ${selected?`<span style="color:var(--violet)">${pIcon('check',15)}</span>`:''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function selectSimpleOption(selectId,value){
+  const sel=document.getElementById(selectId);
+  if(sel){sel.value=value;sel.dispatchEvent(new Event("change"));}
+  renderSimpleTrigger(selectId);
+  closeModelPicker();
 }
 
 // ── IMAGE MODEL CAPABILITIES — drives which tools/fields actually show up
