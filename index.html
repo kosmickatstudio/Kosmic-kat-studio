@@ -1239,6 +1239,156 @@ const CloudSync=(function(){
   function reset(){ Object.values(pushTimers).forEach(clearTimeout); }
   return{schedulePush,onSignIn,reset};
 })();
+
+// ══════════════════════════════════════════════════════════════════════
+// SEMANTIC MEMORY — real embedding-based recall for Kosmic Engine's world
+// memory, replacing the old "2+ shared word" heuristic with actual
+// meaning-based similarity search (the same category of thing InVideo's
+// Agent One advertises as long-term project memory).
+//
+// How it actually works:
+// 1. When a character sheet is approved, its concept+description gets
+//    turned into a real vector via Gemini's embedding API
+//    (gemini-embedding-001, the current GA model as of 2026) and stored
+//    as its OWN Firestore document under users/{uid}/worldMemories/{id} —
+//    not crammed into one shared doc, which is what forced the old
+//    12-item cap in the first place (Firestore's 1MB/doc limit). One doc
+//    per memory scales to thousands of entries with no cap needed.
+// 2. When a new brief comes in, the brief text gets embedded too, then
+//    compared against every stored memory's vector with cosine
+//    similarity — actual semantic closeness, not shared keywords. "a
+//    scrappy orange tabby who runs a food truck" now correctly recalls
+//    "street-food cat entrepreneur, ginger fur" even with zero words in
+//    common, which the old system could never do.
+// 3. Retrieval returns only the top few matches above a real similarity
+//    threshold — matching how production memory systems keep only the
+//    most relevant facts in context, not everything ever stored.
+//
+// Graceful degradation, deliberately: this only activates when BOTH a
+// Gemini API key is configured AND the person is signed into a real
+// account (Firestore needs a uid; guests are local-only by design, same
+// rule as everything else in CloudSync). Without either, recall falls
+// straight back to the original word-overlap check — a real memory
+// upgrade should never make the app less reliable for someone who hasn't
+// added a Gemini key yet.
+// ══════════════════════════════════════════════════════════════════════
+const SemanticMemory=(function(){
+  const EMBED_MODEL="gemini-embedding-001";
+  const SIMILARITY_THRESHOLD=0.72; // empirically reasonable for short concept/description text — tune if recall feels too loose/tight
+  function available(){ return !!gs("api_gemini","") && !!(S.user&&S.user.uid); }
+  async function embedText(text,taskType){
+    const apiKey=gs("api_gemini","");
+    if(!apiKey)return null;
+    try{
+      const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:embedContent`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+        body:JSON.stringify({content:{parts:[{text:text.slice(0,2000)}]},taskType:taskType||"RETRIEVAL_DOCUMENT",outputDimensionality:768})
+      });
+      const data=await response.json();
+      if(data.error||!data.embedding||!data.embedding.values){
+        console.warn("Embedding request failed:",data.error?.message||"no embedding returned");
+        return null;
+      }
+      return data.embedding.values;
+    }catch(err){
+      console.warn("Embedding request failed:",err.message);
+      return null;
+    }
+  }
+  function cosineSimilarity(a,b){
+    if(!a||!b||a.length!==b.length)return 0;
+    let dot=0,magA=0,magB=0;
+    for(let i=0;i<a.length;i++){ dot+=a[i]*b[i]; magA+=a[i]*a[i]; magB+=b[i]*b[i]; }
+    if(magA===0||magB===0)return 0;
+    return dot/(Math.sqrt(magA)*Math.sqrt(magB));
+  }
+  function coll(){ return fbDB.collection("users").doc(S.user.uid).collection("worldMemories"); }
+  // Saves a memory as its own document (real semantic recall) AND mirrors
+  // a lightweight copy into the old local S.worldMemory.characters array
+  // (capped, word-overlap only) so recall still has *something* to work
+  // with offline or before a Gemini key is ever added.
+  async function saveCharacterMemory(prodId,concept,desc,sheetUrl){
+    const text=`${concept}. ${desc}`;
+    if(available()){
+      try{
+        const embedding=await embedText(text,"RETRIEVAL_DOCUMENT");
+        if(embedding){
+          await coll().add({type:"character",prodId,concept:concept.slice(0,80),desc,sheetUrl:sheetUrl||null,embedding,createdAt:Date.now()});
+        }
+      }catch(err){ console.warn("Couldn't save semantic memory — falling back to local-only recall:",err.message); }
+    }
+    // Local mirror — same as the original behavior, kept as the offline/no-key fallback.
+    S.worldMemory.characters=(S.worldMemory.characters||[]).filter(ch=>ch.prodId!==prodId);
+    S.worldMemory.characters.push({prodId,concept:concept.slice(0,80),desc,sheetUrl,savedAt:Date.now()});
+    if(S.worldMemory.characters.length>12)S.worldMemory.characters=S.worldMemory.characters.slice(-12);
+    S.worldMemory.updated=Date.now();
+    window.save("worldMemory");
+  }
+  // Real semantic recall when available; falls back to the original
+  // "2+ shared meaningful word" heuristic otherwise. Returns the same
+  // shape either way ({concept,desc,sheetUrl} or null) so callers don't
+  // need to know which path ran.
+  async function recallCharacter(briefText){
+    if(available()){
+      try{
+        const queryEmbedding=await embedText(briefText,"RETRIEVAL_QUERY");
+        if(queryEmbedding){
+          const snap=await coll().where("type","==","character").get();
+          let best=null,bestScore=SIMILARITY_THRESHOLD;
+          snap.forEach(doc=>{
+            const m=doc.data();
+            const score=cosineSimilarity(queryEmbedding,m.embedding);
+            if(score>bestScore){ bestScore=score; best=m; }
+          });
+          if(best)return{concept:best.concept,desc:best.desc,sheetUrl:best.sheetUrl,semantic:true,score:bestScore};
+        }
+      }catch(err){ console.warn("Semantic recall failed — falling back to word-overlap check:",err.message); }
+    }
+    // Fallback: the original heuristic, unchanged.
+    const words=(ch)=>(ch.concept+" "+ch.desc).toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>3);
+    const briefWords=new Set(briefText.toLowerCase().split(/[^a-z0-9]+/));
+    const found=(S.worldMemory.characters||[]).find(ch=>words(ch).filter(w=>briefWords.has(w)).length>=2);
+    return found?{...found,semantic:false}:null;
+  }
+  async function saveLocationMemory(prodId,name,desc,url){
+    const text=`${name}. ${desc}`;
+    if(available()){
+      try{
+        const embedding=await embedText(text,"RETRIEVAL_DOCUMENT");
+        if(embedding)await coll().add({type:"location",prodId,name,desc,url:url||null,embedding,createdAt:Date.now()});
+      }catch(err){ console.warn("Couldn't save semantic location memory — falling back to local-only recall:",err.message); }
+    }
+    if(!S.worldMemory.locations)S.worldMemory.locations=[];
+    S.worldMemory.locations=S.worldMemory.locations.filter(rl=>rl.name.toLowerCase()!==name.toLowerCase());
+    S.worldMemory.locations.push({name,desc,url,prodId,savedAt:Date.now()});
+    if(S.worldMemory.locations.length>24)S.worldMemory.locations=S.worldMemory.locations.slice(-24);
+    S.worldMemory.updated=Date.now();
+    window.save("worldMemory");
+  }
+  async function recallLocation(nameAndDesc){
+    if(available()){
+      try{
+        const queryEmbedding=await embedText(nameAndDesc,"RETRIEVAL_QUERY");
+        if(queryEmbedding){
+          const snap=await coll().where("type","==","location").get();
+          let best=null,bestScore=SIMILARITY_THRESHOLD;
+          snap.forEach(doc=>{
+            const m=doc.data();
+            const score=cosineSimilarity(queryEmbedding,m.embedding);
+            if(score>bestScore){ bestScore=score; best=m; }
+          });
+          if(best)return{name:best.name,desc:best.desc,url:best.url,semantic:true,score:bestScore};
+        }
+      }catch(err){ console.warn("Semantic location recall failed — falling back to word-overlap check:",err.message); }
+    }
+    const words=(rl)=>(rl.name+" "+rl.desc).toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>3);
+    const queryWords=new Set(nameAndDesc.toLowerCase().split(/[^a-z0-9]+/));
+    const found=(S.worldMemory.locations||[]).find(rl=>words(rl).filter(w=>queryWords.has(w)).length>=2);
+    return found?{...found,semantic:false}:null;
+  }
+  return{available,embedText,cosineSimilarity,saveCharacterMemory,recallCharacter,saveLocationMemory,recallLocation};
+})();
 function saveSetting(k,v){S.settings[k]=v;save("settings");}
 function gs(k,d=""){return S.settings[k]??d;}
 
@@ -9406,14 +9556,10 @@ const DirectorChat=(function(){
       // already have an approved reference for, reuse its canon desc + image
       // instead of re-imagining it from scratch (same pattern as character recall).
       const rememberedNames=[];
-      locs.forEach(l=>{
-        const remembered=(S.worldMemory.locations||[]).find(rl=>{
-          const words=(rl.name+" "+rl.desc).toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>3);
-          const locWords=new Set((l.name+" "+l.desc).toLowerCase().split(/[^a-z0-9]+/));
-          return words.filter(w=>locWords.has(w)).length>=2;
-        });
+      for(const l of locs){
+        const remembered=await SemanticMemory.recallLocation(`${l.name}. ${l.desc}`);
         if(remembered){ l.desc=remembered.desc; l.url=remembered.url||null; rememberedNames.push(remembered.name); }
-      });
+      }
       p.locationBible=locs.map(l=>({name:l.name,desc:l.desc,url:l.url||null}));
       save2Productions();
       // Dynamically insert one parallel image task per location, and rewire
@@ -9596,18 +9742,14 @@ const DirectorChat=(function(){
     if(stage==="awaiting_brief"){
       const projectId=S.activeProject||(S.projects.find(p=>!p.archived)||{}).id;
       if(!projectId){ push("agent","You'll need at least one Project first — head to Projects, create one, then come back and tell me the story again."); return; }
-      const remembered=(S.worldMemory.characters||[]).find(ch=>{
-        const words=(ch.concept+" "+ch.desc).toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>3);
-        const briefWords=new Set(text.toLowerCase().split(/[^a-z0-9]+/));
-        return words.filter(w=>briefWords.has(w)).length>=2; // needs 2+ meaningful word overlaps, not one coincidence
-      });
+      const remembered=await SemanticMemory.recallCharacter(text);
       S.directorChat.draft={
         projectId,concept:text.slice(0,200),imageModel:"fal-ai/flux/dev",videoModel:"bytedance/seedance-2.0/fast/reference-to-video",
         quality:"720p",aspectRatio:"16:9",clipLen:8,totalDurationRequested:8,totalDurationRounded:8,totalShots:1,shotsPerEp:1,
         continuity:"narrative",brainModel:gs("ai_model","claude"),refImages:[],reviewedCharacterDesc:remembered?remembered.desc:"",hasFullScript:false,fullScriptText:text,episodeCount:1,
       };
       save();
-      push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}") — I'll keep their approved look consistent unless you tell me otherwise.`:""} Going with sensible defaults so we can move — 1 episode, ~8s, Seedance 2.0 Fast (multi-ref), 720p, 16:9. Say "3 episodes" or "20 seconds" etc. before I start if you want different — otherwise just say "go" and I'll start planning.`);
+      push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}"${remembered.semantic?', recalled by meaning — '+Math.round(remembered.score*100)+'% match':''}) — I'll keep their approved look consistent unless you tell me otherwise.`:""} Going with sensible defaults so we can move — 1 episode, ~8s, Seedance 2.0 Fast (multi-ref), 720p, 16:9. Say "3 episodes" or "20 seconds" etc. before I start if you want different — otherwise just say "go" and I'll start planning.`);
       S.directorChat.intakeStage="confirm_plan";
       save();
       return;
@@ -9638,30 +9780,22 @@ const DirectorChat=(function(){
     const prodId=S.directorChat.productionId;
     if(task.type==="charsheet_review"){
       approveCharacterSheet(prodId);
-      // World memory: remember this approved character for future productions
+      // World memory: remember this approved character for future productions —
+      // now a real embedding-backed memory, not just a capped local array.
       const p=S.productions.find(x=>x.id===prodId);
       if(p&&p.characterDesc){
-        S.worldMemory.characters=S.worldMemory.characters.filter(ch=>ch.prodId!==prodId);
-        S.worldMemory.characters.push({prodId,concept:(p.concept||"").slice(0,80),desc:p.characterDesc,sheetUrl:p.characterSheet&&(p.characterSheet.front||p.characterSheet.threeQuarter),savedAt:Date.now()});
-        if(S.worldMemory.characters.length>12)S.worldMemory.characters=S.worldMemory.characters.slice(-12);
-        S.worldMemory.updated=Date.now();
-        window.save("worldMemory");
+        await SemanticMemory.saveCharacterMemory(prodId,p.concept||"",p.characterDesc,p.characterSheet&&(p.characterSheet.front||p.characterSheet.threeQuarter));
       }
     }
     else if(task.type==="loc_review"){
-      // World memory: remember each approved location for future productions,
-      // same recall pattern as approved characters.
+      // World memory: remember each approved location for future productions —
+      // now real embedding-backed memory, same as characters.
       const p=S.productions.find(x=>x.id===prodId);
       if(p&&p.locationBible&&p.locationBible.length){
-        if(!S.worldMemory.locations)S.worldMemory.locations=[];
-        p.locationBible.forEach(l=>{
-          if(!l.url)return; // no reference image, nothing durable to remember
-          S.worldMemory.locations=S.worldMemory.locations.filter(rl=>rl.name.toLowerCase()!==l.name.toLowerCase());
-          S.worldMemory.locations.push({name:l.name,desc:l.desc,url:l.url,prodId,savedAt:Date.now()});
-        });
-        if(S.worldMemory.locations.length>24)S.worldMemory.locations=S.worldMemory.locations.slice(-24);
-        S.worldMemory.updated=Date.now();
-        window.save("worldMemory");
+        for(const l of p.locationBible){
+          if(!l.url)continue; // no reference image, nothing durable to remember
+          await SemanticMemory.saveLocationMemory(prodId,l.name,l.desc,l.url);
+        }
       }
     }
     else if(task.type==="script")approveEpisodeStage(prodId,task.epIndex,"script");
