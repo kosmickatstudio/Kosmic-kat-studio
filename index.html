@@ -8261,7 +8261,7 @@ function submitDirectorIntake(projectId){
   if(refImages.length){
     renderDirectorReviewStep();
   } else {
-    renderAssistantDirectorStep();
+    renderEpisodePlanningStep();
   }
 }
 
@@ -8358,12 +8358,12 @@ async function renderDirectorReviewStep(){
 
 function confirmDirectorReview(){
   S.pendingProductionDraft.reviewedCharacterDesc=document.getElementById("reviewedDescText").value.trim();
-  renderAssistantDirectorStep();
+  renderEpisodePlanningStep();
 }
 
 function skipDirectorReview(){
   S.pendingProductionDraft.reviewedCharacterDesc="";
-  renderAssistantDirectorStep();
+  renderEpisodePlanningStep();
 }
 
 // ── STEP 2: ASSISTANT DIRECTOR — budget + split ──
@@ -8558,14 +8558,14 @@ async function runPromptwriter(silent=false){
 
   try{
     const reply=await callAiSimple(
-      `${task}\n\nAlso pick exactly ONE directorial approach that best fits this story's genre and tone, from this list: ${personaList}.\n\n${continuityNote}${reviewNote}\n\n${durationRule}\n\nAlso identify 1-3 key recurring locations/settings this story actually takes place in (skip this if it's just one simple location not worth a dedicated reference sheet).\n\nFormat EXACTLY like this, nothing else:\nPERSONA: <one name from the list, no title>\nCHARACTERS: <character description text>\nLOCATIONS: <location name>: <short visual description>\n<location name 2>: <short visual description>\n(one per line, omit this whole section if there's nothing worth a dedicated sheet)\nEPISODE 1: <duration>s | <content for episode 1>\nEPISODE 2: <duration>s | <content for episode 2>\n(continue for all ${n} episodes)`,
+      `${task}\n\nAlso pick exactly ONE directorial approach that best fits this story's genre and tone, from this list: ${personaList}.\n\n${continuityNote}${reviewNote}\n\n${durationRule}\n\nAlso list every named character who actually appears, each tagged by story importance:\n- MC: the single main character/protagonist (exactly one)\n- LEAD: co-leads, the antagonist, or any other character important enough to need their own dedicated visual reference (zero or more)\n- SIDE: minor/background characters who only need a quick shared reference, not a full dedicated sheet (zero or more)\n\nAlso identify 1-3 key recurring locations/settings this story actually takes place in (skip this if it's just one simple location not worth a dedicated reference sheet).\n\nFormat EXACTLY like this, nothing else:\nPERSONA: <one name from the list, no title>\nCHARACTER: MC | <name> | <full visual description — appearance, build, clothing, distinguishing features>\nCHARACTER: LEAD | <name> | <full visual description>\nCHARACTER: SIDE | <name> | <short visual description>\n(one CHARACTER line per character, in this exact format, order doesn't matter)\nLOCATIONS: <location name>: <short visual description>\n<location name 2>: <short visual description>\n(one per line, omit this whole section if there's nothing worth a dedicated sheet)\nEPISODE 1: <duration>s | <content for episode 1>\nEPISODE 2: <duration>s | <content for episode 2>\n(continue for all ${n} episodes)`,
       "You are a professional Promptwriter for an AI video production pipeline. Follow the requested format exactly, one line per field, no markdown, no extra commentary.",
       draft.brainModel
     );
     const parsed=parsePromptwriterOutput(reply,n,minClip,maxClip);
     if(!parsed)throw new Error("Couldn't parse Promptwriter output — try again");
     const prodId=createProduction(draft,parsed);
-    logCost(draft.brainModel+"_promptwriter","Promptwriter: "+draft.concept.slice(0,40));
+    trackProductionCost(S.productions.find(x=>x.id===prodId),draft.brainModel+"_promptwriter","Promptwriter: "+draft.concept.slice(0,40));
     S.pendingProductionDraft=null;
     if(!silent){
       document.getElementById("prodWizardModal").remove();
@@ -8590,8 +8590,23 @@ function parsePromptwriterOutput(text,n,minClip,maxClip){
   const matchedDirector=DIRECTORS.find(d=>d.name.toLowerCase().includes(rawPersonaName.toLowerCase())||rawPersonaName.toLowerCase().includes(d.id));
   const persona=matchedDirector||DIRECTORS[0]; // fallback: first persona if AI's answer didn't match cleanly
 
-  const charMatch=text.match(/CHARACTERS:\s*([\s\S]*?)(?=LOCATIONS:|EPISODE 1:)/i);
-  const characterDesc=charMatch?charMatch[1].trim():"";
+  // New tiered format: one or more "CHARACTER: TIER | Name | Description" lines.
+  // Parsed into a structured array (characters) so the Character Sheet step can
+  // generate one dedicated sheet per MC/LEAD character and one shared sheet for
+  // all SIDE characters together, instead of guessing at names inside one
+  // combined paragraph. characterDesc is still computed as a joined string
+  // below — shot/storyboard/scene generation legitimately need to know about
+  // every character in the cast together, that part isn't the bug.
+  const charLines=[...text.matchAll(/CHARACTER:\s*(MC|LEAD|SIDE)\s*\|\s*([^|]+)\|\s*(.+)/gi)];
+  let characters=charLines.map(m=>({tier:m[1].toUpperCase(),name:m[2].trim(),desc:m[3].trim()}));
+  if(!characters.some(c=>c.tier==="MC")&&characters.length)characters[0].tier="MC"; // AI forgot the tag — first character named is the safest guess for lead
+  if(!characters.length){
+    // Fallback for the old single-blob format (or a malformed reply) — treat
+    // the whole thing as one MC entry rather than failing outright.
+    const legacyMatch=text.match(/CHARACTERS?:\s*([\s\S]*?)(?=LOCATIONS:|EPISODE 1:)/i);
+    if(legacyMatch&&legacyMatch[1].trim())characters=[{tier:"MC",name:"Character",desc:legacyMatch[1].trim()}];
+  }
+  const characterDesc=characters.map(c=>`${c.name}: ${c.desc}`).join(" ");
 
   // Locations section is optional in the format — only Kosmic Engine's Location
   // Bible feature reads this; the existing wizard flow never references
@@ -8612,7 +8627,7 @@ function parsePromptwriterOutput(text,n,minClip,maxClip){
     duration=Math.max(minClip,Math.min(maxClip,duration)); // clamp to this model's real valid range
     episodes.push({duration,content:m[2].trim()});
   }
-  return {characterDesc,episodes,persona:persona.name.replace('Director ',''),personaId:persona.id,locations};
+  return {characterDesc,characters,episodes,persona:persona.name.replace('Director ',''),personaId:persona.id,locations};
 }
 
 function createProduction(draft,parsed){
@@ -8620,8 +8635,11 @@ function createProduction(draft,parsed){
     id:"prod_"+Date.now(),
     ...draft,
     characterDesc:parsed.characterDesc,
+    characters:parsed.characters||[], // tiered MC/LEAD/SIDE breakdown — see generateCharacterSheet
     characterSheetStatus:"pending", // pending -> generating -> ready -> approved
-    characterSheet:null,
+    characterSheet:null, // legacy view-keyed shape, still used by Kosmic Engine's own separate charsheet_view task — left untouched
+    characterSheets:null, // new tiered shape: [{tier,name,desc,sheetUrl}] — one composite sheet per MC/LEAD character, one shared sheet for all SIDE characters
+    costSpent:0,
     persona:parsed.persona,
     personaId:parsed.personaId,
     locations:parsed.locations||[], // from Promptwriter's own LOCATIONS: section — Kosmic Engine's loc_plan reuses this instead of re-deriving locations from scratch with a second AI call
@@ -8653,29 +8671,47 @@ function openProductionDetail(prodId){
   const allApproved=p.episodes.every(e=>e.sceneStatus==="approved");
   el.innerHTML=`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-      <button class="btn btn-ghost btn-sm" onclick="renderModule('directors')">← Directorial Studio</button>
-      <div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">🎬 ${p.concept.slice(0,60)}</div><div style="font-size:11px;color:var(--textm)">${p.episodes.length} episode${p.episodes.length!==1?'s':''} · Director ${p.persona||''} · ${p.continuity}</div></div>
-      ${allApproved?`<button class="btn btn-primary btn-sm" onclick="finalizeProductionToEditor('${p.id}')">🎞 Finalize to Video Editor</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="renderModule('directors')">${pIcon('back')} Directorial Studio</button>
+      <div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">${p.concept.slice(0,60)}</div><div style="font-size:11px;color:var(--textm)">${p.episodes.length} episode${p.episodes.length!==1?'s':''} · Director ${p.persona||''} · ${p.continuity}</div></div>
+      ${allApproved?`<button class="btn btn-primary btn-sm" onclick="finalizeProductionToEditor('${p.id}')">${pIcon('film',14)} Finalize to Video Editor</button>`:''}
+    </div>
+    <div style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--violet);background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.25);border-radius:10px;padding:8px 12px;margin-bottom:14px">
+      ${pIcon('sparkle',13)} $${(p.costSpent||0).toFixed(2)} spent so far on this production
     </div>
     <div class="panel">
       <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between">
-        <span>🎭 Character Sheet</span>${(()=>{const st=p.characterSheetStatus||"pending";return `<span class="badge ${st==='approved'?'badge-green':st==='ready'?'badge-violet':st==='generating'?'badge-orange':'badge-gray'}">${{pending:'Not created',generating:'Generating…',ready:'Awaiting your approval',approved:'✅ Approved'}[st]||st}</span>`;})()}
+        <span>${pIcon('mask')} Character Sheet${p.characterSheets&&p.characterSheets.length>1?'s':''}</span>${(()=>{const st=p.characterSheetStatus||"pending";return `<span class="badge ${st==='approved'?'badge-green':st==='ready'?'badge-violet':st==='generating'?'badge-orange':'badge-gray'}">${{pending:'Not created',generating:'Generating…',ready:'Awaiting your approval',approved:'Approved'}[st]||st}</span>`;})()}
       </div>
-      <div style="font-size:12px;color:var(--textm);line-height:1.6;margin-bottom:10px">${p.characterDesc||'—'}</div>
-      ${(!p.characterSheetStatus||p.characterSheetStatus==='pending')?`<button class="btn btn-primary btn-sm" onclick="generateCharacterSheet('${p.id}')">🎨 Generate Character Sheet</button>`:''}
-      ${p.characterSheetStatus==='generating'?`<div style="font-size:11px;color:var(--textm)">Generating front, back, side, 3/4, face, and special-feature reference views…</div>`:''}
-      ${p.characterSheet?`<div class="grid3" style="margin-bottom:10px">${["front","back","side","threeQuarter","face","special"].filter(k=>p.characterSheet[k]).map(k=>`<div style="text-align:center"><img src="${p.characterSheet[k]}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;margin-bottom:3px"><div style="font-size:9px;color:var(--textm);text-transform:uppercase;font-weight:700">${({front:"Front",back:"Back",side:"Side",threeQuarter:"3/4",face:"Face",special:"Special Features"})[k]}</div></div>`).join('')}</div>`:''}
+      ${(p.characters&&p.characters.length)?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">${p.characters.map(c=>`<span class="badge ${c.tier==='MC'?'badge-violet':c.tier==='LEAD'?'badge-gold':'badge-gray'}">${c.tier} · ${c.name}</span>`).join('')}</div>`
+        :`<div style="font-size:12px;color:var(--textm);line-height:1.6;margin-bottom:10px">${p.characterDesc||'—'}</div>`}
+      ${(!p.characterSheetStatus||p.characterSheetStatus==='pending')?`<button class="btn btn-primary btn-sm" onclick="generateCharacterSheet('${p.id}')">${pIcon('sparkle',13)} Generate Character Sheet${p.characters&&p.characters.length>1?'s':''}</button>`:''}
+      ${p.characterSheetStatus==='generating'?`<div style="font-size:11px;color:var(--textm)">Generating one composite reference sheet per main/lead character${(p.characters||[]).some(c=>c.tier==='SIDE')?', plus one shared sheet for side characters':''}…</div>`:''}
+      ${p.characterSheets&&p.characterSheets.length?`<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px">${p.characterSheets.map(s=>`
+        <div>
+          <div style="font-size:11px;font-weight:700;color:${s.tier==='MC'?'var(--violet)':s.tier==='LEAD'?'var(--gold)':'var(--textm)'};margin-bottom:4px">${s.tier==='SIDE'?'Side Characters':s.tier+' · '+s.name}</div>
+          <img src="${s.sheetUrl}" style="width:100%;border-radius:10px;border:1.5px solid var(--border);display:block">
+        </div>`).join('')}</div>`
+        :(p.characterSheet?`<div class="grid3" style="margin-bottom:10px">${["front","back","side","threeQuarter","face","special"].filter(k=>p.characterSheet[k]).map(k=>`<div style="text-align:center"><img src="${p.characterSheet[k]}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;margin-bottom:3px"><div style="font-size:9px;color:var(--textm);text-transform:uppercase;font-weight:700">${({front:"Front",back:"Back",side:"Side",threeQuarter:"3/4",face:"Face",special:"Special Features"})[k]}</div></div>`).join('')}</div>`:'')}
       ${p.characterSheetStatus==='ready'?`<div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-xs" onclick="approveCharacterSheet('${p.id}')">✅ Approve</button>
-        <button class="btn btn-outline btn-xs" onclick="generateCharacterSheet('${p.id}')">🔄 Regenerate</button>
+        <button class="btn btn-primary btn-xs" onclick="approveCharacterSheet('${p.id}')">${pIcon('check',12)} Approve</button>
+        <button class="btn btn-outline btn-xs" onclick="generateCharacterSheet('${p.id}')">${pIcon('restore',12)} Regenerate</button>
       </div>`:''}
-      ${p.characterSheetStatus==='approved'?`<button class="btn btn-outline btn-xs" onclick="generateCharacterSheet('${p.id}')">🔄 Regenerate Sheet</button>`:''}
-      ${(!p.characterSheetStatus||p.characterSheetStatus!=='approved')?`<div style="font-size:10px;color:#b45309;margin-top:8px">⚠️ Episode Directors need an approved Character Sheet before they can build storyboards — this keeps every shot visually consistent with the same character.</div>`:''}
+      ${p.characterSheetStatus==='approved'?`<button class="btn btn-outline btn-xs" onclick="generateCharacterSheet('${p.id}')">${pIcon('restore',12)} Regenerate Sheet${p.characterSheets&&p.characterSheets.length>1?'s':''}</button>`:''}
+      ${(!p.characterSheetStatus||p.characterSheetStatus!=='approved')?`<div style="font-size:10px;color:#b45309;margin-top:8px">${pIcon('sparkle',10)} Episode Directors need an approved Character Sheet before they can build storyboards — this keeps every shot visually consistent with the same characters.</div>`:''}
     </div>
     <div style="display:flex;flex-direction:column;gap:12px">
       ${p.episodes.map(e=>episodeCardHTML(p,e)).join('')}
     </div>
   `;
+}
+
+// Wraps logCost() with a running per-production total (p.costSpent), so the
+// Production Pipeline view can show real accumulated spend at every step
+// instead of a one-time rough estimate shown before any generation happens.
+function trackProductionCost(p,key,note,count){
+  logCost(key,note,count);
+  const amt=(COST_TABLE[key]!==undefined?COST_TABLE[key]:0.02)*(count||1);
+  p.costSpent=(p.costSpent||0)+amt;
 }
 
 async function generateCharacterSheet(prodId){
@@ -8684,42 +8720,66 @@ async function generateCharacterSheet(prodId){
   p.characterSheetStatus="generating";
   save("productions");
   openProductionDetail(prodId);
-  const views=[
-    {key:"front",prompt:"full body character turnaround reference, front view, neutral standing pose, clean plain background, character design sheet"},
-    {key:"back",prompt:"full body character turnaround reference, back view, neutral standing pose, clean plain background, character design sheet"},
-    {key:"side",prompt:"full body character turnaround reference, side profile view, neutral standing pose, clean plain background, character design sheet"},
-    {key:"threeQuarter",prompt:"full body character turnaround reference, 3/4 angle view, neutral standing pose, clean plain background, character design sheet"},
-    {key:"face",prompt:"close-up face portrait reference, detailed facial features, neutral expression, clean plain background, character design sheet"},
-    {key:"special",prompt:"close-up reference of the character's distinguishing special features — scars, markings, unique accessories, or unusual anatomy — clean plain background, character design sheet"},
-  ];
-  const sheet=p.characterSheet||{};
+
+  // Older productions created before this format existed won't have a
+  // tiered characters array — fall back to one MC entry from the combined
+  // description rather than generating nothing.
+  const characters=(p.characters&&p.characters.length)?p.characters:[{tier:"MC",name:"Character",desc:p.characterDesc||""}];
+  const leads=characters.filter(c=>c.tier==="MC"||c.tier==="LEAD");
+  const sides=characters.filter(c=>c.tier==="SIDE");
+
+  const sheets=[];
   let failCount=0;
-  for(const v of views){
+
+  // One composite reference sheet per MC/LEAD character — a single image
+  // containing front, back, 3/4, and close-up face/detail views arranged
+  // together (like a real production turnaround sheet), generated using
+  // ONLY that character's own description. This is what fixes two things
+  // at once: no more 6 separate images per character, and no more other
+  // characters' descriptions bleeding into a shot that should only have one
+  // person in it.
+  for(const c of leads){
     try{
-      const fullPrompt=`${p.characterDesc}, ${v.prompt}`;
+      const prompt=`${c.desc}, full character reference turnaround sheet, single composite image arranged in a grid showing: front full-body view, back full-body view, 3/4 angle full-body view, and a close-up face portrait — consistent character design across all views, clean plain background, professional character design sheet, only this one character, no other people`;
       let result;
-      if(p.imageModel&&p.imageModel.startsWith("gemini-")){
-        result=await genViaGemini(fullPrompt,"1:1",p.imageModel);
-      } else if(p.imageModel==="gpt-image-2"){
-        result=await genViaOpenAI(fullPrompt,"1:1");
-      } else {
-        result=await genViaFal(fullPrompt,"",p.imageModel||"fal-ai/flux/dev","1:1",false);
-      }
-      sheet[v.key]=result.url;
-      logCost(p.imageModel,`Character Sheet — ${v.key}`);
+      if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(prompt,"1:1",p.imageModel);
+      else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,"1:1");
+      else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/nano-banana-pro","1:1",false);
+      sheets.push({tier:c.tier,name:c.name,desc:c.desc,sheetUrl:result.url});
+      trackProductionCost(p,p.imageModel,`Character Sheet — ${c.name}`);
     }catch(err){
       failCount++;
-      toast(`❌ Character Sheet ${v.key} view failed: ${err.message}`,"error");
+      toast(`❌ Character Sheet for ${c.name} failed: ${err.message}`,"error");
     }
-    p.characterSheet=sheet;
+    p.characterSheets=sheets;
     save("productions");
     openProductionDetail(prodId);
   }
-  p.characterSheetStatus=Object.keys(sheet).length>0?"ready":"pending";
+
+  // All SIDE characters share ONE reference image instead of a dedicated
+  // sheet each — a simple lineup, not a full turnaround per person.
+  if(sides.length){
+    try{
+      const lineup=sides.map(c=>`${c.name} (${c.desc})`).join("; ");
+      const prompt=`Character lineup reference sheet, ${sides.length} distinct background/side characters standing side by side for comparison, each clearly separated: ${lineup}. Clean plain background, consistent lighting, simple standing poses, professional character design reference — each character visually distinct from the others.`;
+      let result;
+      if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(prompt,"16:9",p.imageModel);
+      else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,"16:9");
+      else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/nano-banana-pro","16:9",false);
+      sheets.push({tier:"SIDE",name:sides.map(c=>c.name).join(", "),desc:lineup,sheetUrl:result.url});
+      trackProductionCost(p,p.imageModel,`Character Sheet — Side characters lineup`);
+    }catch(err){
+      failCount++;
+      toast(`❌ Side character lineup failed: ${err.message}`,"error");
+    }
+  }
+
+  p.characterSheets=sheets;
+  p.characterSheetStatus=sheets.length>0?"ready":"pending";
   save("productions");
   openProductionDetail(prodId);
-  if(failCount===0)toast("🎨 Character Sheet ready for your approval","success");
-  else toast(`⚠️ Character Sheet has ${failCount} failed view${failCount!==1?'s':''} — regenerate to retry`,"error");
+  if(failCount===0)toast(`Character Sheets ready for your approval — ${sheets.length} sheet${sheets.length!==1?'s':''}`,"success");
+  else toast(`⚠️ ${failCount} character sheet${failCount!==1?'s':''} failed — regenerate to retry`,"error");
 }
 
 function approveCharacterSheet(prodId){
@@ -8736,24 +8796,24 @@ function episodeCardHTML(p,e){
   const isEditingScript=S.editingScriptFor===`${p.id}_${e.index}`;
   return `<div class="panel">
     <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between">
-      <span>🎬 Episode ${e.index} <span style="font-weight:400;color:var(--textm);font-size:11px">— ${e.approach} · ${e.duration}s${e.genre?` · ${e.genre}`:''}</span></span>
-      ${stageBadge(e.sceneStatus==='approved'?'approved':e.storyboardStatus==='approved'?'storyboard':e.scriptStatus==='approved'?'script':'pending',{approved:'✅ Complete',storyboard:'🖼 Storyboard stage',script:'✍️ Script approved',pending:'⬜ Not started'})}
+      <span>${pIcon('film')} Episode ${e.index} <span style="font-weight:400;color:var(--textm);font-size:11px">— ${e.approach} · ${e.duration}s${e.genre?` · ${e.genre}`:''}</span></span>
+      ${stageBadge(e.sceneStatus==='approved'?'approved':e.storyboardStatus==='approved'?'storyboard':e.scriptStatus==='approved'?'script':'pending',{approved:'Complete',storyboard:'Storyboard stage',script:'Script approved',pending:'Not started'})}
     </div>
     <div style="font-size:11px;color:var(--textm);margin-bottom:10px;font-style:italic">"${e.masterPrompt.slice(0,120)}${e.masterPrompt.length>120?'…':''}"</div>
 
     <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <span style="font-size:11px;font-weight:700;color:var(--violet)">1. SCRIPT</span>${stageBadge(e.scriptStatus,{pending:'Not written',ready:'Awaiting your approval',approved:'✅ Approved',rejected:'❌ Rejected — rewriting'})}
+        <span style="font-size:11px;font-weight:700;color:var(--violet)">1. SCRIPT</span>${stageBadge(e.scriptStatus,{pending:'Not written',ready:'Awaiting your approval',approved:'Approved',rejected:'Rejected — rewriting'})}
       </div>
-      ${e.scriptStatus==='pending'?`<button class="btn btn-primary btn-sm" onclick="generateEpisodeScript('${p.id}',${e.index})">✍️ Write Script</button>`:''}
+      ${e.scriptStatus==='pending'?`<button class="btn btn-primary btn-sm" onclick="generateEpisodeScript('${p.id}',${e.index})">${pIcon('pencil',13)} Write Script</button>`:''}
       ${e.script&&!isEditingScript?`<div style="font-size:11px;color:var(--textm);white-space:pre-wrap;max-height:160px;overflow-y:auto;background:rgba(61,31,122,0.04);border-radius:6px;padding:8px;margin-bottom:6px">${e.script}</div>`:''}
       ${e.script&&isEditingScript?`<textarea class="f-textarea" id="scriptEditText_${e.index}" style="min-height:140px;margin-bottom:6px">${e.script}</textarea>`:''}
       ${e.scriptStatus==='ready'?`<div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-xs" onclick="approveEpisodeStage('${p.id}',${e.index},'script')">✅ Approve</button>
+        <button class="btn btn-primary btn-xs" onclick="approveEpisodeStage('${p.id}',${e.index},'script')">${pIcon('check',12)} Approve</button>
         ${isEditingScript
-          ?`<button class="btn btn-outline btn-xs" onclick="saveScriptEdit('${p.id}',${e.index})">💾 Save Changes</button>`
-          :`<button class="btn btn-outline btn-xs" onclick="toggleScriptEdit('${p.id}',${e.index})">✏️ Edit</button>`}
-        <button class="btn btn-danger btn-xs" onclick="rejectEpisodeStage('${p.id}',${e.index},'script')">❌ Reject & Rewrite</button>
+          ?`<button class="btn btn-outline btn-xs" onclick="saveScriptEdit('${p.id}',${e.index})">${pIcon('doc',12)} Save Changes</button>`
+          :`<button class="btn btn-outline btn-xs" onclick="toggleScriptEdit('${p.id}',${e.index})">${pIcon('pencil',12)} Edit</button>`}
+        <button class="btn btn-danger btn-xs" onclick="rejectEpisodeStage('${p.id}',${e.index},'script')">${pIcon('trash',12)} Reject & Rewrite</button>
       </div>`:''}
     </div>
 
@@ -8761,23 +8821,23 @@ function episodeCardHTML(p,e){
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
         <span style="font-size:11px;font-weight:700;color:var(--violet)">2. STORYBOARD</span>
         <div style="display:flex;align-items:center;gap:6px">
-          <button class="btn btn-ghost btn-xs" onclick="goToPreviousStage('${p.id}',${e.index},'storyboard')" title="Go back to revise the script">◀ Back to Script</button>
-          ${stageBadge(e.storyboardStatus,{pending:'Not generated',ready:'Awaiting your approval',partial:'⚠️ Incomplete',approved:'✅ Approved',rejected:'❌ Rejected — redoing'})}
+          <button class="btn btn-ghost btn-xs" onclick="goToPreviousStage('${p.id}',${e.index},'storyboard')" title="Go back to revise the script">${pIcon('back',11)} Back to Script</button>
+          ${stageBadge(e.storyboardStatus,{pending:'Not generated',ready:'Awaiting your approval',partial:'Incomplete',approved:'Approved',rejected:'Rejected — redoing'})}
         </div>
       </div>
       ${e.storyboardStatus==='pending'?(p.characterSheetStatus==='approved'?`<div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" onclick="generateEpisodeStoryboard('${p.id}',${e.index})">🖼 Generate Storyboard</button>
-        <button class="btn btn-outline btn-sm" onclick="document.getElementById('ep${e.index}StoryboardUpload').click()">📤 Upload Storyboard</button>
+        <button class="btn btn-primary btn-sm" onclick="generateEpisodeStoryboard('${p.id}',${e.index})">${pIcon('image',13)} Generate Storyboard</button>
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('ep${e.index}StoryboardUpload').click()">${pIcon('upload',13)} Upload Storyboard</button>
         <input type="file" id="ep${e.index}StoryboardUpload" accept="image/*" multiple style="display:none" onchange="uploadEpisodeStoryboard('${p.id}',${e.index},event)">
-      </div>`:`<div style="font-size:11px;color:#b45309">⚠️ Approve the Character Sheet above first — Episode Directors need it to keep this character consistent across every shot.</div>`):''}
+      </div>`:`<div style="font-size:11px;color:#b45309">Approve the Character Sheet above first — Episode Directors need it to keep every character consistent across every shot.</div>`):''}
       ${e.storyboardStatus==='partial'?`<div style="font-size:11px;color:#b45309;margin-bottom:6px">Only ${e.storyboard.length} of ${e.shotsExpected||1} shot${(e.shotsExpected||1)!==1?'s':''} generated — approving now will produce an incomplete scene.</div>`:''}
       ${e.storyboard.length?`<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:6px">${e.storyboard.map(s=>`<img src="${s.url}" style="width:70px;height:70px;border-radius:6px;object-fit:cover;flex-shrink:0">`).join('')}</div>`:''}
       ${(e.storyboardStatus==='ready'||e.storyboardStatus==='partial')?`<div style="display:flex;gap:6px;flex-wrap:wrap">
-        ${e.storyboardStatus==='partial'?`<button class="btn btn-primary btn-xs" onclick="generateEpisodeStoryboard('${p.id}',${e.index},true)">🔄 Retry Missing Shots</button>`:''}
-        ${e.storyboardStatus==='partial'?`<button class="btn btn-outline btn-xs" onclick="document.getElementById('ep${e.index}StoryboardUpload').click()">📤 Upload Missing Shots</button>
+        ${e.storyboardStatus==='partial'?`<button class="btn btn-primary btn-xs" onclick="generateEpisodeStoryboard('${p.id}',${e.index},true)">${pIcon('restore',12)} Retry Missing Shots</button>`:''}
+        ${e.storyboardStatus==='partial'?`<button class="btn btn-outline btn-xs" onclick="document.getElementById('ep${e.index}StoryboardUpload').click()">${pIcon('upload',12)} Upload Missing Shots</button>
         <input type="file" id="ep${e.index}StoryboardUpload" accept="image/*" multiple style="display:none" onchange="uploadEpisodeStoryboard('${p.id}',${e.index},event)">`:''}
-        <button class="btn ${e.storyboardStatus==='partial'?'btn-outline':'btn-primary'} btn-xs" onclick="approveEpisodeStage('${p.id}',${e.index},'storyboard')">✅ Approve${e.storyboardStatus==='partial'?' Anyway':''}</button>
-        <button class="btn btn-danger btn-xs" onclick="rejectEpisodeStage('${p.id}',${e.index},'storyboard')">❌ Reject & Redo</button>
+        <button class="btn ${e.storyboardStatus==='partial'?'btn-outline':'btn-primary'} btn-xs" onclick="approveEpisodeStage('${p.id}',${e.index},'storyboard')">${pIcon('check',12)} Approve${e.storyboardStatus==='partial'?' Anyway':''}</button>
+        <button class="btn btn-danger btn-xs" onclick="rejectEpisodeStage('${p.id}',${e.index},'storyboard')">${pIcon('trash',12)} Reject & Redo</button>
       </div>`:''}
     </div>`:''}
 
@@ -8785,17 +8845,17 @@ function episodeCardHTML(p,e){
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
         <span style="font-size:11px;font-weight:700;color:var(--violet)">3. SCENE (VIDEO)</span>
         <div style="display:flex;align-items:center;gap:6px">
-          <button class="btn btn-ghost btn-xs" onclick="goToPreviousStage('${p.id}',${e.index},'scene')" title="Go back to revise the storyboard">◀ Back to Storyboard</button>
-          ${stageBadge(e.sceneStatus,{pending:'Not generated',ready:'Awaiting your approval',partial:'⚠️ Incomplete',approved:'✅ Approved'})}
+          <button class="btn btn-ghost btn-xs" onclick="goToPreviousStage('${p.id}',${e.index},'scene')" title="Go back to revise the storyboard">${pIcon('back',11)} Back to Storyboard</button>
+          ${stageBadge(e.sceneStatus,{pending:'Not generated',ready:'Awaiting your approval',partial:'Incomplete',approved:'Approved'})}
         </div>
       </div>
-      ${e.sceneStatus==='pending'?`<button class="btn btn-primary btn-sm" onclick="generateEpisodeScene('${p.id}',${e.index})">🎬 Generate Scene</button>`:''}
+      ${e.sceneStatus==='pending'?`<button class="btn btn-primary btn-sm" onclick="generateEpisodeScene('${p.id}',${e.index})">${pIcon('film',13)} Generate Scene</button>`:''}
       ${e.sceneStatus==='partial'?`<div style="font-size:11px;color:#b45309;margin-bottom:6px">Only ${e.shots.filter(s=>s.videoUrl).length} of ${e.storyboard.length} clips generated.</div>`:''}
       ${e.shots.length&&e.shots.some(s=>s.videoUrl)?`<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:6px">${e.shots.filter(s=>s.videoUrl).map(s=>`<video src="${s.videoUrl}" style="width:100px;height:60px;border-radius:6px;object-fit:cover;flex-shrink:0" muted></video>`).join('')}</div>`:''}
       ${(e.sceneStatus==='ready'||e.sceneStatus==='partial')?`<div style="display:flex;gap:6px;flex-wrap:wrap">
-        ${e.sceneStatus==='partial'?`<button class="btn btn-primary btn-xs" onclick="generateEpisodeScene('${p.id}',${e.index},true)">🔄 Retry Missing Clips</button>`:''}
-        <button class="btn ${e.sceneStatus==='partial'?'btn-outline':'btn-primary'} btn-xs" onclick="approveEpisodeStage('${p.id}',${e.index},'scene')">✅ Approve${e.sceneStatus==='partial'?' Anyway':''}</button>
-        <button class="btn btn-danger btn-xs" onclick="reshootEpisodeScene('${p.id}',${e.index})">🔄 Reshoot</button>
+        ${e.sceneStatus==='partial'?`<button class="btn btn-primary btn-xs" onclick="generateEpisodeScene('${p.id}',${e.index},true)">${pIcon('restore',12)} Retry Missing Clips</button>`:''}
+        <button class="btn ${e.sceneStatus==='partial'?'btn-outline':'btn-primary'} btn-xs" onclick="approveEpisodeStage('${p.id}',${e.index},'scene')">${pIcon('check',12)} Approve${e.sceneStatus==='partial'?' Anyway':''}</button>
+        <button class="btn btn-danger btn-xs" onclick="reshootEpisodeScene('${p.id}',${e.index})">${pIcon('restore',12)} Reshoot</button>
       </div>`:''}
     </div>`:''}
   </div>`;
@@ -8925,7 +8985,7 @@ async function generateEpisodeScript(prodId,epIndex){
     e.scriptStatus="ready";
     e.scriptRejectionFeedback=null;
     save("productions");
-    logCost((p.brainModel||"claude")+"_episode_script",`Ep${epIndex} script`);
+    trackProductionCost(p,(p.brainModel||"claude")+"_episode_script",`Ep${epIndex} script`);
     openProductionDetail(prodId);
     toast(`✍️ Episode ${epIndex} script ready for your approval`,"success");
   }catch(err){
@@ -9040,7 +9100,10 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
   for(let i=0;i<shotDescs.length;i++){if(!existingIndices.has(i))indicesToGenerate.push(i);}
   toast(`🖼 Episode ${epIndex} generating ${indicesToGenerate.length} storyboard frame${indicesToGenerate.length!==1?'s':''}…`,"");
 
-  const charSheetRef=(p.characterSheetStatus==="approved"&&p.characterSheet)?(p.characterSheet.threeQuarter||p.characterSheet.front||p.characterSheet.face):null;
+  const mcSheet=p.characterSheets&&p.characterSheets.find(s=>s.tier==="MC");
+  const charSheetRef=(p.characterSheetStatus==="approved")
+    ?(mcSheet?mcSheet.sheetUrl:(p.characterSheet?(p.characterSheet.threeQuarter||p.characterSheet.front||p.characterSheet.face):null))
+    :null;
   const userRef=(p.refImages&&p.refImages.length)?p.refImages[0].dataUrl:null;
   // Prefer an explicit user-uploaded reference if one was given; otherwise fall
   // back to the approved Character Sheet so every shot — not just the first —
@@ -9071,7 +9134,7 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
       }
       e.storyboard.push({shotIndex:i,url:result.url,desc:shotDescs[i]});
       e.storyboard.sort((a,b)=>a.shotIndex-b.shotIndex);
-      logCost(p.imageModel,`Ep${epIndex} storyboard shot ${i+1}`);
+      trackProductionCost(p,p.imageModel,`Ep${epIndex} storyboard shot ${i+1}`);
     }catch(err){
       toast(`❌ Storyboard shot ${i+1} failed: ${err.message}`,"error");
     }
@@ -9227,7 +9290,7 @@ async function generateEpisodeScene(prodId,epIndex,retryOnly=false){
       const videoUrl=await runProductionVideoGen(p.videoModel,`${sb.desc}, ${p.characterDesc}`,p.aspectRatio,e.duration,p.quality,refImage,e.negativePrompt,endImage);
       e.shots.push({shotIndex:i,videoUrl,refImage});
       e.shots.sort((a,b)=>a.shotIndex-b.shotIndex);
-      logCost(p.videoModel,`Ep${epIndex} scene shot ${i+1}`);
+      trackProductionCost(p,p.videoModel,`Ep${epIndex} scene shot ${i+1}`);
     }catch(err){
       toast(`❌ Scene shot ${i+1} failed: ${err.message}`,"error");
     }
