@@ -3317,7 +3317,7 @@ const IMAGE_MODEL_CAPABILITIES={
   // account or key needed. Verified real fal.ai endpoints.
   "fal-ai/nano-banana-2":{multiRef:true,maxRef:14,provider:"flux-edit",editModel:"fal-ai/nano-banana-2/edit"},
   "fal-ai/nano-banana-pro":{multiRef:true,maxRef:2,provider:"flux-edit",editModel:"fal-ai/gemini-3-pro-image-preview/edit"},
-  "openai/gpt-image-2":{},
+  "openai/gpt-image-2":{numImages:{max:4}},
   // FLUX 1.1 Pro Ultra takes aspect_ratio ("16:9") not the FLUX-family
   // image_size enum ("landscape_16_9") — genViaFal special-cases it below,
   // same pattern as Nano Banana's aspect_ratio branch. Confirmed on fal's
@@ -4058,7 +4058,6 @@ async function genViaFal(prompt,negPrompt,model,ratio,useImg2Img){
   const apiKey=gs("api_falai","");
   if(!apiKey)throw new Error("NO_KEY");
   const sizeMap={"16:9":"landscape_16_9","1:1":"square_hd","9:16":"portrait_16_9","4:3":"landscape_4_3","3:4":"portrait_4_3"};
-  const openaiSizeMap={"16:9":"1536x1024","1:1":"1024x1024","9:16":"1024x1536","4:3":"1536x1024","3:4":"1024x1536"};
   const isNanoBanana=model.includes("nano-banana");
   const isGptImage=model.startsWith("openai/gpt-image");
   const isFluxUltra=model==="fal-ai/flux-pro/v1.1-ultra";
@@ -4085,7 +4084,17 @@ async function genViaFal(prompt,negPrompt,model,ratio,useImg2Img){
     body.aspect_ratio=ratio||"1:1";
     if(cap.numImages)body.num_images=numImages;
   } else if(isGptImage){
-    body.size=openaiSizeMap[ratio]||"1024x1024"; // GPT Image 2 uses OpenAI's WxH size format even when routed through fal
+    // Was sending {size:"1536x1024"} (OpenAI's own native WxH format) —
+    // wrong for this route. fal's own API reference for openai/gpt-image-2
+    // confirms it actually takes the SAME image_size preset enum as the
+    // FLUX-family models below (e.g. "landscape_4_3"), plus quality and
+    // output_format. Sending a field name the endpoint doesn't recognize
+    // is exactly the kind of thing that silently fails or gets ignored —
+    // this was very likely why this specific route wasn't generating.
+    body.image_size=sizeMap[ratio]||"landscape_4_3";
+    body.quality="high";
+    body.output_format="png";
+    if(cap.numImages)body.num_images=numImages;
   } else {
     body.image_size=sizeMap[ratio]||"landscape_16_9";
     body.num_images=numImages;
