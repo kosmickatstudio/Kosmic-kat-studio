@@ -3476,9 +3476,11 @@ const IMAGE_MODEL_CAPABILITIES={
   "fal-ai/flux-pro/v1.1-ultra":{ratios:["21:9","16:9","4:3","3:2","1:1","2:3","3:4","9:16","9:21"],numImages:{max:4}},
   // Seedream 5.0 Pro's image_size presets (square_hd, landscape_16_9, etc)
   // match the same enum genViaFal already sends for FLUX-family models, so
-  // no special-casing needed here. (num_images support not independently
-  // confirmed for this specific endpoint — left out rather than guessed.)
-  "fal-ai/bytedance/seedream/v5/pro/text-to-image":{},
+  // no special-casing needed here. num_images confirmed real on fal's own
+  // launch announcement: "batch generation of up to six images per
+  // request" - higher max than the 4 used elsewhere in this file, so kept
+  // as its own explicit value rather than reusing a shared constant.
+  "fal-ai/bytedance/seedream/v5/pro/text-to-image":{numImages:{max:6}},
   // Bria FIBO takes aspect_ratio like FLUX Ultra, not image_size — but
   // unlike FLUX Ultra, FIBO's own schema DOES list negative_prompt as a
   // real accepted field, so genViaFal below no longer blanket-excludes it
@@ -9481,11 +9483,19 @@ const DirectorChat=(function(){
     }
     if(task.type==="model_select"){
       const p=S.productions.find(x=>x.id===S.directorChat.productionId);
-      const VALID_IMAGE=["fal-ai/flux/dev","fal-ai/nano-banana-2"];
+      // Upgraded from FLUX Dev / Nano Banana 2 to the two models that
+      // actually test best for prompt understanding + character
+      // consistency (both matter a lot more than raw speed for a
+      // character-driven production): Nano Banana Pro holds identity
+      // across up to 5 people/scenes with no fine-tuning; Seedream 5.0 Pro
+      // does genuine multi-step reasoning on complex/branded prompts and
+      // is meaningfully cheaper. Neither needs LoRA training to stay
+      // consistent, unlike FLUX.
+      const VALID_IMAGE=["fal-ai/nano-banana-pro","fal-ai/bytedance/seedream/v5/pro/text-to-image"];
       const VALID_VIDEO=["bytedance/seedance-2.0/fast/reference-to-video","bytedance/seedance-2.0/reference-to-video"];
       try{
         const reply=await callAiSimple(
-          `Story: "${p.concept}"\nCharacter: ${p.characterDesc.slice(0,300)}\n\nPick the best-fit models for this production from these REAL options — base this on the story's actual needs, not a default guess:\n\nIMAGE MODELS:\n- fal-ai/flux/dev: fast, cheap, solid general-purpose quality — good default\n- fal-ai/nano-banana-2: higher fidelity, handles many reference images well — better for visually complex or detail-heavy characters\n\nVIDEO MODELS:\n- bytedance/seedance-2.0/fast/reference-to-video: cheaper, quicker turnaround — good default\n- bytedance/seedance-2.0/reference-to-video: standard tier, higher quality output, more expensive — better for hero/high-stakes shots\n\nReply in EXACTLY this format, nothing else:\nIMAGE: <model id>\nVIDEO: <model id>\nREASON: <one short sentence>`,
+          `Story: "${p.concept}"\nCharacter: ${p.characterDesc.slice(0,300)}\n\nPick the best-fit models for this production from these REAL options — base this on the story's actual needs, not a default guess:\n\nIMAGE MODELS:\n- fal-ai/nano-banana-pro: best for multi-character scenes and consistency (holds identity across up to 5 people/scenes with no fine-tuning), native 4K — good default for character-driven stories\n- fal-ai/bytedance/seedream/v5/pro/text-to-image: better for complex/branded/text-heavy prompts (deep multi-step prompt reasoning, native multilingual text rendering), meaningfully cheaper — better when the brief has lots of specific detail to track\n\nVIDEO MODELS:\n- bytedance/seedance-2.0/fast/reference-to-video: cheaper, quicker turnaround — good default\n- bytedance/seedance-2.0/reference-to-video: standard tier, higher quality output, more expensive — better for hero/high-stakes shots\n\nReply in EXACTLY this format, nothing else:\nIMAGE: <model id>\nVIDEO: <model id>\nREASON: <one short sentence>`,
           "You are a technical producer choosing generation models based on real production needs and cost tradeoffs. Only ever pick from the exact model ids given — never invent a different one.",
           p.brainModel
         );
@@ -9495,13 +9505,14 @@ const DirectorChat=(function(){
         if(imgMatch&&VALID_IMAGE.includes(imgMatch[1]))p.imageModel=imgMatch[1];
         if(vidMatch&&VALID_VIDEO.includes(vidMatch[1]))p.videoModel=vidMatch[1];
         save2Productions();
-        return{summary:`🧠 Models chosen — Image: ${p.imageModel.includes('nano-banana')?'Nano Banana 2':'FLUX Dev'}, Video: ${p.videoModel.includes('/fast/')?'Seedance 2.0 Fast':'Seedance 2.0 Standard'}.${reasonMatch?' '+reasonMatch[1].trim():''}`};
+        return{summary:`🧠 Models chosen — Image: ${p.imageModel.includes('nano-banana')?'Nano Banana Pro':'Seedream 5.0 Pro'}, Video: ${p.videoModel.includes('/fast/')?'Seedance 2.0 Fast':'Seedance 2.0 Standard'}.${reasonMatch?' '+reasonMatch[1].trim():''}`};
       }catch(err){
         // Model selection is an enhancement, not a hard requirement — the
-        // defaults already set in the draft (FLUX Dev / Seedance Fast) are
-        // perfectly valid, so a failure here shouldn't block the production.
+        // defaults already set in the draft (Nano Banana Pro / Seedance
+        // Fast) are perfectly valid, so a failure here shouldn't block
+        // the production.
         console.warn("Model auto-selection skipped, using defaults:",err.message);
-        return{summary:`🧠 Using default models (couldn't reach the brain for a custom pick): FLUX Dev, Seedance 2.0 Fast.`};
+        return{summary:`🧠 Using default models (couldn't reach the brain for a custom pick): Nano Banana Pro, Seedance 2.0 Fast.`};
       }
     }
     if(task.type==="charsheet_view"){
@@ -9744,7 +9755,7 @@ const DirectorChat=(function(){
       if(!projectId){ push("agent","You'll need at least one Project first — head to Projects, create one, then come back and tell me the story again."); return; }
       const remembered=await SemanticMemory.recallCharacter(text);
       S.directorChat.draft={
-        projectId,concept:text.slice(0,200),imageModel:"fal-ai/flux/dev",videoModel:"bytedance/seedance-2.0/fast/reference-to-video",
+        projectId,concept:text.slice(0,200),imageModel:"fal-ai/nano-banana-pro",videoModel:"bytedance/seedance-2.0/fast/reference-to-video",
         quality:"720p",aspectRatio:"16:9",clipLen:8,totalDurationRequested:8,totalDurationRounded:8,totalShots:1,shotsPerEp:1,
         continuity:"narrative",brainModel:gs("ai_model","claude"),refImages:[],reviewedCharacterDesc:remembered?remembered.desc:"",hasFullScript:false,fullScriptText:text,episodeCount:1,
       };
