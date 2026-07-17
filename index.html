@@ -8637,7 +8637,7 @@ function createProduction(draft,parsed){
     characterDesc:parsed.characterDesc,
     characters:parsed.characters||[], // tiered MC/LEAD/SIDE breakdown — see generateCharacterSheet
     characterSheetStatus:"pending", // pending -> generating -> ready -> approved
-    characterSheet:null, // legacy view-keyed shape, still used by Kosmic Engine's own separate charsheet_view task — left untouched
+    characterSheet:null, // legacy view-keyed shape from before the tiered-character fix — kept for old productions still reading it, no longer written by anything new
     characterSheets:null, // new tiered shape: [{tier,name,desc,sheetUrl}] — one composite sheet per MC/LEAD character, one shared sheet for all SIDE characters
     costSpent:0,
     persona:parsed.persona,
@@ -9471,8 +9471,8 @@ const DirectorChat=(function(){
     return `${cls.label}${suffix}\n\n${rawMessage}`;
   }
   function guessProvider(task){
-    if(task.type==="charsheet_view"||task.type==="loc_img")return "fal";
-    if(task.type==="script"||task.type==="plan"||task.type==="loc_plan"||task.type==="model_select")return "brain";
+    if(task.type==="charsheet_single"||task.type==="charsheet_side"||task.type==="loc_img")return "fal";
+    if(task.type==="script"||task.type==="plan"||task.type==="loc_plan"||task.type==="char_plan"||task.type==="model_select")return "brain";
     if(task.type==="storyboard"||task.type==="scene")return "fal";
     return "unknown";
   }
@@ -9515,9 +9515,15 @@ const DirectorChat=(function(){
       {id:"plan",type:"plan",label:"Planning production",deps:[],parallel:false,requiresApproval:false,status:"pending",error:null},
       {id:"model_select",type:"model_select",label:"Choosing image & video models",deps:["plan"],parallel:false,requiresApproval:false,status:"pending",error:null},
     ];
-    const csViews=["front","back","side","threeQuarter","face","special"];
-    csViews.forEach(v=>tasks.push({id:`cs_${v}`,type:"charsheet_view",label:`Character Sheet — ${v}`,viewKey:v,deps:["model_select"],parallel:true,requiresApproval:false,status:"pending",error:null}));
-    tasks.push({id:"cs_review",type:"charsheet_review",label:"Character Sheet ready for review",deps:csViews.map(v=>`cs_${v}`),parallel:false,requiresApproval:true,status:"pending",error:null});
+    // Character Sheets: char_plan reads the tiered MC/LEAD/SIDE breakdown the
+    // Promptwriter already produced (p.characters, set in createProduction),
+    // then dynamically inserts one composite-sheet task per MC/LEAD character
+    // plus one shared task for all SIDE characters — same dynamic-insertion
+    // pattern as loc_plan below, and the same fix Production Pipeline's
+    // manual wizard got: one full description per character instead of every
+    // character's description crammed into every generated image.
+    tasks.push({id:"char_plan",type:"char_plan",label:"Identifying characters",deps:["model_select"],parallel:false,requiresApproval:false,status:"pending",error:null});
+    tasks.push({id:"cs_review",type:"charsheet_review",label:"Character Sheets ready for review",deps:["char_plan"],parallel:false,requiresApproval:true,status:"pending",error:null});
     // Location Bible: loc_plan lists key locations (count unknown until the
     // brain answers), then dynamically inserts one parallel image task per
     // location plus a loc_review approval gate — see runTaskWork("loc_plan").
@@ -9578,34 +9584,74 @@ const DirectorChat=(function(){
         return{summary:`🧠 Using default models (couldn't reach the brain for a custom pick): Nano Banana Pro, Seedance 2.0 Fast.`};
       }
     }
-    if(task.type==="charsheet_view"){
+    if(task.type==="char_plan"){
       const p=S.productions.find(x=>x.id===S.directorChat.productionId);
-      const VIEW_PROMPTS={
-        front:"full body character turnaround reference, front view, neutral standing pose, clean plain background, character design sheet",
-        back:"full body character turnaround reference, back view, neutral standing pose, clean plain background, character design sheet",
-        side:"full body character turnaround reference, side profile view, neutral standing pose, clean plain background, character design sheet",
-        threeQuarter:"full body character turnaround reference, 3/4 angle view, neutral standing pose, clean plain background, character design sheet",
-        face:"close-up face portrait reference, detailed facial features, neutral expression, clean plain background, character design sheet",
-        special:"close-up reference of the character's distinguishing special features — scars, markings, unique accessories, or unusual anatomy — clean plain background, character design sheet",
-      };
-      const fullPrompt=`${p.characterDesc}, ${VIEW_PROMPTS[task.viewKey]}`;
-      let result;
-      if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(fullPrompt,"1:1",p.imageModel);
-      else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(fullPrompt,"1:1");
-      else result=await genViaFal(fullPrompt,"",p.imageModel||"fal-ai/flux/dev","1:1",false);
-      p.characterSheet=p.characterSheet||{};
-      p.characterSheet[task.viewKey]=result.url;
+      // p.characters is already set by createProduction (from the
+      // Promptwriter's tiered MC/LEAD/SIDE output) — no second AI call
+      // needed, same reasoning as loc_plan reusing p.locations below.
+      const characters=(p.characters&&p.characters.length)?p.characters:[{tier:"MC",name:"Character",desc:p.characterDesc||""}];
+      const leads=characters.filter(c=>c.tier==="MC"||c.tier==="LEAD");
+      const sides=characters.filter(c=>c.tier==="SIDE");
+      p.characterSheets=[];
       save2Productions();
-      logCost(p.imageModel,`Character Sheet — ${task.viewKey}`);
+      const tasks=S.directorChat.tasks;
+      const reviewIdx=tasks.findIndex(t=>t.id==="cs_review");
+      const sheetIds=[];
+      leads.forEach((c,i)=>{
+        const id=`cs_char_${i}`;
+        tasks.splice(reviewIdx,0,{id,type:"charsheet_single",charIndex:i,label:`Character Sheet — ${c.name}`,deps:["char_plan"],parallel:true,requiresApproval:false,status:"pending",error:null});
+        sheetIds.push(id);
+      });
+      if(sides.length){
+        tasks.splice(reviewIdx,0,{id:"cs_side",type:"charsheet_side",label:"Character Sheet — Side characters",deps:["char_plan"],parallel:true,requiresApproval:false,status:"pending",error:null});
+        sheetIds.push("cs_side");
+      }
+      findTask("cs_review").deps=sheetIds.length?sheetIds:["char_plan"];
+      save();
+      return{summary:`🎭 ${characters.length} character${characters.length!==1?'s':''} identified: ${characters.map(c=>`${c.name} (${c.tier})`).join(", ")} — generating ${leads.length} dedicated sheet${leads.length!==1?'s':''}${sides.length?' + 1 shared side-character sheet':''} in parallel…`};
+    }
+    if(task.type==="charsheet_single"){
+      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
+      const characters=(p.characters&&p.characters.length)?p.characters:[{tier:"MC",name:"Character",desc:p.characterDesc||""}];
+      const c=characters.filter(x=>x.tier==="MC"||x.tier==="LEAD")[task.charIndex];
+      // One composite image containing front/back/3-4/face views, using ONLY
+      // this character's own description — not the whole cast's combined
+      // text, which is what caused multiple people to appear in one sheet.
+      const prompt=`${c.desc}, full character reference turnaround sheet, single composite image arranged in a grid showing: front full-body view, back full-body view, 3/4 angle full-body view, and a close-up face portrait — consistent character design across all views, clean plain background, professional character design sheet, only this one character, no other people`;
+      let result;
+      if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(prompt,"1:1",p.imageModel);
+      else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,"1:1");
+      else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/nano-banana-pro","1:1",false);
+      p.characterSheets=p.characterSheets||[];
+      p.characterSheets.push({tier:c.tier,name:c.name,desc:c.desc,sheetUrl:result.url});
+      save2Productions();
+      trackProductionCost(p,p.imageModel,`Character Sheet — ${c.name}`);
+      return{};
+    }
+    if(task.type==="charsheet_side"){
+      const p=S.productions.find(x=>x.id===S.directorChat.productionId);
+      const characters=(p.characters&&p.characters.length)?p.characters:[];
+      const sides=characters.filter(c=>c.tier==="SIDE");
+      const lineup=sides.map(c=>`${c.name} (${c.desc})`).join("; ");
+      const prompt=`Character lineup reference sheet, ${sides.length} distinct background/side characters standing side by side for comparison, each clearly separated: ${lineup}. Clean plain background, consistent lighting, simple standing poses, professional character design reference — each character visually distinct from the others.`;
+      let result;
+      if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(prompt,"16:9",p.imageModel);
+      else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,"16:9");
+      else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/nano-banana-pro","16:9",false);
+      p.characterSheets=p.characterSheets||[];
+      p.characterSheets.push({tier:"SIDE",name:sides.map(c=>c.name).join(", "),desc:lineup,sheetUrl:result.url});
+      save2Productions();
+      trackProductionCost(p,p.imageModel,"Character Sheet — Side characters lineup");
       return{};
     }
     if(task.type==="charsheet_review"){
       const p=S.productions.find(x=>x.id===prodId);
       p.characterSheetStatus="ready";
       save2Productions();
-      const views=["front","threeQuarter","face"].map(k=>p.characterSheet&&p.characterSheet[k]).filter(Boolean);
-      const qaNote=await runQACheck(p.characterSheet&&p.characterSheet.front,p.characterDesc);
-      return{summary:"🎨 Character Sheet ready — all 6 views generated in parallel:",approval:{images:views,qaNote}};
+      const sheets=p.characterSheets||[];
+      const mc=sheets.find(s=>s.tier==="MC");
+      const qaNote=mc?await runQACheck(mc.sheetUrl,mc.desc):null;
+      return{summary:`🎭 Character Sheet${sheets.length!==1?'s':''} ready — ${sheets.map(s=>s.tier==='SIDE'?'Side characters':s.name).join(', ')}:`,approval:{images:sheets.map(s=>s.sheetUrl),qaNote}};
     }
     if(task.type==="loc_plan"){
       const p=S.productions.find(x=>x.id===S.directorChat.productionId);
@@ -9854,10 +9900,18 @@ const DirectorChat=(function(){
     const prodId=S.directorChat.productionId;
     if(task.type==="charsheet_review"){
       approveCharacterSheet(prodId);
-      // World memory: remember this approved character for future productions —
-      // now a real embedding-backed memory, not just a capped local array.
+      // World memory: remember each approved MC/LEAD character individually —
+      // now real embedding-backed memory per character, not one combined blob
+      // for the whole cast (which would've made recall meaningless once a
+      // story had more than one named character).
       const p=S.productions.find(x=>x.id===prodId);
-      if(p&&p.characterDesc){
+      if(p&&p.characterSheets&&p.characterSheets.length){
+        for(const s of p.characterSheets){
+          if(s.tier==="SIDE")continue; // side-character lineup isn't a durable single-character memory
+          await SemanticMemory.saveCharacterMemory(prodId,s.name,s.desc,s.sheetUrl);
+        }
+      } else if(p&&p.characterDesc){
+        // Legacy fallback for productions created before this format existed.
         await SemanticMemory.saveCharacterMemory(prodId,p.concept||"",p.characterDesc,p.characterSheet&&(p.characterSheet.front||p.characterSheet.threeQuarter));
       }
     }
@@ -9892,12 +9946,17 @@ const DirectorChat=(function(){
     const prodId=S.directorChat.productionId;
     S.directorChat.awaitingApprovalTaskId=null;
     if(task.type==="charsheet_review"){
-      // Regenerate all 6 views in parallel again, not just re-show the same ones
-      const csViewIds=task.deps;
-      csViewIds.forEach(id=>{const t=findTask(id);t.status="pending";t.error=null;});
+      // Regenerate every character sheet in parallel again — clear first, since
+      // charsheet_single/charsheet_side each push() onto p.characterSheets;
+      // without clearing, a regenerate would leave duplicate old entries
+      // sitting alongside the new ones instead of replacing them.
+      const p=S.productions.find(x=>x.id===prodId);
+      if(p)p.characterSheets=[];
+      const csIds=task.deps;
+      csIds.forEach(id=>{const t=findTask(id);if(t){t.status="pending";t.error=null;}});
       task.status="pending";
       save();
-      push("agent","🔄 Regenerating the Character Sheet — all 6 views, in parallel…");
+      push("agent","🔄 Regenerating the Character Sheets, in parallel…");
       await dispatchTasks();
       return;
     }
