@@ -3315,8 +3315,8 @@ const IMAGE_MODEL_CAPABILITIES={
   // Same three models as above, but routed entirely through fal.ai — same
   // fal API key you already have funded, no separate Google/OpenAI billing
   // account or key needed. Verified real fal.ai endpoints.
-  "fal-ai/nano-banana-2":{multiRef:true,maxRef:14,provider:"flux-edit",editModel:"fal-ai/nano-banana-2/edit"},
-  "fal-ai/nano-banana-pro":{multiRef:true,maxRef:2,provider:"flux-edit",editModel:"fal-ai/gemini-3-pro-image-preview/edit"},
+  "fal-ai/nano-banana-2":{multiRef:true,maxRef:14,provider:"flux-edit",editModel:"fal-ai/nano-banana-2/edit",numImages:{max:4}},
+  "fal-ai/nano-banana-pro":{multiRef:true,maxRef:2,provider:"flux-edit",editModel:"fal-ai/nano-banana-pro/edit",numImages:{max:4}},
   "openai/gpt-image-2":{numImages:{max:4}},
   // FLUX 1.1 Pro Ultra takes aspect_ratio ("16:9") not the FLUX-family
   // image_size enum ("landscape_16_9") — genViaFal special-cases it below,
@@ -3785,9 +3785,15 @@ function updateIgModelUI(){
   if(cap.multiRef){
     singleWrap.style.display="none";
     multiWrap.style.display="block";
-    batchWrap.style.display="none";
     document.getElementById("igMultiRefLabel").textContent=`(up to ${cap.maxRef} — multi-reference editing)`;
     note.textContent=cap.provider==="gemini"?"Grounded, reasoning-driven editing — preserves everything you don't ask to change.":"Combines up to 4 reference images into one coherent output.";
+    if(cap.numImages){
+      batchWrap.style.display="block";
+      batchLabel.textContent=`Number of Images (up to ${cap.numImages.max} in one generation)`;
+      batchCount.innerHTML=Array.from({length:cap.numImages.max},(_,i)=>i+1).map(n=>`<option value="${n}">${n} image${n>1?'s':''}</option>`).join('');
+    } else {
+      batchWrap.style.display="none";
+    }
   } else if(cap.batch){
     singleWrap.style.display="block";
     multiWrap.style.display="none";
@@ -4171,23 +4177,25 @@ async function genViaGemini(prompt,ratio,modelId,refImages){
 
 // FLUX.2 Flash Edit — real multi-reference editing, verified endpoint. Accepts
 // an array of reference images (image_urls) rather than a single image.
-async function genViaFluxEdit(prompt,refImages,ratio,model){
+async function genViaFluxEdit(prompt,refImages,ratio,model,count){
   const apiKey=gs("api_falai","");
   if(!apiKey)throw new Error("NO_KEY");
   const endpoint=model||"fal-ai/flux-2/flash/edit";
+  const body={prompt,image_urls:refImages,aspect_ratio:ratio||"1:1"};
+  if(count&&count>1)body.num_images=count;
   const response=await fetch(`https://fal.run/${endpoint}`,{
     method:"POST",
     headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
-    body:JSON.stringify({prompt,image_urls:refImages,aspect_ratio:ratio||"1:1"})
+    body:JSON.stringify(body)
   });
   const data=await response.json();
   if(!response.ok||data.error){
     const msg=(data.detail&&(Array.isArray(data.detail)?data.detail[0]?.msg:data.detail))||data.error||response.statusText;
     throw new Error(msg);
   }
-  const imgUrl=data.images&&data.images[0]&&data.images[0].url;
-  if(!imgUrl)throw new Error(`No image returned from ${endpoint}`);
-  return {url:imgUrl,providerLabel:"fal.ai",costKey:endpoint};
+  const urls=(data.images||[]).map(i=>i&&i.url).filter(Boolean);
+  if(!urls.length)throw new Error(`No image returned from ${endpoint}`);
+  return {url:urls[0],urls,providerLabel:"fal.ai",costKey:endpoint};
 }
 
 // Real batch generation for GPT Image 2 — same verified endpoint as genViaOpenAI,
@@ -4259,14 +4267,23 @@ async function sendIgChatPrompt(){
       sendBtn.disabled=false;
       return;
     }
+    const multiRefCountEl=cap.numImages?document.getElementById("igBatchCount"):null;
+    const multiRefCount=multiRefCountEl?parseInt(multiRefCountEl.value,10)||1:1;
     pushIgChatMessage({id:loadingId,role:"assistant",type:"loading",content:`Generating with ${S.igMultiRefImages.length} reference image${S.igMultiRefImages.length!==1?'s':''}…`});
     try{
       const result=cap.provider==="gemini"
         ?await genViaGemini(prompt,ratio,selectedModel,S.igMultiRefImages)
-        :await genViaFluxEdit(prompt,S.igMultiRefImages,ratio,cap.editModel);
-      const savedAsset=await createImageAsset(result.url,prompt,projectId);
-      replaceIgLoadingBubble(loadingId,{role:"assistant",type:"image",content:result.url,meta:{providerLabel:result.providerLabel,prompt,projectId,assetId:savedAsset.id}});
-      logCost(result.costKey,prompt.slice(0,60));
+        :await genViaFluxEdit(prompt,S.igMultiRefImages,ratio,cap.editModel,multiRefCount);
+      const returnedRefUrls=(result.urls&&result.urls.length)?result.urls:[result.url];
+      if(returnedRefUrls.length>1){
+        const savedAssets=await Promise.all(returnedRefUrls.map(u=>createImageAsset(u,prompt,projectId)));
+        replaceIgLoadingBubble(loadingId,{role:"assistant",type:"images",content:returnedRefUrls,meta:{providerLabel:result.providerLabel,prompt,projectId,assetIds:savedAssets.map(a=>a.id)}});
+        logCost(result.costKey,prompt.slice(0,60)+` (×${returnedRefUrls.length})`,returnedRefUrls.length);
+      } else {
+        const savedAsset=await createImageAsset(result.url,prompt,projectId);
+        replaceIgLoadingBubble(loadingId,{role:"assistant",type:"image",content:result.url,meta:{providerLabel:result.providerLabel,prompt,projectId,assetId:savedAsset.id}});
+        logCost(result.costKey,prompt.slice(0,60));
+      }
     }catch(err){
       replaceIgLoadingBubble(loadingId,{role:"assistant",type:"error",content:err.message});
       toast("❌ Generation failed: "+err.message,"error");
@@ -13172,7 +13189,7 @@ const NodeCanvas=(function(){
     // happened rather than let it fail mysteriously.
     const REF_CAPS={
       "fal-ai/nano-banana-2":{max:14,endpoint:"fal-ai/nano-banana-2/edit"},
-      "fal-ai/nano-banana-pro":{max:2,endpoint:"fal-ai/gemini-3-pro-image-preview/edit"},
+      "fal-ai/nano-banana-pro":{max:2,endpoint:"fal-ai/nano-banana-pro/edit"},
       "openai/gpt-image-2":{max:16,endpoint:"openai/gpt-image-2/edit"},
     };
     let result;
