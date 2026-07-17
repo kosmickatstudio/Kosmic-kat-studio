@@ -9112,8 +9112,24 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
 
   for(const i of indicesToGenerate){
     try{
-      const canImg2Img=seedRef&&!p.imageModel.startsWith("gemini")&&p.imageModel!=="gpt-image-2";
+      // Real multi-character reference: if THIS shot's own text names 2+
+      // characters who each have an approved sheet, give each one their own
+      // labeled reference image instead of relying on one blended text
+      // description (the "identity blurring" problem even Higgsfield's own
+      // team says is unsolved industry-wide for multi-character shots).
+      const shotChars=detectShotCharacters(shotDescs[i],p.characterSheets);
       let result;
+      if(shotChars.length>=2){
+        // Nano Banana Pro is the stronger model but currently caps at 2
+        // reference images; Nano Banana 2 goes up to 14. Use Pro when it
+        // fits, fall back to 2 for casts of 3+ so nobody gets silently
+        // dropped from their own scene.
+        const multiRefModel=shotChars.length<=2?"fal-ai/nano-banana-pro":"fal-ai/nano-banana-2";
+        const tags=shotChars.map((c,idx)=>`Image ${idx+1} is ${c.name}`).join(", ");
+        const prompt=`${tags}. ${shotDescs[i]}${p.locationDesc?", "+p.locationDesc:""}. Keep each character's appearance exactly consistent with their own reference image.`;
+        result=await genViaFluxEdit(prompt,shotChars.map(c=>c.sheetUrl),p.aspectRatio,multiRefModel);
+      } else {
+      const canImg2Img=seedRef&&!p.imageModel.startsWith("gemini")&&p.imageModel!=="gpt-image-2";
       if(canImg2Img){
         // genViaFal's img2img path expects S.igRefDataUrl as the source — set it
         // directly for this one call rather than routing through the Image Gen UI.
@@ -9132,9 +9148,10 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
       } else {
         result=await genViaFal(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}`,"",p.imageModel,p.aspectRatio,false);
       }
+      }
       e.storyboard.push({shotIndex:i,url:result.url,desc:shotDescs[i]});
       e.storyboard.sort((a,b)=>a.shotIndex-b.shotIndex);
-      trackProductionCost(p,p.imageModel,`Ep${epIndex} storyboard shot ${i+1}`);
+      trackProductionCost(p,shotChars.length>=2?(shotChars.length<=2?"fal-ai/nano-banana-pro":"fal-ai/nano-banana-2"):p.imageModel,`Ep${epIndex} storyboard shot ${i+1}`);
     }catch(err){
       toast(`❌ Storyboard shot ${i+1} failed: ${err.message}`,"error");
     }
@@ -9150,6 +9167,25 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
 }
 
 // ── EPISODE SCENE (real video gen per shot, with continuity chaining) ──
+// Real multi-character reference detection: checks a shot's own text against
+// the production's approved character sheets and returns whichever named
+// (non-SIDE) characters are actually mentioned — whole-word match on the
+// character's first name/word to avoid false positives on short names. This
+// is what makes it possible to give a shot with two characters in it TWO
+// real visual anchors instead of one blended text description, which is the
+// exact "identity blurring on every platform" gap Higgsfield's own team
+// still flags as unsolved industry-wide as of mid-2026.
+function detectShotCharacters(shotText,characterSheets){
+  if(!shotText||!characterSheets||!characterSheets.length)return [];
+  const lower=shotText.toLowerCase();
+  return characterSheets.filter(s=>{
+    if(s.tier==="SIDE"||!s.name||!s.sheetUrl)return false;
+    const firstWord=s.name.trim().split(/\s+/)[0].toLowerCase();
+    if(firstWord.length<2)return false;
+    return new RegExp(`\\b${firstWord.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\b`).test(lower);
+  });
+}
+
 async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImageUrl,negativePrompt,endImageUrl){
   const apiKey=gs("api_falai","");
   if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
@@ -9158,8 +9194,16 @@ async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImag
   if(model.includes("/reference-to-video")){
     // Multi-Reference endpoint: refs go in image_urls and MUST be referenced
     // in the prompt via @Image1-style tags or the model ignores them.
-    if(refImageUrl){
-      body.image_urls=[refImageUrl];
+    // refImageUrl can be a single string (existing single-anchor behavior,
+    // unchanged) OR an array of {url,name} for real multi-character shots —
+    // each character gets their own labeled reference instead of every
+    // character's description being blended into one piece of text.
+    if(Array.isArray(refImageUrl)&&refImageUrl.length){
+      body.image_urls=refImageUrl.map(r=>r.url);
+      const tags=refImageUrl.map((r,i)=>`@Image${i+1} is ${r.name} — keep their appearance exactly consistent with this reference.`).join(" ");
+      body.prompt=`${tags} ${prompt}`;
+    } else if(refImageUrl){
+      body.image_urls=[typeof refImageUrl==="string"?refImageUrl:refImageUrl.url];
       body.prompt=`@Image1 is the main character reference — keep their appearance exactly consistent. ${prompt}`;
     }
   } else if(model.includes("/image-to-video")){
@@ -9283,11 +9327,21 @@ async function generateEpisodeScene(prodId,epIndex,retryOnly=false){
     // The Multi-Reference and Start→End Frame models always need a reference —
     // when chaining didn't supply one, use this shot's own storyboard frame.
     if(!refImage&&(p.videoModel.includes("/reference-to-video")||p.videoModel.includes("/image-to-video")))refImage=sb.url;
+    // Real multi-character reference: if this specific shot's own description
+    // names 2+ characters who each have an approved sheet, and the video
+    // model actually supports multiple reference images, give each character
+    // their own labeled visual anchor instead of relying on a single chained
+    // frame + combined text description to hold both identities apart.
+    let videoRef=refImage;
+    if(p.videoModel.includes("/reference-to-video")){
+      const shotChars=detectShotCharacters(sb.desc,p.characterSheets).slice(0,4); // cap 4 — real per-model max varies (Seedance 9, Kling O3 4), 4 covers realistic shot casts safely on either
+      if(shotChars.length>=2)videoRef=shotChars.map(c=>({url:c.sheetUrl,name:c.name}));
+    }
     // Start→End Frame mode: end each shot on the NEXT shot's storyboard frame
     // so consecutive clips flow into each other; the last shot has no end frame.
     const endImage=p.videoModel.includes("/image-to-video")&&e.storyboard[i+1]?e.storyboard[i+1].url:null;
     try{
-      const videoUrl=await runProductionVideoGen(p.videoModel,`${sb.desc}, ${p.characterDesc}`,p.aspectRatio,e.duration,p.quality,refImage,e.negativePrompt,endImage);
+      const videoUrl=await runProductionVideoGen(p.videoModel,`${sb.desc}, ${p.characterDesc}`,p.aspectRatio,e.duration,p.quality,videoRef,e.negativePrompt,endImage);
       e.shots.push({shotIndex:i,videoUrl,refImage});
       e.shots.sort((a,b)=>a.shotIndex-b.shotIndex);
       trackProductionCost(p,p.videoModel,`Ep${epIndex} scene shot ${i+1}`);
