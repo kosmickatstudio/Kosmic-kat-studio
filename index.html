@@ -8671,7 +8671,7 @@ function openProductionDetail(prodId){
   const allApproved=p.episodes.every(e=>e.sceneStatus==="approved");
   el.innerHTML=`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-      <button class="btn btn-ghost btn-sm" onclick="renderModule('directors')">${pIcon('back')} Directorial Studio</button>
+      <button class="btn btn-ghost btn-sm" onclick="renderModule('productionstudio')">${pIcon('back')} Production Pipeline</button>
       <div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">${p.concept.slice(0,60)}</div><div style="font-size:11px;color:var(--textm)">${p.episodes.length} episode${p.episodes.length!==1?'s':''} · Director ${p.persona||''} · ${p.continuity}</div></div>
       ${allApproved?`<button class="btn btn-primary btn-sm" onclick="finalizeProductionToEditor('${p.id}')">${pIcon('film',14)} Finalize to Video Editor</button>`:''}
     </div>
