@@ -241,6 +241,8 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 .toggle-label{font-size:12px;color:var(--textm)}
 .badge{font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:0.06em;text-transform:uppercase;display:inline-block}
 .badge-violet{background:rgba(98,64,176,0.12);color:var(--vm)}
+.subgenre-chip{font-size:11px;font-weight:600;padding:5px 11px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface);color:var(--textm);cursor:pointer;transition:all 0.15s}
+.subgenre-chip.selected{border-color:var(--violet);background:var(--lav);color:var(--violet)}
 .badge-gold{background:rgba(201,151,42,0.12);color:var(--gold)}
 .badge-green{background:rgba(16,185,129,0.12);color:var(--green)}
 .badge-red{background:rgba(239,68,68,0.12);color:var(--red)}
@@ -930,14 +932,39 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
       <div class="f-group">
         <label class="f-label">Genre</label>
         <select class="f-select" id="pmGenre">
-          <option>Sci-fi</option><option>Action</option><option>Historical</option><option>Fantasy</option><option>Horror</option><option>Comedy</option><option>Drama</option><option>Documentary</option>
+          <option>Sci-fi</option><option>Action</option><option>Adventure</option><option>Thriller</option><option>Mystery</option><option>Crime</option><option>Horror</option><option>Fantasy</option><option>Romance</option><option>Comedy</option><option>Drama</option><option>Musical</option><option>Western</option><option>War</option><option>Historical</option><option>Biography</option><option>Documentary</option><option>Family</option><option>Sports</option><option>Superhero</option><option>Animation</option>
         </select>
       </div>
       <div class="f-group">
-        <label class="f-label">Status</label>
+        <label class="f-label">Status <span style="font-weight:400;color:var(--texts);font-size:10px">(auto-advances as work happens)</span></label>
         <select class="f-select" id="pmStatus">
           <option value="Development">Development</option><option value="Pre-production">Pre-production</option><option value="Production">Production</option><option value="Post">Post</option><option value="Complete">Complete</option><option value="Released">Released</option>
         </select>
+      </div>
+    </div>
+    <div class="f-group">
+      <label class="f-label" style="font-size:10px">Sub-genre <span style="font-weight:400;color:var(--texts)">(optional, pick as many as fit)</span></label>
+      <div id="pmSubgenreWrap" style="display:flex;flex-wrap:wrap;gap:5px">
+        <button type="button" class="subgenre-chip" data-val="Cyberpunk" onclick="toggleSubgenreChip(this)">Cyberpunk</button>
+        <button type="button" class="subgenre-chip" data-val="Post-Apocalyptic" onclick="toggleSubgenreChip(this)">Post-Apocalyptic</button>
+        <button type="button" class="subgenre-chip" data-val="Space Opera" onclick="toggleSubgenreChip(this)">Space Opera</button>
+        <button type="button" class="subgenre-chip" data-val="Time Travel" onclick="toggleSubgenreChip(this)">Time Travel</button>
+        <button type="button" class="subgenre-chip" data-val="Slice of Life" onclick="toggleSubgenreChip(this)">Slice of Life</button>
+        <button type="button" class="subgenre-chip" data-val="Coming of Age" onclick="toggleSubgenreChip(this)">Coming of Age</button>
+        <button type="button" class="subgenre-chip" data-val="Revenge" onclick="toggleSubgenreChip(this)">Revenge</button>
+        <button type="button" class="subgenre-chip" data-val="Heist" onclick="toggleSubgenreChip(this)">Heist</button>
+        <button type="button" class="subgenre-chip" data-val="Noir" onclick="toggleSubgenreChip(this)">Noir</button>
+        <button type="button" class="subgenre-chip" data-val="Psychological" onclick="toggleSubgenreChip(this)">Psychological</button>
+        <button type="button" class="subgenre-chip" data-val="Supernatural" onclick="toggleSubgenreChip(this)">Supernatural</button>
+        <button type="button" class="subgenre-chip" data-val="Found Family" onclick="toggleSubgenreChip(this)">Found Family</button>
+        <button type="button" class="subgenre-chip" data-val="Enemies to Lovers" onclick="toggleSubgenreChip(this)">Enemies to Lovers</button>
+        <button type="button" class="subgenre-chip" data-val="Redemption" onclick="toggleSubgenreChip(this)">Redemption</button>
+        <button type="button" class="subgenre-chip" data-val="Survival" onclick="toggleSubgenreChip(this)">Survival</button>
+        <button type="button" class="subgenre-chip" data-val="Dystopian" onclick="toggleSubgenreChip(this)">Dystopian</button>
+        <button type="button" class="subgenre-chip" data-val="Mythology" onclick="toggleSubgenreChip(this)">Mythology</button>
+        <button type="button" class="subgenre-chip" data-val="Steampunk" onclick="toggleSubgenreChip(this)">Steampunk</button>
+        <button type="button" class="subgenre-chip" data-val="Anthology" onclick="toggleSubgenreChip(this)">Anthology</button>
+        <button type="button" class="subgenre-chip" data-val="Satire" onclick="toggleSubgenreChip(this)">Satire</button>
       </div>
     </div>
     <div class="f-group">
@@ -967,7 +994,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
       <button class="btn btn-ghost" onclick="closeProjectModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveProject()">💾 Save Project</button>
+      <button class="btn btn-primary" onclick="saveProject()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v5h8V4"/><path d="M8 20v-6h8v6"/></svg> Save Project</button>
     </div>
   </div>
 </div>
@@ -2345,6 +2372,24 @@ function renderProjectTimeline(p,episodes,shots){
   </div>`;
 }
 
+// Auto-advances a project's Status as real work actually happens, instead of
+// requiring you to remember to update a dropdown manually. Forward-only —
+// never downgrades an already-further-along project — and deliberately
+// capped at "Post": Complete/Released are real-world publishing decisions
+// this app has no way to know about, so those stay manual choices only.
+function advanceProjectStatusIfBehind(projectId,targetStatus){
+  const p=S.projects.find(x=>x.id===projectId);
+  if(!p)return;
+  const order=["Development","Pre-production","Production","Post","Complete","Released"];
+  const cap=order.indexOf("Post");
+  const currentIndex=order.indexOf(p.status||"Development");
+  const targetIndex=Math.min(order.indexOf(targetStatus),cap);
+  if(targetIndex>currentIndex){
+    p.status=order[targetIndex];
+    save("projects");
+  }
+}
+
 async function addShot(projectId){
   const name=await showPromptDialog("","",{title:"Shot Name / Description",okLabel:"Add Shot"});
   if(!name)return;
@@ -2352,6 +2397,7 @@ async function addShot(projectId){
   S.shots.push(shot);save("shots");
   const p=S.projects.find(x=>x.id===projectId);
   if(p){p.shots=(p.shots||0)+1;save("projects");}
+  advanceProjectStatusIfBehind(projectId,"Pre-production");
   renderProjectWorkspace(S.projects.find(x=>x.id===projectId));
   toast(`🎬 Shot added: ${name}`,"success");
 }
@@ -2449,6 +2495,10 @@ function removeProjectRefImage(projectId){
 }
 
 // ── PROJECT MODAL ──
+function toggleSubgenreChip(el){
+  el.classList.toggle("selected");
+}
+
 function openProjectModal(editId=null){
   S.editingProjectId=editId;
   const modal=document.getElementById("projectModal");
@@ -2463,6 +2513,10 @@ function openProjectModal(editId=null){
       document.getElementById("pmUniverse").value=p.universe||"";
       S.thumbColor=p.color||"#7c3aed";
       S.thumbImage=p.thumbImage||null;
+      const selectedSubgenres=p.subgenres||[];
+      document.querySelectorAll("#pmSubgenreWrap .subgenre-chip").forEach(chip=>{
+        chip.classList.toggle("selected",selectedSubgenres.includes(chip.dataset.val));
+      });
     }
   } else {
     document.getElementById("pmName").value="";
@@ -2472,6 +2526,7 @@ function openProjectModal(editId=null){
     document.getElementById("pmUniverse").value="";
     S.thumbColor="#7c3aed";
     S.thumbImage=null;
+    document.querySelectorAll("#pmSubgenreWrap .subgenre-chip").forEach(chip=>chip.classList.remove("selected"));
   }
   // Set color picker + thumbnail preview
   document.querySelectorAll(".color-swatch").forEach(sw=>{
@@ -2538,15 +2593,16 @@ function saveProject(){
     const status=document.getElementById("pmStatus").value;
     const desc=document.getElementById("pmDesc").value;
     const universe=document.getElementById("pmUniverse").value.trim();
+    const subgenres=[...document.querySelectorAll("#pmSubgenreWrap .subgenre-chip.selected")].map(c=>c.dataset.val);
     if(S.editingProjectId){
       const p=S.projects.find(x=>x.id===S.editingProjectId);
       if(p){
-        p.name=name;p.genre=genre;p.status=status;p.desc=desc;p.universe=universe;p.color=S.thumbColor;p.thumbImage=S.thumbImage||null;
+        p.name=name;p.genre=genre;p.status=status;p.desc=desc;p.universe=universe;p.subgenres=subgenres;p.color=S.thumbColor;p.thumbImage=S.thumbImage||null;
         save("projects");
         toast("✅ Project updated","success");
       }
     } else {
-      const p={id:"proj_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),name,genre,status,desc,universe,color:S.thumbColor,thumbImage:S.thumbImage||null,shots:0,chars:0,archived:false,created:new Date().toISOString()};
+      const p={id:"proj_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),name,genre,status,desc,universe,subgenres,color:S.thumbColor,thumbImage:S.thumbImage||null,shots:0,chars:0,archived:false,created:new Date().toISOString()};
       S.projects.push(p);
       save("projects");
       toast("🎉 Project created!","success");
@@ -3202,6 +3258,7 @@ function saveCharacter(){
     if(data.projectId){
       const p=S.projects.find(x=>x.id===data.projectId);
       if(p){p.chars=(p.chars||0)+1;save("projects");}
+      advanceProjectStatusIfBehind(data.projectId,"Pre-production");
     }
     save("characters");toast(`🎭 ${name} created`,"success");
   }
@@ -8787,6 +8844,7 @@ function approveCharacterSheet(prodId){
   if(!p)return;
   p.characterSheetStatus="approved";
   save("productions");
+  if(p.projectId)advanceProjectStatusIfBehind(p.projectId,"Production");
   openProductionDetail(prodId);
   toast("✅ Character Sheet approved — Episode Directors can now build storyboards","success");
 }
@@ -9344,6 +9402,7 @@ async function generateEpisodeScene(prodId,epIndex,retryOnly=false){
       const videoUrl=await runProductionVideoGen(p.videoModel,`${sb.desc}, ${p.characterDesc}`,p.aspectRatio,e.duration,p.quality,videoRef,e.negativePrompt,endImage);
       e.shots.push({shotIndex:i,videoUrl,refImage});
       e.shots.sort((a,b)=>a.shotIndex-b.shotIndex);
+      if(p.projectId)advanceProjectStatusIfBehind(p.projectId,"Post");
       trackProductionCost(p,p.videoModel,`Ep${epIndex} scene shot ${i+1}`);
     }catch(err){
       toast(`❌ Scene shot ${i+1} failed: ${err.message}`,"error");
