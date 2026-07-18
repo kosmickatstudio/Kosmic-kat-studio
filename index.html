@@ -4637,6 +4637,35 @@ function replaceIgLoadingBubble(loadingId,newMsg){
   renderIgChatThread();
 }
 
+// Re-hosts a fal.ai/Google/OpenAI-hosted generated file to your own Firebase
+// Storage, returning a URL you actually own instead of just a bookmark to
+// the provider's server. Every generated image/video URL in this app was
+// previously just the raw provider link — if that provider ever removed the
+// file, the reference would break with no independent backup anywhere.
+//
+// Gracefully degrades: no signed-in account (Storage needs a real uid, same
+// rule as Firestore elsewhere), a CORS-protected provider CDN that browsers
+// can't fetch() cross-origin, or any network failure — all fall back to
+// returning the original URL unchanged rather than blocking whatever
+// generation flow called this. Re-hosting is a bonus, not a requirement.
+async function rehostToStorage(url,pathPrefix){
+  if(!S.user||!S.user.uid)return url; // guest/signed-out — no account to own a copy under
+  if(!url||url.startsWith("data:")||url.includes("firebasestorage.googleapis.com"))return url; // already a data URL or already hosted by us
+  try{
+    const response=await fetch(url);
+    if(!response.ok)return url;
+    const blob=await response.blob();
+    const ext=(blob.type.split("/")[1]||"bin").split("+")[0];
+    const path=`${pathPrefix}/${S.user.uid}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
+    const ref=fbStorage.ref(path);
+    await ref.put(blob);
+    return await ref.getDownloadURL();
+  }catch(err){
+    console.warn(`Couldn't re-host to your own storage (likely a CORS-protected provider CDN) — keeping the original link:`,err.message);
+    return url;
+  }
+}
+
 async function createImageAsset(url,prompt,projectId){
   const wantsWatermark=gs("watermark",false)===true||gs("watermark",false)==="true";
   let finalUrl=url;
@@ -4651,6 +4680,15 @@ async function createImageAsset(url,prompt,projectId){
   const asset={id:"asset_"+Date.now(),type:"image",url:finalUrl,prompt,projectId:projectId||null,created:new Date().toISOString()};
   S.assets.push(asset);
   save("assets");
+  // Re-host in the background rather than making every save wait on the
+  // round-trip — swaps the asset's URL to the permanent one once ready; if
+  // it fails, the original provider URL (already saved above) just stays.
+  rehostToStorage(finalUrl,"gallery-images").then(hostedUrl=>{
+    if(hostedUrl!==finalUrl){
+      const a=S.assets.find(x=>x.id===asset.id);
+      if(a){a.url=hostedUrl;save("assets");}
+    }
+  });
   return asset;
 }
 
@@ -7647,6 +7685,15 @@ function createVideoAsset(url,prompt,projectId){
   const asset={id:"asset_"+Date.now(),type:"video",url,prompt,projectId:projectId||null,created:new Date().toISOString()};
   S.assets.push(asset);
   save("assets");
+  // Videos can be multi-MB — re-hosting in the background (not awaited)
+  // keeps every video generation's UI update instant instead of waiting on
+  // a full download+reupload round-trip. Swaps the URL once ready.
+  rehostToStorage(url,"gallery-videos").then(hostedUrl=>{
+    if(hostedUrl!==url){
+      const a=S.assets.find(x=>x.id===asset.id);
+      if(a){a.url=hostedUrl;save("assets");}
+    }
+  });
   return asset;
 }
 
@@ -8854,6 +8901,7 @@ async function generateCharacterSheet(prodId){
       else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/nano-banana-pro","1:1",false);
       sheets.push({tier:c.tier,name:c.name,desc:c.desc,sheetUrl:result.url});
       trackProductionCost(p,p.imageModel,`Character Sheet — ${c.name}`);
+      createImageAsset(result.url,`Character Sheet — ${c.name} (${p.concept.slice(0,40)})`,p.projectId);
     }catch(err){
       failCount++;
       toast(`❌ Character Sheet for ${c.name} failed: ${err.message}`,"error");
@@ -8875,6 +8923,7 @@ async function generateCharacterSheet(prodId){
       else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/nano-banana-pro","16:9",false);
       sheets.push({tier:"SIDE",name:sides.map(c=>c.name).join(", "),desc:lineup,sheetUrl:result.url});
       trackProductionCost(p,p.imageModel,`Character Sheet — Side characters lineup`);
+      createImageAsset(result.url,`Character Sheet — Side characters (${p.concept.slice(0,40)})`,p.projectId);
     }catch(err){
       failCount++;
       toast(`❌ Side character lineup failed: ${err.message}`,"error");
@@ -9789,6 +9838,7 @@ const DirectorChat=(function(){
       p.characterSheets.push({tier:c.tier,name:c.name,desc:c.desc,sheetUrl:result.url});
       save2Productions();
       trackProductionCost(p,p.imageModel,`Character Sheet — ${c.name}`);
+      createImageAsset(result.url,`Character Sheet — ${c.name} (${p.concept.slice(0,40)})`,p.projectId);
       return{};
     }
     if(task.type==="charsheet_side"){
@@ -9805,6 +9855,7 @@ const DirectorChat=(function(){
       p.characterSheets.push({tier:"SIDE",name:sides.map(c=>c.name).join(", "),desc:lineup,sheetUrl:result.url});
       save2Productions();
       trackProductionCost(p,p.imageModel,"Character Sheet — Side characters lineup");
+      createImageAsset(result.url,`Character Sheet — Side characters (${p.concept.slice(0,40)})`,p.projectId);
       return{};
     }
     if(task.type==="charsheet_review"){
