@@ -9032,6 +9032,16 @@ function approveCharacterSheet(prodId){
   toast("✅ Character Sheet approved — Episode Directors can now build storyboards","success");
 }
 
+// Bolds the First/Then/Finally beat markers for display only — e.script
+// itself stays plain text (that's what actually gets sent to the storyboard/
+// video generation calls, unchanged).
+function formatScriptForDisplay(script){
+  return script
+    .replace(/\n/g,"<br>")
+    .replace(/\s*\b(First,|Then,|Finally,)/g,'<br><strong style="color:var(--violet)">$1</strong>')
+    .replace(/^(<br>)+/,"");
+}
+
 function episodeCardHTML(p,e){
   const stageBadge=(status,labels)=>`<span class="badge ${status==='approved'?'badge-green':status==='rejected'?'badge-red':status==='partial'?'badge-orange':status==='ready'?'badge-violet':'badge-gray'}">${labels[status]||status}</span>`;
   const isEditingScript=S.editingScriptFor===`${p.id}_${e.index}`;
@@ -9057,7 +9067,7 @@ function episodeCardHTML(p,e){
         <span style="font-size:11px;font-weight:700;color:var(--violet)">1. SCRIPT</span>${stageBadge(e.scriptStatus,{pending:'Not written',ready:'Awaiting your approval',approved:'Approved',rejected:'Rejected — rewriting'})}
       </div>
       ${e.scriptStatus==='pending'?`<button class="btn btn-primary btn-sm" onclick="generateEpisodeScript('${p.id}',${e.index})">${pIcon('pencil',13)} Write Script</button>`:''}
-      ${e.script&&!isEditingScript?`<div style="font-size:11px;color:var(--textm);white-space:pre-wrap;max-height:160px;overflow-y:auto;background:rgba(61,31,122,0.04);border-radius:6px;padding:8px;margin-bottom:6px">${e.script}</div>`:''}
+      ${e.script&&!isEditingScript?`<div style="font-size:11px;color:var(--textm);line-height:1.6;white-space:pre-wrap;max-height:160px;overflow-y:auto;background:rgba(61,31,122,0.04);border-radius:6px;padding:8px;margin-bottom:6px">${formatScriptForDisplay(e.script)}</div>`:''}
       ${e.script&&isEditingScript?`<textarea class="f-textarea" id="scriptEditText_${e.index}" style="min-height:140px;margin-bottom:6px">${e.script}</textarea>`:''}
       ${e.scriptStatus==='ready'?`<div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn btn-primary btn-xs" onclick="approveEpisodeStage('${p.id}',${e.index},'script')">${pIcon('check',12)} Approve</button>
@@ -9228,7 +9238,7 @@ async function generateEpisodeScript(prodId,epIndex){
       // since that's exactly where it was getting lost before.
       const immediatelyPrior=priorEpisodes[priorEpisodes.length-1];
       if(immediatelyPrior.index===epIndex-1){
-        directContinuationNote=`\n\nCRITICAL — this episode must pick up from EXACTLY where Episode ${immediatelyPrior.index} left off, not re-enter or re-establish the scene:\nEpisode ${immediatelyPrior.index} ended on this exact moment: "${immediatelyPrior.script.slice(-400)}"\nIf that ending was unresolved/mid-action (a hold not broken, a strike not landed, a fall not finished, a question left hanging), SHOT 1 of this episode must continue directly from that literal physical position and motion — do NOT open with a fresh entrance, a new "camera bursts in" framing, or any shot that implies the scene is starting over. Only open with a fresh scene/establishing shot if Episode ${immediatelyPrior.index} actually reached a clean resolution (a clear winner, a completed action, a genuine scene change).`;
+        directContinuationNote=`\n\nCRITICAL — this episode must pick up from EXACTLY where Episode ${immediatelyPrior.index} left off, not re-enter or re-establish the scene:\nEpisode ${immediatelyPrior.index} ended on this exact moment: "${immediatelyPrior.script.slice(-400)}"\nIf that ending was unresolved/mid-action (a hold not broken, a strike not landed, a fall not finished, a question left hanging), the opening ("First,") beat of this episode must continue directly from that literal physical position and motion — do NOT open with a fresh entrance, a new "camera bursts in" framing, or any shot that implies the scene is starting over. Only open with a fresh scene/establishing shot if Episode ${immediatelyPrior.index} actually reached a clean resolution (a clear winner, a completed action, a genuine scene change).`;
       }
       // Two more failure modes found by hand-checking a real 4-episode run:
       // (1) an earlier episode sets up something specific (a job accepted, a
@@ -9246,14 +9256,14 @@ async function generateEpisodeScript(prodId,epIndex){
 
   try{
     const reply=await callAiSimple(
-      `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"${priorContext}${directContinuationNote}${threadAndDuplicationNote}\n\nFirst, identify which genre this portion of the story actually is, from this list (pick the single best fit, don't invent a new one):\n${genreList}\n\nThen write a detailed shooting script for a single continuous ${e.duration}-second video clip, structured using that genre's exact formula (cover every component listed for it, in a natural sentence, not a literal list). Include concrete camera angle, setting/background, scene time, and precise character movement/action within that structure.\n\nThis clip also needs to work as a piece of short-form content someone could stop scrolling for, not just a technically well-shot moment — structure the ${e.duration} seconds with a real narrative shape, timed out:\n- HOOK (roughly the first 15-20% of the duration): open on something that immediately grabs attention — mid-action, a striking visual, or a sudden change — never a slow, static setup shot. (If continuing directly from the previous episode's unresolved ending per the instruction above, this hook IS that continuation, not a new entrance.)\n- BUILD (the middle): escalate the tension, stakes, or visual intensity so there's a reason to keep watching, not just more of the same motion repeated.\n- PAYOFF (the final 10-15%): land on a clear beat — a resolution, a twist, a reveal, or (if this isn't the last episode) a cliffhanger moment that makes the next episode feel necessary. Never just let the action trail off or cut mid-motion with nothing resolved.\n\nWeave this pacing into the single continuous shot description naturally — don't label the three parts in the output, just make sure the described action actually has this shape when read start to finish.\n\nFormat EXACTLY like this, nothing else:\nGENRE: <one genre name from the list above, exactly as written>\nSHOT 1: <the shooting script description>${feedbackNote}`,
+      `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"${priorContext}${directContinuationNote}${threadAndDuplicationNote}\n\nFirst, identify which genre this portion of the story actually is, from this list (pick the single best fit, don't invent a new one):\n${genreList}\n\nThen write a detailed shooting script for a single continuous ${e.duration}-second video clip, covering every component of that genre's formula in natural sentences (not a literal list). Include concrete camera angle, setting/background, and precise character movement/action.\n\nThis clip also needs to work as short-form content someone could stop scrolling for, not just a technically well-shot moment. Structure it as exactly three beats, each starting with the transition word shown — this is also Seedance's own documented best practice for prompt clarity, so it directly helps generation quality, not just readability:\nFirst, <the HOOK — open on something that immediately grabs attention: mid-action, a striking visual, a sudden change. Never a slow, static setup. If continuing directly from the previous episode's unresolved ending per the instruction above, this IS that continuation, not a new entrance.>\nThen, <the BUILD — escalate the tension, stakes, or visual intensity. Not just more of the same motion repeated.>\nFinally, <the PAYOFF — a resolution, a twist, a reveal, or (if this isn't the last episode) a real cliffhanger. Never let the action just trail off unresolved.>\n\nTwo more rules that measurably affect actual generation quality on Seedance, not just style:\n- CAMERA DISCIPLINE: use at most TWO distinct camera movements across the whole clip (e.g. one dolly-in and one pan — not four different moves chained together). Mixing more than two confuses the model and produces less stable results. Pick the two that matter most for this beat.\n- If more than one named character appears in this shot, describe each one's appearance and action separately, by name, in its own clause (e.g. "Sheera lunges forward while Gorthok braces low") — never blend two characters' descriptions into one ambiguous passage, since each one gets fed to the model as its own separate visual reference.\n- Be specific, not long: 2-3 descriptive details per subject is plenty. Stacking adjectives doesn't improve the result and makes the script harder to read.\n\nFormat EXACTLY like this, nothing else:\nGENRE: <one genre name from the list above, exactly as written>\nFirst, <hook beat>\nThen, <build beat>\nFinally, <payoff beat>${feedbackNote}`,
       "You are Episode Director for a professional AI video production, analyzing your assigned script portion to pick the right genre formula before writing. No preamble, no markdown.",
       p.brainModel
     );
     const genreMatch=reply.match(/GENRE:\s*([^\n]+)/i);
-    const shotMatch=reply.match(/SHOT 1:\s*([\s\S]*)/i);
+    const bodyMatch=reply.match(/First,[\s\S]*/i);
     const genre=genreMatch&&GENRE_PROMPT_FORMULAS[genreMatch[1].trim()]?genreMatch[1].trim():null;
-    e.script=shotMatch?`SHOT 1: ${shotMatch[1].trim()}`:reply;
+    e.script=bodyMatch?bodyMatch[0].trim():reply.replace(/^GENRE:.*\n?/i,"").trim();
     e.genre=genre;
     e.negativePrompt=genre?GENRE_PROMPT_FORMULAS[genre].negativePrompt:"";
     e.scriptStatus="ready";
@@ -9306,6 +9316,13 @@ function dismissContinuityWarning(prodId,epIndex){
 }
 
 function parseScriptShots(script,count){
+  // Every episode is exactly one continuous clip (see the shotsExpected
+  // comment in generateEpisodeScript) - no marker needed to identify "the
+  // one shot," it's just the whole script. This also means the script text
+  // itself is free to use whatever formatting reads best for humans (the
+  // First/Then/Finally structure below) without needing to keep a "SHOT 1:"
+  // label around purely to stay parseable.
+  if(count===1)return {shots:[script.trim()],usedFallback:false};
   const shots=[];
   let allMatched=true;
   for(let i=1;i<=count;i++){
