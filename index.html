@@ -9445,6 +9445,11 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
   // back to the approved Character Sheet so every shot — not just the first —
   // is actually visually grounded in it, not just a text description.
   const seedRef=userRef||charSheetRef;
+  // Was captured on reject but never actually used anywhere — fixing that
+  // here. Appended as an explicit instruction to the image prompt itself,
+  // since (unlike the script step) there's no separate text-rewriting pass
+  // for storyboard frames to weave it into naturally.
+  const storyboardFeedbackSuffix=e.storyboardRejectionFeedback?`. IMPORTANT — address this feedback from the previous attempt: ${e.storyboardRejectionFeedback}`:"";
 
   for(const i of indicesToGenerate){
     try{
@@ -9462,7 +9467,7 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
         // dropped from their own scene.
         const multiRefModel=shotChars.length<=2?"fal-ai/nano-banana-pro":"fal-ai/nano-banana-2";
         const tags=shotChars.map((c,idx)=>`Image ${idx+1} is ${c.name}`).join(", ");
-        const prompt=`${tags}. ${shotDescs[i]}${p.locationDesc?", "+p.locationDesc:""}. Keep each character's appearance exactly consistent with their own reference image.`;
+        const prompt=`${tags}. ${shotDescs[i]}${p.locationDesc?", "+p.locationDesc:""}. Keep each character's appearance exactly consistent with their own reference image.${storyboardFeedbackSuffix}`;
         result=await genViaFluxEdit(prompt,shotChars.map(c=>c.sheetUrl),p.aspectRatio,multiRefModel);
       } else {
       const canImg2Img=seedRef&&!p.imageModel.startsWith("gemini")&&p.imageModel!=="gpt-image-2";
@@ -9475,14 +9480,14 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
         // image gen below don't have that path wired, so this branch is skipped
         // for those two providers (image still generates, just without the seed).
         S.igRefDataUrl=seedRef;
-        result=await genViaFal(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}`,"","fal-ai/flux/dev/image-to-image",p.aspectRatio,true);
+        result=await genViaFal(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}${storyboardFeedbackSuffix}`,"","fal-ai/flux/dev/image-to-image",p.aspectRatio,true);
         S.igRefDataUrl="";
       } else if(p.imageModel.startsWith("gemini-")){
-        result=await genViaGemini(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}`,p.aspectRatio,p.imageModel);
+        result=await genViaGemini(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}${storyboardFeedbackSuffix}`,p.aspectRatio,p.imageModel);
       } else if(p.imageModel==="gpt-image-2"){
-        result=await genViaOpenAI(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}`,p.aspectRatio);
+        result=await genViaOpenAI(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}${storyboardFeedbackSuffix}`,p.aspectRatio);
       } else {
-        result=await genViaFal(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}`,"",p.imageModel,p.aspectRatio,false);
+        result=await genViaFal(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}${storyboardFeedbackSuffix}`,"",p.imageModel,p.aspectRatio,false);
       }
       }
       e.storyboard.push({shotIndex:i,url:result.url,desc:shotDescs[i]});
@@ -9496,6 +9501,7 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
   }
   const complete=e.storyboard.length>=shotDescs.length;
   e.storyboardStatus=e.storyboard.length===0?"pending":(complete?"ready":"partial");
+  if(complete)e.storyboardRejectionFeedback=null; // used above — clear so it doesn't linger and get reapplied to an unrelated future regenerate
   save("productions");
   openProductionDetail(prodId);
   if(complete)toast(`🖼 Episode ${epIndex} storyboard ready for your approval`,"success");
