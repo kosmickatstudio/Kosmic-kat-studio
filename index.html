@@ -9211,11 +9211,24 @@ async function generateEpisodeScript(prodId,epIndex){
   // ones, since those haven't been written yet from this episode's POV.
   const usesNarrative=p.continuity==="narrative"||p.continuity==="both";
   let priorContext="";
+  let directContinuationNote="";
   if(usesNarrative){
     const priorEpisodes=p.episodes.filter(pe=>pe.index<epIndex&&pe.script&&(pe.scriptStatus==="ready"||pe.scriptStatus==="approved"));
     if(priorEpisodes.length){
       const summaries=priorEpisodes.map(pe=>`Episode ${pe.index}: ${pe.script}`).join("\n\n");
-      priorContext=`\n\nHere is exactly what happened in the earlier episode${priorEpisodes.length!==1?'s':''} — continue naturally from this, keep every established detail (character appearance, setting, objects, established facts) consistent, don't contradict anything:\n\n${summaries.slice(0,6000)}`;
+      priorContext=`\n\nHere is exactly what happened in the earlier episode${priorEpisodes.length!==1?'s':''} — keep every established detail (character appearance, setting, named characters/objects, established facts) consistent, don't contradict anything, and never swap a named character/object for a generic reference once they've been named:\n\n${summaries.slice(0,6000)}`;
+      // The single most common continuity failure: the immediately-prior
+      // episode ends mid-action (a hold, a strike in progress, a fall not
+      // yet landed), and the next one opens with a fresh "camera bursts
+      // into the arena" entrance shot instead of picking up that exact
+      // physical moment — reading as two different fights back to back
+      // instead of one continuous one. Calling this out as its own
+      // instruction, not buried inside the full prior-episode text block,
+      // since that's exactly where it was getting lost before.
+      const immediatelyPrior=priorEpisodes[priorEpisodes.length-1];
+      if(immediatelyPrior.index===epIndex-1){
+        directContinuationNote=`\n\nCRITICAL — this episode must pick up from EXACTLY where Episode ${immediatelyPrior.index} left off, not re-enter or re-establish the scene:\nEpisode ${immediatelyPrior.index} ended on this exact moment: "${immediatelyPrior.script.slice(-400)}"\nIf that ending was unresolved/mid-action (a hold not broken, a strike not landed, a fall not finished, a question left hanging), SHOT 1 of this episode must continue directly from that literal physical position and motion — do NOT open with a fresh entrance, a new "camera bursts in" framing, or any shot that implies the scene is starting over. Only open with a fresh scene/establishing shot if Episode ${immediatelyPrior.index} actually reached a clean resolution (a clear winner, a completed action, a genuine scene change).`;
+      }
     }
   }
 
@@ -9223,7 +9236,7 @@ async function generateEpisodeScript(prodId,epIndex){
 
   try{
     const reply=await callAiSimple(
-      `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"${priorContext}\n\nFirst, identify which genre this portion of the story actually is, from this list (pick the single best fit, don't invent a new one):\n${genreList}\n\nThen write a detailed shooting script for a single continuous ${e.duration}-second video clip, structured using that genre's exact formula (cover every component listed for it, in a natural sentence, not a literal list). Include concrete camera angle, setting/background, scene time, and precise character movement/action within that structure.\n\nThis clip also needs to work as a piece of short-form content someone could stop scrolling for, not just a technically well-shot moment — structure the ${e.duration} seconds with a real narrative shape, timed out:\n- HOOK (roughly the first 15-20% of the duration): open on something that immediately grabs attention — mid-action, a striking visual, or a sudden change — never a slow, static setup shot.\n- BUILD (the middle): escalate the tension, stakes, or visual intensity so there's a reason to keep watching, not just more of the same motion repeated.\n- PAYOFF (the final 10-15%): land on a clear beat — a resolution, a twist, a reveal, or (if this isn't the last episode) a cliffhanger moment that makes the next episode feel necessary. Never just let the action trail off or cut mid-motion with nothing resolved.\n\nWeave this pacing into the single continuous shot description naturally — don't label the three parts in the output, just make sure the described action actually has this shape when read start to finish.\n\nFormat EXACTLY like this, nothing else:\nGENRE: <one genre name from the list above, exactly as written>\nSHOT 1: <the shooting script description>${feedbackNote}`,
+      `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"${priorContext}${directContinuationNote}\n\nFirst, identify which genre this portion of the story actually is, from this list (pick the single best fit, don't invent a new one):\n${genreList}\n\nThen write a detailed shooting script for a single continuous ${e.duration}-second video clip, structured using that genre's exact formula (cover every component listed for it, in a natural sentence, not a literal list). Include concrete camera angle, setting/background, scene time, and precise character movement/action within that structure.\n\nThis clip also needs to work as a piece of short-form content someone could stop scrolling for, not just a technically well-shot moment — structure the ${e.duration} seconds with a real narrative shape, timed out:\n- HOOK (roughly the first 15-20% of the duration): open on something that immediately grabs attention — mid-action, a striking visual, or a sudden change — never a slow, static setup shot. (If continuing directly from the previous episode's unresolved ending per the instruction above, this hook IS that continuation, not a new entrance.)\n- BUILD (the middle): escalate the tension, stakes, or visual intensity so there's a reason to keep watching, not just more of the same motion repeated.\n- PAYOFF (the final 10-15%): land on a clear beat — a resolution, a twist, a reveal, or (if this isn't the last episode) a cliffhanger moment that makes the next episode feel necessary. Never just let the action trail off or cut mid-motion with nothing resolved.\n\nWeave this pacing into the single continuous shot description naturally — don't label the three parts in the output, just make sure the described action actually has this shape when read start to finish.\n\nFormat EXACTLY like this, nothing else:\nGENRE: <one genre name from the list above, exactly as written>\nSHOT 1: <the shooting script description>${feedbackNote}`,
       "You are Episode Director for a professional AI video production, analyzing your assigned script portion to pick the right genre formula before writing. No preamble, no markdown.",
       p.brainModel
     );
