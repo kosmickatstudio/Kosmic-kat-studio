@@ -9038,8 +9038,17 @@ function approveCharacterSheet(prodId){
 function formatScriptForDisplay(script){
   return script
     .replace(/\n/g,"<br>")
-    .replace(/\s*\b(First,|Then,|Finally,)/g,'<br><strong style="color:var(--violet)">$1</strong>')
+    .replace(/\s*(\[\d+s\])/g,'<br><strong style="color:var(--violet)">$1</strong>')
     .replace(/^(<br>)+/,"");
+}
+
+// Timestamp brackets are genuinely useful in the VIDEO generation prompt
+// (Seedance reads [0s]/[3s]/[6s] as real timing directives) but meaningless
+// clutter in a STILL IMAGE prompt — a storyboard frame has no "seconds."
+// Strips them for image generation only; e.script itself (used for video)
+// keeps them intact.
+function stripTimestampBrackets(text){
+  return text.replace(/\[\d+s\]\s*/g,"").trim();
 }
 
 function episodeCardHTML(p,e){
@@ -9262,15 +9271,35 @@ async function generateEpisodeScript(prodId,epIndex){
   const isFastTier=p.videoModel&&p.videoModel.includes("/fast/");
   const maxCameraMoves=isFastTier?1:2;
 
+  // Explicit [Xs] timestamp brackets instead of relying on prose transition
+  // words — this is what actually fixed the "first...then...finally all
+  // crammed into one 100-word run-on sentence" failure. Plain transition
+  // words can be embedded anywhere in a single sentence with zero real
+  // separation; a bracket format can't be faked that way, since each marker
+  // has to be followed by genuinely separate content. Also a real,
+  // documented Seedance pattern (timeline prompting with [0s]/[3s]/[6s]
+  // markers), not invented here. Proportions match the same hook/build/
+  // payoff timing described to the AI: ~15-20% / ~65% / ~15-20%.
+  const dur=e.duration;
+  const hookEnd=Math.max(1,Math.round(dur*0.18));
+  const payoffStart=Math.min(dur-1,Math.round(dur*0.82));
+
   try{
     const reply=await callAiSimple(
-      `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"${priorContext}${directContinuationNote}${threadAndDuplicationNote}\n\nFirst, identify which genre this portion of the story actually is, from this list (pick the single best fit, don't invent a new one):\n${genreList}\n\nThen write a detailed shooting script for a single continuous ${e.duration}-second video clip on ${p.videoModel} — covering every component of that genre's formula in natural sentences (not a literal list).\n\nPROMPT ORDER MATTERS on Seedance: it uses the opening of the prompt to lock in the subject and core action before processing the rest. Lead with WHO is in frame and WHAT they're doing — save camera/lighting/atmosphere detail for after the subject and action are established, not before.\n\nThis clip also needs real narrative shape, not just technique — someone should want to keep watching, not just look at a well-shot moment. Give it a genuine hook, an escalating middle, and a payoff (a resolution, a twist, or — if this isn't the last episode — a real cliffhanger; never let the action just trail off unresolved).\n\nSTRUCTURE — this is not optional: write the three beats as up to three SEPARATE SENTENCES, each ending in a period, not one continuous comma-chained run-on sentence. A 100+ word single sentence that just happens to contain the words "first"/"then"/"finally" somewhere inside it does NOT count as distinct beats — the model needs actual sentence boundaries to read this as three real stages, not one blob. (If continuing directly from the previous episode's unresolved ending per the instruction above, the opening sentence IS that continuation, not a new entrance.)\n\nFive more rules that measurably affect actual generation quality on ${p.videoModel}, not just style — confirmed against Seedance's own current prompt guides, not guessed at:\n- CAMERA VOCABULARY: use concrete, named camera terms paired with their effect — e.g. a slow dolly in builds intimacy, a tracking shot follows lateral movement. Write your OWN specific phrasing for THIS shot's actual action, don't reuse stock phrasing. Use at most ${maxCameraMoves} distinct camera movement${maxCameraMoves>1?'s':''} across the whole clip${isFastTier?' (this production is on Seedance Fast tier, which has less tolerance for complex multi-move camera work than Standard)':''} — mixing more confuses the model and produces less stable results.\n- LIGHTING MUST BE PHYSICAL AND MUST MATCH THIS SHOT'S ACTUAL LOCATION: never write just "cinematic lighting" or "dramatic shadows" alone. Name the real light source, its color temperature, its direction, and how shadows fall from it, but it must be a source that would actually exist in THIS scene's specific setting (a guild hall has wall sconces or windows, not arena floodlights; an arena has overhead rig lighting, not desk lamps) — check what you wrote actually matches where this scene is set before finalizing it. Keep the lighting logic consistent through the clip.\n- LENS/DEPTH OF FIELD where it fits the beat: a close-up or emotional beat benefits from naming a shallow depth of field / bokeh; a wide action beat can stay deep-focus. Don't force this on every shot if it doesn't fit.\n- If more than one named character appears in this shot, describe each one's appearance and action separately, by name, in its own clause — never blend two characters' descriptions into one ambiguous passage, since each one gets fed to the model as its own separate visual reference.\n- Be specific, not long — 2-3 concrete details per subject is plenty; stacking adjectives doesn't improve the result. Write original phrasing throughout — don't reuse any example wording shown above verbatim, those are illustrations of the STYLE expected, not text to copy into your answer.\n\nFormat EXACTLY like this, nothing else:\nGENRE: <one genre name from the list above, exactly as written>\n<the shooting script itself, following every rule above>${feedbackNote}`,
+      `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"${priorContext}${directContinuationNote}${threadAndDuplicationNote}\n\nFirst, identify which genre this portion of the story actually is, from this list (pick the single best fit, don't invent a new one):\n${genreList}\n\nThen write a detailed shooting script for a single continuous ${dur}-second video clip on ${p.videoModel} — covering every component of that genre's formula in natural sentences (not a literal list).\n\nPROMPT ORDER MATTERS on Seedance: it uses the opening of the prompt to lock in the subject and core action before processing the rest. Lead with WHO is in frame and WHAT they're doing — save camera/lighting/atmosphere detail for after the subject and action are established, not before.\n\nSTRUCTURE — this is not optional, and it's a real Seedance format, not just organization: use explicit timestamp brackets to mark exactly three beats across the ${dur} seconds:\n[0s] <the HOOK — grabs attention immediately, mid-action or a striking visual, never a slow static setup. If continuing directly from the previous episode's unresolved ending per the instruction above, this IS that continuation, not a new entrance.>\n[${hookEnd}s] <the BUILD — escalates tension/stakes/intensity, not just more of the same motion repeated.>\n[${payoffStart}s] <the PAYOFF — a resolution, a twist, a reveal, or (if this isn't the last episode) a real cliffhanger. Never let the action just trail off unresolved.>\nEach bracketed section must be its own genuinely separate content, not one continuous sentence spanning all three brackets — the brackets exist specifically so the model knows where in the clip's actual timeline each beat happens.\n\nFive more rules that measurably affect actual generation quality on ${p.videoModel}, not just style — confirmed against Seedance's own current prompt guides, not guessed at:\n- CAMERA VOCABULARY: use concrete, named camera terms paired with their effect — e.g. a slow dolly in builds intimacy, a tracking shot follows lateral movement. Write your OWN specific phrasing for THIS shot's actual action, don't reuse stock phrasing. Use at most ${maxCameraMoves} distinct camera movement${maxCameraMoves>1?'s':''} across the whole clip${isFastTier?' (this production is on Seedance Fast tier, which has less tolerance for complex multi-move camera work than Standard)':''} — mixing more confuses the model and produces less stable results.\n- LIGHTING MUST BE PHYSICAL AND MUST MATCH THIS SHOT'S ACTUAL LOCATION: never write just "cinematic lighting" or "dramatic shadows" alone. Name the real light source, its color temperature, its direction, and how shadows fall from it, but it must be a source that would actually exist in THIS scene's specific setting (a guild hall has wall sconces or windows, not arena floodlights; an arena has overhead rig lighting, not desk lamps) — check what you wrote actually matches where this scene is set before finalizing it. Keep the lighting logic consistent through the clip.\n- LENS/DEPTH OF FIELD where it fits the beat: a close-up or emotional beat benefits from naming a shallow depth of field / bokeh; a wide action beat can stay deep-focus. Don't force this on every beat if it doesn't fit.\n- If more than one named character appears in this shot, describe each one's appearance and action separately, by name, in its own clause — never blend two characters' descriptions into one ambiguous passage, since each one gets fed to the model as its own separate visual reference.\n- Be specific, not long — 2-3 concrete details per subject is plenty; stacking adjectives doesn't improve the result. Write original phrasing throughout — don't reuse any example wording shown above verbatim, those are illustrations of the STYLE expected, not text to copy into your answer.\n\nFormat EXACTLY like this, nothing else:\nGENRE: <one genre name from the list above, exactly as written>\n[0s] <hook beat>\n[${hookEnd}s] <build beat>\n[${payoffStart}s] <payoff beat>${feedbackNote}`,
       "You are Episode Director for a professional AI video production, analyzing your assigned script portion to pick the right genre formula before writing. No preamble, no markdown.",
       p.brainModel
     );
     const genreMatch=reply.match(/GENRE:\s*([^\n]+)/i);
     const genre=genreMatch&&GENRE_PROMPT_FORMULAS[genreMatch[1].trim()]?genreMatch[1].trim():null;
     e.script=reply.replace(/^GENRE:.*\n?/i,"").trim();
+    // Soft validation, not a hard failure — visibility into whether the
+    // brand actually followed the timestamp format, since a prior version
+    // of this instruction silently got ignored (prose "first/then/finally"
+    // words crammed into one sentence) with no way to notice it happened.
+    if((e.script.match(/\[\d+s\]/g)||[]).length<3){
+      console.warn(`Episode ${epIndex} script didn't use the required [Xs] timestamp format — the brain may not be following structure instructions reliably.`);
+    }
     e.genre=genre;
     e.negativePrompt=genre?GENRE_PROMPT_FORMULAS[genre].negativePrompt:"";
     e.scriptStatus="ready";
@@ -9430,6 +9459,10 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
     toast(`⚠️ Episode ${epIndex}'s script wasn't in strict "SHOT 1:/SHOT 2:" format — split by paragraph instead. Check the storyboard prompts look right.`,"error");
   }
   const shotDescs=parsed.shots;
+  // Timestamp brackets are useful in the script/video prompt but meaningless
+  // in a still-image prompt — stripped here, not from shotDescs itself
+  // (which stays intact for character-name detection and display).
+  const shotDescsForImage=shotDescs.map(stripTimestampBrackets);
   if(!retryOnly){e.storyboard=[];}
   const existingIndices=new Set(e.storyboard.map(s=>s.shotIndex));
   const indicesToGenerate=[];
@@ -9467,7 +9500,7 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
         // dropped from their own scene.
         const multiRefModel=shotChars.length<=2?"fal-ai/nano-banana-pro":"fal-ai/nano-banana-2";
         const tags=shotChars.map((c,idx)=>`Image ${idx+1} is ${c.name}`).join(", ");
-        const prompt=`${tags}. ${shotDescs[i]}${p.locationDesc?", "+p.locationDesc:""}. Keep each character's appearance exactly consistent with their own reference image.${storyboardFeedbackSuffix}`;
+        const prompt=`${tags}. ${shotDescsForImage[i]}${p.locationDesc?", "+p.locationDesc:""}. Keep each character's appearance exactly consistent with their own reference image.${storyboardFeedbackSuffix}`;
         result=await genViaFluxEdit(prompt,shotChars.map(c=>c.sheetUrl),p.aspectRatio,multiRefModel);
       } else {
       const canImg2Img=seedRef&&!p.imageModel.startsWith("gemini")&&p.imageModel!=="gpt-image-2";
@@ -9480,14 +9513,14 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
         // image gen below don't have that path wired, so this branch is skipped
         // for those two providers (image still generates, just without the seed).
         S.igRefDataUrl=seedRef;
-        result=await genViaFal(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}${storyboardFeedbackSuffix}`,"","fal-ai/flux/dev/image-to-image",p.aspectRatio,true);
+        result=await genViaFal(`${shotDescsForImage[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}${storyboardFeedbackSuffix}`,"","fal-ai/flux/dev/image-to-image",p.aspectRatio,true);
         S.igRefDataUrl="";
       } else if(p.imageModel.startsWith("gemini-")){
-        result=await genViaGemini(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}${storyboardFeedbackSuffix}`,p.aspectRatio,p.imageModel);
+        result=await genViaGemini(`${shotDescsForImage[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}${storyboardFeedbackSuffix}`,p.aspectRatio,p.imageModel);
       } else if(p.imageModel==="gpt-image-2"){
-        result=await genViaOpenAI(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}${storyboardFeedbackSuffix}`,p.aspectRatio);
+        result=await genViaOpenAI(`${shotDescsForImage[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}${storyboardFeedbackSuffix}`,p.aspectRatio);
       } else {
-        result=await genViaFal(`${shotDescs[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}${storyboardFeedbackSuffix}`,"",p.imageModel,p.aspectRatio,false);
+        result=await genViaFal(`${shotDescsForImage[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}${storyboardFeedbackSuffix}`,"",p.imageModel,p.aspectRatio,false);
       }
       }
       e.storyboard.push({shotIndex:i,url:result.url,desc:shotDescs[i]});
