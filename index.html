@@ -8957,6 +8957,16 @@ function episodeCardHTML(p,e){
       ${stageBadge(e.sceneStatus==='approved'?'approved':e.storyboardStatus==='approved'?'storyboard':e.scriptStatus==='approved'?'script':'pending',{approved:'Complete',storyboard:'Storyboard stage',script:'Script approved',pending:'Not started'})}
     </div>
     <div style="font-size:11px;color:var(--textm);margin-bottom:10px;font-style:italic">"${e.masterPrompt.slice(0,120)}${e.masterPrompt.length>120?'…':''}"</div>
+    ${e.continuityStale?`<div style="display:flex;align-items:flex-start;gap:8px;background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);border-radius:10px;padding:9px 11px;margin-bottom:10px">
+      <span style="color:#b45309;flex-shrink:0;margin-top:1px">${pIcon('sparkle',13)}</span>
+      <div style="flex:1">
+        <div style="font-size:11px;color:#b45309;font-weight:600">Episode ${e.continuityStaleSource} changed since this script was written — may no longer be consistent.</div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn btn-outline btn-xs" onclick="generateEpisodeScript('${p.id}',${e.index})">${pIcon('restore',11)} Regenerate to Fix</button>
+          <button class="btn btn-ghost btn-xs" onclick="dismissContinuityWarning('${p.id}',${e.index})">Dismiss — I checked, it's fine</button>
+        </div>
+      </div>
+    </div>`:''}
 
     <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -9141,6 +9151,17 @@ async function generateEpisodeScript(prodId,epIndex){
     e.negativePrompt=genre?GENRE_PROMPT_FORMULAS[genre].negativePrompt:"";
     e.scriptStatus="ready";
     e.scriptRejectionFeedback=null;
+    // Record exactly which prior episodes' content (and what that content
+    // actually was) this script was written from — the only way to later
+    // detect "an earlier episode changed after this one was already built
+    // on top of it" instead of silently letting continuity drift.
+    e.continuitySnapshot=usesNarrative?p.episodes.filter(pe=>pe.index<epIndex&&pe.script&&(pe.scriptStatus==="ready"||pe.scriptStatus==="approved")).map(pe=>({index:pe.index,script:pe.script})):null;
+    e.continuityStale=false;
+    e.continuityStaleSource=null;
+    // This episode's own script just changed — check every LATER episode
+    // that was already written using this one's old content, and flag any
+    // whose snapshot no longer matches what this episode actually says now.
+    flagDownstreamContinuityStaleness(p,epIndex);
     save("productions");
     trackProductionCost(p,(p.brainModel||"claude")+"_episode_script",`Ep${epIndex} script`);
     openProductionDetail(prodId);
@@ -9148,6 +9169,33 @@ async function generateEpisodeScript(prodId,epIndex){
   }catch(err){
     toast(`❌ Episode ${epIndex} script failed: ${err.message}`,"error");
   }
+}
+
+// Checks every episode after changedEpIndex for a continuity snapshot that
+// references changedEpIndex, and flags it stale if that snapshot's stored
+// script no longer matches what the earlier episode currently says. This is
+// what catches "approved episode 2 and 3, then sent episode 1 back for a
+// rewrite" — 2 and 3 don't get silently left contradicting the new episode
+// 1, they get a visible warning instead.
+function flagDownstreamContinuityStaleness(p,changedEpIndex){
+  const changedEp=p.episodes.find(pe=>pe.index===changedEpIndex);
+  if(!changedEp)return;
+  p.episodes.filter(pe=>pe.index>changedEpIndex&&pe.continuitySnapshot).forEach(pe=>{
+    const snap=pe.continuitySnapshot.find(s=>s.index===changedEpIndex);
+    if(snap&&snap.script!==changedEp.script){
+      pe.continuityStale=true;
+      pe.continuityStaleSource=changedEpIndex;
+    }
+  });
+}
+
+function dismissContinuityWarning(prodId,epIndex){
+  const p=S.productions.find(x=>x.id===prodId);
+  const e=getEpisode(p,epIndex);
+  e.continuityStale=false;
+  e.continuityStaleSource=null;
+  save("productions");
+  openProductionDetail(prodId);
 }
 
 function parseScriptShots(script,count){
