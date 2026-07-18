@@ -7977,6 +7977,89 @@ function updateVcRatioSelect(model){
   sel.value=ratios.includes(prevValue)?prevValue:ratios[0];
 }
 
+// Editable "director intake" for a production that already exists — the
+// original wizard only ever creates NEW productions; there was no way to
+// revisit a production's own concept or generation settings afterward.
+// Deliberately scoped to concept + model/quality/ratio/continuity only —
+// NOT per-episode duration/content, since episodes already exist with
+// their own settings from when they were planned.
+function openEditProductionSettings(prodId){
+  const p=S.productions.find(x=>x.id===prodId);
+  if(!p)return;
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show";
+  overlay.id="editProductionModal";
+  overlay.innerHTML=`
+    <div class="modal">
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:6px">${pIcon('pencil',15)} Edit Concept & Settings</div>
+      <div style="font-size:11px;color:var(--textm);background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.25);border-radius:8px;padding:8px 10px;margin-bottom:14px">
+        This only affects what you generate from here on — already-approved character sheets, scripts, storyboards, and scenes won't be regenerated automatically. If you change the concept significantly, check newer episodes for the continuity warning.
+      </div>
+      <div class="f-group">
+        <label class="f-label">Concept</label>
+        <textarea class="f-textarea" id="epsConcept" style="min-height:70px">${p.concept}</textarea>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Image Model</label>
+        <select class="f-select" id="pdImageModel" onchange="renderModelTrigger('pdImageModel')" style="display:none">${imageModelOptionsHTML()}</select>
+        <div id="pdImageModelTrigger" onclick="openModelPicker('pdImageModel')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Video Model</label>
+        <select class="f-select" id="pdVideoModel" onchange="updatePdAspectRatioOptions();updateClipLenOptionsSafe();renderModelTrigger('pdVideoModel','video')" style="display:none">${modelOptionsHTML("video",PD_VIDEO_MODEL_ALLOWED)}</select>
+        <div id="pdVideoModelTrigger" onclick="openModelPicker('pdVideoModel','video',PD_VIDEO_MODEL_ALLOWED)" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
+      <div class="f-row">
+        <div class="f-group" id="pdQualityWrap"><label class="f-label">Video Quality</label><select class="f-select" id="pdQuality"></select></div>
+        <div class="f-group"><label class="f-label">Aspect Ratio</label><select class="f-select" id="pdAspectRatio"></select></div>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Continuity Style</label>
+        <select class="f-select" id="epsContinuity">
+          <option value="narrative" ${p.continuity==="narrative"?"selected":""}>Narrative (shared story/character details across episodes)</option>
+          <option value="visual" ${p.continuity==="visual"?"selected":""}>Visual chaining (each episode starts from the previous episode's last frame)</option>
+          <option value="both" ${p.continuity==="both"?"selected":""}>Both</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="document.getElementById('editProductionModal').remove()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveProductionSettings('${p.id}')">${pIcon('check',13)} Save Changes</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById("pdImageModel").value=p.imageModel;
+  document.getElementById("pdVideoModel").value=p.videoModel;
+  renderModelTrigger("pdImageModel");
+  renderModelTrigger("pdVideoModel","video");
+  updatePdAspectRatioOptions();
+  document.getElementById("pdAspectRatio").value=p.aspectRatio;
+  populateResolutionSelect("pdQuality","pdQualityWrap",p.videoModel,p.quality);
+}
+
+// Same as updateClipLenOptions but skips updateDurationPreview() — that
+// targets per-episode planning UI this settings editor doesn't have, and
+// would throw looking for elements that don't exist on this screen.
+function updateClipLenOptionsSafe(){
+  populateResolutionSelect("pdQuality","pdQualityWrap",document.getElementById("pdVideoModel").value);
+}
+
+function saveProductionSettings(prodId){
+  const p=S.productions.find(x=>x.id===prodId);
+  if(!p)return;
+  const newConcept=document.getElementById("epsConcept").value.trim();
+  if(!newConcept){toast("Concept can't be empty","error");return;}
+  p.concept=newConcept;
+  p.imageModel=document.getElementById("pdImageModel").value;
+  p.videoModel=document.getElementById("pdVideoModel").value;
+  p.quality=document.getElementById("pdQuality").value;
+  p.aspectRatio=document.getElementById("pdAspectRatio").value;
+  p.continuity=document.getElementById("epsContinuity").value;
+  save("productions");
+  document.getElementById("editProductionModal").remove();
+  openProductionDetail(prodId);
+  toast("✅ Production settings updated","success");
+}
+
 function openProductionEntryChoice(projectId){
   const overlay=document.createElement("div");
   overlay.className="modal-overlay show";
@@ -8827,6 +8910,7 @@ function openProductionDetail(prodId){
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
       <button class="btn btn-ghost btn-sm" onclick="renderModule('productionstudio')">${pIcon('back')} Production Pipeline</button>
       <div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">${p.concept.slice(0,60)}</div><div style="font-size:11px;color:var(--textm)">${p.episodes.length} episode${p.episodes.length!==1?'s':''} · Director ${p.persona||''} · ${p.continuity}</div></div>
+      <button class="btn btn-outline btn-sm" onclick="openEditProductionSettings('${p.id}')" title="Change the concept, models, or generation settings for this production">${pIcon('pencil',13)}</button>
       ${allApproved?`<button class="btn btn-primary btn-sm" onclick="finalizeProductionToEditor('${p.id}')">${pIcon('film',14)} Finalize to Video Editor</button>`:''}
     </div>
     <div style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--violet);background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.25);border-radius:10px;padding:8px 12px;margin-bottom:14px">
