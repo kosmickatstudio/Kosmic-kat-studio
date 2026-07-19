@@ -1545,6 +1545,18 @@ const COST_TABLE={
   // $/second rate) — check your actual ElevenLabs usage after a few real
   // conversions and adjust this if it's off.
   "elevenlabs_voicechanger":0.05,
+  // Dubbing is priced per minute of source content on ElevenLabs' current
+  // Dubbing v2 pricing, not per-character — this is a rough per-use
+  // estimate for a short clip (under a minute), not a per-minute rate.
+  // Check your actual usage after a real dub and adjust if your clips run
+  // longer.
+  "elevenlabs_dubbing":0.30,
+  // Isolation bills the same rate structure as TTS (per character-
+  // equivalent of audio processed) — modest flat estimate for a short clip.
+  "elevenlabs_isolator":0.05,
+  // Music/Video-to-Music bills per second of output audio on a separate
+  // rate from TTS — this is a rough estimate for a short (~30s) soundtrack.
+  "elevenlabs_video2music":0.15,
   "stable-audio-3":0.05,
   "sfx-generator":0.02,
   // Two genuinely separate lipsync features exist in this app - Audio Tools'
@@ -11111,6 +11123,54 @@ function renderAudio(el){
       <div id="vcResult" style="margin-top:10px"></div>
     </div>
 
+    <div class="panel" id="audioDubbingAnchor" style="margin-top:14px">
+      <div class="panel-title">${pIcon('film')} Dubbing ${hasKey?'<span class="badge badge-green">ACTIVE — ElevenLabs</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Translate a video or audio file into another language — preserves the original speaker's voice, emotion, and timing. Takes a while to process; this stays open and polls for you.</div>
+      <div class="f-group">
+        <label class="f-label">Source file</label>
+        <input type="file" accept="audio/*,video/*" id="dubSourceFile" style="display:none" onchange="handleDubbingFileUpload(event)">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('dubSourceFile').click()">${pIcon('upload',12)} Choose Audio or Video</button>
+        <span id="dubSourceFileLabel" style="font-size:11px;color:var(--textm);margin-left:8px"></span>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Target language</label>
+        <select class="f-select" id="dubTargetLang" onchange="renderSimpleTrigger('dubTargetLang')" style="display:none">
+          <option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option><option value="it">Italian</option><option value="pt">Portuguese</option><option value="hi">Hindi</option><option value="ar">Arabic</option><option value="ja">Japanese</option><option value="ko">Korean</option><option value="zh">Chinese</option><option value="ru">Russian</option><option value="tr">Turkish</option><option value="id">Indonesian</option><option value="nl">Dutch</option><option value="pl">Polish</option>
+        </select>
+        <div id="dubTargetLangTrigger" onclick="openSimplePicker('dubTargetLang','Target Language')" style="display:flex;align-items:center;gap:8px;border:1.5px solid var(--border);border-radius:12px;padding:10px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
+      <button class="btn btn-primary btn-full" id="dubGenBtn" ${!hasKey?'disabled':''} onclick="startDubbing()">${hasKey?pIcon('film',13)+' Start Dubbing':pIcon('film',13)+' Add API Key First'}</button>
+      <div id="dubResult" style="margin-top:10px"></div>
+    </div>
+
+    <div class="panel" id="audioIsolatorAnchor" style="margin-top:14px">
+      <div class="panel-title">${pIcon('mic')} Voice Isolator ${hasKey?'<span class="badge badge-green">ACTIVE — ElevenLabs</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Strip background noise/music from a real-world recording, leaving clean isolated vocals — useful before cloning a voice from a messy source.</div>
+      <div class="f-group">
+        <input type="file" accept="audio/*" id="isoSourceFile" style="display:none" onchange="handleIsolatorFileUpload(event)">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('isoSourceFile').click()">${pIcon('upload',12)} Choose Audio File</button>
+        <span id="isoSourceFileLabel" style="font-size:11px;color:var(--textm);margin-left:8px"></span>
+      </div>
+      <button class="btn btn-primary btn-full" id="isoGenBtn" ${!hasKey?'disabled':''} onclick="runVoiceIsolator()">${hasKey?pIcon('mic',13)+' Isolate Voice':pIcon('mic',13)+' Add API Key First'}</button>
+      <div id="isoResult" style="margin-top:10px"></div>
+    </div>
+
+    <div class="panel" id="audioVideoToMusicAnchor" style="margin-top:14px">
+      <div class="panel-title">${pIcon('sparkle')} Video → Music ${hasKey?'<span class="badge badge-green">ACTIVE — ElevenLabs</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Generate a custom soundtrack directly from a finished video clip — analyzes the actual footage, not just a text description.</div>
+      <div class="f-group">
+        <input type="file" accept="video/*" id="v2mSourceFile" style="display:none" onchange="handleVideoToMusicFileUpload(event)">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('v2mSourceFile').click()">${pIcon('upload',12)} Choose Video</button>
+        <span id="v2mSourceFileLabel" style="font-size:11px;color:var(--textm);margin-left:8px"></span>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Style direction (optional)</label>
+        <input class="f-input" id="v2mDescription" placeholder="e.g. Tense cinematic build, low strings, resolves triumphant">
+      </div>
+      <button class="btn btn-primary btn-full" id="v2mGenBtn" ${!hasKey?'disabled':''} onclick="runVideoToMusic()">${hasKey?pIcon('sparkle',13)+' Generate Soundtrack':pIcon('sparkle',13)+' Add API Key First'}</button>
+      <div id="v2mResult" style="margin-top:10px"></div>
+    </div>
+
     <div class="panel" id="audioLibraryAnchor" style="margin-top:14px">
       <div class="panel-title">🎧 Recent Voiceovers</div>
       ${S.assets.filter(a=>a.type==='audio').length?`<div id="audioRecentList" style="display:flex;flex-direction:column;gap:8px">${S.assets.filter(a=>a.type==='audio').slice(-6).reverse().map(a=>`
@@ -11183,6 +11243,7 @@ function renderAudio(el){
   renderVoicePickerTrigger("audioVoice","audioVoiceTrigger");
   renderSimpleTrigger("audioModel");
   renderVoicePickerTrigger("vcTargetVoice","vcTargetVoiceTrigger");
+  renderSimpleTrigger("dubTargetLang");
   // Warm the cache in the background so opening any picker feels instant,
   // then refresh every visible trigger once real voice names/labels are in
   // — otherwise triggers show only the hardcoded fallback names until the
@@ -11786,6 +11847,184 @@ async function runVoiceChanger(){
   }catch(err){
     resultEl.innerHTML=`<div style="color:var(--red);font-size:12px;padding:8px">❌ ${err.message}</div>`;
     toast("❌ Voice conversion failed: "+err.message,"error");
+  }
+  btn.disabled=false;
+}
+
+// ── DUBBING — POST /v1/dubbing (confirmed via ElevenLabs' own docs,
+// multipart form) creates a project and returns a dubbing_id. This is a
+// genuinely async operation (can take minutes for real content), unlike
+// the other tools — polls GET /v1/dubbing/:dubbing_id for status ('dubbed'/
+// 'dubbing'/'failed') every 5s, then fetches the finished result from
+// GET /v1/dubbing/:dubbing_id/audio/:language_code once status is 'dubbed'.
+S.dubSourceFileBlob=null;
+function handleDubbingFileUpload(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  S.dubSourceFileBlob=file;
+  document.getElementById("dubSourceFileLabel").textContent=file.name;
+}
+async function startDubbing(){
+  if(!S.dubSourceFileBlob){toast("Choose a source file first","error");return;}
+  const apiKey=gs("api_elevenlabs","");
+  if(!apiKey){toast("Add an ElevenLabs API key in Settings first","error");return;}
+  const targetLang=document.getElementById("dubTargetLang").value;
+  const isVideo=S.dubSourceFileBlob.type.startsWith("video/");
+  const btn=document.getElementById("dubGenBtn");
+  const resultEl=document.getElementById("dubResult");
+  btn.disabled=true;
+  resultEl.innerHTML=`<div style="text-align:center;padding:16px;color:var(--textm);font-size:12px">${pIcon('film',14)} Submitting…</div>`;
+  try{
+    const form=new FormData();
+    form.append("file",S.dubSourceFileBlob);
+    form.append("target_lang",targetLang);
+    const submitResponse=await fetch("https://api.elevenlabs.io/v1/dubbing",{
+      method:"POST",headers:{"xi-api-key":apiKey},body:form
+    });
+    const submitData=await submitResponse.json();
+    if(!submitResponse.ok)throw new Error((submitData.detail&&(submitData.detail.message||JSON.stringify(submitData.detail)))||submitResponse.statusText);
+    const dubbingId=submitData.dubbing_id;
+    // Real content can genuinely take minutes — poll every 5s, up to 10
+    // minutes (120 attempts) before giving up, showing progress the whole way.
+    let attempts=0;
+    const maxAttempts=120;
+    const poll=async()=>{
+      attempts++;
+      resultEl.innerHTML=`<div style="text-align:center;padding:16px;color:var(--textm);font-size:12px">${pIcon('film',14)} Dubbing in progress… (checked ${attempts}×, this can take a few minutes)</div>`;
+      const statusResponse=await fetch(`https://api.elevenlabs.io/v1/dubbing/${dubbingId}`,{headers:{"xi-api-key":apiKey}});
+      const statusData=await statusResponse.json();
+      if(statusData.status==="dubbed"){
+        const audioResponse=await fetch(`https://api.elevenlabs.io/v1/dubbing/${dubbingId}/audio/${targetLang}`,{headers:{"xi-api-key":apiKey}});
+        if(!audioResponse.ok)throw new Error("Dub finished but couldn't fetch the result — try again");
+        const blob=await audioResponse.blob();
+        const base64Url=await new Promise((resolve,reject)=>{
+          const reader=new FileReader();
+          reader.onload=()=>resolve(reader.result);
+          reader.onerror=reject;
+          reader.readAsDataURL(blob);
+        });
+        const savedAssetDub=isVideo?createVideoAsset(base64Url,`Dubbed (${targetLang}): ${S.dubSourceFileBlob.name}`,""):createAudioAsset(base64Url,`Dubbed (${targetLang}): ${S.dubSourceFileBlob.name}`);
+        resultEl.innerHTML=`
+          <${isVideo?'video':'audio'} src="${base64Url}" controls style="width:100%;margin-bottom:8px${isVideo?';border-radius:8px':''}"></${isVideo?'video':'audio'}>
+          <div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Saved to Gallery automatically</div>
+          <div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAssetDub.id}')">${pIcon('folder',12)} Add to Collection</button></div>`;
+        logCost("elevenlabs_dubbing","Dubbed ("+targetLang+"): "+S.dubSourceFileBlob.name);
+        toast("🌍 Dubbing complete — saved to Gallery!","success");
+        btn.disabled=false;
+        return;
+      }
+      if(statusData.status==="failed")throw new Error("Dubbing failed on ElevenLabs' side — try a shorter clip or check the source file");
+      if(attempts>=maxAttempts)throw new Error("Dubbing is taking longer than expected (10+ min) — check back later, your dubbing_id is "+dubbingId);
+      setTimeout(poll,5000);
+    };
+    await poll();
+  }catch(err){
+    resultEl.innerHTML=`<div style="color:var(--red);font-size:12px;padding:8px">❌ ${err.message}</div>`;
+    toast("❌ Dubbing failed: "+err.message,"error");
+    btn.disabled=false;
+  }
+}
+
+// ── VOICE ISOLATOR — POST /v1/audio-isolation (confirmed via ElevenLabs'
+// own docs, multipart form, single field "audio"). Single call, no polling
+// needed — returns the isolated track directly.
+S.isoSourceFileBlob=null;
+function handleIsolatorFileUpload(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  S.isoSourceFileBlob=file;
+  document.getElementById("isoSourceFileLabel").textContent=file.name;
+}
+async function runVoiceIsolator(){
+  if(!S.isoSourceFileBlob){toast("Choose an audio file first","error");return;}
+  const apiKey=gs("api_elevenlabs","");
+  if(!apiKey){toast("Add an ElevenLabs API key in Settings first","error");return;}
+  const btn=document.getElementById("isoGenBtn");
+  const resultEl=document.getElementById("isoResult");
+  btn.disabled=true;
+  resultEl.innerHTML=`<div style="text-align:center;padding:16px;color:var(--textm);font-size:12px">${pIcon('mic',14)} Isolating…</div>`;
+  try{
+    const form=new FormData();
+    form.append("audio",S.isoSourceFileBlob);
+    const response=await fetch("https://api.elevenlabs.io/v1/audio-isolation",{
+      method:"POST",headers:{"xi-api-key":apiKey},body:form
+    });
+    if(!response.ok){
+      let errMsg=response.statusText;
+      try{const errData=await response.json();errMsg=(errData.detail&&(errData.detail.message||JSON.stringify(errData.detail)))||errMsg;}catch(e){}
+      throw new Error(errMsg);
+    }
+    const blob=await response.blob();
+    const base64Url=await new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(reader.result);
+      reader.onerror=reject;
+      reader.readAsDataURL(blob);
+    });
+    const savedAssetIso=createAudioAsset(base64Url,"Isolated: "+S.isoSourceFileBlob.name);
+    resultEl.innerHTML=`
+      <audio src="${base64Url}" controls style="width:100%;margin-bottom:8px"></audio>
+      <div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Saved to Gallery automatically</div>
+      <div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAssetIso.id}')">${pIcon('folder',12)} Add to Collection</button></div>`;
+    logCost("elevenlabs_isolator","Isolated: "+S.isoSourceFileBlob.name);
+    toast("🎤 Voice isolated — saved to Gallery!","success");
+  }catch(err){
+    resultEl.innerHTML=`<div style="color:var(--red);font-size:12px;padding:8px">❌ ${err.message}</div>`;
+    toast("❌ Isolation failed: "+err.message,"error");
+  }
+  btn.disabled=false;
+}
+
+// ── VIDEO TO MUSIC — POST /v1/music/video-to-music (confirmed via
+// ElevenLabs' own docs, multipart form, field "videos" — array-capable but
+// used here with a single file for simplicity). Single call, analyzes the
+// actual video content, not just a text prompt.
+S.v2mSourceFileBlob=null;
+function handleVideoToMusicFileUpload(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  S.v2mSourceFileBlob=file;
+  document.getElementById("v2mSourceFileLabel").textContent=file.name;
+}
+async function runVideoToMusic(){
+  if(!S.v2mSourceFileBlob){toast("Choose a video first","error");return;}
+  const apiKey=gs("api_elevenlabs","");
+  if(!apiKey){toast("Add an ElevenLabs API key in Settings first","error");return;}
+  const description=document.getElementById("v2mDescription").value.trim();
+  const btn=document.getElementById("v2mGenBtn");
+  const resultEl=document.getElementById("v2mResult");
+  btn.disabled=true;
+  resultEl.innerHTML=`<div style="text-align:center;padding:16px;color:var(--textm);font-size:12px">${pIcon('sparkle',14)} Analyzing video and composing…</div>`;
+  try{
+    const form=new FormData();
+    form.append("videos",S.v2mSourceFileBlob);
+    if(description)form.append("description",description);
+    form.append("model_id","music_v2");
+    const response=await fetch("https://api.elevenlabs.io/v1/music/video-to-music",{
+      method:"POST",headers:{"xi-api-key":apiKey},body:form
+    });
+    if(!response.ok){
+      let errMsg=response.statusText;
+      try{const errData=await response.json();errMsg=(errData.detail&&(errData.detail.message||JSON.stringify(errData.detail)))||errMsg;}catch(e){}
+      throw new Error(errMsg);
+    }
+    const blob=await response.blob();
+    const base64Url=await new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(reader.result);
+      reader.onerror=reject;
+      reader.readAsDataURL(blob);
+    });
+    const savedAssetV2m=createAudioAsset(base64Url,"Soundtrack for: "+S.v2mSourceFileBlob.name+(description?" — "+description:""));
+    resultEl.innerHTML=`
+      <audio src="${base64Url}" controls style="width:100%;margin-bottom:8px"></audio>
+      <div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Saved to Gallery automatically</div>
+      <div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${savedAssetV2m.id}')">${pIcon('folder',12)} Add to Collection</button></div>`;
+    logCost("elevenlabs_video2music","Soundtrack: "+S.v2mSourceFileBlob.name);
+    toast("🎼 Soundtrack generated — saved to Gallery!","success");
+  }catch(err){
+    resultEl.innerHTML=`<div style="color:var(--red);font-size:12px;padding:8px">❌ ${err.message}</div>`;
+    toast("❌ Soundtrack generation failed: "+err.message,"error");
   }
   btn.disabled=false;
 }
