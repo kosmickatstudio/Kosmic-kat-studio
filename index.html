@@ -7995,6 +7995,57 @@ function updateVcRatioSelect(model){
 // Deliberately scoped to concept + model/quality/ratio/continuity only —
 // NOT per-episode duration/content, since episodes already exist with
 // their own settings from when they were planned.
+// Continuity as two independent toggles instead of one 3-option dropdown —
+// the underlying checks (usesNarrative/useVisualChain elsewhere in this
+// file) already treat these as two separate booleans that happen to
+// combine into a stored string; exposing them as two switches matches the
+// real mechanism instead of an artificial "pick 1 of 3" mental model, and
+// naturally supports all 4 real combinations (including both off) instead
+// of forcing a choice between exactly the 3 that used to be named options.
+function continuityToggleHTML(idPrefix,narrativeOn,visualOn){
+  return `
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div onclick="toggleContinuityCard('${idPrefix}Narrative')" id="${idPrefix}Narrative" data-on="${narrativeOn}" style="display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:12px;cursor:pointer;border:1.5px solid ${narrativeOn?'var(--violet)':'var(--border)'};background:${narrativeOn?'var(--lav)':'var(--surface)'}">
+        <div style="width:34px;height:34px;border-radius:9px;background:${narrativeOn?'var(--violet)':'var(--lav)'};color:${narrativeOn?'#fff':'var(--textm)'};display:flex;align-items:center;justify-content:center;flex-shrink:0">${pIcon('doc',16)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:700;color:var(--text)">Narrative Continuity</div>
+          <div style="font-size:10.5px;color:var(--textm)">AI remembers what happened earlier — named characters, plot threads, no contradictions</div>
+        </div>
+        <div style="width:38px;height:22px;border-radius:20px;background:${narrativeOn?'var(--violet)':'var(--border)'};position:relative;flex-shrink:0;transition:background 0.15s"><div style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:3px;left:${narrativeOn?'19px':'3px'};transition:left 0.15s;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></div></div>
+      </div>
+      <div onclick="toggleContinuityCard('${idPrefix}Visual')" id="${idPrefix}Visual" data-on="${visualOn}" style="display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:12px;cursor:pointer;border:1.5px solid ${visualOn?'var(--violet)':'var(--border)'};background:${visualOn?'var(--lav)':'var(--surface)'}">
+        <div style="width:34px;height:34px;border-radius:9px;background:${visualOn?'var(--violet)':'var(--lav)'};color:${visualOn?'#fff':'var(--textm)'};display:flex;align-items:center;justify-content:center;flex-shrink:0">${pIcon('film',16)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:700;color:var(--text)">Visual Chaining</div>
+          <div style="font-size:10.5px;color:var(--textm)">Each episode continues from the exact last frame of the one before it — seamless motion, not just a consistent story</div>
+        </div>
+        <div style="width:38px;height:22px;border-radius:20px;background:${visualOn?'var(--violet)':'var(--border)'};position:relative;flex-shrink:0;transition:background 0.15s"><div style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:3px;left:${visualOn?'19px':'3px'};transition:left 0.15s;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></div></div>
+      </div>
+    </div>`;
+}
+function toggleContinuityCard(id){
+  const el=document.getElementById(id);
+  if(!el)return;
+  const nowOn=el.dataset.on!=="true";
+  el.dataset.on=nowOn;
+  el.style.borderColor=nowOn?"var(--violet)":"var(--border)";
+  el.style.background=nowOn?"var(--lav)":"var(--surface)";
+  const iconBox=el.children[0];
+  iconBox.style.background=nowOn?"var(--violet)":"var(--lav)";
+  iconBox.style.color=nowOn?"#fff":"var(--textm)";
+  const track=el.children[2];
+  track.style.background=nowOn?"var(--violet)":"var(--border)";
+  track.children[0].style.left=nowOn?"19px":"3px";
+}
+function readContinuityValue(idPrefix){
+  const narrativeOn=document.getElementById(idPrefix+"Narrative")?.dataset.on==="true";
+  const visualOn=document.getElementById(idPrefix+"Visual")?.dataset.on==="true";
+  if(narrativeOn&&visualOn)return"both";
+  if(narrativeOn)return"narrative";
+  if(visualOn)return"visual";
+  return"none"; // both off is a real, valid state — no continuity features run, fully independent episodes
+}
+
 function openEditProductionSettings(prodId){
   const p=S.productions.find(x=>x.id===prodId);
   if(!p)return;
@@ -8027,7 +8078,7 @@ function openEditProductionSettings(prodId){
       </div>
       <div class="f-group">
         <label class="f-label">Continuity</label>
-        <div style="font-size:11px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px 10px">Always both narrative (shared story/character details) and visual (each episode continues from the previous episode's actual last frame) — no longer a per-production choice.</div>
+        ${continuityToggleHTML("eps",p.continuity==="narrative"||p.continuity==="both",p.continuity==="visual"||p.continuity==="both")}
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
         <button class="btn btn-ghost" onclick="document.getElementById('editProductionModal').remove()">Cancel</button>
@@ -8061,7 +8112,7 @@ function saveProductionSettings(prodId){
   p.videoModel=document.getElementById("pdVideoModel").value;
   p.quality=document.getElementById("pdQuality").value;
   p.aspectRatio=document.getElementById("pdAspectRatio").value;
-  p.continuity="both"; // no longer a choice — always narrative + visual
+  p.continuity=readContinuityValue("eps");
   save("productions");
   document.getElementById("editProductionModal").remove();
   openProductionDetail(prodId);
@@ -8189,8 +8240,8 @@ function renderPdSharedFields(){
         <input type="range" id="pdDuration" min="4" max="300" value="30" step="1" style="width:100%;--range-fill:8.78%" oninput="updateDurationPreview()">
         <div id="pdDurationPreview" style="font-size:11px;color:var(--textm);margin-top:6px">Drag to set your total video length.</div>
       </div>
-      <div class="f-group"><label class="f-label">Continuity</label>
-        <div style="font-size:11px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px 10px">Every production uses both narrative (shared story/character details) and visual (each episode continues from the previous episode's actual last frame) continuity — no longer a choice.</div>
+      <div class="f-group"><label class="f-label">5. Continuity</label>
+        ${continuityToggleHTML("pd",true,true)}
       </div>`;
 }
 
@@ -8267,7 +8318,7 @@ function submitScriptIntake(projectId){
   const imageModel=document.getElementById("pdImageModel").value;
   const quality=document.getElementById("pdQuality").value;
   const aspectRatio=document.getElementById("pdAspectRatio").value;
-  const continuity="both"; // no longer a choice — always narrative + visual
+  const continuity=readContinuityValue("pd");
   const brainModel=document.getElementById("pdBrain").value;
   const refImages=[...S.pdRefImages];
 
@@ -8490,7 +8541,7 @@ function submitDirectorIntake(projectId){
   const imageModel=document.getElementById("pdImageModel").value;
   const quality=document.getElementById("pdQuality").value;
   const aspectRatio=document.getElementById("pdAspectRatio").value;
-  const continuity="both"; // no longer a choice — always narrative + visual
+  const continuity=readContinuityValue("pd");
   const brainModel=document.getElementById("pdBrain").value;
   const refImages=[...S.pdRefImages];
 
@@ -10328,7 +10379,7 @@ const DirectorChat=(function(){
         continuity:"both",brainModel:gs("ai_model","claude"),refImages:[],reviewedCharacterDesc:remembered?remembered.desc:"",hasFullScript:false,fullScriptText:text,episodeCount:1,
       };
       save();
-      push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}"${remembered.semantic?', recalled by meaning — '+Math.round(remembered.score*100)+'% match':''}) — I'll keep their approved look consistent unless you tell me otherwise.`:""} Going with sensible defaults so we can move — 1 episode, ~8s, Seedance 2.0 Fast (multi-ref), 720p, 16:9. Say "3 episodes" or "20 seconds" etc. before I start if you want different — otherwise just say "go" and I'll start planning.`);
+      push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}"${remembered.semantic?', recalled by meaning — '+Math.round(remembered.score*100)+'% match':''}) — I'll keep their approved look consistent unless you tell me otherwise.`:""} Going with sensible defaults so we can move — 1 episode, ~8s, Seedance 2.0 Fast (multi-ref), 720p, 16:9, both narrative + visual continuity. Say "3 episodes", "20 seconds", or "narrative only"/"visual only" before I start if you want different — otherwise just say "go" and I'll start planning.`);
       S.directorChat.intakeStage="confirm_plan";
       save();
       return;
@@ -10339,7 +10390,16 @@ const DirectorChat=(function(){
       const durMatch=lower.match(/(\d+)\s*(?:sec|second)/);
       if(epMatch)S.directorChat.draft.episodeCount=parseInt(epMatch[1],10);
       if(durMatch){S.directorChat.draft.totalDurationRequested=parseInt(durMatch[1],10);S.directorChat.draft.totalDurationRounded=parseInt(durMatch[1],10);}
-      if(!/^(go|start|yes|proceed|begin)/i.test(lower)&&!epMatch&&!durMatch){
+      // Continuity as text overrides, same conversational pattern as episode
+      // count/duration above — defaults to both narrative+visual (set at
+      // draft creation) unless told otherwise.
+      let continuityMatch=false;
+      if(/no visual|visual off|without visual/.test(lower)){S.directorChat.draft.continuity=S.directorChat.draft.continuity==="both"?"narrative":"none";continuityMatch=true;}
+      else if(/no narrative|narrative off|without narrative/.test(lower)){S.directorChat.draft.continuity=S.directorChat.draft.continuity==="both"?"visual":"none";continuityMatch=true;}
+      else if(/narrative only/.test(lower)){S.directorChat.draft.continuity="narrative";continuityMatch=true;}
+      else if(/visual only|visual chaining only/.test(lower)){S.directorChat.draft.continuity="visual";continuityMatch=true;}
+      else if(/both continuity|narrative and visual/.test(lower)){S.directorChat.draft.continuity="both";continuityMatch=true;}
+      if(!/^(go|start|yes|proceed|begin)/i.test(lower)&&!epMatch&&!durMatch&&!continuityMatch){
         push("agent",`Noted. Say "go" whenever you're ready to start.`);
         return;
       }
