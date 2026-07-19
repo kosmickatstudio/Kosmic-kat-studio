@@ -8026,12 +8026,8 @@ function openEditProductionSettings(prodId){
         <div class="f-group"><label class="f-label">Aspect Ratio</label><select class="f-select" id="pdAspectRatio"></select></div>
       </div>
       <div class="f-group">
-        <label class="f-label">Continuity Style</label>
-        <select class="f-select" id="epsContinuity">
-          <option value="narrative" ${p.continuity==="narrative"?"selected":""}>Narrative (shared story/character details across episodes)</option>
-          <option value="visual" ${p.continuity==="visual"?"selected":""}>Visual chaining (each episode starts from the previous episode's last frame)</option>
-          <option value="both" ${p.continuity==="both"?"selected":""}>Both</option>
-        </select>
+        <label class="f-label">Continuity</label>
+        <div style="font-size:11px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px 10px">Always both narrative (shared story/character details) and visual (each episode continues from the previous episode's actual last frame) — no longer a per-production choice.</div>
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
         <button class="btn btn-ghost" onclick="document.getElementById('editProductionModal').remove()">Cancel</button>
@@ -8065,7 +8061,7 @@ function saveProductionSettings(prodId){
   p.videoModel=document.getElementById("pdVideoModel").value;
   p.quality=document.getElementById("pdQuality").value;
   p.aspectRatio=document.getElementById("pdAspectRatio").value;
-  p.continuity=document.getElementById("epsContinuity").value;
+  p.continuity="both"; // no longer a choice — always narrative + visual
   save("productions");
   document.getElementById("editProductionModal").remove();
   openProductionDetail(prodId);
@@ -8193,11 +8189,9 @@ function renderPdSharedFields(){
         <input type="range" id="pdDuration" min="4" max="300" value="30" step="1" style="width:100%;--range-fill:8.78%" oninput="updateDurationPreview()">
         <div id="pdDurationPreview" style="font-size:11px;color:var(--textm);margin-top:6px">Drag to set your total video length.</div>
       </div>
-      <div class="f-group"><label class="f-label">5. Continuity Style</label><select class="f-select" id="pdContinuity">
-        <option value="narrative">Narrative only (shared story/character details across episodes)</option>
-        <option value="visual">Visual chaining (each episode starts from the previous episode's last frame)</option>
-        <option value="both">Both</option>
-      </select></div>`;
+      <div class="f-group"><label class="f-label">Continuity</label>
+        <div style="font-size:11px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px 10px">Every production uses both narrative (shared story/character details) and visual (each episode continues from the previous episode's actual last frame) continuity — no longer a choice.</div>
+      </div>`;
 }
 
 function initPdSharedFields(){
@@ -8273,7 +8267,7 @@ function submitScriptIntake(projectId){
   const imageModel=document.getElementById("pdImageModel").value;
   const quality=document.getElementById("pdQuality").value;
   const aspectRatio=document.getElementById("pdAspectRatio").value;
-  const continuity=document.getElementById("pdContinuity").value;
+  const continuity="both"; // no longer a choice — always narrative + visual
   const brainModel=document.getElementById("pdBrain").value;
   const refImages=[...S.pdRefImages];
 
@@ -8496,7 +8490,7 @@ function submitDirectorIntake(projectId){
   const imageModel=document.getElementById("pdImageModel").value;
   const quality=document.getElementById("pdQuality").value;
   const aspectRatio=document.getElementById("pdAspectRatio").value;
-  const continuity=document.getElementById("pdContinuity").value;
+  const continuity="both"; // no longer a choice — always narrative + visual
   const brainModel=document.getElementById("pdBrain").value;
   const refImages=[...S.pdRefImages];
 
@@ -10331,7 +10325,7 @@ const DirectorChat=(function(){
       S.directorChat.draft={
         projectId,concept:text.slice(0,200),imageModel:"fal-ai/nano-banana-pro",videoModel:"bytedance/seedance-2.0/fast/reference-to-video",
         quality:"720p",aspectRatio:"16:9",clipLen:8,totalDurationRequested:8,totalDurationRounded:8,totalShots:1,shotsPerEp:1,
-        continuity:"narrative",brainModel:gs("ai_model","claude"),refImages:[],reviewedCharacterDesc:remembered?remembered.desc:"",hasFullScript:false,fullScriptText:text,episodeCount:1,
+        continuity:"both",brainModel:gs("ai_model","claude"),refImages:[],reviewedCharacterDesc:remembered?remembered.desc:"",hasFullScript:false,fullScriptText:text,episodeCount:1,
       };
       save();
       push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}"${remembered.semantic?', recalled by meaning — '+Math.round(remembered.score*100)+'% match':''}) — I'll keep their approved look consistent unless you tell me otherwise.`:""} Going with sensible defaults so we can move — 1 episode, ~8s, Seedance 2.0 Fast (multi-ref), 720p, 16:9. Say "3 episodes" or "20 seconds" etc. before I start if you want different — otherwise just say "go" and I'll start planning.`);
