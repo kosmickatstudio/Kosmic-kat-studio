@@ -10865,6 +10865,139 @@ async function generateAdBrief(){
 }
 
 // ── AUDIO ──
+// ── REAL ELEVENLABS VOICE LIBRARY — was hardcoded to 6 premade voices in a
+// plain <select>, when the account actually has access to every premade,
+// cloned, and designed voice via GET /v1/voices (confirmed against
+// ElevenLabs' own docs). Fetched once per session and cached; cloned_voices
+// (the local list Voice Cloning/Voice Design write to) stays as an offline
+// fallback if the fetch fails or no key is set, so nothing breaks for
+// anyone without a key.
+S.elevenLabsVoicesCache=S.elevenLabsVoicesCache||null;
+async function fetchElevenLabsVoices(force){
+  if(S.elevenLabsVoicesCache&&!force)return S.elevenLabsVoicesCache;
+  const apiKey=gs("api_elevenlabs","");
+  if(!apiKey)return null;
+  try{
+    const response=await fetch("https://api.elevenlabs.io/v1/voices",{headers:{"xi-api-key":apiKey}});
+    const data=await response.json();
+    if(!response.ok)throw new Error((data.detail&&(data.detail.message||JSON.stringify(data.detail)))||response.statusText);
+    S.elevenLabsVoicesCache=(data.voices||[]).map(v=>({
+      id:v.voice_id,name:v.name,
+      category:v.category||"premade",
+      sub:[v.labels?.gender,v.labels?.accent,v.labels?.age].filter(Boolean).join(", ")
+    }));
+    return S.elevenLabsVoicesCache;
+  }catch(err){
+    console.warn("Couldn't fetch ElevenLabs voice library — falling back to the local cloned-voices list:",err.message);
+    return null;
+  }
+}
+function voiceMonogram(name){
+  return (name||"?").trim().slice(0,2).toUpperCase();
+}
+// Generic voice-picker sheet — same bottom-sheet chrome as the model/simple
+// pickers, with a live search filter since a real account can have far
+// more than 6 voices. selectId is the hidden <select> to update (kept for
+// every existing call site that reads .value), triggerId is the display
+// element.
+async function openVoicePicker(selectId,triggerId){
+  const overlay=document.createElement("div");
+  overlay.id="voicePickerOverlay";
+  overlay.style.cssText="position:fixed;inset:0;background:rgba(20,10,40,0.45);z-index:400;display:flex;align-items:flex-end";
+  overlay.onclick=(e)=>{if(e.target===overlay)overlay.remove();};
+  overlay.innerHTML=`
+    <div style="background:var(--surface);width:100%;max-height:80vh;border-radius:20px 20px 0 0;overflow-y:auto;box-shadow:var(--shv)">
+      <div style="position:sticky;top:0;background:var(--surface);padding:14px 18px 10px;z-index:2;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">Choose Voice</div>
+          <button onclick="document.getElementById('voicePickerOverlay').remove()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
+        </div>
+        <input class="f-input" id="voicePickerSearch" placeholder="Search voices…" oninput="filterVoicePickerList(this.value)" style="font-size:13px">
+      </div>
+      <div id="voicePickerList" style="padding:10px 14px 24px">
+        <div style="text-align:center;padding:20px;color:var(--textm);font-size:12px">${pIcon('mic',14)} Loading your voice library…</div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  let voices=await fetchElevenLabsVoices();
+  if(!voices){
+    // No key / fetch failed — fall back to the small local list so this
+    // still works for anyone without an ElevenLabs key configured yet.
+    const clonedVoices=gs("cloned_voices",[])||[];
+    voices=[
+      {id:"21m00Tcm4TlvDq8ikWAM",name:"Rachel",category:"premade",sub:"Female, Calm"},
+      {id:"ErXwobaYiN019PkySvjV",name:"Antoni",category:"premade",sub:"Male, Warm"},
+      {id:"EXAVITQu4vr4xnSDxMaL",name:"Bella",category:"premade",sub:"Female, Soft"},
+      {id:"TxGEqnHWrfWFTfGW9XjX",name:"Josh",category:"premade",sub:"Male, Deep"},
+      {id:"pNInz6obpgDQGcFmaJgB",name:"Adam",category:"premade",sub:"Male, Narrator"},
+      {id:"jsCqWAovK2LkecY7zXl4",name:"Freya",category:"premade",sub:"Female, Energetic"},
+      ...clonedVoices.map(v=>({id:v.id,name:v.name,category:"cloned",sub:""})),
+    ];
+  }
+  S.voicePickerCurrentList=voices;
+  S.voicePickerTargets={selectId,triggerId};
+  renderVoicePickerList(voices);
+}
+function renderVoicePickerList(voices){
+  const listEl=document.getElementById("voicePickerList");
+  if(!listEl)return;
+  const groups={premade:[],cloned:[],generated:[]};
+  voices.forEach(v=>(groups[v.category]||groups.premade).push(v));
+  const groupLabels={premade:"Premade",cloned:"Your Cloned Voices",generated:"Your Designed Voices"};
+  const sel=document.getElementById(S.voicePickerTargets.selectId);
+  const current=sel?sel.value:"";
+  listEl.innerHTML=Object.keys(groups).filter(g=>groups[g].length).map(g=>`
+    <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.4px;margin:12px 4px 6px">${groupLabels[g]}</div>
+    ${groups[g].map(v=>{
+      const selected=v.id===current;
+      return `<div onclick="selectVoiceOption('${v.id.replace(/'/g,"\\'")}')" style="display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:12px;cursor:pointer;margin-bottom:4px;border:1.5px solid ${selected?'var(--vs)':'transparent'};background:${selected?'var(--lav)':'transparent'}">
+        <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--vs),var(--violet));color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0">${voiceMonogram(v.name)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:var(--text)">${v.name}</div>
+          ${v.sub?`<div style="font-size:10.5px;color:var(--textm)">${v.sub}</div>`:''}
+        </div>
+        ${selected?`<span style="color:var(--violet)">${pIcon('check',15)}</span>`:''}
+      </div>`;
+    }).join('')}`).join('')||`<div style="text-align:center;padding:20px;color:var(--textm);font-size:12px">No voices found.</div>`;
+}
+function filterVoicePickerList(query){
+  const q=query.toLowerCase();
+  const filtered=(S.voicePickerCurrentList||[]).filter(v=>v.name.toLowerCase().includes(q)||(v.sub||"").toLowerCase().includes(q));
+  renderVoicePickerList(filtered);
+}
+function selectVoiceOption(voiceId){
+  const {selectId,triggerId}=S.voicePickerTargets;
+  const sel=document.getElementById(selectId);
+  if(sel){
+    // Voice options are added dynamically since we no longer hand-write a
+    // fixed <option> list — ensure one exists before setting .value so
+    // every existing call site reading sel.value keeps working unchanged.
+    if(![...sel.options].some(o=>o.value===voiceId)){
+      const voice=(S.voicePickerCurrentList||[]).find(v=>v.id===voiceId);
+      const opt=document.createElement("option");
+      opt.value=voiceId;opt.textContent=voice?voice.name:voiceId;
+      sel.appendChild(opt);
+    }
+    sel.value=voiceId;
+    sel.dispatchEvent(new Event("change"));
+  }
+  renderVoicePickerTrigger(selectId,triggerId);
+  const overlay=document.getElementById("voicePickerOverlay");
+  if(overlay)overlay.remove();
+}
+function renderVoicePickerTrigger(selectId,triggerId){
+  const sel=document.getElementById(selectId);
+  const trigger=document.getElementById(triggerId);
+  if(!sel||!trigger)return;
+  const voice=(S.voicePickerCurrentList||[]).find(v=>v.id===sel.value);
+  const name=voice?voice.name:(sel.options[sel.selectedIndex]?.textContent||"Choose a voice…");
+  const sub=voice?voice.sub:"";
+  trigger.innerHTML=`
+    <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--vs),var(--violet));color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0">${voiceMonogram(name)}</div>
+    <div style="flex:1;min-width:0;overflow:hidden"><div style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>${sub?`<div style="font-size:10px;color:var(--textm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div>`:''}</div>
+    <span style="color:var(--textm);flex-shrink:0">${pIcon('chevron',14)}</span>`;
+}
+
 function renderAudio(el){
   const hasKey=gs("api_elevenlabs");
   const clonedVoices=gs("cloned_voices",[])||[];
@@ -10879,22 +11012,24 @@ function renderAudio(el){
       <div class="f-row">
         <div class="f-group">
           <label class="f-label">Voice</label>
-          <select class="f-select" id="audioVoice">
-            <option value="21m00Tcm4TlvDq8ikWAM">Rachel (Female, Calm)</option>
-            <option value="ErXwobaYiN019PkySvjV">Antoni (Male, Warm)</option>
-            <option value="EXAVITQu4vr4xnSDxMaL">Bella (Female, Soft)</option>
-            <option value="TxGEqnHWrfWFTfGW9XjX">Josh (Male, Deep)</option>
-            <option value="pNInz6obpgDQGcFmaJgB">Adam (Male, Narrator)</option>
-            <option value="jsCqWAovK2LkecY7zXl4">Freya (Female, Energetic)</option>
-            ${clonedVoices.length?`<optgroup label="Your Cloned Voices">${clonedVoices.map(v=>`<option value="${v.id}">🎙️ ${v.name}</option>`).join('')}</optgroup>`:''}
+          <select class="f-select" id="audioVoice" onchange="renderVoicePickerTrigger('audioVoice','audioVoiceTrigger')" style="display:none">
+            <option value="21m00Tcm4TlvDq8ikWAM">Rachel</option>
+            <option value="ErXwobaYiN019PkySvjV">Antoni</option>
+            <option value="EXAVITQu4vr4xnSDxMaL">Bella</option>
+            <option value="TxGEqnHWrfWFTfGW9XjX">Josh</option>
+            <option value="pNInz6obpgDQGcFmaJgB">Adam</option>
+            <option value="jsCqWAovK2LkecY7zXl4">Freya</option>
+            ${clonedVoices.map(v=>`<option value="${v.id}">${v.name}</option>`).join('')}
           </select>
+          <div id="audioVoiceTrigger" onclick="openVoicePicker('audioVoice','audioVoiceTrigger')" style="display:flex;align-items:center;gap:9px;border:1.5px solid var(--border);border-radius:12px;padding:7px 10px;cursor:pointer;background:var(--surface)"></div>
         </div>
         <div class="f-group">
           <label class="f-label">Model</label>
-          <select class="f-select" id="audioModel">
+          <select class="f-select" id="audioModel" onchange="renderSimpleTrigger('audioModel')" style="display:none">
             <option value="eleven_flash_v2_5">Flash v2.5 (Fast, cheap)</option>
             <option value="eleven_multilingual_v2">Multilingual v2 (Best quality)</option>
           </select>
+          <div id="audioModelTrigger" onclick="openSimplePicker('audioModel','Choose Model')" style="display:flex;align-items:center;gap:8px;border:1.5px solid var(--border);border-radius:12px;padding:10px 12px;cursor:pointer;background:var(--surface)"></div>
         </div>
       </div>
       ${S.characters.filter(c=>c.voice).length?`<div class="f-group"><label class="f-label">Or use a Character's Voice Profile</label><select class="f-select" id="audioCharVoice" onchange="applyCharVoice()"><option value="">— Select character —</option>${S.characters.filter(c=>c.voice).map(c=>`<option value="${c.voice}">${c.name}</option>`).join('')}</select></div>`:''}
@@ -10961,15 +11096,16 @@ function renderAudio(el){
       </div>
       <div class="f-group">
         <label class="f-label">Target voice</label>
-        <select class="f-select" id="vcTargetVoice">
-          <option value="21m00Tcm4TlvDq8ikWAM">Rachel (Female, Calm)</option>
-          <option value="ErXwobaYiN019PkySvjV">Antoni (Male, Warm)</option>
-          <option value="EXAVITQu4vr4xnSDxMaL">Bella (Female, Soft)</option>
-          <option value="TxGEqnHWrfWFTfGW9XjX">Josh (Male, Deep)</option>
-          <option value="pNInz6obpgDQGcFmaJgB">Adam (Male, Narrator)</option>
-          <option value="jsCqWAovK2LkecY7zXl4">Freya (Female, Energetic)</option>
-          ${clonedVoices.length?`<optgroup label="Your Cloned Voices">${clonedVoices.map(v=>`<option value="${v.id}">${v.name}</option>`).join('')}</optgroup>`:''}
+        <select class="f-select" id="vcTargetVoice" onchange="renderVoicePickerTrigger('vcTargetVoice','vcTargetVoiceTrigger')" style="display:none">
+          <option value="21m00Tcm4TlvDq8ikWAM">Rachel</option>
+          <option value="ErXwobaYiN019PkySvjV">Antoni</option>
+          <option value="EXAVITQu4vr4xnSDxMaL">Bella</option>
+          <option value="TxGEqnHWrfWFTfGW9XjX">Josh</option>
+          <option value="pNInz6obpgDQGcFmaJgB">Adam</option>
+          <option value="jsCqWAovK2LkecY7zXl4">Freya</option>
+          ${clonedVoices.map(v=>`<option value="${v.id}">${v.name}</option>`).join('')}
         </select>
+        <div id="vcTargetVoiceTrigger" onclick="openVoicePicker('vcTargetVoice','vcTargetVoiceTrigger')" style="display:flex;align-items:center;gap:9px;border:1.5px solid var(--border);border-radius:12px;padding:7px 10px;cursor:pointer;background:var(--surface)"></div>
       </div>
       <button class="btn btn-primary btn-full" id="vcGenBtn" ${!hasKey?'disabled':''} onclick="runVoiceChanger()">${hasKey?pIcon('swap',13)+' Convert Voice':pIcon('swap',13)+' Add API Key First'}</button>
       <div id="vcResult" style="margin-top:10px"></div>
@@ -11044,6 +11180,20 @@ function renderAudio(el){
     </div>
   `;
   renderDialogueLines();
+  renderVoicePickerTrigger("audioVoice","audioVoiceTrigger");
+  renderSimpleTrigger("audioModel");
+  renderVoicePickerTrigger("vcTargetVoice","vcTargetVoiceTrigger");
+  // Warm the cache in the background so opening any picker feels instant,
+  // then refresh every visible trigger once real voice names/labels are in
+  // — otherwise triggers show only the hardcoded fallback names until the
+  // user manually opens a picker once.
+  fetchElevenLabsVoices().then(voices=>{
+    if(!voices)return;
+    S.voicePickerCurrentList=voices;
+    renderVoicePickerTrigger("audioVoice","audioVoiceTrigger");
+    renderVoicePickerTrigger("vcTargetVoice","vcTargetVoiceTrigger");
+    S.dialogueLinesData.forEach((line,i)=>renderVoicePickerTrigger(`dlVoiceSel_${i}`,`dlVoiceTrig_${i}`));
+  });
 }
 
 // ── MUSIC GENERATION (fal-ai/stable-audio-3) ──
@@ -11526,11 +11676,13 @@ function renderDialogueLines(){
     <option value="jsCqWAovK2LkecY7zXl4" ${selected==="jsCqWAovK2LkecY7zXl4"?"selected":""}>Freya</option>
     ${clonedVoices.map(v=>`<option value="${v.id}" ${selected===v.id?"selected":""}>${v.name}</option>`).join('')}`;
   wrap.innerHTML=S.dialogueLinesData.map((line,i)=>`
-    <div style="display:flex;gap:6px;align-items:flex-start">
-      <select class="f-select" style="width:110px;flex-shrink:0" onchange="S.dialogueLinesData[${i}].voice=this.value">${voiceOptionsHTML(line.voice)}</select>
+    <div style="display:flex;gap:6px;align-items:center">
+      <select id="dlVoiceSel_${i}" style="display:none" onchange="S.dialogueLinesData[${i}].voice=this.value">${voiceOptionsHTML(line.voice)}</select>
+      <div id="dlVoiceTrig_${i}" onclick="openVoicePicker('dlVoiceSel_${i}','dlVoiceTrig_${i}')" style="width:78px;flex-shrink:0;display:flex;align-items:center;gap:5px;border:1.5px solid var(--border);border-radius:10px;padding:5px 6px;cursor:pointer;background:var(--surface)"></div>
       <input class="f-input" style="flex:1" placeholder="Line ${i+1}…" value="${(line.text||'').replace(/"/g,'&quot;')}" oninput="S.dialogueLinesData[${i}].text=this.value">
       ${S.dialogueLinesData.length>2?`<button class="pc-menu-btn" onclick="removeDialogueLine(${i})">${pIcon('trash',12)}</button>`:''}
     </div>`).join('');
+  S.dialogueLinesData.forEach((line,i)=>renderVoicePickerTrigger(`dlVoiceSel_${i}`,`dlVoiceTrig_${i}`));
 }
 function addDialogueLine(){
   if(S.dialogueLinesData.length>=12){toast("Max 12 lines per dialogue","error");return;}
