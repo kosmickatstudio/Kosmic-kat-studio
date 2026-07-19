@@ -9737,7 +9737,12 @@ async function generateEpisodeScene(prodId,epIndex,retryOnly=false){
     // frame + combined text description to hold both identities apart.
     let videoRef=refImage;
     if(p.videoModel.includes("/reference-to-video")){
-      const shotChars=detectShotCharacters(sb.desc,p.characterSheets).slice(0,4); // cap 4 — real per-model max varies (Seedance 9, Kling O3 4), 4 covers realistic shot casts safely on either
+      // Was flat-capped at 4 for both models "to be safe" — but that was
+      // needlessly conservative for Seedance, which genuinely supports up
+      // to 9 reference images. Only Kling O3's reference-to-video is
+      // actually capped at 4 characters.
+      const realMaxRefs=p.videoModel.includes("bytedance/seedance")?9:4;
+      const shotChars=detectShotCharacters(sb.desc,p.characterSheets).slice(0,realMaxRefs);
       if(shotChars.length>=2)videoRef=shotChars.map(c=>({url:c.sheetUrl,name:c.name}));
     }
     // Start→End Frame mode: end each shot on the NEXT shot's storyboard frame
