@@ -761,7 +761,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
         <option value="gemini">Google Gemini (Vision-capable, cheap, supports images)</option>
         <option value="openai">OpenAI GPT-4o (Supports images)</option>
         <option value="groq">Groq Llama 3.3 (Free & fast, text only)</option>
-        <option value="deepseek">DeepSeek V3 (Ultra cheap, text only)</option>
+        <option value="deepseek">DeepSeek V4 Flash (Ultra cheap, text only)</option>
         <option value="aicredits">AICredits Gateway (Routes to whichever model you pick below, images if that model supports them)</option>
         </select>
         <div id="aiModelSelectTrigger" onclick="openModelPicker('aiModelSelect','brain')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
@@ -3420,7 +3420,7 @@ const BRAIN_MODEL_GROUPS=[
     {value:"gemini",name:"Google Gemini",sub:"Vision-capable, cheap, supports images"},
     {value:"openai",name:"OpenAI GPT-4o",sub:"Supports images"},
     {value:"groq",name:"Groq Llama 3.3",sub:"Free & fast, text only"},
-    {value:"deepseek",name:"DeepSeek V3",sub:"Ultra cheap, text only"},
+    {value:"deepseek",name:"DeepSeek V4 Flash",sub:"Ultra cheap, text only"},
     {value:"aicredits",name:"AICredits Gateway",sub:"Routes to whichever model you pick below, images if that model supports them"},
   ]},
 ];
@@ -8758,7 +8758,7 @@ function selectEpisodeCount(n){
 
 // ── STEP 3: PROMPTWRITER — 6 Master Prompts + Character Descriptions ──
 // ── VISION AI CALL — only Claude, OpenAI, and Gemini's wired models actually
-// support image input. Groq's llama-3.3-70b and DeepSeek's deepseek-chat are
+// support image input. Groq's llama-3.3-70b and DeepSeek's deepseek-v4-flash are
 // text-only, verified against what's already wired in callAiSimple.
 function isBrainVisionCapable(model){
   return model==="claude"||model==="openai"||model==="gemini";
@@ -14802,7 +14802,7 @@ async function callAiSimple(userPrompt,systemPrompt,modelOverride){
     // docs) — same request/response shape as OpenAI itself, just a different
     // base URL and a user-chosen model name instead of a fixed one.
     const endpoints={groq:"https://api.groq.com/openai/v1/chat/completions",deepseek:"https://api.deepseek.com/v1/chat/completions",openai:"https://api.openai.com/v1/chat/completions",aicredits:"https://api.aicredits.in/v1/chat/completions"};
-    const modelIds={groq:"llama-3.3-70b-versatile",deepseek:"deepseek-chat",openai:"gpt-4o-mini",aicredits:gs("aicredits_model","")||"gpt-4o-mini"};
+    const modelIds={groq:"llama-3.3-70b-versatile",deepseek:"deepseek-v4-flash",openai:"gpt-4o-mini",aicredits:gs("aicredits_model","")||"gpt-4o-mini"};
     if(model==="aicredits"&&!gs("aicredits_model",""))throw new Error("Set which model AICredits should use in Settings (e.g. claude-3-5-sonnet, gpt-4o)");
     const response=await fetch(endpoints[model],{
       method:"POST",
@@ -14871,7 +14871,7 @@ async function sendAiPrompt(){
     } else {
       // Groq / OpenAI / AICredits — all OpenAI-compatible
       const endpoints={groq:"https://api.groq.com/openai/v1/chat/completions",deepseek:"https://api.deepseek.com/v1/chat/completions",openai:"https://api.openai.com/v1/chat/completions",aicredits:"https://api.aicredits.in/v1/chat/completions"};
-      const modelIds={groq:"llama-3.3-70b-versatile",deepseek:"deepseek-chat",openai:"gpt-4o-mini",aicredits:gs("aicredits_model","")||"gpt-4o-mini"};
+      const modelIds={groq:"llama-3.3-70b-versatile",deepseek:"deepseek-v4-flash",openai:"gpt-4o-mini",aicredits:gs("aicredits_model","")||"gpt-4o-mini"};
       const response=await fetch(endpoints[model],{
         method:"POST",
         headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
