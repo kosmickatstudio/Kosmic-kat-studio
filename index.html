@@ -1421,6 +1421,18 @@ function gs(k,d=""){return S.settings[k]??d;}
 
 // ── COST TRACKING (estimates, approximate real-world fal.ai/ElevenLabs pricing) ──
 const COST_TABLE={
+  // Claude-brain text tasks — the "claude" brain option now calls Opus 4.8
+  // ($5/M input, $25/M output tokens — confirmed on Anthropic's own current
+  // pricing docs), not Haiku ($1/$5/M) like before. The $0.02 generic
+  // fallback these previously fell into was a reasonable estimate for
+  // Haiku-scale calls but is a real undercount now — same category of gap
+  // fixed earlier for image/video models. Estimated from typical token
+  // counts per task (promptwriter/script include continuity context, so
+  // run longer; ad copy is shorter) rather than one flat number for all four.
+  "claude_promptwriter":0.035,
+  "claude_episode_script":0.04, // longest input of the four — can include up to ~6000 chars of prior-episode continuity context
+  "claude_ad_variants":0.025,
+  "claude_ad_brief":0.02,
   "fal-ai/flux/schnell":0.003,
   "fal-ai/flux/dev":0.025,
   "fal-ai/flux-pro/v1.1":0.05,
@@ -8723,7 +8735,7 @@ async function callAiVision(images,userPrompt,systemPrompt,modelOverride){
     const response=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1200,system:systemPrompt,messages:[{role:"user",content}]})
+      body:JSON.stringify({model:"claude-opus-4-8",max_tokens:1200,system:systemPrompt,messages:[{role:"user",content}]})
     });
     const data=await response.json();
     if(data.error)throw new Error(data.error.message);
@@ -14690,7 +14702,7 @@ async function callAiSimple(userPrompt,systemPrompt,modelOverride){
     const response=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1200,system:systemPrompt,messages:[{role:"user",content:userPrompt}]})
+      body:JSON.stringify({model:"claude-opus-4-8",max_tokens:1200,system:systemPrompt,messages:[{role:"user",content:userPrompt}]})
     });
     const data=await response.json();
     if(data.error)throw new Error(data.error.message);
@@ -14753,7 +14765,7 @@ async function sendAiPrompt(){
       const response=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",
         headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-        body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:800,system:systemPrompt,messages:S.aiHistory.slice(-10)})
+        body:JSON.stringify({model:"claude-opus-4-8",max_tokens:800,system:systemPrompt,messages:S.aiHistory.slice(-10)})
       });
       const data=await response.json();
       if(data.error){appendAiMsg("assistant","❌ Error: "+data.error.message);}
