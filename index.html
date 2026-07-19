@@ -1455,6 +1455,12 @@ const COST_TABLE={
   // not modeled here, this is the 1K baseline like the rest of this table.
   "fal-ai/nano-banana-2":0.08,
   "fal-ai/nano-banana-pro":0.15,
+  // Found missing while compiling a full pricing comparison — these two had
+  // a pre-generation cost HINT in IMAGE_PRICING but no entry here, meaning
+  // every real generation with either was silently logging the $0.02
+  // fallback instead of their real cost.
+  "fal-ai/bytedance/seedream/v5/pro/text-to-image":0.0675,
+  "bria/fibo/generate":0.035, // unconfirmed real rate — see IMAGE_PRICING comment on this same key
   "fal-ai/flux-2":0.012,
   "fal-ai/flux-2-pro":0.03,
   "fal-ai/flux-2/flash":0.01,
