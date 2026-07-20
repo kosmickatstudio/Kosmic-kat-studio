@@ -15380,7 +15380,7 @@ function toggleAiPanel(){
 
 function updateAiModelLabel(){
   const model=gs("ai_model","claude");
-  const modelNames={claude:"Claude (Anthropic)",gemini:"Google Gemini",groq:"Groq Llama 3.3",deepseek:"DeepSeek V3",openai:"OpenAI GPT-4o",aicredits:"AICredits ("+(gs("aicredits_model","")||"no model set")+")"};
+  const modelNames={claude:"Claude (Anthropic)",gemini:"Google Gemini",groq:"Groq Llama 3.3",deepseek:"DeepSeek V4 Flash",openai:"OpenAI GPT-4o",aicredits:"AICredits ("+(gs("aicredits_model","")||"no model set")+")"};
   const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
   const hasKey=!!gs(apiKeyMap[model],"");
   const lbl=document.getElementById("aiModelLabel");
