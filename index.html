@@ -6266,18 +6266,38 @@ function updateVcCostHint(){
 // Fast tier only goes up to 720p in this app and fal doesn't publish its
 // token rate separately, so it stays a flat verified per-second rate.
 const SEEDANCE_RES_PX={"480p":[854,480],"720p":[1280,720],"1080p":[1920,1080],"4k":[3840,2160]};
-function seedanceStandardCost(resolution,seconds,videoRefMultiplier){
+// Seedance pricing is genuinely token-based and resolution-dependent for
+// BOTH tiers, not just Standard — confirmed directly from fal's own model
+// pages for Fast specifically ("$0.0112 per 1000 tokens... tokens = height *
+// width * duration * 24 / 1024"), the exact same formula shape as Standard,
+// just a different rate per 1000 tokens. The previous version hardcoded
+// Fast as a flat $0.2419/s regardless of resolution — that number is
+// actually only the 720p rate; 480p is genuinely about 45% of it. Selecting
+// 480p vs 720p showed an identical price because resolution was never
+// factored into Fast's calculation at all — this is what was reported and
+// confirmed.
+function seedanceStandardCost(resolution,seconds,videoRefMultiplier,ratePerK4kOverride){
   const px=SEEDANCE_RES_PX[resolution]||SEEDANCE_RES_PX["720p"];
   const tokens=(px[1]*px[0]*seconds*24)/1024;
-  const ratePerK=resolution==="4k"?0.008:0.014;
+  const ratePerK=resolution==="4k"?(ratePerK4kOverride!=null?ratePerK4kOverride:0.008):0.014;
   let cost=(tokens/1000)*ratePerK;
   if(videoRefMultiplier)cost*=videoRefMultiplier;
   return cost;
 }
+function seedanceFastCost(resolution,seconds,videoRefMultiplier){
+  // Confirmed: no 1080p/4K option on the Fast tier at all — SEEDANCE_RES_PX
+  // lookup falls back to 720p for anything else, which is correct here
+  // since Fast genuinely doesn't offer those resolutions.
+  const px=SEEDANCE_RES_PX[resolution]||SEEDANCE_RES_PX["720p"];
+  const tokens=(px[1]*px[0]*seconds*24)/1024;
+  let cost=(tokens/1000)*0.0112; // confirmed directly on fal's Fast tier model pages
+  if(videoRefMultiplier)cost*=videoRefMultiplier;
+  return cost;
+}
 const VIDEO_PRICING={
-  "bytedance/seedance-2.0/fast/text-to-video":{perSec:0.2419,audioIncluded:true},
+  "bytedance/seedance-2.0/fast/text-to-video":{fast:true,audioIncluded:true},
   "bytedance/seedance-2.0/text-to-video":{standard:true,audioIncluded:true},
-  "bytedance/seedance-2.0/fast/reference-to-video":{perSec:0.2419,audioIncluded:true,videoRefMultiplier:0.6},
+  "bytedance/seedance-2.0/fast/reference-to-video":{fast:true,audioIncluded:true,videoRefMultiplier:0.6},
   "bytedance/seedance-2.0/reference-to-video":{standard:true,audioIncluded:true,videoRefMultiplier:0.6},
   "bytedance/seedance-2.0/image-to-video":{standard:true,audioIncluded:true},
   // Kling rates below corrected against fal's own model pages after a real
@@ -6330,6 +6350,10 @@ function estimateVideoCost(model,seconds,resolution,hasVideoRefs,usesElements){
     // reference inputs are attached (per fal's pricing docs) — image-only
     // references bill at the full standard rate.
     const cost=seedanceStandardCost(resolution,seconds,hasVideoRefs?p.videoRefMultiplier:null);
+    return{cost,approx:false};
+  }
+  if(p.fast){
+    const cost=seedanceFastCost(resolution,seconds,hasVideoRefs?p.videoRefMultiplier:null);
     return{cost,approx:false};
   }
   let rate=(resolution==="4k"&&p.perSec4k)?p.perSec4k:p.perSec;
