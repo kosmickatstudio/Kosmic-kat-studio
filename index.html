@@ -1571,9 +1571,15 @@ const COST_TABLE={
   "fal-ai/kling-video/v3/pro/motion-control":1.34,
 };
 
-function logCost(key,note,count){
+function logCost(key,note,count,amountOverride){
   count=count||1;
-  const amt=(COST_TABLE[key]!==undefined?COST_TABLE[key]:0.02)*count;
+  // amountOverride lets a caller pass a real, precisely-computed cost
+  // (e.g. estimateVideoCost's resolution-aware formula) instead of the flat
+  // COST_TABLE lookup — needed because COST_TABLE has one fixed number per
+  // Seedance/video model regardless of what resolution was actually used,
+  // which is wrong: 480p and 4K cost genuinely different amounts on a
+  // token-based formula, not the same flat rate.
+  const amt=amountOverride!=null?amountOverride:(COST_TABLE[key]!==undefined?COST_TABLE[key]:0.02)*count;
   if(!S.costLog)S.costLog=[];
   S.costLog.push({id:"cost_"+Date.now(),key,amt,note:note||"",created:new Date().toISOString()});
   save("costLog");
@@ -7433,7 +7439,12 @@ async function sendVcChatPrompt(){
     }
     const savedAssetVc=createVideoAsset(videoUrl,prompt,"");
     replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel,prompt,totalDuration:parseInt(duration,10),assetId:savedAssetVc.id,model,resolution:model.startsWith("fal-ai/kling-video")?"Fixed by model (up to 1080p)":(document.getElementById("vcRes")?.value||""),refImages:hostedImages}});
-    logCost(costKey,prompt.slice(0,60));
+    // Real, resolution-aware cost, not the flat COST_TABLE number — that
+    // table has one fixed price per model regardless of what resolution
+    // was actually used, which is wrong for Seedance/Veo's token-based
+    // formulas (480p and 4K genuinely cost different amounts).
+    const realCostEst=estimateVideoCost(costKey,parseInt(duration,10)||0,resolution,!!(S.vcMultiVideos&&S.vcMultiVideos.length),!!((VIDEO_MODEL_CAPABILITIES[costKey]||{}).elements&&S.vcMultiImages.length>1));
+    logCost(costKey,prompt.slice(0,60),1,realCostEst?realCostEst.cost:null);
     toast(`✨ Video generated via ${providerLabel}!`,"success");
   }catch(err){
     replaceVcLoadingBubble(loadingId,{role:"assistant",type:"error",content:err.message});
@@ -9067,9 +9078,9 @@ function openProductionDetail(prodId){
 // Wraps logCost() with a running per-production total (p.costSpent), so the
 // Production Pipeline view can show real accumulated spend at every step
 // instead of a one-time rough estimate shown before any generation happens.
-function trackProductionCost(p,key,note,count){
-  logCost(key,note,count);
-  const amt=(COST_TABLE[key]!==undefined?COST_TABLE[key]:0.02)*(count||1);
+function trackProductionCost(p,key,note,count,amountOverride){
+  logCost(key,note,count,amountOverride);
+  const amt=amountOverride!=null?amountOverride:(COST_TABLE[key]!==undefined?COST_TABLE[key]:0.02)*(count||1);
   p.costSpent=(p.costSpent||0)+amt;
 }
 
@@ -9414,7 +9425,7 @@ async function generateEpisodeScript(prodId,epIndex){
 
   try{
     const reply=await callAiSimple(
-      `Master Prompt: "${e.masterPrompt}"\nCharacter Description: "${p.characterDesc}"${priorContext}${directContinuationNote}${threadAndDuplicationNote}${projectGenreNote}\n\nFirst, identify which genre this portion of the story actually is, from this list (pick the single best fit, don't invent a new one):\n${genreList}\n\nThen write a detailed shooting script for a single continuous ${dur}-second video clip on ${p.videoModel} — covering every component of that genre's formula in natural sentences (not a literal list).\n\nPROMPT ORDER MATTERS on Seedance: it uses the opening of the prompt to lock in the subject and core action before processing the rest. Lead with WHO is in frame and WHAT they're doing — save camera/lighting/atmosphere detail for after the subject and action are established, not before.\n\nSTRUCTURE — this is not optional, and it's a real Seedance format, not just organization: use explicit timestamp brackets to mark exactly three beats across the ${dur} seconds:\n[0s] <the HOOK — grabs attention immediately, mid-action or a striking visual, never a slow static setup. If continuing directly from the previous episode's unresolved ending per the instruction above, this IS that continuation, not a new entrance.>\n[${hookEnd}s] <the BUILD — escalates tension/stakes/intensity, not just more of the same motion repeated.>\n[${payoffStart}s] <the PAYOFF — a resolution, a twist, a reveal, or (if this isn't the last episode) a real cliffhanger. Never let the action just trail off unresolved.>\nEach bracketed section must be its own genuinely separate content, not one continuous sentence spanning all three brackets — the brackets exist specifically so the model knows where in the clip's actual timeline each beat happens.\n\nFive more rules that measurably affect actual generation quality on ${p.videoModel}, not just style — confirmed against Seedance's own current prompt guides, not guessed at:\n- CAMERA VOCABULARY: use concrete, named camera terms paired with their effect — e.g. a slow dolly in builds intimacy, a tracking shot follows lateral movement. Write your OWN specific phrasing for THIS shot's actual action, don't reuse stock phrasing. Use at most ${maxCameraMoves} distinct camera movement${maxCameraMoves>1?'s':''} across the whole clip${isFastTier?' (this production is on Seedance Fast tier, which has less tolerance for complex multi-move camera work than Standard)':''} — mixing more confuses the model and produces less stable results.\n- LIGHTING MUST BE PHYSICAL AND MUST MATCH THIS SHOT'S ACTUAL LOCATION: never write just "cinematic lighting" or "dramatic shadows" alone. Name the real light source, its color temperature, its direction, and how shadows fall from it, but it must be a source that would actually exist in THIS scene's specific setting (a guild hall has wall sconces or windows, not arena floodlights; an arena has overhead rig lighting, not desk lamps) — check what you wrote actually matches where this scene is set before finalizing it. Keep the lighting logic consistent through the clip.\n- LENS/DEPTH OF FIELD where it fits the beat: a close-up or emotional beat benefits from naming a shallow depth of field / bokeh; a wide action beat can stay deep-focus. Don't force this on every beat if it doesn't fit.\n- If more than one named character appears in this shot, describe each one's appearance and action separately, by name, in its own clause — never blend two characters' descriptions into one ambiguous passage, since each one gets fed to the model as its own separate visual reference.\n- Be specific, not long — 2-3 concrete details per subject is plenty; stacking adjectives doesn't improve the result. Write original phrasing throughout — don't reuse any example wording shown above verbatim, those are illustrations of the STYLE expected, not text to copy into your answer.\n\nFormat EXACTLY like this, nothing else:\nGENRE: <one genre name from the list above, exactly as written>\n[0s] <hook beat>\n[${hookEnd}s] <build beat>\n[${payoffStart}s] <payoff beat>${feedbackNote}`,
+      `Master Prompt: "${e.masterPrompt}"\nCharacter Description (for your context/continuity only — see the note below on when to actually restate any of this): "${p.characterDesc}"${priorContext}${directContinuationNote}${threadAndDuplicationNote}${projectGenreNote}\n\nFirst, identify which genre this portion of the story actually is, from this list (pick the single best fit, don't invent a new one):\n${genreList}\n\nThen write a detailed shooting script for this ${dur}-second video clip on ${p.videoModel}, structured around Seedance's own prompt formula: Subject → Action → Environment → Camera → Style — covering every component of the chosen genre's formula within that structure, in natural sentences. No target word count — write however long it actually takes to direct this shot properly, don't compress it. (Skip a separate "Constraints" step — negative prompts are handled as their own field elsewhere, not written into this text.)\n\nDON'T RE-DESCRIBE CHARACTERS WHO ALREADY HAVE AN APPROVED SHEET: each named character's full appearance (build, outfit, features) already exists as a real visual reference image fed directly into generation alongside this text — restating their static appearance in every single shot is redundant and wastes the prompt's attention on something the reference image already handles. Just name them and describe what they're doing. The ONLY time to actually describe appearance in the text: something about it is genuinely CHANGING in this specific shot that the reference image can't show on its own — a transformation, a costume/armor change, visible new damage or injury, torn clothing, a disguise. In that case describe the change itself, not their whole baseline look.\n\nDIALOGUE — a real Seedance capability, use it when the beat calls for a character actually speaking: write the line in double quotes within the script text (e.g. Sheera snarls, "You're not walking away from this one."). Seedance lip-syncs and voices any quoted line natively in the same generation pass — don't invent dialogue that doesn't fit, but use it whenever a character genuinely has something to say in this beat.\n\nMULTIPLE CUTS ARE ALLOWED: this doesn't have to be one unbroken continuous take if the story is better served by cutting to a new angle or moment within the clip — Seedance can render multiple cuts in one generation when they're written out explicitly (mark a hard cut clearly, e.g. "Cut to:"). Use a cut when the beat genuinely needs it; stay on one continuous take when that serves the action better — your call based on what's actually happening in this specific shot.\n\nThis clip also needs real narrative shape, not just technique — someone should want to keep watching, not just look at a well-shot moment. Give it a genuine hook, an escalating middle, and a payoff (a resolution, a twist, or — if this isn't the last episode — a real cliffhanger; never let the action just trail off unresolved).\n\nSTRUCTURE — this is not optional, and it's a real Seedance format, not just organization: use explicit timestamp brackets to mark exactly three beats across the ${dur} seconds:\n[0s] <the HOOK — grabs attention immediately, mid-action or a striking visual, never a slow static setup. If continuing directly from the previous episode's unresolved ending per the instruction above, this IS that continuation, not a new entrance.>\n[${hookEnd}s] <the BUILD — escalates tension/stakes/intensity, not just more of the same motion repeated. This is where a cut (per the note above) is most likely to earn its place, if one fits.>\n[${payoffStart}s] <the PAYOFF — a resolution, a twist, a reveal, or (if this isn't the last episode) a real cliffhanger. Never let the action just trail off unresolved.>\nEach bracketed section must be its own genuinely separate content, not one continuous sentence spanning all three brackets.\n\nFour more rules that measurably affect actual generation quality on ${p.videoModel}, not just style — confirmed against Seedance's own current prompt guides, not guessed at:\n- CAMERA VOCABULARY: use concrete, named camera terms paired with their effect — e.g. a slow dolly in builds intimacy, a tracking shot follows lateral movement. Write your OWN specific phrasing for THIS shot's actual action, don't reuse stock phrasing. Use at most ${maxCameraMoves} distinct camera movement${maxCameraMoves>1?'s':''} across the whole clip${isFastTier?' (this production is on Seedance Fast tier, which has less tolerance for complex multi-move camera work than Standard)':''} — mixing more confuses the model and produces less stable results.\n- LIGHTING MUST BE PHYSICAL AND MUST MATCH THIS SHOT'S ACTUAL LOCATION: never write just "cinematic lighting" or "dramatic shadows" alone. Name the real light source, its color temperature, its direction, and how shadows fall from it, but it must be a source that would actually exist in THIS scene's specific setting (a guild hall has wall sconces or windows, not arena floodlights; an arena has overhead rig lighting, not desk lamps) — check what you wrote actually matches where this scene is set before finalizing it. Keep the lighting logic consistent through the clip.\n- LENS/DEPTH OF FIELD where it fits the beat: a close-up or emotional beat benefits from naming a shallow depth of field / bokeh; a wide action beat can stay deep-focus. Don't force this on every beat if it doesn't fit.\n- If more than one named character appears in this shot, describe each one's action separately, by name, in its own clause — never blend two characters' descriptions into one ambiguous passage, since each one gets fed to the model as its own separate visual reference. Write original phrasing throughout — don't reuse any example wording shown above verbatim, those are illustrations of the STYLE expected, not text to copy into your answer.\n\nFormat EXACTLY like this, nothing else:\nGENRE: <one genre name from the list above, exactly as written>\n[0s] <hook beat>\n[${hookEnd}s] <build beat>\n[${payoffStart}s] <payoff beat>${feedbackNote}`,
       "You are Episode Director for a professional AI video production, analyzing your assigned script portion to pick the right genre formula before writing. No preamble, no markdown.",
       p.brainModel
     );
@@ -9853,7 +9864,10 @@ async function generateEpisodeScene(prodId,epIndex,retryOnly=false){
       e.shots.push({shotIndex:i,videoUrl,refImage});
       e.shots.sort((a,b)=>a.shotIndex-b.shotIndex);
       if(p.projectId)advanceProjectStatusIfBehind(p.projectId,"Post");
-      trackProductionCost(p,p.videoModel,`Ep${epIndex} scene shot ${i+1}`);
+      // Real, resolution-aware cost (p.quality) — not the flat COST_TABLE
+      // number, which is wrong for Seedance/Veo's token-based formulas.
+      const sceneEst=estimateVideoCost(p.videoModel,e.duration,p.quality,Array.isArray(videoRef)&&videoRef.length>1,false);
+      trackProductionCost(p,p.videoModel,`Ep${epIndex} scene shot ${i+1}`,1,sceneEst?sceneEst.cost:null);
     }catch(err){
       toast(`❌ Scene shot ${i+1} failed: ${err.message}`,"error");
     }
@@ -14757,7 +14771,7 @@ const NodeCanvas=(function(){
     const est=estimateVideoCost(node.data.model,node.data.duration||5,node.data.resolution||"720p",videoUrls.length>0,!!(klingCap&&klingCap.elements&&imageUrls.length>1));
     node.meta.model=node.data.model;
     node.meta.cost=est?est.cost:0;
-    logCost(node.data.model,"Node Canvas — Video Clip");
+    logCost(node.data.model,"Node Canvas — Video Clip",1,est?est.cost:null);
   }
   async function execUpscale(node){
     const input=getConnectedInput(node,"in_1");
