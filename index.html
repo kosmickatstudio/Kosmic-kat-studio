@@ -1120,13 +1120,20 @@ const API_SERVICES = [
 const S = {
   user: null,
   mod: "home",
-  settings: JSON.parse(localStorage.getItem("kk_settings")||"{}"),
-  projects: JSON.parse(localStorage.getItem("kk_projects")||"[]"),
-  characters: JSON.parse(localStorage.getItem("kk_characters")||"[]"),
-  shots: JSON.parse(localStorage.getItem("kk_shots")||"[]"),
-  episodes: JSON.parse(localStorage.getItem("kk_episodes")||"[]"),
-  assets: JSON.parse(localStorage.getItem("kk_assets")||"[]"),
-  uploads: JSON.parse(localStorage.getItem("kk_uploads")||"[]"),
+  // These used to read straight from localStorage synchronously right here
+  // at script-parse time. Now they start as plain defaults — the real data
+  // gets loaded into them by loadStateFromStorage(), awaited at the start
+  // of init(), before the first render ever happens. See the IndexedDB
+  // storage layer below for why: localStorage caps out around 5-10MB total
+  // across the whole app, which real usage (especially audio/image assets)
+  // was heading toward. IndexedDB comfortably holds hundreds of MB+.
+  settings: {},
+  projects: [],
+  characters: [],
+  shots: [],
+  episodes: [],
+  assets: [],
+  uploads: [],
   activeProject: null,
   aiAbort: null,
   aiHistory: [],
@@ -1136,37 +1143,128 @@ const S = {
   editingCharId: null,
   editingCharRefImages: [],
   vcActiveProject: null,
-  activityLog: JSON.parse(localStorage.getItem("kk_activity")||"[]"),
-  productions: JSON.parse(localStorage.getItem("kk_productions")||"[]"),
-  collections: JSON.parse(localStorage.getItem("kk_collections")||"[]"),
-  igChatHistory: JSON.parse(localStorage.getItem("kk_ig_chat")||"[]"),
+  activityLog: [],
+  productions: [],
+  collections: [],
+  igChatHistory: [],
   pendingFirstFrame: null,
   editingCharRelationships: [],
   pendingRefTag: "Front",
   galleryFilter: "all",
   assetFilter: "all",
-  editorSequence: JSON.parse(localStorage.getItem("kk_editor_seq")||"[]"),
-  costLog: JSON.parse(localStorage.getItem("kk_cost_log")||"[]"),
-  team: JSON.parse(localStorage.getItem("kk_team")||"[]"),
-  flowProjects: JSON.parse(localStorage.getItem("kk_flow_projects")||"[]"),
-  assetRegistry: JSON.parse(localStorage.getItem("kk_asset_registry")||"[]"),
-  directorChat: JSON.parse(localStorage.getItem("kk_director_chat")||"null")||{active:false,productionId:null,directorName:"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief"},
-  worldMemory: JSON.parse(localStorage.getItem("kk_world_memory")||"null")||{characters:[],locations:[],styleNotes:"",updated:0},
+  editorSequence: [],
+  costLog: [],
+  team: [],
+  flowProjects: [],
+  assetRegistry: [],
+  directorChat: {active:false,productionId:null,directorName:"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief"},
+  worldMemory: {characters:[],locations:[],styleNotes:"",updated:0},
 };
 
-function save(k){
-  const m={projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",settings:"kk_settings",activityLog:"kk_activity",productions:"kk_productions",collections:"kk_collections",igChatHistory:"kk_ig_chat",flowProjects:"kk_flow_projects",assetRegistry:"kk_asset_registry",directorChat:"kk_director_chat",worldMemory:"kk_world_memory"};
-  if(!m[k])return;
+// ── INDEXEDDB STORAGE LAYER ──
+// Replaces localStorage as the actual source of truth for every key below.
+// Same reasoning as the comment above: localStorage's ~5-10MB total cap was
+// a real, hit ceiling (confirmed: base64 audio assets alone could fill it in
+// a handful of generations). IndexedDB is purpose-built for exactly this —
+// structured app data, no realistic size ceiling for what this app needs.
+//
+// Existing users are migrated automatically and silently, once: on first
+// load after this update, if IndexedDB has no data yet, this reads whatever
+// this device's real existing data was out of localStorage, copies it into
+// IndexedDB, and leaves the old localStorage entries in place untouched
+// (not deleted — just never written to again). Nothing is lost either way.
+const IDB_NAME="kosmickat_studio";
+const IDB_STORE="kv";
+let idbInstance=null;
+function idbOpen(){
+  if(idbInstance)return Promise.resolve(idbInstance);
+  return new Promise((resolve,reject)=>{
+    if(!window.indexedDB){reject(new Error("IndexedDB not supported"));return;}
+    const req=indexedDB.open(IDB_NAME,1);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains(IDB_STORE))db.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess=()=>{idbInstance=req.result;resolve(idbInstance);};
+    req.onerror=()=>reject(req.error);
+  });
+}
+function idbGet(key){
+  return idbOpen().then(db=>new Promise((resolve,reject)=>{
+    const req=db.transaction(IDB_STORE,"readonly").objectStore(IDB_STORE).get(key);
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  }));
+}
+function idbSet(key,value){
+  return idbOpen().then(db=>new Promise((resolve,reject)=>{
+    const tx=db.transaction(IDB_STORE,"readwrite");
+    tx.objectStore(IDB_STORE).put(value,key);
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  }));
+}
+function idbGetAllKeys(){
+  return idbOpen().then(db=>new Promise((resolve,reject)=>{
+    const req=db.transaction(IDB_STORE,"readonly").objectStore(IDB_STORE).getAllKeys();
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  }));
+}
+// Same key strings as before (kk_projects etc) so the migration read from
+// localStorage below can reuse them directly — this map is the one place
+// that knows the S-key <-> storage-key relationship, save()/gs() both use it.
+const STATE_KEY_MAP={settings:"kk_settings",projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",activityLog:"kk_activity",productions:"kk_productions",collections:"kk_collections",igChatHistory:"kk_ig_chat",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",flowProjects:"kk_flow_projects",assetRegistry:"kk_asset_registry",directorChat:"kk_director_chat",worldMemory:"kk_world_memory"};
+async function loadStateFromStorage(){
   try{
-    localStorage.setItem(m[k],JSON.stringify(S[k]));
-  }catch(e){
-    console.error("Storage error:",e);
-    if(e.name==="QuotaExceededError"){
-      toast("⚠️ Storage full — open Chat History in Video/Image Canvas and tap Clear All, or remove an old project/reference image","error");
+    const existingIdbKeys=await idbGetAllKeys();
+    if(existingIdbKeys&&existingIdbKeys.length>0){
+      // Already migrated on this device — IndexedDB is the real source of
+      // truth now, load straight from it.
+      for(const stateKey of Object.keys(STATE_KEY_MAP)){
+        const val=await idbGet(STATE_KEY_MAP[stateKey]);
+        if(val!==undefined&&val!==null)S[stateKey]=val;
+      }
     }else{
-      toast("⚠️ Save failed: "+e.message,"error");
+      // First run since this update — one-time pull from this device's
+      // real existing localStorage data into S, then persist all of it
+      // into IndexedDB so every save() from here on goes there instead.
+      for(const stateKey of Object.keys(STATE_KEY_MAP)){
+        const lsKey=STATE_KEY_MAP[stateKey];
+        const raw=localStorage.getItem(lsKey);
+        if(raw){
+          try{
+            const parsed=JSON.parse(raw);
+            S[stateKey]=parsed;
+            await idbSet(lsKey,parsed);
+          }catch(e){/* corrupt localStorage entry for this key — keep the default, skip it */}
+        }
+      }
+    }
+  }catch(err){
+    // IndexedDB unavailable in this environment (very old/restricted
+    // browser) — fall back to plain localStorage so the app still works,
+    // just without the higher capacity.
+    console.warn("IndexedDB unavailable — falling back to localStorage:",err.message);
+    for(const stateKey of Object.keys(STATE_KEY_MAP)){
+      const raw=localStorage.getItem(STATE_KEY_MAP[stateKey]);
+      if(raw){try{S[stateKey]=JSON.parse(raw);}catch(e){}}
     }
   }
+}
+
+function save(k){
+  const lsKey=STATE_KEY_MAP[k];
+  if(!lsKey)return;
+  // Fire-and-forget: callers never awaited save() before (localStorage was
+  // synchronous) and don't need to now — S[k] is already updated by the
+  // time save() is called, IndexedDB just needs to catch up, which happens
+  // in the background. If it fails, the in-memory state (and the next
+  // successful save) are unaffected.
+  idbSet(lsKey,S[k]).catch(e=>{
+    console.error("Storage error:",e);
+    toast("⚠️ Save failed: "+e.message,"error");
+  });
   // Mirror to the signed-in account's cloud state so this shows up on
   // every device signed into the same Google account. No-ops silently for
   // guests/signed-out sessions — those stay local-only by definition.
@@ -3835,7 +3933,6 @@ function showVcChatView(){
 }
 
 // ── CHAT HISTORY (SESSIONS) — "New Chat" archives instead of deletes ──
-S.igChatSessions=S.igChatSessions||gs("ig_chat_sessions",[])||[];
 
 function generateSessionTitle(messages){
   const firstUserMsg=messages.find(m=>m.role==="user");
@@ -5525,7 +5622,6 @@ S.vcMultiImages=S.vcMultiImages||[];
 // multi-reference array.
 S.mcImage=S.mcImage||null;
 S.mcVideo=S.mcVideo||null;
-S.mcResults=S.mcResults||gs("mc_results",[])||[];
 // Local, app-side saved character presets — NOT a registered Kling Element.
 // fal doesn't expose Kling's own persistent Element Library (create/name/
 // tag/save/reuse with AI-assisted angle generation and voice binding) via
@@ -5534,12 +5630,10 @@ S.mcResults=S.mcResults||gs("mc_results",[])||[];
 // alternative: a real, working way to quickly reuse a named group of
 // reference images in THIS app, without pretending to replicate Kling's
 // own native-app-only feature.
-S.characterPresets=S.characterPresets||gs("character_presets",[])||[];
 S.vcMultiVideos=S.vcMultiVideos||[];
 S.vcMultiAudios=S.vcMultiAudios||[];
 S.vcEndFrame=S.vcEndFrame||null; // single image, not an array — Kling v3's real End Frame feature
 S.vcElementGroupMode=S.vcElementGroupMode||false; // O3: treat all reference images as multiple angles of one character
-S.vcChatHistory=S.vcChatHistory||gs("vc_chat_history",[])||[];
 
 // ══════════════════════════════════════════════════════
 // KLING MOTION BRUSH — real canvas painting tool producing the exact
@@ -6008,7 +6102,6 @@ function updateVcShotTotal(){
 
 // ── KLING VOICE CLONING — real create-voice endpoint, referenced via
 // <<<voice_1>>>/<<<voice_2>>> tags in the prompt, max 2 per generation.
-S.klingVoices=S.klingVoices||gs("kling_voices",[])||[];
 S.klingSelectedVoices=S.klingSelectedVoices||[];
 
 // fal's file-input fields accept base64 data URIs directly, but fal's own docs
@@ -7222,7 +7315,6 @@ async function sendVcMultiShotPrompt(){
 }
 
 // ── CHAT HISTORY (SESSIONS) — "New Chat" archives instead of deletes ──
-S.vcChatSessions=S.vcChatSessions||gs("vc_chat_sessions",[])||[];
 
 async function startNewVcChat(){
   if(S.vcChatHistory.length){
@@ -13265,7 +13357,6 @@ function clearDisplay(){
 }
 
 // ── DISPLAY AREA — real content system, lives only on Home now ──
-S.displayItems=S.displayItems||gs("display_items",[])||[];
 S.displayIndex=S.displayIndex||0;
 
 function openDisplayContentModal(){
@@ -15628,8 +15719,28 @@ document.addEventListener("click",e=>{
 });
 
 // ── INIT ──
-function init(){
+async function init(){
   try{
+  // Everything below reads S (settings, projects, etc) — must be fully
+  // loaded (from IndexedDB, migrating from localStorage on first run)
+  // before any of it runs, or the app would render against empty defaults
+  // for a frame and then jarringly repopulate.
+  await loadStateFromStorage();
+  // These used to be top-level statements that ran immediately at
+  // script-parse time — safe back when S.settings was populated
+  // synchronously right there in the S object literal. Now that settings
+  // load asynchronously (see loadStateFromStorage above), running these
+  // before that completes would have permanently locked each one to its
+  // empty-array default: S.x||gs(...) short-circuits on any truthy value,
+  // and [] IS truthy in JS, so a premature run poisons it before the real
+  // data ever gets a chance to load. Moved here, after the real load.
+  S.igChatSessions=S.igChatSessions||gs("ig_chat_sessions",[])||[];
+  S.mcResults=S.mcResults||gs("mc_results",[])||[];
+  S.characterPresets=S.characterPresets||gs("character_presets",[])||[];
+  S.vcChatHistory=S.vcChatHistory||gs("vc_chat_history",[])||[];
+  S.klingVoices=S.klingVoices||gs("kling_voices",[])||[];
+  S.vcChatSessions=S.vcChatSessions||gs("vc_chat_sessions",[])||[];
+  S.displayItems=S.displayItems||gs("display_items",[])||[];
   initStars();
   injectLogos();
   buildApiKeyFields();
