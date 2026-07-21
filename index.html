@@ -4699,11 +4699,22 @@ function replaceIgLoadingBubble(loadingId,newMsg){
 // generation flow called this. Re-hosting is a bonus, not a requirement.
 async function rehostToStorage(url,pathPrefix){
   if(!S.user||!S.user.uid)return url; // guest/signed-out — no account to own a copy under
-  if(!url||url.startsWith("data:")||url.includes("firebasestorage.googleapis.com"))return url; // already a data URL or already hosted by us
+  if(!url||url.includes("firebasestorage.googleapis.com"))return url; // already hosted by us
   try{
-    const response=await fetch(url);
-    if(!response.ok)return url;
-    const blob=await response.blob();
+    let blob;
+    if(url.startsWith("data:")){
+      // data: URLs (all generated audio, some images) MUST be re-hosted, not
+      // skipped — they're the worst case for localStorage: a single 1-minute
+      // MP3 is ~1MB of base64 inside S.assets, and localStorage caps out
+      // around 5-10MB total. A few audio generations left as data URLs will
+      // fill the quota and break ALL saving app-wide.
+      const response=await fetch(url);
+      blob=await response.blob();
+    }else{
+      const response=await fetch(url);
+      if(!response.ok)return url;
+      blob=await response.blob();
+    }
     const ext=(blob.type.split("/")[1]||"bin").split("+")[0];
     const path=`${pathPrefix}/${S.user.uid}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
     const ref=fbStorage.ref(path);
@@ -11687,6 +11698,18 @@ function createAudioAsset(url,text){
   const asset={id:"asset_"+Date.now(),type:"audio",url,prompt:text,created:new Date().toISOString()};
   S.assets.push(asset);
   save("assets");
+  // Background re-host, same pattern as images/videos — but for audio this
+  // isn't just about permanence, it's about survival: audio is always a
+  // base64 data URL at creation time, and leaving megabytes of base64
+  // sitting inside S.assets fills the localStorage quota within a handful
+  // of generations, breaking ALL saving app-wide. Swapping to a short
+  // hosted URL shrinks the stored record from ~1MB to ~200 bytes.
+  rehostToStorage(url,"gallery-audio").then(hostedUrl=>{
+    if(hostedUrl!==url){
+      const a=S.assets.find(x=>x.id===asset.id);
+      if(a){a.url=hostedUrl;save("assets");}
+    }
+  });
   return asset;
 }
 
