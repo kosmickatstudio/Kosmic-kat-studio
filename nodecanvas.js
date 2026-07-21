@@ -94,10 +94,23 @@ const NodeCanvas=(function(){
     autoSaveTimer=setTimeout(saveToFirebase,1000); // 1s after last edit, not every keystroke/drag-move
   }
   async function loadProjectsList(){
-    S.nodeCanvasProjects=S.nodeCanvasProjects||JSON.parse(localStorage.getItem("kk_nc_projects")||"[]");
+    // Migrated off localStorage (was a separate, undiscovered gap from the
+    // main app's IndexedDB migration — this whole module had its own
+    // parallel storage system that bypassed it entirely). One-time
+    // fallback for existing users: if IndexedDB has nothing yet, pull
+    // whatever's in the old localStorage key once, then save it into
+    // IndexedDB so every future save goes there instead.
+    if(!S.nodeCanvasProjects){
+      S.nodeCanvasProjects=await idbGet("kk_nc_projects");
+      if(!S.nodeCanvasProjects){
+        const legacy=localStorage.getItem("kk_nc_projects");
+        S.nodeCanvasProjects=legacy?JSON.parse(legacy):[];
+        if(S.nodeCanvasProjects.length)idbSet("kk_nc_projects",S.nodeCanvasProjects);
+      }
+    }
     if(S.nodeCanvasProjects.length===0){
       S.nodeCanvasProjects=[{id:uid("ncproj"),name:"Untitled Canvas"}];
-      localStorage.setItem("kk_nc_projects",JSON.stringify(S.nodeCanvasProjects));
+      idbSet("kk_nc_projects",S.nodeCanvasProjects);
     }
     const sel=document.getElementById("ncProjectSelect");
     // 'selected' is baked directly into the option HTML rather than set via a
@@ -112,13 +125,18 @@ const NodeCanvas=(function(){
       const name=await showPromptDialog?.("Name this canvas","Untitled Canvas")||"Untitled Canvas";
       const proj={id:uid("ncproj"),name};
       S.nodeCanvasProjects.push(proj);
-      localStorage.setItem("kk_nc_projects",JSON.stringify(S.nodeCanvasProjects));
+      idbSet("kk_nc_projects",S.nodeCanvasProjects);
       id=proj.id;
       graphState={nodes:{},edges:{},viewport:{x:0,y:0,zoom:1},selection:{nodeIds:[],edgeIds:[]}};
     }
     currentProjectId=id;
-    localStorage.setItem("kk_nc_last_project",id); // survives a tab reload/backgrounding, so init() resumes the right canvas
-    const saved=localStorage.getItem("kk_nc_graph_"+id);
+    idbSet("kk_nc_last_project",id); // survives a tab reload/backgrounding, so init() resumes the right canvas
+    let saved=await idbGet("kk_nc_graph_"+id);
+    if(!saved){
+      // Same one-time legacy fallback as loadProjectsList above.
+      const legacy=localStorage.getItem("kk_nc_graph_"+id);
+      if(legacy){saved=legacy;idbSet("kk_nc_graph_"+id,legacy);}
+    }
     if(saved){ loadGraph(saved); }
     else{
       try{
@@ -130,7 +148,7 @@ const NodeCanvas=(function(){
   }
   function saveGraphLocal(){
     if(!currentProjectId)return;
-    localStorage.setItem("kk_nc_graph_"+currentProjectId,serializeGraph());
+    idbSet("kk_nc_graph_"+currentProjectId,serializeGraph());
   }
 
   // ── Coordinate math: nodes are positioned with plain left/top in
@@ -1032,7 +1050,7 @@ const NodeCanvas=(function(){
 
     (async()=>{
       await loadProjectsList();
-      const lastId=currentProjectId||localStorage.getItem("kk_nc_last_project");
+      const lastId=currentProjectId||(await idbGet("kk_nc_last_project"))||localStorage.getItem("kk_nc_last_project");
       const validId=(lastId&&(S.nodeCanvasProjects||[]).find(p=>p.id===lastId))?lastId:(S.nodeCanvasProjects[0]&&S.nodeCanvasProjects[0].id);
       switchProject(validId);
     })();

@@ -1920,35 +1920,6 @@ function renderModule(mod){
   requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add("in")));
 }
 
-// ── THEMED BANNERS — original CSS gradients (not hotlinked photos), so no
-// copyright/hosting risk and no extra load time. Each themed to its model/agent.
-const MODEL_BANNERS={
-  "fal-ai/flux/schnell":"linear-gradient(135deg,#0EA5E9,#D946EF)",
-  "fal-ai/flux/dev":"linear-gradient(135deg,#0F2E1F,#10B981)",
-  "fal-ai/flux-pro/v1.1":"linear-gradient(135deg,#312E81,#7C3AED)",
-  "fal-ai/ideogram/v3":"linear-gradient(135deg,#78350F,#D97706)",
-  "fal-ai/recraft/v3/text-to-image":"linear-gradient(135deg,#BE185D,#8B5CF6)",
-  "fal-ai/stable-diffusion-v35-large":"linear-gradient(135deg,#1E3A8A,#3B82F6)",
-  "fal-ai/flux-2":"linear-gradient(135deg,#134E4A,#0D9488)",
-  "fal-ai/flux-2-pro":"linear-gradient(135deg,#581C87,#DB2777)",
-  "fal-ai/flux-2/flash":"linear-gradient(135deg,#B45309,#FBBF24)",
-  "gemini-3.1-flash-image":"linear-gradient(135deg,#65A30D,#FDE047)",
-  "gemini-3-pro-image":"linear-gradient(135deg,#4D7C0F,#EAB308)",
-  "gpt-image-2":"linear-gradient(135deg,#0F172A,#0D9488)",
-  "fal-ai/nano-banana-2":"linear-gradient(135deg,#65A30D,#FDE047)",
-  "fal-ai/nano-banana-pro":"linear-gradient(135deg,#4D7C0F,#EAB308)",
-  "openai/gpt-image-2":"linear-gradient(135deg,#0F172A,#0D9488)",
-  "bytedance/seedance-2.0/fast/text-to-video":"linear-gradient(135deg,#14532D,#4ADE80)",
-  "bytedance/seedance-2.0/text-to-video":"linear-gradient(135deg,#052E16,#16A34A)",
-  "fal-ai/kling-video/v2.1/master/text-to-video":"linear-gradient(135deg,#1E1B2E,#6D28D9)",
-  "fal-ai/kling-video/v2.6/pro/text-to-video":"linear-gradient(135deg,#18181B,#52525B)",
-  "fal-ai/kling-video/v3/standard/text-to-video":"linear-gradient(135deg,#1E293B,#475569)",
-  "fal-ai/kling-video/v3/pro/text-to-video":"linear-gradient(135deg,#1E1B2E,#3B82F6)",
-  "fal-ai/kling-video/o3/pro/reference-to-video":"linear-gradient(135deg,#1E1B2E,#8B5CF6)",
-  "fal-ai/kling-video/o3/standard/image-to-video":"linear-gradient(135deg,#1E1B2E,#8B5CF6)",
-  "fal-ai/kling-video/v3/4k/image-to-video":"linear-gradient(135deg,#0F0B1E,#F59E0B)",
-  "fal-ai/veo3.1":"linear-gradient(135deg,#1E1B4B,#4338CA)",
-};
 // ── HOME ── (moved to home.js — loaded via <script src="home.js"> near the end of <body>, fifteenth module extracted from this file)
 // ── PROJECTS ──
 function renderProjects(el){
