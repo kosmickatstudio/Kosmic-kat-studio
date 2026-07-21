@@ -8238,6 +8238,15 @@ function episodeCardHTML(p,e){
       </div>`:''}
     </div>
 
+    ${(e.scriptStatus==='approved'&&detectDialogueLines(e.script,p.characters).length>0)?`<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:700;color:var(--violet)">DIALOGUE AUDIO <span style="font-weight:400;color:var(--textm);text-transform:none">(optional)</span></span>
+        ${e.dialogueAudioUrl?'<span class="badge badge-green">Generated</span>':'<span class="badge badge-gray">Not generated</span>'}
+      </div>
+      ${e.dialogueAudioUrl?`<audio src="${e.dialogueAudioUrl}" controls style="width:100%;margin-bottom:8px"></audio>`:''}
+      <button class="btn btn-outline btn-sm" onclick="openDialogueCastingPreview('${p.id}',${e.index})">${pIcon('chat',13)} ${e.dialogueAudioUrl?'Recast & Regenerate':'Cast & Generate Dialogue Audio'}</button>
+    </div>`:''}
+
     ${e.scriptStatus==='approved'?`<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
         <span style="font-size:11px;font-weight:700;color:var(--violet)">2. STORYBOARD</span>
@@ -8283,6 +8292,122 @@ function episodeCardHTML(p,e){
 }
 
 function getEpisode(p,index){return p.episodes.find(e=>e.index===index);}
+
+// Casting preview: shows every detected line with its guessed speaker and a
+// real voice picker (same one Audio Tools uses) to correct before anything
+// gets generated. openVoicePicker/renderVoicePickerTrigger are defined in
+// audio.js, which has already finished loading by the time a user can click
+// anything — same principle proven throughout this whole module split.
+async function openDialogueCastingPreview(prodId,epIndex){
+  const p=S.productions.find(x=>x.id===prodId);
+  const e=getEpisode(p,epIndex);
+  const detected=detectDialogueLines(e.script,p.characters);
+  if(!detected.length){toast("No quoted dialogue detected in this script","error");return;}
+  S.dialogueCastingLines=detected.map(l=>({...l,voice:findCharacterVoice(l.speaker)||""}));
+  S.dialogueCastingContext={prodId,epIndex};
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show";
+  overlay.id="dialogueCastingModal";
+  overlay.innerHTML=`
+    <div class="modal" style="max-width:480px">
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:6px">${pIcon('chat',15)} Cast Dialogue — Episode ${epIndex}</div>
+      <div style="font-size:11px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px 10px;margin-bottom:14px">
+        Speakers are a best guess based on nearby names in the script — check each one before generating. Lines with a voice already assigned in Character Bible are pre-filled; pick manually for anything else.
+      </div>
+      <div id="dialogueCastingLines" style="display:flex;flex-direction:column;gap:10px;max-height:50vh;overflow-y:auto;margin-bottom:14px"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('dialogueCastingModal').remove()">Cancel</button>
+        <button class="btn btn-primary" id="dialogueCastGenBtn" onclick="generateEpisodeDialogueAudio()">${pIcon('sparkle',13)} Generate Audio</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  renderDialogueCastingLines();
+}
+function renderDialogueCastingLines(){
+  const wrap=document.getElementById("dialogueCastingLines");
+  if(!wrap)return;
+  wrap.innerHTML=S.dialogueCastingLines.map((l,i)=>`
+    <div style="border:1.5px solid var(--border);border-radius:10px;padding:10px">
+      <div style="font-size:12px;color:var(--text);font-style:italic;margin-bottom:8px">"${l.text.replace(/"/g,'&quot;')}"</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="f-input" style="flex:1;font-size:12px" value="${l.speaker.replace(/"/g,'&quot;')}" oninput="S.dialogueCastingLines[${i}].speaker=this.value" placeholder="Speaker name">
+        <select id="dcVoiceSel_${i}" style="display:none" onchange="S.dialogueCastingLines[${i}].voice=this.value;renderVoicePickerTrigger('dcVoiceSel_${i}','dcVoiceTrig_${i}')">
+          <option value="">— no voice —</option>
+        </select>
+        <div id="dcVoiceTrig_${i}" onclick="openVoicePicker('dcVoiceSel_${i}','dcVoiceTrig_${i}')" style="width:130px;flex-shrink:0;display:flex;align-items:center;gap:6px;border:1.5px solid var(--border);border-radius:10px;padding:6px 8px;cursor:pointer;background:var(--surface)"></div>
+      </div>
+    </div>`).join('');
+  S.dialogueCastingLines.forEach((l,i)=>{
+    const sel=document.getElementById(`dcVoiceSel_${i}`);
+    if(sel&&l.voice){
+      // The real ElevenLabs voice list loads async — the assigned voice's
+      // <option> might not exist in this hidden select yet, so add a
+      // placeholder one so .value= actually takes before the real list loads.
+      if(![...sel.options].some(o=>o.value===l.voice)){
+        const opt=document.createElement("option");
+        opt.value=l.voice;opt.textContent="Assigned voice";
+        sel.appendChild(opt);
+      }
+      sel.value=l.voice;
+    }
+    renderVoicePickerTrigger(`dcVoiceSel_${i}`,`dcVoiceTrig_${i}`);
+  });
+}
+async function generateEpisodeDialogueAudio(){
+  const {prodId,epIndex}=S.dialogueCastingContext;
+  const p=S.productions.find(x=>x.id===prodId);
+  const e=getEpisode(p,epIndex);
+  const lines=S.dialogueCastingLines.filter(l=>l.text&&l.text.trim()&&l.voice);
+  if(!lines.length){toast("Assign a voice to at least one line first","error");return;}
+  const apiKey=gs("api_elevenlabs","");
+  if(!apiKey){toast("Add an ElevenLabs API key in Settings first","error");return;}
+  const btn=document.getElementById("dialogueCastGenBtn");
+  btn.disabled=true;btn.textContent="Generating…";
+  try{
+    let response;
+    if(lines.length>=2){
+      // Multiple cast lines — Text-to-Dialogue, same endpoint the
+      // standalone Dialogue tool in Audio Tools uses, for a natural
+      // conversational pass rather than separate disconnected clips.
+      response=await fetch("https://api.elevenlabs.io/v1/text-to-dialogue",{
+        method:"POST",headers:{"Content-Type":"application/json","xi-api-key":apiKey,"Accept":"audio/mpeg"},
+        body:JSON.stringify({inputs:lines.map(l=>({text:l.text,voice_id:l.voice})),model_id:"eleven_v3"})
+      });
+    }else{
+      // A single cast line fits plain TTS better — the dialogue endpoint is
+      // built for multi-speaker exchanges, not a solo line.
+      response=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${lines[0].voice}`,{
+        method:"POST",headers:{"Content-Type":"application/json","xi-api-key":apiKey,"Accept":"audio/mpeg"},
+        body:JSON.stringify({text:lines[0].text,model_id:"eleven_multilingual_v2",voice_settings:{stability:0.5,similarity_boost:0.75}})
+      });
+    }
+    if(!response.ok){
+      let errMsg=response.statusText;
+      try{const errData=await response.json();errMsg=(errData.detail&&(errData.detail.message||JSON.stringify(errData.detail)))||errMsg;}catch(err){}
+      throw new Error(errMsg);
+    }
+    const blob=await response.blob();
+    const base64Url=await new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(reader.result);
+      reader.onerror=reject;
+      reader.readAsDataURL(blob);
+    });
+    e.dialogueAudioUrl=base64Url;
+    e.dialogueStatus="ready";
+    save("productions");
+    createAudioAsset(base64Url,`Ep${epIndex} dialogue: ${lines.map(l=>l.speaker).join(", ")}`);
+    trackProductionCost(p,lines.length>=2?"elevenlabs_dialogue":"elevenlabs_tts",`Ep${epIndex} dialogue audio`);
+    const modal=document.getElementById("dialogueCastingModal");
+    if(modal)modal.remove();
+    openProductionDetail(prodId);
+    toast("🎭 Dialogue audio generated — saved to Gallery!","success");
+  }catch(err){
+    toast("❌ Dialogue generation failed: "+err.message,"error");
+    btn.disabled=false;btn.textContent="Generate Audio";
+  }
+}
+
 
 function toggleScriptEdit(prodId,epIndex){
   S.editingScriptFor=`${prodId}_${epIndex}`;
@@ -8717,6 +8842,60 @@ function detectShotCharacters(shotText,characterSheets){
     if(firstWord.length<2)return false;
     return new RegExp(`\\b${firstWord.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\b`).test(lower);
   });
+}
+
+// ── PER-EPISODE DIALOGUE CASTING ──
+// Scripts can now include real quoted dialogue (added when native Seedance
+// lip-sync support was wired in). This detects those quoted lines and
+// guesses who's speaking by proximity — whichever character's name was
+// most recently mentioned before the quote.
+//
+// Being direct about a real limitation found while building this:
+// proximity is NOT the same as correctly identifying who's speaking. A
+// sentence like "Sheera grips Gorthok's collar and snarls, 'quote'"
+// mentions Gorthok's name textually closer to the quote than Sheera's,
+// even though Sheera is the one actually speaking — tried three
+// progressively more complex scoring attempts (speech-verb adjacency,
+// verb-then-name scoring) and none reliably solved this for real sentence
+// structures; it's a genuine coreference-resolution problem, not something
+// a proximity regex can nail for every case. Rather than pretend
+// otherwise, this stays a simple, predictable "closest mention wins" guess
+// — the actual reliability comes from the casting preview below, which
+// shows every detected line with its guessed speaker and a full picker to
+// correct it BEFORE any paid audio generation happens, not from the guess
+// itself being perfect.
+function detectDialogueLines(scriptText,characters){
+  if(!scriptText)return [];
+  const lines=[];
+  const quoteRegex=/"([^"]{2,300})"/g;
+  let match;
+  while((match=quoteRegex.exec(scriptText))!==null){
+    const quoteText=match[1].trim();
+    const before=scriptText.slice(Math.max(0,match.index-200),match.index);
+    let speaker=null,bestPos=-1;
+    for(const c of (characters||[])){
+      if(!c.name)continue;
+      const firstWord=c.name.trim().split(/\s+/)[0];
+      if(firstWord.length<2)continue;
+      const re=new RegExp(`\\b${firstWord.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\b`,"gi");
+      let m,lastIdx=-1;
+      while((m=re.exec(before))!==null)lastIdx=m.index;
+      if(lastIdx>bestPos){bestPos=lastIdx;speaker=c.name;}
+    }
+    lines.push({text:quoteText,speaker:speaker||"Unknown"});
+  }
+  return lines;
+}
+// Matches a detected speaker name against Character Bible entries (the
+// only place a voice is actually assigned — Production Pipeline's own
+// tiered character list has no voice field at all) — lenient partial
+// match since a production might say "Sheera" while the Character Bible
+// entry is named "Sheera Blackthorn" or similar.
+function findCharacterVoice(name){
+  if(!name||name==="Unknown")return null;
+  const lower=name.toLowerCase().trim();
+  const match=S.characters.find(c=>c.name&&c.voice&&(c.name.toLowerCase().includes(lower)||lower.includes(c.name.toLowerCase())));
+  return match?match.voice:null;
 }
 
 async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImageUrl,negativePrompt,endImageUrl){
