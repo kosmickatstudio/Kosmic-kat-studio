@@ -1,8 +1,9 @@
 // Network-first service worker — always serves the latest deploy when online,
 // falls back to cache only when offline. Cache version bumps on each deploy-relevant change.
-const CACHE_NAME = "kosmic-kat-studio-v5";
+const CACHE_NAME = "kosmic-kat-studio-v6";
 const ASSETS = [
   "/index.html",
+  "/audio.js",
   "/manifest.json",
   "/icon-192.png",
   "/icon-512.png"
