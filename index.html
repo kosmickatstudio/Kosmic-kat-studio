@@ -7180,6 +7180,7 @@ function openEditProductionSettings(prodId){
         ${continuityToggleHTML("eps",p.continuity==="narrative"||p.continuity==="both",p.continuity==="visual"||p.continuity==="both")}
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-outline" onclick="publishProductionAsTemplate('${p.id}')" title="Share this production's model/quality/continuity setup publicly for other creators to use">${pIcon('upload',13)} Publish as Template</button>
         <button class="btn btn-ghost" onclick="document.getElementById('editProductionModal').remove()">Cancel</button>
         <button class="btn btn-primary" onclick="saveProductionSettings('${p.id}')">${pIcon('check',13)} Save Changes</button>
       </div>
@@ -7238,10 +7239,142 @@ function openProductionEntryChoice(projectId){
           <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:#fff">I Have an Idea / Concept</div>
           <div style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:4px">Just a spark of a premise? The Director and Scriptwriter will build it out with you.</div>
         </div>
+        <div onclick="document.getElementById('prodEntryChoiceModal').remove();openTemplateMarketplace('${projectId}')" style="cursor:pointer;border-radius:16px;padding:22px 16px;background:linear-gradient(135deg,#134E4A,#0D9488);position:relative;overflow:hidden">
+          <div style="font-size:28px;margin-bottom:6px">✨</div>
+          <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:#fff">Start from a Template</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:4px">Browse genre/model setups other creators have shared publicly, and start pre-configured instead of from scratch.</div>
+        </div>
       </div>
       <button class="btn btn-ghost btn-full" style="margin-top:14px" onclick="document.getElementById('prodEntryChoiceModal').remove()">Cancel</button>
     </div>`;
   document.body.appendChild(overlay);
+}
+
+// ── TEMPLATE MARKETPLACE ── Phase 1 as discussed: free public sharing only.
+// A "template" here is a production's settings bundle — image/video model,
+// quality, aspect ratio, duration, continuity, plus a short reusable
+// starter concept — NOT a real payment feature yet. price/isPaid fields
+// are included now so the data model doesn't need a breaking change later,
+// but nothing anywhere in this app actually enforces or verifies a
+// payment — that requires server-side logic (Firebase Cloud Functions,
+// which needs the Blaze plan) and a real Stripe account, both of which are
+// external setup only the user can do, not something safe to fake client-
+// side. Uses the same fbDB.collection("public") pattern Node Canvas
+// already uses for shared data, just a different doc-ID prefix.
+async function openTemplateMarketplace(projectId){
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show";
+  overlay.id="templateMarketplaceModal";
+  overlay.innerHTML=`
+    <div class="modal" style="max-width:500px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">${pIcon('sparkle',15)} Template Marketplace</div>
+        <button onclick="document.getElementById('templateMarketplaceModal').remove()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
+      </div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Free and public — anyone using the app can browse and use these. Paid templates aren't live yet (needs a couple of things set up first).</div>
+      <input class="f-input" id="templateSearchInput" placeholder="Search by name, genre, or description…" oninput="filterTemplateMarketplace()" style="margin-bottom:12px">
+      <div id="templateMarketplaceList" style="display:flex;flex-direction:column;gap:10px;max-height:55vh;overflow-y:auto">
+        <div style="text-align:center;padding:20px;color:var(--textm);font-size:12px">${pIcon('sparkle',14)} Loading templates…</div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.dataset.projectId=projectId;
+  try{
+    const snap=await fbDB.collection("public").where("kind","==","template").orderBy("createdAt","desc").limit(50).get();
+    S.marketplaceTemplates=snap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(err){
+    // Firestore needs a composite index for where()+orderBy() together on
+    // first real use — if that hasn't been created yet, fall back to an
+    // unordered fetch rather than showing a dead end.
+    try{
+      const snap=await fbDB.collection("public").where("kind","==","template").limit(50).get();
+      S.marketplaceTemplates=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    }catch(err2){
+      document.getElementById("templateMarketplaceList").innerHTML=`<div style="color:var(--red);font-size:12px;text-align:center;padding:20px">Couldn't load templates: ${err2.message}</div>`;
+      return;
+    }
+  }
+  renderTemplateMarketplaceList(S.marketplaceTemplates);
+}
+function renderTemplateMarketplaceList(templates){
+  const wrap=document.getElementById("templateMarketplaceList");
+  if(!wrap)return;
+  if(!templates.length){
+    wrap.innerHTML=`<div class="empty-state"><div class="empty-icon">✨</div><div class="empty-title">No Templates Yet</div><div class="empty-desc">Be the first — publish one from any existing production's settings.</div></div>`;
+    return;
+  }
+  wrap.innerHTML=templates.map(t=>`
+    <div style="border:1.5px solid var(--border);border-radius:12px;padding:12px">
+      <div style="display:flex;align-items:center;justify-content:between;gap:8px;margin-bottom:4px">
+        <div style="font-size:13px;font-weight:700;color:var(--text);flex:1">${t.name}</div>
+        ${t.isPaid?`<span class="badge badge-gold">$${(t.price||0).toFixed(2)}</span>`:`<span class="badge badge-green">Free</span>`}
+      </div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px;line-height:1.5">${t.description||''}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;font-size:10px;color:var(--textm)">
+        ${t.continuity?`<span class="badge badge-gray">${t.continuity} continuity</span>`:''}
+        <span class="badge badge-gray">${t.duration}s</span>
+        <span class="badge badge-gray">${t.aspectRatio||'16:9'}</span>
+        <span class="badge badge-gray">↓ ${t.downloadCount||0}</span>
+      </div>
+      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">By ${t.authorName||'a creator'}</div>
+      <button class="btn btn-primary btn-sm btn-full" onclick="useTemplate('${t.id}')">${pIcon('sparkle',12)} Use This Template</button>
+    </div>`).join('');
+}
+function filterTemplateMarketplace(){
+  const q=(document.getElementById("templateSearchInput").value||"").toLowerCase();
+  const filtered=(S.marketplaceTemplates||[]).filter(t=>
+    (t.name||"").toLowerCase().includes(q)||(t.description||"").toLowerCase().includes(q)||(t.continuity||"").toLowerCase().includes(q)
+  );
+  renderTemplateMarketplaceList(filtered);
+}
+async function useTemplate(templateId){
+  const t=(S.marketplaceTemplates||[]).find(x=>x.id===templateId);
+  if(!t)return;
+  const projectId=document.getElementById("templateMarketplaceModal")?.dataset.projectId;
+  document.getElementById("templateMarketplaceModal").remove();
+  // Best-effort download count — not a security-sensitive number, fine to
+  // increment client-side directly rather than needing a Cloud Function.
+  fbDB.collection("public").doc(templateId).update({downloadCount:(t.downloadCount||0)+1}).catch(()=>{});
+  openProductionWizard(projectId);
+  // Wizard fields are freshly created by openProductionWizard's own
+  // innerHTML — wait a tick for them to actually exist before touching them.
+  setTimeout(()=>{
+    if(t.imageModel){document.getElementById("pdImageModel").value=t.imageModel;renderModelTrigger("pdImageModel");}
+    if(t.videoModel){document.getElementById("pdVideoModel").value=t.videoModel;renderModelTrigger("pdVideoModel","video");updateClipLenOptions();updatePdAspectRatioOptions();}
+    if(t.quality)document.getElementById("pdQuality").value=t.quality;
+    if(t.aspectRatio)document.getElementById("pdAspectRatio").value=t.aspectRatio;
+    if(t.duration){document.getElementById("pdDuration").value=t.duration;updateDurationPreview();}
+    if(t.conceptTemplate)document.getElementById("pdConcept").value=t.conceptTemplate;
+    toast(`✨ Loaded "${t.name}" — adjust anything, then continue as normal`,"success");
+  },50);
+}
+// Publishes an EXISTING production's settings as a reusable public
+// template — called from the Edit Production Settings modal, using
+// whatever's currently in that same modal's fields so what gets published
+// exactly matches what the user is looking at.
+async function publishProductionAsTemplate(prodId){
+  const p=S.productions.find(x=>x.id===prodId);
+  if(!p)return;
+  if(!S.user||S.user.email==="guest"){toast("Sign in with Google first — templates need a real author account","error");return;}
+  const name=await showPromptDialog("Name this template","");
+  if(!name)return;
+  const description=await showPromptDialog("Short description (what's it good for?)","");
+  try{
+    await fbDB.collection("public").add({
+      kind:"template",
+      name,description:description||"",
+      imageModel:p.imageModel,videoModel:p.videoModel,quality:p.quality,aspectRatio:p.aspectRatio,
+      duration:p.episodes.reduce((sum,e)=>sum+(e.duration||0),0)||30,
+      continuity:p.continuity,
+      conceptTemplate:(p.concept||"").slice(0,300),
+      authorName:maskEmail(S.user.email),authorUid:S.user.uid,
+      isPaid:false,price:0,downloadCount:0,
+      createdAt:Date.now(),
+    });
+    toast("✨ Published — anyone can find this in the Template Marketplace now","success");
+  }catch(err){
+    toast("❌ Couldn't publish: "+err.message,"error");
+  }
 }
 
 // ── SCRIPT FILE PARSING — pdf.js/mammoth.js loaded lazily (only when a
