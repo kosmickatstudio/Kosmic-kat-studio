@@ -3841,7 +3841,17 @@ async function sendIgChatPrompt(){
   const sendBtn=document.getElementById("igSendBtn");
   sendBtn.disabled=true;
 
-  if(cap.multiRef){
+  // NOTE: this gate used to fire for cap.multiRef regardless of provider —
+  // but multiRef only means "requires a reference image" for the fal.ai
+  // /edit-routed models below (they hit a dedicated edit endpoint that needs
+  // a base image). The two Gemini-direct models further down share the same
+  // multiRef:true flag purely to mean "CAN accept up to N references", not
+  // "MUST have one" — genViaGemini already handles zero refs as plain
+  // text-to-image just fine. Without this provider check, a bare prompt like
+  // "Cat" on Nano Banana Pro/2 got wrongly blocked with a false "needs a
+  // reference image" error before ever reaching the function that would
+  // have generated it with no image at all.
+  if(cap.multiRef&&cap.provider!=="gemini"){
     if(!S.igMultiRefImages.length){
       pushIgChatMessage({role:"assistant",type:"error",content:"This model needs at least 1 reference image — open ⚙ Settings to add one."});
       sendBtn.disabled=false;
@@ -3851,9 +3861,7 @@ async function sendIgChatPrompt(){
     const multiRefCount=multiRefCountEl?parseInt(multiRefCountEl.value,10)||1:1;
     pushIgChatMessage({id:loadingId,role:"assistant",type:"loading",content:`Generating with ${S.igMultiRefImages.length} reference image${S.igMultiRefImages.length!==1?'s':''}…`});
     try{
-      const result=cap.provider==="gemini"
-        ?await genViaGemini(prompt,ratio,selectedModel,S.igMultiRefImages)
-        :await genViaFluxEdit(prompt,S.igMultiRefImages,ratio,cap.editModel,multiRefCount);
+      const result=await genViaFluxEdit(prompt,S.igMultiRefImages,ratio,cap.editModel,multiRefCount);
       const returnedRefUrls=(result.urls&&result.urls.length)?result.urls:[result.url];
       if(returnedRefUrls.length>1){
         const savedAssets=await Promise.all(returnedRefUrls.map(u=>createImageAsset(u,prompt,projectId)));
@@ -3864,6 +3872,27 @@ async function sendIgChatPrompt(){
         replaceIgLoadingBubble(loadingId,{role:"assistant",type:"image",content:result.url,meta:{providerLabel:result.providerLabel,prompt,projectId,assetId:savedAsset.id}});
         logCost(result.costKey,prompt.slice(0,60));
       }
+    }catch(err){
+      replaceIgLoadingBubble(loadingId,{role:"assistant",type:"error",content:err.message});
+      toast("❌ Generation failed: "+err.message,"error");
+    }
+    sendBtn.disabled=false;
+    return;
+  }
+
+  // Gemini-direct models (Nano Banana Pro / Nano Banana 2 via
+  // generativelanguage.googleapis.com): references are optional, so this is
+  // its own branch rather than folding into the gate above. Empty
+  // S.igMultiRefImages is a completely valid, expected case here.
+  if(cap.provider==="gemini"){
+    const hasRefs=S.igMultiRefImages.length>0;
+    pushIgChatMessage({id:loadingId,role:"assistant",type:"loading",content:hasRefs?`Generating with ${S.igMultiRefImages.length} reference image${S.igMultiRefImages.length!==1?'s':''}…`:"Generating…"});
+    try{
+      const result=await genViaGemini(prompt,ratio,selectedModel,S.igMultiRefImages);
+      const savedAsset=await createImageAsset(result.url,prompt,projectId);
+      replaceIgLoadingBubble(loadingId,{role:"assistant",type:"image",content:result.url,meta:{providerLabel:result.providerLabel,prompt,projectId,assetId:savedAsset.id}});
+      logCost(result.costKey,prompt.slice(0,60));
+      toast(`✨ Image generated via ${result.providerLabel}!`,"success");
     }catch(err){
       replaceIgLoadingBubble(loadingId,{role:"assistant",type:"error",content:err.message});
       toast("❌ Generation failed: "+err.message,"error");
