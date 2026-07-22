@@ -8076,6 +8076,7 @@ function openProductionDetail(prodId){
       <button class="btn btn-ghost btn-sm" onclick="renderModule('productionstudio')">${pIcon('back')} Production Pipeline</button>
       <div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">${p.concept.slice(0,60)}</div><div style="font-size:11px;color:var(--textm)">${p.episodes.length} episode${p.episodes.length!==1?'s':''} · Director ${p.persona||''} · ${p.continuity}</div></div>
       <button class="btn btn-outline btn-sm" onclick="openEditProductionSettings('${p.id}')" title="Change the concept, models, or generation settings for this production">${pIcon('pencil',13)}</button>
+      ${p.episodes.every(e=>e.scriptStatus==="pending")?`<button class="btn btn-outline btn-sm" onclick="handToKosmicEngine('${p.id}')" title="Let Kosmic Engine run through every episode autonomously from here — you still approve or reject at each checkpoint">${pIcon('sparkle',13)} Hand to Kosmic Engine</button>`:''}
       ${allApproved?`<button class="btn btn-primary btn-sm" onclick="finalizeProductionToEditor('${p.id}')">${pIcon('film',14)} Finalize to Video Editor</button>`:''}
     </div>
     <div style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--violet);background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.25);border-radius:10px;padding:8px 12px;margin-bottom:14px">
@@ -9189,6 +9190,17 @@ async function publishViaWebhook(prodId){
   }catch(err){
     toast("❌ Webhook call failed: "+err.message+" — check the URL in Settings","error");
   }
+}
+
+// Bridges an existing manual-wizard production into Kosmic Engine's
+// autonomous task queue — resumeExistingProduction() (defined in
+// kosmicengine.js, safe cross-file call via plain global scope, same
+// principle proven throughout the whole module split) does the real work
+// of building the correct resume state; this just triggers it and switches
+// the screen to actually watch it run.
+function handToKosmicEngine(prodId){
+  DirectorChat.resumeExistingProduction(prodId);
+  renderModule("directorchat");
 }
 
 async function finalizeProductionToEditor(prodId){

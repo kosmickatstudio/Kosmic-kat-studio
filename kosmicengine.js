@@ -683,6 +683,52 @@ const DirectorChat=(function(){
     save();
     renderModule("directorchat");
   }
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud};
+  // ── AUTO-PILOT BRIDGE ── Hands an existing Production Pipeline (manual
+  // wizard) production over to run autonomously from here. Deliberately
+  // scoped to productions where NO episode has started any work yet — this
+  // module's char_plan/loc_plan tasks assume a clean starting point, and
+  // Location Bible in particular is a Kosmic Engine-only feature the manual
+  // wizard never creates, so bridging mid-episode would leave already-
+  // generated storyboards with no location reference to have drawn from,
+  // a real mismatch rather than a clean continuation.
+  //
+  // Builds the exact same task graph buildTaskGraph() would for a brand
+  // new production, then marks whatever's ALREADY genuinely done (an
+  // approved Character Sheet, specifically) as done up front instead of
+  // pending, so dispatchTasks() correctly skips re-doing real completed
+  // work and starts from wherever the manual wizard actually left off.
+  function resumeExistingProduction(prodId){
+    const p=S.productions.find(x=>x.id===prodId);
+    if(!p){toast("Couldn't find that production","error");return;}
+    if(p.episodes.some(e=>e.scriptStatus!=="pending")){
+      toast("This production already has episode work started — Auto-Pilot only bridges productions where no episode has begun yet","error");
+      return;
+    }
+    S.directorChat={active:true,productionId:prodId,directorName:S.directorChat.directorName||"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:{episodeCount:p.episodes.length},intakeStage:"running"};
+    const tasks=buildTaskGraph(p.episodes.length);
+    // plan/model_select created the production and picked models in the
+    // normal flow — both already happened via the manual wizard, so mark
+    // them done rather than let runTaskWork("plan") create a SECOND,
+    // duplicate production.
+    findTaskIn(tasks,"plan").status="done";
+    findTaskIn(tasks,"model_select").status="done";
+    // Character Sheets: only skip if the manual wizard already got a real
+    // approval — otherwise let Kosmic Engine build/get approval for them
+    // normally, same as it would for a production it created itself.
+    if(p.characterSheetStatus==="approved"){
+      findTaskIn(tasks,"char_plan").status="done";
+      findTaskIn(tasks,"cs_review").status="done";
+    }
+    // Location Bible always runs fresh — genuine bonus feature the manual
+    // wizard never had a chance to create, safe here specifically because
+    // no episode/storyboard work exists yet to have needed it already.
+    S.directorChat.tasks=tasks;
+    save();
+    push("agent",`Picking up "${p.concept.slice(0,60)}" from here — ${p.characterSheetStatus==="approved"?"Character Sheet is already approved, so ":""}I'll build the Location Bible next, then run through all ${p.episodes.length} episode${p.episodes.length!==1?'s':''} the same way I would for a production I planned myself. Approve or reject at each checkpoint as usual.`);
+    dispatchTasks();
+  }
+  function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
+
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction};
 })();
 
