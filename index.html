@@ -2711,6 +2711,12 @@ const VIDEO_MODEL_GROUPS=[
     {value:"fal-ai/veo3.1/image-to-video",name:"Veo 3.1 — Image-to-Video",sub:"Animates a single starting image"},
     {value:"fal-ai/veo3.1/reference-to-video",name:"Veo 3.1 — Multi-Reference",sub:"up to 3 images"},
   ]},
+  {label:"Veo 3 Direct (Google API — free tier, unverified limits)",items:[
+    {value:"veo-3.1-generate-preview",name:"Veo 3.1 Direct",sub:"Uses your Gemini key, not fal.ai — test limits first"},
+    {value:"veo-3.1-fast-generate-preview",name:"Veo 3.1 Fast Direct",sub:"Uses your Gemini key, not fal.ai"},
+    {value:"veo-3.0-generate-001",name:"Veo 3.0 Direct",sub:"Uses your Gemini key, not fal.ai"},
+    {value:"veo-3.0-fast-generate-001",name:"Veo 3.0 Fast Direct",sub:"Uses your Gemini key, not fal.ai"},
+  ]},
 ];
 const BRAIN_MODEL_GROUPS=[
   {label:"AI Brain",items:[
@@ -4164,6 +4170,60 @@ async function genViaVeoReference(prompt,ratio,duration,imageUrls){
   return pollFalVideoResult(model,submitData,apiKey);
 }
 
+// ── VEO 3 DIRECT (Gemini API) — NOT fal.ai. Uses api_gemini key against
+// Google's own generativelanguage.googleapis.com, on whatever tier that key
+// has (free tier if eligible — UNVERIFIED, test with the burst probe tool
+// before routing real production volume through this). Video generation on
+// the Gemini API is a long-running operation: submit via predictLongRunning,
+// then poll the operation name every 5s until done. Optional single starting
+// image only — no multi-reference support (fal.ai's veo-ref path covers that).
+async function genViaVeoDirect(prompt,ratio,modelId,startImageDataUrl){
+  const apiKey=gs("api_gemini","");
+  if(!apiKey)throw new Error("Add a Gemini API key in Settings first");
+  const model=modelId||"veo-3.1-generate-preview";
+  const instance={prompt};
+  if(startImageDataUrl){
+    const [meta,b64]=startImageDataUrl.split(",");
+    const mimeType=(meta.match(/data:(.*?);/)||[])[1]||"image/jpeg";
+    instance.image={bytesBase64Encoded:b64,mimeType};
+  }
+  const submitRes=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:predictLongRunning`,{
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+    body:JSON.stringify({instances:[instance],parameters:{aspectRatio:ratio||"16:9"}})
+  });
+  const submitData=await submitRes.json();
+  if(!submitRes.ok){
+    const code=submitData.error&&submitData.error.code;
+    const msg=(submitData.error&&submitData.error.message)||submitRes.statusText;
+    if(code===429)throw new Error(`Gemini free-tier rate limit hit (429): ${msg}`);
+    throw new Error(msg||"Veo 3 Direct submit failed");
+  }
+  const opName=submitData.name;
+  if(!opName)throw new Error("No operation name returned — Veo submit response was unexpected");
+  let attempts=0,opData=null;
+  while(attempts<40){
+    await new Promise(r=>setTimeout(r,5000));
+    attempts++;
+    const pollRes=await fetch(`https://generativelanguage.googleapis.com/v1beta/${opName}`,{headers:{"x-goog-api-key":apiKey}});
+    opData=await pollRes.json();
+    if(!pollRes.ok)throw new Error((opData.error&&opData.error.message)||"Veo 3 Direct poll failed");
+    if(opData.done)break;
+  }
+  if(!opData||!opData.done)throw new Error("Veo 3 Direct timed out after ~200s without completing");
+  if(opData.error)throw new Error(opData.error.message||"Veo 3 Direct operation errored");
+  const samples=opData.response&&opData.response.generateVideoResponse&&opData.response.generateVideoResponse.generatedSamples;
+  const uri=samples&&samples[0]&&samples[0].video&&samples[0].video.uri;
+  if(!uri)throw new Error("Veo 3 Direct completed but returned no video URI");
+  // The file URI requires the API key to fetch — resolve it to a blob URL so
+  // the rest of the app (which expects a directly-playable/downloadable URL)
+  // doesn't need to know about Gemini's auth-gated file serving.
+  const videoRes=await fetch(uri,{headers:{"x-goog-api-key":apiKey}});
+  if(!videoRes.ok)throw new Error("Veo 3 Direct: video was generated but couldn't be downloaded");
+  const blob=await videoRes.blob();
+  return URL.createObjectURL(blob);
+}
+
 // ── KLING O3 PRO REFERENCE-TO-VIDEO — real endpoint, verified against fal's
 // actual O3 API docs. Each uploaded image becomes its own `elements` entry
 // (frontal_image_url), referenced in the prompt as @Element1, @Element2, etc —
@@ -4409,6 +4469,14 @@ const VIDEO_MODEL_CAPABILITIES={
   "fal-ai/kling-video/v3/pro/text-to-video":{multiImage:true,maxImages:4,negPrompt:true,multiShot:true,elements:true,cfgScale:true,tagSyntax:"@Element1 (when 2+ reference images)"},
   "fal-ai/veo3.1":{},
   "fal-ai/veo3.1/reference-to-video":{multiRef:true,maxImages:3,provider:"veo-ref"},
+  // Veo 3 DIRECT via Google's own Gemini API — NOT fal.ai. Uses the api_gemini
+  // key, free-tier eligible (unverified at scale — test with the burst probe
+  // before relying on this for production volume). Single optional starting
+  // image only, no multi-reference support (that's fal.ai-only via veo-ref).
+  "veo-3.1-generate-preview":{provider:"veo-direct",singleImage:true},
+  "veo-3.1-fast-generate-preview":{provider:"veo-direct",singleImage:true},
+  "veo-3.0-generate-001":{provider:"veo-direct",singleImage:true},
+  "veo-3.0-fast-generate-001":{provider:"veo-direct",singleImage:true},
   // Kling O3 Pro has no plain text-to-video form — it's reference-first by
   // design (fal: "O3 is best for reference-heavy workflows with character
   // consistency"), so it's wired the same way as Seedance/Veo's ref models:
@@ -5324,7 +5392,7 @@ function updateVcCostHint(){
   const usesElements=!!(cap.elements&&S.vcMultiImages.length>1);
   const est=estimateVideoCost(model,seconds,resolution,!!(S.vcMultiVideos&&S.vcMultiVideos.length),usesElements);
   const hint=document.getElementById("vcCostHint");
-  if(hint)hint.textContent=est?formatCostLine(est):"";
+  if(hint)hint.textContent=cap.provider==="veo-direct"?"Free tier (Google API) — rate-limited, not billed":(est?formatCostLine(est):"");
 }
 // ── COST ESTIMATION ──
 // Rates verified directly against fal.ai's own model pages. Seedance 2.0
@@ -6402,6 +6470,24 @@ async function sendVcChatPrompt(){
 
   try{
     let videoUrl,providerLabel,costKey;
+    // Veo 3 Direct uses api_gemini against Google's own API, not fal.ai — it
+    // needs no fal.ai key and no hosted-URL upload step (its optional single
+    // reference image goes straight in as inline base64), so it's handled as
+    // its own early branch before the fal.ai key gate below.
+    if(cap.provider==="veo-direct"){
+      pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with Veo 3 Direct (Gemini API)…"});
+      const startImage=S.vcMultiImages.length?S.vcMultiImages[0].dataUrl:null;
+      videoUrl=await genViaVeoDirect(prompt,ratio,model,startImage);
+      providerLabel="Veo 3 Direct (Gemini API)";costKey=model;
+      const savedAssetVcDirect=createVideoAsset(videoUrl,prompt,"");
+      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel,prompt,totalDuration:parseInt(duration,10),assetId:savedAssetVcDirect.id,model,resolution:"",refImages:[]}});
+      // amountOverride:0 — this is Google's own free-tier API, not fal.ai's
+      // paid proxy, so there's no per-call charge to log against COST_TABLE.
+      logCost(model,"Video Canvas — Veo 3 Direct (free tier)",1,0);
+      toast(`✨ Video generated via ${providerLabel}!`,"success");
+      sendBtn.disabled=false;
+      return;
+    }
     const apiKeyEarly=gs("api_falai","");
     if(!apiKeyEarly)throw new Error("Add a fal.ai API key in Settings first");
     // Upload every attached reference file to a hosted URL before building any
@@ -6896,6 +6982,14 @@ const VIDEO_MODEL_DURATIONS={
   "fal-ai/kling-video/v3/4k/image-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/veo3.1":{options:[4,6,8],format:n=>`${n}s`},
   "fal-ai/veo3.1/reference-to-video":{options:[4,6,8],format:n=>`${n}s`},
+  // Veo 3 Direct (Gemini API): genViaVeoDirect doesn't currently send a
+  // duration parameter at all (Google's API defaults it), so this is a fixed
+  // single option purely to stop updateVcModelUI's slider math from breaking
+  // on an undefined lookup — it isn't read by the actual request.
+  "veo-3.1-generate-preview":{options:[8],format:n=>`${n}s (fixed)`},
+  "veo-3.1-fast-generate-preview":{options:[8],format:n=>`${n}s (fixed)`},
+  "veo-3.0-generate-001":{options:[8],format:n=>`${n}s (fixed)`},
+  "veo-3.0-fast-generate-001":{options:[8],format:n=>`${n}s (fixed)`},
 };
 
 // Real per-model resolution support on fal, not a one-size-fits-all list.
@@ -6921,6 +7015,13 @@ const VIDEO_MODEL_RESOLUTIONS={
   "fal-ai/kling-video/o3/pro/reference-to-video":null,
   "fal-ai/kling-video/o3/standard/image-to-video":null,
   "fal-ai/kling-video/v3/4k/image-to-video":null,
+  // Veo 3 Direct — genViaVeoDirect doesn't send a resolution param, so this
+  // is null like Kling (hides the Resolution selector rather than showing a
+  // control that has no effect on the actual request).
+  "veo-3.1-generate-preview":null,
+  "veo-3.1-fast-generate-preview":null,
+  "veo-3.0-generate-001":null,
+  "veo-3.0-fast-generate-001":null,
 };
 const KLING_FIXED_RESOLUTION_NOTE={
   "fal-ai/kling-video/v2.1/master/text-to-video":"Kling 2.1 Master renders at a fixed resolution — no manual selection on fal.",
