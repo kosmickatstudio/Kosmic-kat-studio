@@ -30,11 +30,13 @@ function renderEditor(el){
           <button class="btn btn-outline btn-xs" style="width:100%;margin-top:4px">+ Add to Sequence</button>
         </div>`).join('')}</div>`}
       ${sequence.length?`
+      <div style="font-size:11px;font-weight:700;color:var(--violet);margin-bottom:4px">TIMELINE — ${formatTimelineDuration(sequence)} total</div>
+      <div id="timelineStrip" style="display:flex;gap:2px;height:44px;border-radius:8px;overflow:hidden;margin-bottom:16px;background:var(--border)">${timelineStripHTML(sequence)}</div>
       <div style="font-size:11px;font-weight:700;color:var(--violet);margin-bottom:8px">SEQUENCE (${sequence.length} clip${sequence.length!==1?'s':''})</div>
       <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px">${sequence.map((item,i)=>{
         const v=S.assets.find(a=>a.id===item.id);
         if(!v)return'';
-        return `<div style="background:rgba(61,31,122,0.04);border-radius:10px;padding:10px">
+        return `<div id="seqCard_${i}" style="background:rgba(61,31,122,0.04);border-radius:10px;padding:10px;transition:background 0.3s">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
             <span style="font-size:11px;font-weight:700;color:var(--gold);width:20px">${i+1}</span>
             <video src="${v.url}" style="width:60px;height:34px;border-radius:4px;object-fit:cover" muted></video>
@@ -55,6 +57,7 @@ function renderEditor(el){
       `:''}
     </div>
   `;
+  if(sequence.length)loadTimelineDurations(sequence);
 }
 
 // Old sequences stored plain string IDs — normalize to objects with trim/transition metadata
@@ -62,6 +65,69 @@ function normalizeSequence(seq){
   const normalized=seq.map(item=>typeof item==="string"?{id:item,trimStart:0,trimEnd:null,transition:"cut"}:item);
   if(JSON.stringify(normalized)!==JSON.stringify(seq)){S.editorSequence=normalized;save("editorSequence");}
   return normalized;
+}
+
+// ── TIMELINE STRIP ── A real proportional-width visual overview of the
+// sequence, above the existing per-clip list (which still handles all the
+// actual trim/reorder/transition controls — this is a navigation/overview
+// layer on top, not a replacement). No video asset stores its own duration,
+// so an UNTRIMMED clip's real length is unknown until probed — but a
+// TRIMMED clip's effective length is just trimEnd-trimStart, known
+// immediately with no probing needed. Only untrimmed clips need the
+// background metadata load below.
+function getClipEffectiveDuration(item,asset){
+  if(item.trimEnd!==null)return Math.max(0.5,item.trimEnd-(item.trimStart||0));
+  if(asset&&asset.durationCached)return Math.max(0.5,asset.durationCached-(item.trimStart||0));
+  return 8; // reasonable placeholder (typical clip length) until the real duration loads
+}
+function formatTimelineDuration(sequence){
+  let total=0;
+  for(const item of sequence){
+    total+=getClipEffectiveDuration(item,S.assets.find(a=>a.id===item.id));
+  }
+  const mins=Math.floor(total/60),secs=Math.round(total%60);
+  return mins>0?`${mins}:${secs.toString().padStart(2,'0')}`:`${secs}s`;
+}
+function timelineStripHTML(sequence){
+  const durations=sequence.map(item=>getClipEffectiveDuration(item,S.assets.find(a=>a.id===item.id)));
+  const total=durations.reduce((a,b)=>a+b,0)||1;
+  const palette=["#7c3aed","#0891b2","#059669","#b45309","#be185d","#1e40af"];
+  return sequence.map((item,i)=>{
+    const pct=(durations[i]/total*100);
+    return `<div onclick="jumpToSeqCard(${i})" title="Clip ${i+1} — ${durations[i].toFixed(1)}s" style="width:${pct.toFixed(2)}%;background:${palette[i%palette.length]};cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;min-width:4px;flex-shrink:0">${pct>6?i+1:''}</div>`;
+  }).join('');
+}
+function jumpToSeqCard(i){
+  const card=document.getElementById(`seqCard_${i}`);
+  if(!card)return;
+  card.scrollIntoView({behavior:"smooth",block:"center"});
+  card.style.background="rgba(124,58,237,0.15)";
+  setTimeout(()=>{card.style.background="rgba(61,31,122,0.04)";},1000);
+}
+// Background probe for any untrimmed clip's real duration — runs after the
+// initial render so the timeline shows immediately with reasonable
+// placeholder widths, then quietly becomes accurate once each real length
+// is known. Cached on the asset itself (and persisted) so this only ever
+// runs once per clip, not on every re-render.
+function loadTimelineDurations(sequence){
+  sequence.forEach(item=>{
+    const asset=S.assets.find(a=>a.id===item.id);
+    if(!asset||asset.durationCached||item.trimEnd!==null)return; // trimmed clips already know their effective length
+    const probe=document.createElement("video");
+    probe.preload="metadata";
+    probe.src=asset.url;
+    probe.onloadedmetadata=()=>{
+      asset.durationCached=probe.duration;
+      save("assets");
+      // Re-render just the timeline strip, not the whole screen — avoids
+      // disrupting anything the user might be mid-interaction with
+      // elsewhere on the page (a trim slider, a scroll position, etc).
+      const stripEl=document.getElementById("timelineStrip");
+      const totalEl=stripEl&&stripEl.previousElementSibling;
+      if(stripEl)stripEl.innerHTML=timelineStripHTML(sequence);
+      if(totalEl)totalEl.textContent=`TIMELINE — ${formatTimelineDuration(sequence)} total`;
+    };
+  });
 }
 
 function addToSequence(assetId){
