@@ -103,6 +103,18 @@ async function addDisplayContent(){
   let item={id:"disp_"+Date.now(),type};
   if(type==="upload"){
     if(!S.dcUploadedFile){toast("Choose a file from your device first","error");return;}
+    // Storage Rules require request.auth != null — if the sign-in state
+    // isn't actually established (still "guest," or the Firebase Auth
+    // session hasn't resolved), this upload WILL get denied. Every other
+    // upload in this app (rehostToStorage) has silently skipped the real
+    // Storage write in that exact situation and fallen back to the
+    // original provider URL instead — which still displays/plays fine, so
+    // it never surfaced as a visible failure. This path has no such
+    // fallback, so it's likely the only place actually exposing this.
+    if(!S.user||S.user.email==="guest"||!S.user.uid){
+      toast(`❌ Not signed in with a real account (currently: ${S.user?S.user.email:'none'}) — sign in with Google in Settings first, Storage Rules require it`,"error");
+      return;
+    }
     try{
       if(addBtn){addBtn.disabled=true;addBtn.textContent="Uploading… 0%";}
       const path=`home-display/${Date.now()}_${S.dcUploadedFile.name}`;
