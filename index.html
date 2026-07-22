@@ -751,6 +751,20 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
     </div>
   </div>
 
+  <!-- Publishing -->
+  <div class="sp-section">
+    <div class="sp-section-title" onclick="toggleSpSection(this)">
+      Publishing <span class="sp-collapse-icon">▼</span>
+    </div>
+    <div class="sp-section-body">
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Optional — this app has no built-in YouTube/social posting. If you've already set up your own Zapier "Catch Hook" trigger, paste its URL here to enable one-tap publishing from a finished production; otherwise just copy the generated title/description/tags manually.</div>
+      <div class="f-group">
+        <label class="f-label">Zapier Webhook URL</label>
+        <input class="f-input" id="zapierWebhookInput" placeholder="https://hooks.zapier.com/hooks/catch/…" oninput="saveSetting('zapier_webhook_url',this.value.trim())">
+      </div>
+    </div>
+  </div>
+
   <!-- AI Brain -->
   <div class="sp-section">
     <div class="sp-section-title">AI Director Brain</div>
@@ -8067,6 +8081,13 @@ function openProductionDetail(prodId){
     <div style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--violet);background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.25);border-radius:10px;padding:8px 12px;margin-bottom:14px">
       ${pIcon('sparkle',13)} $${(p.costSpent||0).toFixed(2)} spent so far on this production
     </div>
+    ${allApproved?`<div class="panel" style="border:1.5px solid var(--vs)">
+      <div class="panel-title">${pIcon('upload')} Ready to Publish</div>
+      <div id="publishPanelBody_${p.id}">
+        ${p.publishMeta?renderPublishMetaHTML(p):`<div style="font-size:12px;color:var(--textm);margin-bottom:10px">Generate a title, description, and tags from this production's actual content — genre, cast, and what happens across the episodes — instead of writing them from scratch.</div>
+        <button class="btn btn-primary btn-sm" onclick="generatePublishingMetadata('${p.id}')" id="publishGenBtn_${p.id}">${pIcon('sparkle',13)} Generate Title, Description & Tags</button>`}
+      </div>
+    </div>`:''}
     <div class="panel">
       <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between">
         <span>${pIcon('mask')} Character Sheet${p.characterSheets&&p.characterSheets.length>1?'s':''}</span>${(()=>{const st=p.characterSheetStatus||"pending";return `<span class="badge ${st==='approved'?'badge-green':st==='ready'?'badge-violet':st==='generating'?'badge-orange':'badge-gray'}">${{pending:'Not created',generating:'Generating…',ready:'Awaiting your approval',approved:'Approved'}[st]||st}</span>`;})()}
@@ -9091,6 +9112,85 @@ function reshootEpisodeScene(prodId,epIndex){
 }
 
 // ── FINALIZE: push all approved clips into Video Editor sequence, in order ──
+// ── PUBLISHING PIPELINE ──
+// Generates real YouTube-ready metadata from a production's ACTUAL content
+// (genre, cast, what happens across the episodes) instead of you writing it
+// from scratch every time. Being honest about scope: this app has no
+// built-in YouTube/Zapier posting integration at all — no OAuth, no video
+// upload API. What's real and buildable right now is the metadata
+// generation itself, plus an OPTIONAL webhook trigger for anyone who's
+// already set up their own Zap (Settings > Zapier Webhook URL) to catch a
+// POST and take it from there. Nothing here fakes automation that doesn't
+// exist — the fallback is always just copying the generated text yourself.
+async function generatePublishingMetadata(prodId){
+  const p=S.productions.find(x=>x.id===prodId);
+  if(!p)return;
+  const btn=document.getElementById(`publishGenBtn_${p.id}`);
+  if(btn){btn.disabled=true;btn.textContent="Generating…";}
+  try{
+    const castList=(p.characters||[]).filter(c=>c.tier!=="SIDE").map(c=>`${c.name} (${c.tier})`).join(", ")||"—";
+    const episodeSummaries=p.episodes.map(e=>`Episode ${e.index} (${e.genre||e.approach}, ${e.duration}s): ${e.masterPrompt}`).join("\n");
+    const reply=await callAiSimple(
+      `Write YouTube publishing metadata for this short-form video series, based on what actually happens in it — not generic filler.\n\nConcept: "${p.concept}"\nMain cast: ${castList}\nEpisodes:\n${episodeSummaries}\n\nFormat EXACTLY like this, nothing else:\nTITLE: <a catchy, clickable title under 100 characters — specific to this story, not generic>\nDESCRIPTION: <2-3 short paragraphs: an opening hook, a one-line sense of what happens without spoiling the ending, and a call-to-action to follow/subscribe for more>\nTAGS: <10-15 comma-separated tags/keywords genuinely relevant to this specific content>`,
+      "You write real, specific YouTube metadata — never generic placeholder text. No preamble, no markdown.",
+      gs("ai_model","claude")
+    );
+    const titleMatch=reply.match(/TITLE:\s*([^\n]+)/i);
+    const descMatch=reply.match(/DESCRIPTION:\s*([\s\S]*?)(?=TAGS:)/i);
+    const tagsMatch=reply.match(/TAGS:\s*([^\n]+)/i);
+    p.publishMeta={
+      title:titleMatch?titleMatch[1].trim():"",
+      description:descMatch?descMatch[1].trim():"",
+      tags:tagsMatch?tagsMatch[1].trim():"",
+    };
+    save("productions");
+    trackProductionCost(p,(gs("ai_model","claude"))+"_promptwriter",`Publishing metadata: ${p.concept.slice(0,40)}`);
+    const container=document.getElementById(`publishPanelBody_${p.id}`);
+    if(container)container.innerHTML=renderPublishMetaHTML(p);
+    toast("📤 Publishing metadata generated","success");
+  }catch(err){
+    toast("❌ Couldn't generate metadata: "+err.message,"error");
+    if(btn){btn.disabled=false;btn.textContent="✨ Generate Title, Description & Tags";}
+  }
+}
+function renderPublishMetaHTML(p){
+  const m=p.publishMeta||{title:"",description:"",tags:""};
+  const hasWebhook=!!gs("zapier_webhook_url","");
+  return `
+    <div class="f-group"><label class="f-label">Title</label><input class="f-input" id="pubTitle_${p.id}" value="${(m.title||'').replace(/"/g,'&quot;')}" oninput="S.productions.find(x=>x.id==='${p.id}').publishMeta.title=this.value;save('productions')"></div>
+    <div class="f-group"><label class="f-label">Description</label><textarea class="f-textarea" id="pubDesc_${p.id}" style="min-height:100px" oninput="S.productions.find(x=>x.id==='${p.id}').publishMeta.description=this.value;save('productions')">${m.description||''}</textarea></div>
+    <div class="f-group"><label class="f-label">Tags</label><input class="f-input" id="pubTags_${p.id}" value="${(m.tags||'').replace(/"/g,'&quot;')}" oninput="S.productions.find(x=>x.id==='${p.id}').publishMeta.tags=this.value;save('productions')"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+      <button class="btn btn-outline btn-xs" onclick="navigator.clipboard.writeText(document.getElementById('pubTitle_${p.id}').value+String.fromCharCode(10,10)+document.getElementById('pubDesc_${p.id}').value+String.fromCharCode(10,10)+document.getElementById('pubTags_${p.id}').value);toast('Copied — paste into YouTube Studio','success')">${pIcon('doc',12)} Copy All</button>
+      <button class="btn btn-outline btn-xs" onclick="generatePublishingMetadata('${p.id}')">${pIcon('restore',12)} Regenerate</button>
+      ${hasWebhook?`<button class="btn btn-primary btn-xs" onclick="publishViaWebhook('${p.id}')">${pIcon('upload',12)} Publish via Zapier</button>`
+        :`<span style="font-size:10px;color:var(--textm);align-self:center">No Zapier webhook set in Settings — copy the text above and post manually, or add one to publish with one tap.</span>`}
+    </div>`;
+}
+// Optional — only appears if the user has configured their own Zapier
+// Catch Hook webhook URL in Settings. POSTs the generated metadata plus a
+// link to the finalized video; what that Zap actually DOES with it (post to
+// YouTube, Instagram, wherever) is entirely up to how the user's own Zap is
+// built — this app has no visibility into or control over that.
+async function publishViaWebhook(prodId){
+  const p=S.productions.find(x=>x.id===prodId);
+  const webhookUrl=gs("zapier_webhook_url","");
+  if(!webhookUrl){toast("Add a Zapier webhook URL in Settings first","error");return;}
+  try{
+    await fetch(webhookUrl,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        title:p.publishMeta.title,description:p.publishMeta.description,tags:p.publishMeta.tags,
+        concept:p.concept,episodeCount:p.episodes.length,
+      })
+    });
+    toast("📤 Sent to your Zapier webhook","success");
+  }catch(err){
+    toast("❌ Webhook call failed: "+err.message+" — check the URL in Settings","error");
+  }
+}
+
 async function finalizeProductionToEditor(prodId){
   const p=S.productions.find(x=>x.id===prodId);
   if(!p.episodes.every(e=>e.sceneStatus==="approved")){toast("All 6 episodes must be approved first","error");return;}
@@ -9720,6 +9820,8 @@ function updateUserUI(){
   // after init() — refresh them here so they don't stay stuck on the
   // "please sign in" state once Firebase actually confirms who's signed in.
   if(document.getElementById("apiKeyFields"))buildApiKeyFields();
+  const zwInput=document.getElementById("zapierWebhookInput");
+  if(zwInput)zwInput.value=gs("zapier_webhook_url","");
   if(S.mod==="team")renderModule("team");
 }
 
@@ -9995,6 +10097,8 @@ async function init(){
   initStars();
   injectLogos();
   buildApiKeyFields();
+  const zwInputInit=document.getElementById("zapierWebhookInput");
+  if(zwInputInit)zwInputInit.value=gs("zapier_webhook_url","");
   const lastMod=gs("last_mod","home");
   S.mod=lastMod;
   const lastBtn=document.querySelector(`[data-mod="${lastMod}"]`);
