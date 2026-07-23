@@ -138,72 +138,73 @@ function renderHome(el){
       </div>`).join('')}
     </div>`:''}
 
-    <div class="panel" style="position:relative;overflow:hidden;background:linear-gradient(160deg,#2A1B4D 0%,#3D1F7A 45%,#4A2A8C 100%);border:1px solid rgba(255,255,255,0.14);box-shadow:0 10px 34px rgba(61,31,122,0.35),inset 0 1px 0 rgba(255,255,255,0.18)">
-      <div style="position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,0.14) 0%,rgba(255,255,255,0.02) 30%,rgba(255,255,255,0) 55%);pointer-events:none"></div>
-      <div style="position:absolute;top:-60%;left:-20%;width:140%;height:100%;background:radial-gradient(ellipse at top,rgba(255,255,255,0.16),transparent 60%);pointer-events:none"></div>
-      <div style="position:relative">
-        <div class="panel-title" style="justify-content:center;font-size:13.5px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.3)">✦ Model Selection ✦</div>
-        <div style="font-size:10.5px;color:rgba(255,255,255,0.75);text-align:center;margin-bottom:14px">Tap a model to make it your default — the active one turns <span style="color:#4ADE80;font-weight:700">green</span>.</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
-          <div>
-            <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.9);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:6px">🖼 Image</div>
-            <div style="display:flex;flex-direction:column">
-              ${[
-                {id:"fal-ai/flux/schnell",label:"FLUX Schnell",ready:hasFal},
-                {id:"fal-ai/flux/dev",label:"FLUX Dev",ready:hasFal},
-                {id:"fal-ai/flux-pro/v1.1",label:"FLUX 1.1 Pro",ready:hasFal},
-                {id:"fal-ai/ideogram/v3",label:"Ideogram V3",ready:hasFal},
-                {id:"fal-ai/recraft/v3/text-to-image",label:"Recraft V3",ready:hasFal},
-                {id:"fal-ai/stable-diffusion-v35-large",label:"Stable Diff. 3.5",ready:hasFal},
-                {id:"fal-ai/flux-2",label:"FLUX.2 Dev",ready:hasFal},
-                {id:"fal-ai/flux-2-pro",label:"FLUX.2 Pro",ready:hasFal},
-                {id:"fal-ai/flux-2/flash",label:"FLUX.2 Flash",ready:hasFal},
-                {id:"gemini-3.1-flash-image",label:"Nano Banana 2",ready:!!gs("api_gemini")},
-                {id:"gemini-3-pro-image",label:"Nano Banana Pro",ready:!!gs("api_gemini")},
-                {id:"gpt-image-2",label:"GPT Image 2",ready:hasOpenAI},
-                {id:"fal-ai/nano-banana-2",label:"Nano Banana 2 (fal)",ready:hasFal},
-                {id:"fal-ai/nano-banana-pro",label:"Nano Banana Pro (fal)",ready:hasFal},
-                {id:"openai/gpt-image-2",label:"GPT Image 2 (fal)",ready:hasFal},
-              ].map(m=>{const active=defaultImageModel===m.id;return `<div onclick="setDefaultModel('image','${m.id}')" style="padding:5px 2px;cursor:pointer">
-                  <div style="font-size:10.5px;font-weight:${active?'800':'400'};color:${active?'#4ADE80':'rgba(255,255,255,0.8)'};line-height:1.3;text-shadow:${active?'0 0 10px rgba(74,222,128,0.5)':'none'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.ready?'':'○ '}${m.label}</div>
-                </div>`;}).join('')}
-            </div>
+    <div class="home-glass-panel" style="position:relative">
+      <div class="panel-title" style="justify-content:center;font-size:13.5px">${pIcon('sparkle',15)} Model Selection ${pIcon('sparkle',15)}</div>
+      <div style="font-size:10.5px;color:var(--textm);text-align:center;margin-bottom:14px">Tap a model to make it your default — the active one turns <span style="color:var(--green);font-weight:700">green</span>.</div>
+      <div style="display:grid;grid-template-columns:1.2fr 1.15fr 0.95fr;gap:10px">
+        <div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:4px;font-size:10px;font-weight:800;color:var(--violet);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;border-bottom:1px solid var(--glass-brd);padding-bottom:6px">${pIcon('image',12)} Image</div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            ${[
+              {id:"fal-ai/flux/schnell",label:"FLUX Schnell",ready:hasFal},
+              {id:"fal-ai/flux/dev",label:"FLUX Dev",ready:hasFal},
+              {id:"fal-ai/flux-pro/v1.1",label:"FLUX 1.1 Pro",ready:hasFal},
+              {id:"fal-ai/ideogram/v3",label:"Ideogram V3",ready:hasFal},
+              {id:"fal-ai/recraft/v3/text-to-image",label:"Recraft V3",ready:hasFal},
+              {id:"fal-ai/stable-diffusion-v35-large",label:"Stable Diff. 3.5",ready:hasFal},
+              {id:"fal-ai/flux-2",label:"FLUX.2 Dev",ready:hasFal},
+              {id:"fal-ai/flux-2-pro",label:"FLUX.2 Pro",ready:hasFal},
+              {id:"fal-ai/flux-2/flash",label:"FLUX.2 Flash",ready:hasFal},
+              {id:"gemini-3.1-flash-image",label:"Nano Banana 2",ready:!!gs("api_gemini")},
+              {id:"gemini-3-pro-image",label:"Nano Banana Pro",ready:!!gs("api_gemini")},
+              {id:"gpt-image-2",label:"GPT Image 2",ready:hasOpenAI},
+              {id:"fal-ai/nano-banana-2",label:"Nano Banana 2 (fal)",ready:hasFal},
+              {id:"fal-ai/nano-banana-pro",label:"Nano Banana Pro (fal)",ready:hasFal},
+              {id:"openai/gpt-image-2",label:"GPT Image 2 (fal)",ready:hasFal},
+            ].map(m=>{const active=defaultImageModel===m.id;return `<div onclick="setDefaultModel('image','${m.id}')" style="padding:4px 2px;cursor:pointer;display:flex;align-items:baseline;gap:4px">
+                ${m.ready?'':'<span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;border:1.3px solid var(--textm);opacity:0.6;margin-top:3px"></span>'}
+                <span style="font-size:10.5px;font-weight:${active?'800':'400'};color:${active?'var(--green)':'var(--text)'};line-height:1.35;text-shadow:${active?'0 0 8px rgba(16,185,129,0.35)':'none'}">${m.label}</span>
+              </div>`;}).join('')}
           </div>
-          <div>
-            <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.9);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:6px">▶ Video</div>
-            <div style="display:flex;flex-direction:column">
-              ${[
-                {id:"bytedance/seedance-2.0/fast/text-to-video",label:"Seedance 2.0 Fast"},
-                {id:"bytedance/seedance-2.0/text-to-video",label:"Seedance 2.0"},
-                {id:"fal-ai/kling-video/v2.1/master/text-to-video",label:"Kling 2.1 Master"},
-                {id:"fal-ai/kling-video/v2.6/pro/text-to-video",label:"Kling 2.6 Pro"},
-                {id:"fal-ai/kling-video/v3/standard/text-to-video",label:"Kling 3.0 Standard"},
-                {id:"fal-ai/kling-video/v3/pro/text-to-video",label:"Kling 3.0 Pro"},
-                {id:"fal-ai/kling-video/o3/pro/reference-to-video",label:"Kling O3 Pro"},
-                {id:"fal-ai/veo3.1",label:"Veo 3.1"},
-                {id:"veo-3.1-generate-preview",label:"Veo 3.1 Direct"},
-              ].map(m=>{const active=defaultVideoModel===m.id;return `<div onclick="setDefaultModel('video','${m.id}')" style="padding:5px 2px;cursor:pointer">
-                  <div style="font-size:10.5px;font-weight:${active?'800':'400'};color:${active?'#4ADE80':'rgba(255,255,255,0.8)'};line-height:1.3;text-shadow:${active?'0 0 10px rgba(74,222,128,0.5)':'none'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${hasFal?'':'○ '}${m.label}</div>
-                </div>`;}).join('')}
-            </div>
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:4px;font-size:10px;font-weight:800;color:var(--violet);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;border-bottom:1px solid var(--glass-brd);padding-bottom:6px">${pIcon('film',12)} Video</div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            ${[
+              {id:"bytedance/seedance-2.0/fast/text-to-video",label:"Seedance 2.0 Fast"},
+              {id:"bytedance/seedance-2.0/text-to-video",label:"Seedance 2.0"},
+              {id:"fal-ai/kling-video/v2.1/master/text-to-video",label:"Kling 2.1 Master"},
+              {id:"fal-ai/kling-video/v2.6/pro/text-to-video",label:"Kling 2.6 Pro"},
+              {id:"fal-ai/kling-video/v3/standard/text-to-video",label:"Kling 3.0 Standard"},
+              {id:"fal-ai/kling-video/v3/pro/text-to-video",label:"Kling 3.0 Pro"},
+              {id:"fal-ai/kling-video/o3/pro/reference-to-video",label:"Kling O3 Pro"},
+              {id:"fal-ai/veo3.1",label:"Veo 3.1"},
+              {id:"veo-3.1-generate-preview",label:"Veo 3.1 Direct"},
+            ].map(m=>{const active=defaultVideoModel===m.id;return `<div onclick="setDefaultModel('video','${m.id}')" style="padding:4px 2px;cursor:pointer;display:flex;align-items:baseline;gap:4px">
+                ${hasFal?'':'<span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;border:1.3px solid var(--textm);opacity:0.6;margin-top:3px"></span>'}
+                <span style="font-size:10.5px;font-weight:${active?'800':'400'};color:${active?'var(--green)':'var(--text)'};line-height:1.35;text-shadow:${active?'0 0 8px rgba(16,185,129,0.35)':'none'}">${m.label}</span>
+              </div>`;}).join('')}
           </div>
-          <div>
-            <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.9);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:6px">✧ Brain</div>
-            <div style="display:flex;flex-direction:column">
-              ${[
-                {id:"claude",label:"Claude",ready:!!gs("api_anthropic")},
-                {id:"gemini",label:"Gemini",ready:!!gs("api_gemini")},
-                {id:"openai",label:"GPT-4o",ready:!!gs("api_openai")},
-                {id:"groq",label:"Groq Llama",ready:!!gs("api_groq")},
-                {id:"deepseek",label:"DeepSeek V4",ready:!!gs("api_deepseek")},
-                {id:"aicredits",label:"AICredits",ready:!!gs("api_aicredits")},
-              ].map(m=>{const active=gs("ai_model","claude")===m.id;return `<div onclick="setBrainModelQuick('${m.id}')" style="padding:5px 2px;cursor:pointer">
-                  <div style="font-size:10.5px;font-weight:${active?'800':'400'};color:${active?'#4ADE80':'rgba(255,255,255,0.8)'};line-height:1.3;text-shadow:${active?'0 0 10px rgba(74,222,128,0.5)':'none'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.ready?'':'○ '}${m.label}</div>
-                </div>`;}).join('')}
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:4px;font-size:10px;font-weight:800;color:var(--violet);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;border-bottom:1px solid var(--glass-brd);padding-bottom:6px">${pIcon('sparkle',12)} Brain</div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            ${[
+              {id:"claude",label:"Claude",ready:!!gs("api_anthropic")},
+              {id:"gemini",label:"Gemini",ready:!!gs("api_gemini")},
+              {id:"openai",label:"GPT-4o",ready:!!gs("api_openai")},
+              {id:"groq",label:"Groq Llama",ready:!!gs("api_groq")},
+              {id:"deepseek",label:"DeepSeek V4",ready:!!gs("api_deepseek")},
+              {id:"aicredits",label:"AICredits",ready:!!gs("api_aicredits")},
+            ].map(m=>{const active=gs("ai_model","claude")===m.id;return `<div onclick="setBrainModelQuick('${m.id}')" style="padding:4px 2px;cursor:pointer;display:flex;align-items:baseline;gap:4px">
+                ${m.ready?'':'<span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;border:1.3px solid var(--textm);opacity:0.6;margin-top:3px"></span>'}
+                <span style="font-size:10.5px;font-weight:${active?'800':'400'};color:${active?'var(--green)':'var(--text)'};line-height:1.35;text-shadow:${active?'0 0 8px rgba(16,185,129,0.35)':'none'}">${m.label}</span>
+              </div>`;}).join('')}
           </div>
         </div>
       </div>
-      <div style="font-size:9.5px;color:rgba(255,255,255,0.6);margin-top:10px;text-align:center">○ = no API key set yet for that model</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:5px;font-size:9.5px;color:var(--textm);margin-top:12px">
+        <span style="width:6px;height:6px;border-radius:50%;border:1.3px solid var(--textm);opacity:0.6"></span> No API key set yet for that model
       </div>
     </div>
   `;

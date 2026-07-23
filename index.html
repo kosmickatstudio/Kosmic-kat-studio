@@ -4360,42 +4360,42 @@ function openGenerationInfoModal(meta){
   const sheet=document.createElement("div");
   sheet.id="vcInfoSheet";
   sheet.className="ig-settings-sheet open";
-  sheet.style.cssText="background:linear-gradient(165deg,rgba(61,31,122,0.94),rgba(38,20,80,0.97));backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%)";
+  sheet.style.cssText="background:linear-gradient(160deg,rgba(98,64,176,0.14),rgba(74,169,217,0.07)),var(--glass-solid);backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%)";
   const isVideo=meta.mediaType==="video"||meta.mediaType==="Video";
   const modelName=friendlyModelName(meta.model)||meta.providerLabel||"Unknown";
   sheet.innerHTML=`
     <div style="position:absolute;inset:0;border-radius:26px 26px 0 0;overflow:hidden;pointer-events:none">
-      <div style="position:absolute;top:-50%;left:-20%;width:140%;height:90%;background:radial-gradient(ellipse at top,rgba(255,255,255,0.14),transparent 60%)"></div>
+      <div style="position:absolute;top:-50%;left:-20%;width:140%;height:90%;background:radial-gradient(ellipse at top,rgba(255,255,255,0.12),transparent 60%)"></div>
     </div>
     <div class="ig-sheet-handle" ontouchstart="sheetSwipeStart(event)" ontouchmove="sheetSwipeMove(event,'vcInfoSheet')" ontouchend="sheetSwipeEnd(event,'vcInfoSheet','closeGenerationInfoModal')" style="position:relative"></div>
     <div style="padding:6px 20px 24px;position:relative">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,0.3)">Generation Details</div>
-        <button onclick="closeGenerationInfoModal()" style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.1);color:#fff;cursor:pointer">✕</button>
+        <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">Generation Details</div>
+        <button onclick="closeGenerationInfoModal()" style="width:30px;height:30px;border-radius:50%;border:1px solid var(--glass-brd);background:var(--glass);color:var(--textm);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center">✕</button>
       </div>
-      ${meta.mediaUrl?`<div style="border-radius:16px;overflow:hidden;margin-bottom:16px;box-shadow:0 8px 28px rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.15)">
-        ${isVideo?`<video src="${meta.mediaUrl}" controls style="width:100%;max-height:46vh;display:block;background:#000"></video>`:`<img src="${meta.mediaUrl}" style="width:100%;max-height:46vh;object-fit:contain;display:block;background:#000">`}
+      ${meta.mediaUrl?`<div style="border-radius:16px;overflow:hidden;margin-bottom:16px;box-shadow:0 8px 28px rgba(61,31,122,0.18);border:1px solid var(--glass-brd)">
+        ${isVideo?`<video src="${meta.mediaUrl}" controls style="width:100%;max-height:46vh;display:block;background:#000"></video>`:`<img src="${meta.mediaUrl}" style="width:100%;max-height:46vh;object-fit:contain;display:block;background:var(--pearl2)">`}
       </div>`:''}
-      <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px">Prompt</div>
-      <div style="font-size:12.5px;color:#fff;line-height:1.5;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:10px 12px;margin-bottom:16px;white-space:pre-wrap">${(meta.prompt||"—")}</div>
-      ${(meta.refImages&&meta.refImages.length)?`<div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px">Reference Images</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">${meta.refImages.map(u=>`<img src="${u}" style="width:52px;height:52px;border-radius:8px;object-fit:cover;border:1px solid rgba(255,255,255,0.2)">`).join('')}</div>`:''}
+      <div style="font-size:10px;font-weight:800;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px">Prompt</div>
+      <div style="font-size:12.5px;color:var(--text);line-height:1.5;background:var(--glass);border:1px solid var(--glass-brd);border-radius:12px;padding:10px 12px;margin-bottom:16px;white-space:pre-wrap">${(meta.prompt||"—")}</div>
+      ${(meta.refImages&&meta.refImages.length)?`<div style="font-size:10px;font-weight:800;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px">Reference Images</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">${meta.refImages.map(u=>`<img src="${u}" style="width:52px;height:52px;border-radius:8px;object-fit:cover;border:1px solid var(--glass-brd)">`).join('')}</div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div>
-          <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Model</div>
-          <div style="font-size:12.5px;color:#fff;font-weight:600">${modelName}</div>
+          <div style="font-size:10px;font-weight:800;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Model</div>
+          <div style="font-size:12.5px;color:var(--text);font-weight:600">${modelName}</div>
         </div>
         <div>
-          <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Resolution</div>
-          <div style="font-size:12.5px;color:#fff;font-weight:600">${meta.resolution||"Unknown"}</div>
+          <div style="font-size:10px;font-weight:800;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Resolution</div>
+          <div style="font-size:12.5px;color:var(--text);font-weight:600">${meta.resolution||"Unknown"}</div>
         </div>
         <div>
-          <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Aspect Ratio</div>
-          <div style="font-size:12.5px;color:#fff;font-weight:600">${meta.aspectRatio||"Unknown"}</div>
+          <div style="font-size:10px;font-weight:800;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Aspect Ratio</div>
+          <div style="font-size:12.5px;color:var(--text);font-weight:600">${meta.aspectRatio||"Unknown"}</div>
         </div>
         ${isVideo?`<div>
-          <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Duration</div>
-          <div style="font-size:12.5px;color:#fff;font-weight:600">${meta.duration||"Unknown"}</div>
+          <div style="font-size:10px;font-weight:800;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Duration</div>
+          <div style="font-size:12.5px;color:var(--text);font-weight:600">${meta.duration||"Unknown"}</div>
         </div>`:''}
       </div>
     </div>`;
