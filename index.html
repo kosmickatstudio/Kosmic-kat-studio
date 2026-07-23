@@ -2563,7 +2563,7 @@ async function deleteProject(id){
 // ── CHARACTERS ── (moved to characters.js — loaded via <script src="characters.js"> near the end of <body>, thirteenth module extracted from this file)
 // ── IMAGE GEN ──
 const STYLE_PRESETS=[
-  {label:"— No style —",value:""},
+  {label:"Auto",value:"",sub:"Photorealistic, or anything you specify in your prompt"},
   {label:"Studio Ghibli",value:"Studio Ghibli animation style, soft painterly backgrounds, warm colors"},
   {label:"Disney Animation",value:"Disney animated feature style, expressive characters, vibrant colors"},
   {label:"Pixar 3D",value:"Pixar 3D animation style, stylized realism, warm lighting"},
@@ -2588,6 +2588,36 @@ const STYLE_PRESETS=[
   {label:"Isometric",value:"isometric illustration style, clean geometric perspective"},
   {label:"Grunge/Sketchy",value:"gritty sketchy grunge illustration, rough pencil linework"},
 ];
+// Original gradient swatches per style — deliberately NOT real stills from
+// Ghibli/Disney/Pixar/GTA (those are copyrighted studio IP; embedding actual
+// frames in a live commercial app is a real infringement risk, not a style
+// choice). These are palette/mood swatches evocative of each aesthetic.
+const STYLE_SWATCHES={
+  "Auto":"linear-gradient(135deg,var(--violet),var(--ice))",
+  "Studio Ghibli":"linear-gradient(135deg,#8ec9e8,#a8d8a0)",
+  "Disney Animation":"linear-gradient(135deg,#f4c14a,#e85d9a)",
+  "Pixar 3D":"linear-gradient(135deg,#4aa9e8,#f4914a)",
+  "Anime":"linear-gradient(135deg,#ff8fc9,#6fe3ff)",
+  "Manga":"linear-gradient(135deg,#3a3a3a,#e8e8e8)",
+  "Webtoon":"linear-gradient(135deg,#ffd23f,#ff6b6b)",
+  "GTA Box Art":"linear-gradient(135deg,#e8341c,#1a1a1a)",
+  "Cyberpunk":"linear-gradient(135deg,#ff2e9a,#2ee8ff)",
+  "Film Noir":"linear-gradient(135deg,#2a2a2a,#c9c9c9)",
+  "Van Gogh":"linear-gradient(135deg,#2c4a8c,#f0c674)",
+  "Watercolor":"linear-gradient(135deg,#f5c9dc,#c9b8f0)",
+  "Comic Book":"linear-gradient(135deg,#ffe14a,#e83d3d)",
+  "Pixel Art":"linear-gradient(135deg,#5ac85a,#3868c8)",
+  "Claymation":"linear-gradient(135deg,#d8935a,#c96f4a)",
+  "Cinematic Photoreal":"linear-gradient(135deg,#1a4a4a,#e8a94a)",
+  "Vaporwave":"linear-gradient(135deg,#ff77e9,#9b7fd4,#6fe3ff)",
+  "Steampunk":"linear-gradient(135deg,#b8823a,#4a3018)",
+  "Fantasy Concept Art":"linear-gradient(135deg,#4a2c7a,#f0c674)",
+  "Line Art":"linear-gradient(135deg,#f5f5f5,#d0d0d0)",
+  "Low Poly 3D":"linear-gradient(135deg,#3ac9b0,#7a4ac9)",
+  "Oil Painting":"linear-gradient(135deg,#6a1a2a,#2a4a2a)",
+  "Isometric":"linear-gradient(135deg,#4a8ce8,#3ac9b0)",
+  "Grunge/Sketchy":"linear-gradient(135deg,#8a8a8a,#2a2a2a)",
+};
 
 // ── IMAGE MODEL PICKER — a custom bottom-sheet replacing the plain native
 // <select>, which every phone renders with its own OS UI that HTML/CSS
@@ -2828,6 +2858,93 @@ function selectSimpleOption(selectId,value){
   closeModelPicker();
 }
 
+// ── VISUAL PICKER — same bottom-sheet chrome as the model/simple pickers,
+// but each row also gets a real visual preview instead of just text: a
+// proportionally-accurate rectangle for aspect ratios, a proportionally-
+// accurate size-comparison diagram for resolutions, or a mood/palette
+// swatch for style presets (see STYLE_SWATCHES — deliberately not real
+// stills from copyrighted studios/franchises).
+function aspectRatioPreviewHTML(value){
+  const parts=value.split(":").map(Number);
+  const w=parts[0]||1,h=parts[1]||1;
+  const box=34; // bounding box both dimensions fit inside
+  let boxW,boxH;
+  if(w>=h){boxW=box;boxH=box*(h/w);}else{boxH=box;boxW=box*(w/h);}
+  return `<div style="width:${box}px;height:${box}px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+    <div style="width:${boxW}px;height:${boxH}px;border-radius:3px;background:linear-gradient(135deg,var(--violet),var(--ice));box-shadow:0 2px 6px rgba(61,31,122,0.25)"></div>
+  </div>`;
+}
+const RESOLUTION_HEIGHTS={"480p":480,"720p":720,"1080p":1080,"4k":2160,"4K":2160};
+function resolutionPreviewHTML(value){
+  const box=34;
+  const maxH=RESOLUTION_HEIGHTS["4k"];
+  const h=RESOLUTION_HEIGHTS[value]||RESOLUTION_HEIGHTS[value.toLowerCase()]||720;
+  const scaledH=Math.max(6,Math.round((h/maxH)*box));
+  const scaledW=Math.max(9,Math.round(scaledH*16/9));
+  const outerW=Math.round(box*16/9);
+  return `<div style="width:${outerW}px;height:${box}px;border:1.3px dashed var(--border);border-radius:3px;display:flex;align-items:flex-end;justify-content:flex-start;flex-shrink:0;overflow:hidden">
+    <div style="width:${scaledW}px;height:${scaledH}px;background:linear-gradient(135deg,var(--violet),var(--ice));border-radius:0 3px 0 0"></div>
+  </div>`;
+}
+function stylePreviewHTML(label){
+  const grad=STYLE_SWATCHES[label]||"linear-gradient(135deg,var(--violet),var(--ice))";
+  return `<div style="width:34px;height:34px;border-radius:9px;background:${grad};box-shadow:0 2px 6px rgba(61,31,122,0.2);flex-shrink:0"></div>`;
+}
+function visualPreviewHTML(kind,value,label){
+  if(kind==="ratio")return aspectRatioPreviewHTML(value);
+  if(kind==="resolution")return resolutionPreviewHTML(value);
+  if(kind==="style")return stylePreviewHTML(label);
+  return "";
+}
+function renderVisualTrigger(selectId,kind){
+  const sel=document.getElementById(selectId);
+  const trigger=document.getElementById(selectId+"Trigger");
+  if(!sel||!trigger)return;
+  const opt=sel.options[sel.selectedIndex];
+  const label=opt?opt.textContent:"Choose…";
+  const value=sel.value;
+  trigger.innerHTML=opt?`
+    ${visualPreviewHTML(kind,value,label)}
+    <span style="flex:1;font-size:13px;font-weight:600;color:var(--text)">${label}</span>
+    <span style="color:var(--textm)">${pIcon('chevron',14)}</span>
+  `:`<span style="flex:1;font-size:13px;color:var(--textm)">Choose…</span><span style="color:var(--textm)">${pIcon('chevron',14)}</span>`;
+}
+function openVisualPicker(selectId,title,kind){
+  closeModelPicker();
+  const sel=document.getElementById(selectId);
+  if(!sel)return;
+  const current=sel.value;
+  const opts=[...sel.options].map(o=>({value:o.value,label:o.textContent}));
+  const overlay=document.createElement("div");
+  overlay.id="modelPickerOverlay";
+  overlay.style.cssText="position:fixed;inset:0;background:rgba(20,10,40,0.45);z-index:400;display:flex;align-items:flex-end";
+  overlay.onclick=(e)=>{if(e.target===overlay)closeModelPicker();};
+  overlay.innerHTML=`
+    <div style="background:var(--surface);width:100%;max-height:78vh;border-radius:20px 20px 0 0;overflow-y:auto;box-shadow:var(--shv)">
+      <div style="position:sticky;top:0;background:var(--surface);padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;z-index:2">
+        <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">${title}</div>
+        <button onclick="closeModelPicker()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
+      </div>
+      <div style="padding:10px 14px 24px">
+        ${opts.map(o=>{
+          const selected=o.value===current;
+          return `<div onclick="selectVisualOption('${selectId}','${o.value.replace(/'/g,"\\'")}','${kind}')" style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:12px;cursor:pointer;margin-bottom:4px;border:1.5px solid ${selected?'var(--vs)':'transparent'};background:${selected?'var(--lav)':'transparent'}">
+            ${visualPreviewHTML(kind,o.value,o.label)}
+            <span style="flex:1;font-size:13.5px;font-weight:${selected?'700':'500'};color:${selected?'var(--violet)':'var(--text)'}">${o.label}</span>
+            ${selected?`<span style="color:var(--violet)">${pIcon('check',15)}</span>`:''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function selectVisualOption(selectId,value,kind){
+  const sel=document.getElementById(selectId);
+  if(sel){sel.value=value;sel.dispatchEvent(new Event("change"));}
+  renderVisualTrigger(selectId,kind);
+  closeModelPicker();
+}
+
 // ── IMAGE MODEL CAPABILITIES — drives which tools/fields actually show up
 // per model, since not every model supports the same features. Verified
 // each capability against real docs rather than assuming uniform support.
@@ -2921,8 +3038,16 @@ function renderImageGen(el){
           <button type="button" class="btn btn-outline btn-sm" style="flex:1" onclick="openPromptLibrary()">${pIcon('doc',13)} Prompt Library</button>
         </div>
         <div class="f-row">
-          <div class="f-group"><label class="f-label">Style Preset</label><select class="f-select" id="igStyle">${STYLE_PRESETS.map(s=>`<option value="${s.value.replace(/"/g,'&quot;')}">${s.label}</option>`).join('')}</select></div>
-          <div class="f-group"><label class="f-label">Aspect Ratio</label><select class="f-select" id="igRatio"><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="9:16">9:16</option><option value="4:3">4:3</option><option value="3:4">3:4</option></select></div>
+          <div class="f-group">
+            <label class="f-label">Style Preset</label>
+            <select class="f-select" id="igStyle" onchange="renderVisualTrigger('igStyle','style')" style="display:none">${STYLE_PRESETS.map(s=>`<option value="${s.value.replace(/"/g,'&quot;')}">${s.label}</option>`).join('')}</select>
+            <div id="igStyleTrigger" onclick="openVisualPicker('igStyle','Choose Style','style')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+          </div>
+          <div class="f-group">
+            <label class="f-label">Aspect Ratio</label>
+            <select class="f-select" id="igRatio" onchange="renderVisualTrigger('igRatio','ratio')" style="display:none"><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="9:16">9:16</option><option value="4:3">4:3</option><option value="3:4">3:4</option></select>
+            <div id="igRatioTrigger" onclick="openVisualPicker('igRatio','Choose Aspect Ratio','ratio')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+          </div>
         </div>
         <div class="f-group"><label class="f-label">Negative Prompt <span style="font-weight:400;color:var(--texts)">(optional)</span></label><input class="f-input" id="igNegPrompt" placeholder="e.g. blurry, low quality, watermark"></div>
         <div class="f-group">
@@ -2976,6 +3101,8 @@ function renderImageGen(el){
   updateIgModelUI();
   updateIgAttachmentBar();
   renderIgChatThread();
+  renderVisualTrigger("igStyle","style");
+  renderVisualTrigger("igRatio","ratio");
 }
 
 // ── INLINE GALLERY VIEW — shows images generated in this chat, no navigation away ──
@@ -4763,8 +4890,16 @@ function renderVideoCanvas(el){
             <div id="vcModelNote" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
           </div>
           <div class="f-row">
-            <div class="f-group" id="vcResWrap"><label class="f-label">Resolution</label><select class="f-select" id="vcRes" onchange="updateVcCostHint()"></select></div>
-            <div class="f-group"><label class="f-label">Aspect Ratio</label><select class="f-select" id="vcRatio"></select></div>
+            <div class="f-group" id="vcResWrap">
+              <label class="f-label">Resolution</label>
+              <select class="f-select" id="vcRes" onchange="updateVcCostHint();renderVisualTrigger('vcRes','resolution')" style="display:none"></select>
+              <div id="vcResTrigger" onclick="openVisualPicker('vcRes','Choose Resolution','resolution')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+            </div>
+            <div class="f-group">
+              <label class="f-label">Aspect Ratio</label>
+              <select class="f-select" id="vcRatio" onchange="renderVisualTrigger('vcRatio','ratio')" style="display:none"></select>
+              <div id="vcRatioTrigger" onclick="openVisualPicker('vcRatio','Choose Aspect Ratio','ratio')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+            </div>
           </div>
           <div class="f-group"><label class="f-label">Duration <span id="vcDurationLabel" style="font-weight:400;color:var(--texts)"></span></label>
             <input type="range" id="vcDurationSlider" min="0" max="0" step="1" value="0" style="width:100%" oninput="updateVcDurationFromSlider()">
@@ -6006,7 +6141,7 @@ function restoreVcGenSettings(g){
     updateVcDurationFromSlider();
   }
   const ratioSel=document.getElementById("vcRatio");
-  if(ratioSel&&g.ratio&&[...ratioSel.options].some(o=>o.value===g.ratio))ratioSel.value=g.ratio;
+  if(ratioSel&&g.ratio&&[...ratioSel.options].some(o=>o.value===g.ratio)){ratioSel.value=g.ratio;renderVisualTrigger("vcRatio","ratio");}
   if(g.resolution)populateResolutionSelect("vcRes","vcResWrap",g.model,g.resolution);
   const negEl=document.getElementById("vcNegPrompt");
   if(negEl)negEl.value=g.negPrompt||"";
@@ -7129,6 +7264,7 @@ function populateResolutionSelect(selectId,wrapId,model,preselect){
   wrap.style.display="block";
   const fallback=options.includes("720p")?"720p":options[0];
   sel.innerHTML=options.map(r=>`<option value="${r}" ${(preselect&&preselect===r)||(!preselect&&r===fallback)?'selected':''}>${r==="4k"?"4K":r}</option>`).join('');
+  renderVisualTrigger(selectId,"resolution");
 }
 
 // ── PRODUCTION STUDIO (own top-level module, not nested in Directorial Studio) ──
@@ -7270,6 +7406,7 @@ function updateVcRatioSelect(model){
   const prevValue=sel.value;
   sel.innerHTML=ratios.map(r=>`<option value="${r}">${r}</option>`).join('');
   sel.value=ratios.includes(prevValue)?prevValue:ratios[0];
+  renderVisualTrigger("vcRatio","ratio");
 }
 
 // Editable "director intake" for a production that already exists — the
