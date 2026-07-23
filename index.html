@@ -2890,10 +2890,23 @@ function stylePreviewHTML(label){
   const grad=STYLE_SWATCHES[label]||"linear-gradient(135deg,var(--violet),var(--ice))";
   return `<div style="width:34px;height:34px;border-radius:9px;background:${grad};box-shadow:0 2px 6px rgba(61,31,122,0.2);flex-shrink:0"></div>`;
 }
+function countPreviewHTML(value){
+  const n=parseInt(value,10)||1;
+  const box=34;
+  const layouts={1:{cols:1,rows:1},2:{cols:2,rows:1},4:{cols:2,rows:2},8:{cols:4,rows:2}};
+  const l=layouts[n]||{cols:Math.ceil(Math.sqrt(n)),rows:Math.ceil(n/Math.ceil(Math.sqrt(n)))};
+  const gap=2;
+  const cellW=(box-(l.cols-1)*gap)/l.cols;
+  const cellH=(box-(l.rows-1)*gap)/l.rows;
+  let cells="";
+  for(let i=0;i<n;i++)cells+=`<div style="width:${cellW}px;height:${cellH}px;border-radius:2px;background:linear-gradient(135deg,var(--violet),var(--ice))"></div>`;
+  return `<div style="width:${box}px;height:${box}px;display:grid;grid-template-columns:repeat(${l.cols},1fr);gap:${gap}px;flex-shrink:0">${cells}</div>`;
+}
 function visualPreviewHTML(kind,value,label){
   if(kind==="ratio")return aspectRatioPreviewHTML(value);
   if(kind==="resolution")return resolutionPreviewHTML(value);
   if(kind==="style")return stylePreviewHTML(label);
+  if(kind==="count")return countPreviewHTML(value);
   return "";
 }
 function renderVisualTrigger(selectId,kind){
@@ -3085,7 +3098,8 @@ function renderImageGen(el){
 
         <div class="f-group" id="igBatchWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
           <label class="f-label" id="igBatchLabel">Batch Count <span style="font-weight:400;color:var(--texts)">(GPT Image 2 can generate up to 8 at once)</span></label>
-          <select class="f-select" id="igBatchCount" onchange="updateIgCostHint()"><option value="1">1 image</option><option value="2">2 images</option><option value="4">4 images</option><option value="8">8 images</option></select>
+          <select class="f-select" id="igBatchCount" onchange="updateIgCostHint();renderVisualTrigger('igBatchCount','count')" style="display:none"><option value="1">1 image</option><option value="2">2 images</option><option value="4">4 images</option><option value="8">8 images</option></select>
+          <div id="igBatchCountTrigger" onclick="openVisualPicker('igBatchCount','Choose Batch Count','count')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
         </div>
       </div>
     </div>
@@ -3103,6 +3117,7 @@ function renderImageGen(el){
   renderIgChatThread();
   renderVisualTrigger("igStyle","style");
   renderVisualTrigger("igRatio","ratio");
+  renderVisualTrigger("igBatchCount","count");
 }
 
 // ── INLINE GALLERY VIEW — shows images generated in this chat, no navigation away ──
@@ -3434,6 +3449,7 @@ function updateIgRatioOptions(cap){
   const prev=sel.value;
   sel.innerHTML=ratios.map(r=>`<option value="${r}">${r}</option>`).join('');
   sel.value=ratios.includes(prev)?prev:ratios[0];
+  renderVisualTrigger("igRatio","ratio");
 }
 function updateIgModelUI(){
   const model=document.getElementById("igModel").value;
@@ -3457,6 +3473,7 @@ function updateIgModelUI(){
       batchWrap.style.display="block";
       batchLabel.textContent=`Number of Images (up to ${cap.numImages.max} in one generation)`;
       batchCount.innerHTML=Array.from({length:cap.numImages.max},(_,i)=>i+1).map(n=>`<option value="${n}">${n} image${n>1?'s':''}</option>`).join('');
+      renderVisualTrigger("igBatchCount","count");
     } else {
       batchWrap.style.display="none";
     }
@@ -3466,6 +3483,7 @@ function updateIgModelUI(){
     batchWrap.style.display="block";
     batchLabel.textContent="Batch Count (GPT Image 2 can generate up to 8 at once)";
     batchCount.innerHTML=`<option value="1">1 image</option><option value="2">2 images</option><option value="4">4 images</option><option value="8">8 images</option>`;
+    renderVisualTrigger("igBatchCount","count");
     note.textContent="Native 'Thinking'/'Instant' mode toggle not yet wired — couldn't verify the exact API parameter, so it's deferred rather than guessed at.";
   } else if(cap.numImages){
     singleWrap.style.display="block";
@@ -3473,6 +3491,7 @@ function updateIgModelUI(){
     batchWrap.style.display="block";
     batchLabel.textContent=`Number of Images (up to ${cap.numImages.max} in one generation)`;
     batchCount.innerHTML=Array.from({length:cap.numImages.max},(_,i)=>i+1).map(n=>`<option value="${n}">${n} image${n>1?'s':''}</option>`).join('');
+    renderVisualTrigger("igBatchCount","count");
     note.textContent="";
   } else {
     singleWrap.style.display="block";
