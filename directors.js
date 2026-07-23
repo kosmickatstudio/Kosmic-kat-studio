@@ -56,42 +56,65 @@ const STYLE_LIBRARY=[
 ];
 function renderHierarchyPanel(projectId,activeAssistantId,allDirectors){
   const project=S.projects.find(p=>p.id===projectId);
-  const showrunnerName=(S.user&&S.user.email!=="guest")?S.user.email:"Not signed in";
+  const isGuest=!S.user||S.user.email==="guest";
+  const showrunnerEmail=isGuest?"Not signed in":S.user.email;
+  const showrunnerName=isGuest?"Guest":(S.user.name||maskEmail(S.user.email));
+  const showrunnerPhoto=isGuest?"":(S.user.photo||"");
   const roster=S.team||[];
-  const episodeDirectorOptions=[{email:showrunnerName,label:`${maskEmail(showrunnerName)} (Showrunner)`},...roster.map(m=>({email:m.email,label:`${maskEmail(m.email)} (${m.role})`}))];
-  const currentEpDirector=project?(project.episodeDirector||showrunnerName):showrunnerName;
+  // Team members only ever capture email+role at invite time (see team.js) —
+  // there's no display-name field to look up, so a roster member genuinely
+  // has nothing better than a masked email to show yet. The signed-in
+  // Showrunner is the one case with a real name+photo (from Google auth),
+  // so that's what gets shown whenever the Showrunner is also the Episode
+  // Director — which is every solo/no-team account, i.e. most of them.
+  const episodeDirectorOptions=[{email:showrunnerEmail,label:`${showrunnerName} (Showrunner)`},...roster.map(m=>({email:m.email,label:`${maskEmail(m.email)} (${m.role})`}))];
+  const currentEpDirector=project?(project.episodeDirector||showrunnerEmail):showrunnerEmail;
+  const epIsShowrunner=currentEpDirector===showrunnerEmail;
+  const epDisplayName=epIsShowrunner?showrunnerName:maskEmail(currentEpDirector);
+  const epDisplayPhoto=epIsShowrunner?showrunnerPhoto:"";
+  const epRoleTag=epIsShowrunner?"":(roster.find(m=>m.email===currentEpDirector)||{}).role;
   const activeAssistant=allDirectors.find(d=>d.id===activeAssistantId);
+  const avatarHTML=(photo,name,size)=>photo
+    ?`<img src="${photo}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid var(--surface);box-shadow:0 0 0 1.5px var(--vs)">`
+    :`<div style="width:${size}px;height:${size}px;border-radius:50%;background:var(--lav);color:var(--violet);display:flex;align-items:center;justify-content:center;font-size:${size*0.4}px;font-weight:700;flex-shrink:0;border:1.5px solid var(--surface);box-shadow:0 0 0 1.5px var(--vs)">${(name||"?").charAt(0).toUpperCase()}</div>`;
 
   return `<div class="panel">
-    <div class="panel-title">🏛 Director Hierarchy</div>
+    <div class="panel-title">${pIcon('orbit',15)} Director Hierarchy</div>
     ${S.projects.length>1?`<div class="f-group"><label class="f-label">Project</label><select class="f-select" onchange="setHierarchyProject(this.value)">${S.projects.map(p=>`<option value="${p.id}" ${p.id===projectId?'selected':''}>${p.name}</option>`).join('')}</select></div>`:''}
     <div style="display:flex;flex-direction:column;gap:2px">
       <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(201,151,42,0.08);border-radius:8px 8px 0 0">
-        <span style="font-size:18px">👑</span>
-        <div style="flex:1"><div style="font-size:9px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em">Showrunner</div><div style="font-size:12px;font-weight:600;color:var(--text)">${maskEmail(showrunnerName)}</div></div>
-      </div>
-      <div style="height:14px;width:1.5px;background:var(--border);margin-left:19px"></div>
-      <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(61,31,122,0.05)">
-        <span style="font-size:18px">🎬</span>
-        <div style="flex:1">
-          <div style="font-size:9px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em">Episode Director ${project?'— '+project.name:''}</div>
-          ${project?`<select class="f-select" style="margin-top:4px;font-size:12px;padding:4px 8px" onchange="setEpisodeDirector('${project.id}',this.value)">
-            ${episodeDirectorOptions.map(o=>`<option value="${o.email}" ${o.email===currentEpDirector?'selected':''}>${o.label}</option>`).join('')}
-          </select>`:`<div style="font-size:12px;color:var(--textm)">No project selected — create one to assign an Episode Director</div>`}
+        ${avatarHTML(showrunnerPhoto,showrunnerName,30)}
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:4px;font-size:9px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:0.06em">${pIcon('crown',11)} Showrunner</div>
+          <div style="font-size:12.5px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${showrunnerName}</div>
         </div>
       </div>
-      <div style="height:14px;width:1.5px;background:var(--border);margin-left:19px"></div>
+      <div style="height:14px;width:1.5px;background:var(--border);margin-left:24px"></div>
       <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(61,31,122,0.05)">
-        <span style="font-size:18px">🎥</span>
-        <div style="flex:1"><div style="font-size:9px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em">Assistant Director</div><div style="font-size:12px;font-weight:600;color:var(--text)">${activeAssistant?activeAssistant.name+' — '+activeAssistant.style:'None selected yet — pick one below'}</div></div>
+        ${avatarHTML(epDisplayPhoto,epDisplayName,30)}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:9px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em">Episode Director ${project?'— '+project.name:''}</div>
+          <div style="font-size:12.5px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${epDisplayName}${epRoleTag?` <span style="font-weight:400;color:var(--textm)">(${epRoleTag})</span>`:''}</div>
+          ${project?`<select class="f-select" style="margin-top:5px;font-size:11px;padding:4px 8px" onchange="setEpisodeDirector('${project.id}',this.value)">
+            ${episodeDirectorOptions.map(o=>`<option value="${o.email}" ${o.email===currentEpDirector?'selected':''}>${o.label}</option>`).join('')}
+          </select>`:`<div style="font-size:11px;color:var(--textm);margin-top:4px">No project selected — create one to assign an Episode Director</div>`}
+        </div>
       </div>
-      <div style="height:14px;width:1.5px;background:var(--border);margin-left:19px"></div>
+      <div style="height:14px;width:1.5px;background:var(--border);margin-left:24px"></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(61,31,122,0.05)">
+        <div style="width:30px;height:30px;border-radius:50%;background:var(--lav);color:var(--violet);display:flex;align-items:center;justify-content:center;flex-shrink:0">${pIcon('film',15)}</div>
+        <div style="flex:1;min-width:0"><div style="font-size:9px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em">Assistant Director</div><div style="font-size:12.5px;font-weight:600;color:var(--text)">${activeAssistant?activeAssistant.name+' — '+activeAssistant.style:'None selected yet — pick one below'}</div></div>
+      </div>
+      <div style="height:14px;width:1.5px;background:var(--border);margin-left:24px"></div>
       <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(61,31,122,0.05);border-radius:0 0 8px 8px">
-        <span style="font-size:18px">✍️</span>
-        <div style="flex:1"><div style="font-size:9px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em">Prompt Writer</div><div style="font-size:12px;color:var(--textm)">Automatic — the Assistant Director's approach, the active Character's Identity Lock, and your shot's camera/VFX choices are combined into the final generation prompt</div></div>
+        <div style="width:30px;height:30px;border-radius:50%;background:var(--lav);color:var(--violet);display:flex;align-items:center;justify-content:center;flex-shrink:0">${pIcon('pencil',15)}</div>
+        <div style="flex:1;min-width:0"><div style="font-size:9px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em">Prompt Writer</div><div style="font-size:11.5px;color:var(--textm)">Automatic — the Assistant Director's approach, the active Character's Identity Lock, and your shot's camera/VFX choices are combined into the final generation prompt</div></div>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--textm);margin-top:10px">All 6 Assistant Directors work every genre — they're distinguished by <i>how</i> they direct (pacing, scale, emotional focus), not locked to one visual style. Pick whichever approach fits this shot.</div>
+    <div style="font-size:11px;color:var(--textm);margin-top:10px;line-height:1.5">
+      <b style="color:var(--text)">What Episode Director is for:</b> it assigns who owns final creative sign-off on <i>this project</i> — matters once you invite collaborators in Team, since it decides whose calls settle disagreements. Solo, it's just you by default, which is why it currently matches your Showrunner identity above.
+    </div>
+    <div style="font-size:11px;color:var(--textm);margin-top:8px">All 6 Assistant Directors work every genre — they're distinguished by <i>how</i> they direct (pacing, scale, emotional focus), not locked to one visual style. Pick whichever approach fits this shot.</div>
   </div>`;
 }
 
@@ -114,24 +137,41 @@ function renderDirectors(el){
   const cats=[...new Set(STYLE_LIBRARY.map(s=>s.cat))];
   const allDirectors=getAllDirectors();
   const hierarchyProjectId=S.hierarchyProjectId||(S.projects[0]&&S.projects[0].id)||"";
+  const activeStyleObj=activeStyleRef?STYLE_LIBRARY.find(s=>s.name===activeStyleRef):null;
   el.innerHTML=`
     ${renderHierarchyPanel(hierarchyProjectId,activeId,allDirectors)}
     <div style="margin-bottom:14px">
-      <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">🎥 Directorial Studio</div>
+      <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">${pIcon('film',18)} Directorial Studio</div>
       <div style="font-size:11px;color:var(--textm);margin-top:2px">${activeId?`Active: ${allDirectors.find(d=>d.id===activeId)?.name||''} — style is auto-injected into AI Director chat and Image/Video prompts`:'Select a director to shape the visual style of every generation'}</div>
     </div>
-    <div class="grid2">${allDirectors.map(d=>`<div class="director-card ${d.cls||''}${activeId===d.id?' selected':''}" onclick="selectDirector('${d.id}',this)">
-      <div style="font-size:24px;margin-bottom:8px">${d.icon||'🎬'}</div>
-      <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet)">${d.name}${d.custom?' <span class="badge badge-gray" style="font-size:9px">custom</span>':''}</div>
-      <div style="font-size:11px;color:var(--textm);margin-top:4px">${d.style||d.prompt}</div>
-      ${activeId===d.id?'<div style="margin-top:6px"><span class="badge badge-green">✓ Active</span></div>':''}
-    </div>`).join('')}</div>
-    ${activeId?`<div class="panel" style="margin-top:14px"><div class="panel-title">🎨 Style Signature</div><div style="font-size:12px;color:var(--textm);line-height:1.6;font-family:monospace;background:rgba(61,31,122,0.05);border-radius:8px;padding:10px">${allDirectors.find(d=>d.id===activeId)?.prompt||''}</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="clearDirector()">✕ Clear Selection</button></div>`:''}
+    <div class="grid2">${allDirectors.map(d=>{
+      const bg=DIRECTOR_BANNERS[d.cls]||"linear-gradient(135deg,#3D1F7A,#6240B0)";
+      return `<div class="director-card${activeId===d.id?' selected':''}" onclick="selectDirector('${d.id}',this)" style="cursor:pointer;border-radius:14px;overflow:hidden;border:1.5px solid ${activeId===d.id?'var(--violet)':'var(--border)'};box-shadow:0 3px 14px rgba(61,31,122,0.08)">
+        <div style="height:60px;position:relative;background:${bg};display:flex;align-items:center;justify-content:center;gap:6px">
+          <div style="position:absolute;inset:0;background:rgba(10,5,20,0.32)"></div>
+          <div style="position:relative;font-size:18px;color:#fff">${d.icon||'●'}</div>
+          <div style="position:relative;font-family:'Cinzel',serif;font-size:12.5px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.5)">${d.name}${d.custom?' <span class="badge badge-gray" style="font-size:8px">custom</span>':''}</div>
+        </div>
+        <div style="padding:9px 10px;background:var(--surface)">
+          <div style="font-size:10.5px;font-weight:700;color:var(--violet)">${d.style||''}</div>
+          <div style="font-size:10px;color:var(--textm);margin-top:3px;line-height:1.4">${d.prompt||''}</div>
+          ${activeId===d.id?`<div style="margin-top:6px"><span class="badge badge-green">${pIcon('check',9)} Active</span></div>`:''}
+        </div>
+      </div>`;}).join('')}</div>
+    ${(activeId||activeStyleRef)?`<div class="panel" style="margin-top:14px">
+      <div class="panel-title">${pIcon('image',15)} Style Signature</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">This is the exact style text being woven into every prompt right now.</div>
+      <div style="font-size:12px;color:var(--text);line-height:1.6;font-family:monospace;background:rgba(61,31,122,0.05);border-radius:8px;padding:10px">${getActiveDirectorPrompt()||'—'}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        ${activeId?`<span class="badge badge-violet">${allDirectors.find(d=>d.id===activeId)?.name||''} <span style="cursor:pointer;margin-left:4px" onclick="event.stopPropagation();clearDirector()">✕</span></span>`:''}
+        ${activeStyleObj?`<span class="badge badge-green">${activeStyleObj.name} <span style="cursor:pointer;margin-left:4px" onclick="event.stopPropagation();clearStyleRef()">✕</span></span>`:''}
+      </div>
+    </div>`:''}
 
     <div class="panel" style="margin-top:14px">
-      <div class="panel-title">📚 Style Intelligence <span style="font-weight:400;color:var(--texts);font-size:11px">— layer a real director/animator/composer reference on top</span></div>
+      <div class="panel-title">${pIcon('doc',15)} Style Intelligence <span style="font-weight:400;color:var(--texts);font-size:11px">— layer a real director/animator/composer reference on top</span></div>
       <input class="f-input" id="styleLibSearch" placeholder="Search by name…" oninput="filterStyleLibrary()" style="margin-bottom:10px">
-      ${activeStyleRef?`<div style="margin-bottom:10px"><span class="badge badge-green">✓ Layered: ${STYLE_LIBRARY.find(s=>s.name===activeStyleRef)?.name}</span> <button class="btn btn-ghost btn-xs" onclick="clearStyleRef()">✕ Remove</button></div>`:''}
+      ${activeStyleRef?`<div style="margin-bottom:10px"><span class="badge badge-green">${pIcon('check',9)} Layered: ${STYLE_LIBRARY.find(s=>s.name===activeStyleRef)?.name}</span> <button class="btn btn-ghost btn-xs" onclick="clearStyleRef()">✕ Remove</button></div>`:''}
       <div id="styleLibList">${cats.map(cat=>`
         <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.4px;margin:10px 0 6px">${cat}</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px">
@@ -140,13 +180,13 @@ function renderDirectors(el){
     </div>
 
     <div class="panel" style="margin-top:14px">
-      <div class="panel-title">🔍 AI Creative Feedback <span style="font-weight:400;color:var(--texts);font-size:11px">— AI opinion, not a trained prediction model</span></div>
-      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Heads up: there's no real API anywhere that gives a statistically validated "virality score" — nothing on the market actually predicts hold rate or share velocity with real accuracy. What this does instead: your AI brain reads the shot/hook and gives honest creative feedback — hook strength, pacing risk, what's generic — the way a sharp editor friend would, not a black-box number.</div>
+      <div class="panel-title">${pIcon('search',15)} AI Creative Feedback <span style="font-weight:400;color:var(--texts);font-size:11px">— your AI Brain's honest read, not a virality predictor</span></div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Paste a hook or opening shot and your configured AI Brain (set below on Home, or in Settings) reads it like a sharp editor would — hook strength, pacing risk, what's generic, one concrete fix. No API anywhere can give a validated "virality score", so this deliberately doesn't pretend to.</div>
       <div class="f-group">
         <label class="f-label">Paste your hook / opening line / shot description</label>
         <textarea class="f-textarea" id="feedbackInput" placeholder="e.g. Opens on a galaxy cat leaping through nebula clouds, camera whip-pans to reveal a cyberpunk city below…" style="min-height:70px"></textarea>
       </div>
-      <button class="btn btn-primary btn-full" onclick="analyzeShotFeedback()">🔍 Get Feedback</button>
+      <button class="btn btn-primary btn-full" onclick="analyzeShotFeedback()">${pIcon('search',14)} Get Feedback</button>
       <div id="feedbackResult" style="margin-top:12px"></div>
     </div>
   `;
@@ -159,7 +199,7 @@ async function analyzeShotFeedback(){
   const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
   if(!gs(apiKeyMap[model],"")){toast("Add an AI API key in Settings first","error");return;}
   const resultEl=document.getElementById("feedbackResult");
-  resultEl.innerHTML=`<div style="text-align:center;padding:20px;color:var(--textm);font-size:13px">🔍 Analyzing…</div>`;
+  resultEl.innerHTML=`<div style="text-align:center;padding:20px;color:var(--textm);font-size:13px">${pIcon('search',14)} Analyzing…</div>`;
   try{
     const feedback=await callAiSimple(
       `Give honest, specific creative feedback on this short-form video hook/opening shot, as a sharp, experienced short-form video editor would — not generic praise. Cover: (1) Hook Strength — would this stop a scroll in the first 3 seconds, and why/why not, (2) Pacing — any risk of dragging or confusing cuts, (3) What's Generic — any cliché or overused element, (4) One Concrete Suggestion to strengthen it. Keep each section to 1-2 sentences. Content: "${text}"`,
@@ -194,8 +234,8 @@ function selectDirector(id,el){
   document.querySelectorAll(".director-card").forEach(c=>c.classList.remove("selected"));
   el.classList.add("selected");
   saveSetting("active_director",id);
-  const d=DIRECTORS.find(x=>x.id===id);
-  toast(`🎬 ${d.name} selected — style now injected into AI Director & generation prompts`,"success");
+  const d=getAllDirectors().find(x=>x.id===id);
+  toast(`${d?d.name:'Director'} selected — style now injected into AI Director & generation prompts`,"success");
   renderDirectors(document.getElementById("moduleContent"));
 }
 
