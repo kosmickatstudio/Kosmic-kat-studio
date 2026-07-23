@@ -53,22 +53,9 @@ function renderHome(el){
       </div>
     </div>
 
-    <div class="home-glass-panel">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-        <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--ice));display:flex;align-items:center;justify-content:center;box-shadow:0 3px 14px var(--glow-ice);flex-shrink:0">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4M22 5h-4M4 17v2M5 18H3"/></svg>
-        </div>
-        <div>
-          <div class="panel-title" style="margin:0;font-family:var(--font-display)">Ask Your Director</div>
-          <div style="font-size:10px;color:var(--textm)">Talk through an idea — opens straight into your AI Director chat</div>
-        </div>
-      </div>
-      <div class="f-group" style="margin-top:10px">
-        <div class="ig-input-shell">
-          <textarea class="ig-input-textarea-v2" id="homeAgentInput" placeholder="What do you need help with?" style="min-height:52px" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendHomeAgentPrompt();}"></textarea>
-        </div>
-      </div>
-      <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="sendHomeAgentPrompt()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z"/></svg> Send to Director</button>
+    <div class="ig-chat-inputbar" style="margin-bottom:14px;background:var(--glass);backdrop-filter:blur(18px);border:1.5px solid var(--glass-brd);border-radius:24px;box-shadow:0 4px 20px rgba(0,0,0,0.06)">
+      <textarea class="ig-chat-textarea" id="homeAgentInput" rows="1" placeholder="Tell Kosmic Engine what you want to make…" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendHomeAgentPrompt();}"></textarea>
+      <button class="ig-send-btn" onclick="sendHomeAgentPrompt()">➤</button>
     </div>
 
     <div class="panel">
@@ -211,13 +198,19 @@ function renderHome(el){
 function sendHomeAgentPrompt(){
   const inputEl=document.getElementById("homeAgentInput");
   const msg=inputEl.value.trim();
-  if(!msg){toast("Type something for your agent first","error");return;}
-  if(!_aiPanelOpen)toggleAiPanel();
-  const aiPromptEl=document.getElementById("aiPrompt");
-  aiPromptEl.value=msg;
+  if(!msg){toast("Type something first","error");return;}
   inputEl.value="";
-  sendAiPrompt();
-  aiPromptEl.scrollIntoView({behavior:"smooth",block:"center"});
+  // Straight into Kosmic Engine's actual production chat — no detour through
+  // the separate lightweight "AI Studio" panel this used to open. Matches
+  // exactly what happens if the user manually taps the Kosmic Engine tab and
+  // types the same message themselves: switchMod does the real module
+  // switch/render, then we drop the message into its input and send it.
+  switchMod("directorchat",document.querySelector('[data-mod="directorchat"]'));
+  const dcInput=document.getElementById("dcInput");
+  if(dcInput){
+    dcInput.value=msg;
+    DirectorChat.send();
+  }
 }
 
 function selectDirectorQuick(id){
