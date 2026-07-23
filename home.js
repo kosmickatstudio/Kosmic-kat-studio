@@ -84,7 +84,54 @@ function renderHome(el){
           ${activeDirId===d.id?'<span style="position:relative;font-size:11px;color:var(--green)">✓</span>':''}
         </div>`;}).join('')}
       </div>
-      <button class="btn btn-outline btn-full" onclick="toggleAiPanel()">Open AI Director Chat</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">✧ AI Director Brain</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Which AI powers your Director chat and prompt help — moved here from Settings.</div>
+      <div class="f-group">
+        <select class="f-select" id="aiModelSelect" onchange="saveSetting('ai_model',this.value);updateAiModelLabel();updateAicreditsModelVisibility();renderModelTrigger('aiModelSelect','brain')" style="display:none">
+        <option value="claude" ${gs("ai_model","claude")==="claude"?"selected":""}>Claude (Anthropic) (Best quality, supports images)</option>
+        <option value="gemini" ${gs("ai_model","claude")==="gemini"?"selected":""}>Google Gemini (Vision-capable, cheap, supports images)</option>
+        <option value="openai" ${gs("ai_model","claude")==="openai"?"selected":""}>OpenAI GPT-4o (Supports images)</option>
+        <option value="groq" ${gs("ai_model","claude")==="groq"?"selected":""}>Groq Llama 3.3 (Free & fast, text only)</option>
+        <option value="deepseek" ${gs("ai_model","claude")==="deepseek"?"selected":""}>DeepSeek V4 Flash (Ultra cheap, text only)</option>
+        <option value="aicredits" ${gs("ai_model","claude")==="aicredits"?"selected":""}>AICredits Gateway (Routes to whichever model you pick below, images if that model supports them)</option>
+        </select>
+        <div id="aiModelSelectTrigger" onclick="openModelPicker('aiModelSelect','brain')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
+      <div class="f-group" id="aicreditsModelWrap" style="display:none;margin-top:8px">
+        <label class="f-label">AICredits Model <span style="font-weight:400;color:var(--texts)">(300+ available — curated list below, or type any exact ID)</span></label>
+        <select class="f-select" id="aicreditsModelSelect" onchange="handleAicreditsModelSelect()">
+          <optgroup label="Anthropic">
+            <option value="anthropic/claude-opus-4-8">Claude Opus 4.8 (best quality)</option>
+            <option value="anthropic/claude-sonnet-4-6">Claude Sonnet 4.6 (balanced)</option>
+            <option value="anthropic/claude-haiku-4-5">Claude Haiku 4.5 (fast, cheap)</option>
+          </optgroup>
+          <optgroup label="OpenAI">
+            <option value="openai/gpt-5.5">GPT-5.5 (best quality)</option>
+            <option value="openai/gpt-4o">GPT-4o</option>
+            <option value="openai/gpt-4o-mini">GPT-4o mini (fast, cheap)</option>
+          </optgroup>
+          <optgroup label="Google">
+            <option value="google/gemini-3.1-pro">Gemini 3.1 Pro (best quality)</option>
+            <option value="google/gemini-3-flash">Gemini 3 Flash (fast, cheap)</option>
+          </optgroup>
+          <optgroup label="DeepSeek">
+            <option value="deepseek/deepseek-v4">DeepSeek V4</option>
+            <option value="deepseek/deepseek-v4-flash">DeepSeek V4 Flash (cheapest)</option>
+          </optgroup>
+          <optgroup label="Mistral">
+            <option value="mistral/mistral-large">Mistral Large</option>
+          </optgroup>
+          <optgroup label="xAI">
+            <option value="xai/grok-4.3">Grok 4.3</option>
+          </optgroup>
+          <option value="__custom__">✏️ Custom — type an exact model ID</option>
+        </select>
+        <input class="f-input" id="aicreditsModelInput" style="display:none;margin-top:6px" placeholder="e.g. moonshot/kimi-k2-turbo-preview" oninput="saveSetting('aicredits_model',this.value)">
+        <div style="font-size:10px;color:var(--textm);margin-top:6px">This list is a curated subset, verified against AICredits' own documented ID format (provider/model) — not their full 300+ catalog, which isn't published anywhere as a static list. If your model isn't above, pick Custom and type its exact ID from your AICredits dashboard.</div>
+      </div>
     </div>
 
     <div class="panel">
@@ -151,6 +198,14 @@ function renderHome(el){
   renderHomeCarousel();
   attachHomeSwipeHandlers();
   loadDisplayItemsFromCloud();
+  // AI Director Brain picker moved here from Settings — the select's
+  // `selected` option is baked into the template string above (correct on
+  // first paint), but the trigger div's own label/icon and the AICredits
+  // sub-picker's visibility/value both need their own render pass here,
+  // exactly like Settings used to do when its panel opened.
+  renderModelTrigger("aiModelSelect","brain");
+  updateAicreditsModelVisibility();
+  restoreAicreditsModelUI();
 }
 
 function sendHomeAgentPrompt(){
