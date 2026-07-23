@@ -27,7 +27,6 @@ const DIRECTOR_BANNERS={
 // ── HOME ──
 function renderHome(el){
   const hasFal=!!gs("api_falai");
-  const hasReplicate=!!gs("api_replicate");
   const hasOpenAI=!!gs("api_openai");
   const defaultImageModel=gs("default_image_model","fal-ai/flux/schnell");
   const defaultVideoModel=gs("default_video_model","bytedance/seedance-2.0/fast/text-to-video");
@@ -121,65 +120,87 @@ function renderHome(el){
       </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-title">✦ Recent Work</div>
-      ${!recentImages.length&&!recentVideos.length?`<div style="font-size:11px;color:var(--textm)">Your generated images and videos will show up here.</div>`:''}
-      ${recentImages.length?`<div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">Images</div>
-      <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:${recentVideos.length?'14px':'0'}">
-        ${recentImages.map(a=>`<img src="${a.url}" class="home-mini-thumb" style="width:64px;height:64px;flex-shrink:0;cursor:pointer" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))" title="${(a.prompt||'').replace(/"/g,'&quot;')}">`).join('')}
-      </div>`:''}
-      ${recentVideos.length?`<div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">Videos</div>
-      <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px">
-        ${recentVideos.map(a=>`<video src="${a.url}" class="home-mini-thumb" style="width:96px;height:64px;flex-shrink:0;cursor:pointer;aspect-ratio:auto" muted onclick="switchMod('videocanvas',document.querySelector('[data-mod=videocanvas]'))" title="${(a.prompt||'').replace(/"/g,'&quot;')}"></video>`).join('')}
-      </div>`:''}
+    <div style="margin:2px 2px 8px">
+      <div class="panel-title" style="margin-bottom:2px">✦ Recent Work</div>
+      <div style="font-size:10.5px;color:var(--textm)">Tap any creation to see its full prompt and details.</div>
     </div>
+    ${!recentImages.length&&!recentVideos.length?`<div class="panel" style="text-align:center"><div style="font-size:11px;color:var(--textm)">Your generated images and videos will show up here.</div></div>`:''}
+    ${recentImages.length?`<div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.04em;margin:0 2px 6px">Images</div>
+    <div style="display:flex;gap:10px;overflow-x:auto;padding:2px 2px 10px;margin-bottom:${recentVideos.length?'4':'14'}px">
+      ${recentImages.map(a=>`<div onclick="openGenerationInfoModal({prompt:'${(a.prompt||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',providerLabel:'Image',resolution:''})" style="flex-shrink:0;width:140px;border-radius:16px;overflow:hidden;background:var(--surface);border:1px solid var(--border);box-shadow:0 3px 14px rgba(61,31,122,0.08);cursor:pointer">
+        <img src="${a.url}" style="width:140px;height:140px;object-fit:cover;display:block">
+      </div>`).join('')}
+    </div>`:''}
+    ${recentVideos.length?`<div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.04em;margin:0 2px 6px">Videos</div>
+    <div style="display:flex;gap:10px;overflow-x:auto;padding:2px 2px 14px">
+      ${recentVideos.map(a=>`<div onclick="openGenerationInfoModal({prompt:'${(a.prompt||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',providerLabel:'Video',resolution:''})" style="flex-shrink:0;width:200px;border-radius:16px;overflow:hidden;background:var(--surface);border:1px solid var(--border);box-shadow:0 3px 14px rgba(61,31,122,0.08);cursor:pointer">
+        <video src="${a.url}" style="width:200px;height:130px;object-fit:cover;display:block" muted></video>
+      </div>`).join('')}
+    </div>`:''}
 
-    <div class="panel">
-      <div class="panel-title">Image Models <span class="badge ${hasFal||hasReplicate||hasOpenAI||gs("api_gemini")?'badge-green':'badge-red'}" style="font-size:9px">${hasFal||hasReplicate||hasOpenAI||gs("api_gemini")?'READY':'NO KEY'}</span></div>
-      <div style="display:flex;flex-direction:column;gap:5px">
-        ${[
-          {id:"fal-ai/flux/schnell",label:"FLUX Schnell",ready:hasFal},
-          {id:"fal-ai/flux/dev",label:"FLUX Dev",ready:hasFal},
-          {id:"fal-ai/flux-pro/v1.1",label:"FLUX 1.1 Pro",ready:hasFal},
-          {id:"fal-ai/ideogram/v3",label:"Ideogram V3",ready:hasFal},
-          {id:"fal-ai/recraft/v3/text-to-image",label:"Recraft V3",ready:hasFal},
-          {id:"fal-ai/stable-diffusion-v35-large",label:"Stable Diffusion 3.5",ready:hasFal},
-          {id:"fal-ai/flux-2",label:"FLUX.2 Dev",ready:hasFal},
-          {id:"fal-ai/flux-2-pro",label:"FLUX.2 Pro",ready:hasFal},
-          {id:"fal-ai/flux-2/flash",label:"FLUX.2 Flash",ready:hasFal},
-          {id:"gemini-3.1-flash-image",label:"Nano Banana 2",ready:!!gs("api_gemini")},
-          {id:"gemini-3-pro-image",label:"Nano Banana Pro",ready:!!gs("api_gemini")},
-          {id:"gpt-image-2",label:"GPT Image 2",ready:hasOpenAI},
-          {id:"fal-ai/nano-banana-2",label:"Nano Banana 2 (via fal.ai)",ready:hasFal},
-          {id:"fal-ai/nano-banana-pro",label:"Nano Banana Pro (via fal.ai)",ready:hasFal},
-          {id:"openai/gpt-image-2",label:"GPT Image 2 (via fal.ai)",ready:hasFal},
-        ].map(m=>`<div class="home-model-row">
-          <span class="dot" style="background:${m.ready?'var(--green)':'var(--border)'}"></span>
-          <span class="name">${m.label}</span>
-          ${defaultImageModel===m.id?'<span class="badge badge-violet" style="font-size:9px">Default</span>':`<button class="btn btn-outline btn-xs" onclick="setDefaultModel('image','${m.id}')">Set Default</button>`}
-        </div>`).join('')}
+    <div class="panel" style="background:linear-gradient(160deg,var(--surface),var(--pearl2));border:1.5px solid var(--violet);box-shadow:0 6px 24px rgba(61,31,122,0.12)">
+      <div class="panel-title" style="justify-content:center;font-size:13px">✦ Model Selection ✦</div>
+      <div style="font-size:10.5px;color:var(--textm);text-align:center;margin-bottom:12px">Tap a model to make it your default — the active one lights up <span style="color:var(--green);font-weight:700">green</span>.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:10px;font-weight:800;color:var(--violet);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;text-align:center">🖼 Image</div>
+          <div style="display:flex;flex-direction:column;gap:3px;max-height:280px;overflow-y:auto">
+            ${[
+              {id:"fal-ai/flux/schnell",label:"FLUX Schnell",ready:hasFal},
+              {id:"fal-ai/flux/dev",label:"FLUX Dev",ready:hasFal},
+              {id:"fal-ai/flux-pro/v1.1",label:"FLUX 1.1 Pro",ready:hasFal},
+              {id:"fal-ai/ideogram/v3",label:"Ideogram V3",ready:hasFal},
+              {id:"fal-ai/recraft/v3/text-to-image",label:"Recraft V3",ready:hasFal},
+              {id:"fal-ai/stable-diffusion-v35-large",label:"Stable Diff. 3.5",ready:hasFal},
+              {id:"fal-ai/flux-2",label:"FLUX.2 Dev",ready:hasFal},
+              {id:"fal-ai/flux-2-pro",label:"FLUX.2 Pro",ready:hasFal},
+              {id:"fal-ai/flux-2/flash",label:"FLUX.2 Flash",ready:hasFal},
+              {id:"gemini-3.1-flash-image",label:"Nano Banana 2",ready:!!gs("api_gemini")},
+              {id:"gemini-3-pro-image",label:"Nano Banana Pro",ready:!!gs("api_gemini")},
+              {id:"gpt-image-2",label:"GPT Image 2",ready:hasOpenAI},
+              {id:"fal-ai/nano-banana-2",label:"Nano Banana 2 (fal)",ready:hasFal},
+              {id:"fal-ai/nano-banana-pro",label:"Nano Banana Pro (fal)",ready:hasFal},
+              {id:"openai/gpt-image-2",label:"GPT Image 2 (fal)",ready:hasFal},
+            ].map(m=>{const active=defaultImageModel===m.id;return `<div onclick="setDefaultModel('image','${m.id}')" style="padding:6px 7px;border-radius:8px;cursor:pointer;background:${active?'rgba(16,185,129,0.1)':'var(--pearl2)'};border:1px solid ${active?'var(--green)':'var(--borderl)'}">
+                <div style="font-size:10.5px;font-weight:${active?'800':'500'};color:${active?'var(--green)':'var(--text)'};line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.ready?'':'○ '}${m.label}</div>
+              </div>`;}).join('')}
+          </div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:800;color:var(--violet);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;text-align:center">▶ Video</div>
+          <div style="display:flex;flex-direction:column;gap:3px;max-height:280px;overflow-y:auto">
+            ${[
+              {id:"bytedance/seedance-2.0/fast/text-to-video",label:"Seedance 2.0 Fast"},
+              {id:"bytedance/seedance-2.0/text-to-video",label:"Seedance 2.0"},
+              {id:"fal-ai/kling-video/v2.1/master/text-to-video",label:"Kling 2.1 Master"},
+              {id:"fal-ai/kling-video/v2.6/pro/text-to-video",label:"Kling 2.6 Pro"},
+              {id:"fal-ai/kling-video/v3/standard/text-to-video",label:"Kling 3.0 Standard"},
+              {id:"fal-ai/kling-video/v3/pro/text-to-video",label:"Kling 3.0 Pro"},
+              {id:"fal-ai/kling-video/o3/pro/reference-to-video",label:"Kling O3 Pro"},
+              {id:"fal-ai/veo3.1",label:"Veo 3.1"},
+              {id:"veo-3.1-generate-preview",label:"Veo 3.1 Direct"},
+            ].map(m=>{const active=defaultVideoModel===m.id;return `<div onclick="setDefaultModel('video','${m.id}')" style="padding:6px 7px;border-radius:8px;cursor:pointer;background:${active?'rgba(16,185,129,0.1)':'var(--pearl2)'};border:1px solid ${active?'var(--green)':'var(--borderl)'}">
+                <div style="font-size:10.5px;font-weight:${active?'800':'500'};color:${active?'var(--green)':'var(--text)'};line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${hasFal?'':'○ '}${m.label}</div>
+              </div>`;}).join('')}
+          </div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:800;color:var(--violet);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;text-align:center">✧ Brain</div>
+          <div style="display:flex;flex-direction:column;gap:3px;max-height:280px;overflow-y:auto">
+            ${[
+              {id:"claude",label:"Claude",ready:!!gs("api_anthropic")},
+              {id:"gemini",label:"Gemini",ready:!!gs("api_gemini")},
+              {id:"openai",label:"GPT-4o",ready:!!gs("api_openai")},
+              {id:"groq",label:"Groq Llama",ready:!!gs("api_groq")},
+              {id:"deepseek",label:"DeepSeek V4",ready:!!gs("api_deepseek")},
+              {id:"aicredits",label:"AICredits",ready:!!gs("api_aicredits")},
+            ].map(m=>{const active=gs("ai_model","claude")===m.id;return `<div onclick="setBrainModelQuick('${m.id}')" style="padding:6px 7px;border-radius:8px;cursor:pointer;background:${active?'rgba(16,185,129,0.1)':'var(--pearl2)'};border:1px solid ${active?'var(--green)':'var(--borderl)'}">
+                <div style="font-size:10.5px;font-weight:${active?'800':'500'};color:${active?'var(--green)':'var(--text)'};line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.ready?'':'○ '}${m.label}</div>
+              </div>`;}).join('')}
+          </div>
+        </div>
       </div>
-      <div style="font-size:10px;color:var(--textm);margin-top:8px">FLUX.2 Flash Edit (multi-reference) not shown here — pick it directly in Image's Settings.</div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-title">Video Models <span class="badge ${hasFal?'badge-green':'badge-red'}" style="font-size:9px">${hasFal?'READY':'NO KEY'}</span></div>
-      <div style="display:flex;flex-direction:column;gap:5px">
-        ${[
-          {id:"bytedance/seedance-2.0/fast/text-to-video",label:"Seedance 2.0 Fast"},
-          {id:"bytedance/seedance-2.0/text-to-video",label:"Seedance 2.0"},
-          {id:"fal-ai/kling-video/v2.1/master/text-to-video",label:"Kling 2.1 Master"},
-          {id:"fal-ai/kling-video/v2.6/pro/text-to-video",label:"Kling 2.6 Pro"},
-          {id:"fal-ai/kling-video/v3/standard/text-to-video",label:"Kling 3.0 Standard"},
-          {id:"fal-ai/kling-video/v3/pro/text-to-video",label:"Kling 3.0 Pro"},
-          {id:"fal-ai/kling-video/o3/pro/reference-to-video",label:"Kling O3 Pro (Multi-Reference)"},
-          {id:"fal-ai/veo3.1",label:"Veo 3.1"},
-        ].map(m=>`<div class="home-model-row">
-          <span class="dot" style="background:${hasFal?'var(--green)':'var(--border)'}"></span>
-          <span class="name">${m.label}</span>
-          ${defaultVideoModel===m.id?'<span class="badge badge-violet" style="font-size:9px">Default</span>':`<button class="btn btn-outline btn-xs" onclick="setDefaultModel('video','${m.id}')">Set Default</button>`}
-        </div>`).join('')}
-      </div>
+      <div style="font-size:9.5px;color:var(--textm);margin-top:10px;text-align:center">○ = no API key set yet for that model</div>
     </div>
   `;
   renderHomeCarousel();
@@ -224,6 +245,15 @@ function setDefaultModel(kind,id){
   saveSetting(kind==="image"?"default_image_model":"default_video_model",id);
   renderHome(document.getElementById("moduleContent"));
   toast("✅ Default "+kind+" model updated","success");
+}
+
+function setBrainModelQuick(id){
+  saveSetting("ai_model",id);
+  const sel=document.getElementById("aiModelSelect");
+  if(sel)sel.value=id;
+  updateAiModelLabel();
+  renderHome(document.getElementById("moduleContent"));
+  toast("✅ AI Director Brain updated","success");
 }
 
 
