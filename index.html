@@ -3814,11 +3814,11 @@ async function sendIgChatPrompt(){
       const result=await genViaFluxEdit(prompt,S.igMultiRefImages,ratio,cap.editModel,multiRefCount);
       const returnedRefUrls=(result.urls&&result.urls.length)?result.urls:[result.url];
       if(returnedRefUrls.length>1){
-        const savedAssets=await Promise.all(returnedRefUrls.map(u=>createImageAsset(u,prompt,projectId)));
+        const savedAssets=await Promise.all(returnedRefUrls.map(u=>createImageAsset(u,prompt,projectId,{model:selectedModel,providerLabel:result.providerLabel,aspectRatio:ratio})));
         replaceIgLoadingBubble(loadingId,{role:"assistant",type:"images",content:returnedRefUrls,meta:{providerLabel:result.providerLabel,prompt,projectId,assetIds:savedAssets.map(a=>a.id)}});
         logCost(result.costKey,prompt.slice(0,60)+` (×${returnedRefUrls.length})`,returnedRefUrls.length);
       } else {
-        const savedAsset=await createImageAsset(result.url,prompt,projectId);
+        const savedAsset=await createImageAsset(result.url,prompt,projectId,{model:selectedModel,providerLabel:result.providerLabel,aspectRatio:ratio});
         replaceIgLoadingBubble(loadingId,{role:"assistant",type:"image",content:result.url,meta:{providerLabel:result.providerLabel,prompt,projectId,assetId:savedAsset.id}});
         logCost(result.costKey,prompt.slice(0,60));
       }
@@ -3839,7 +3839,7 @@ async function sendIgChatPrompt(){
     pushIgChatMessage({id:loadingId,role:"assistant",type:"loading",content:hasRefs?`Generating with ${S.igMultiRefImages.length} reference image${S.igMultiRefImages.length!==1?'s':''}…`:"Generating…"});
     try{
       const result=await genViaGemini(prompt,ratio,selectedModel,S.igMultiRefImages);
-      const savedAsset=await createImageAsset(result.url,prompt,projectId);
+      const savedAsset=await createImageAsset(result.url,prompt,projectId,{model:selectedModel,providerLabel:result.providerLabel,aspectRatio:ratio});
       replaceIgLoadingBubble(loadingId,{role:"assistant",type:"image",content:result.url,meta:{providerLabel:result.providerLabel,prompt,projectId,assetId:savedAsset.id}});
       logCost(result.costKey,prompt.slice(0,60));
       toast(`✨ Image generated via ${result.providerLabel}!`,"success");
@@ -3856,7 +3856,7 @@ async function sendIgChatPrompt(){
     pushIgChatMessage({id:loadingId,role:"assistant",type:"loading",content:`Generating ${count} image${count!==1?'s':''}…`});
     try{
       const {urls,providerLabel,costKey}=await genViaOpenAIBatch(prompt,ratio,count);
-      const savedAssets=await Promise.all(urls.map(u=>createImageAsset(u,prompt,projectId)));
+      const savedAssets=await Promise.all(urls.map(u=>createImageAsset(u,prompt,projectId,{model:"gpt-image-2",providerLabel,aspectRatio:ratio})));
       replaceIgLoadingBubble(loadingId,{role:"assistant",type:"images",content:urls,meta:{providerLabel,prompt,projectId,assetIds:savedAssets.map(a=>a.id)}});
       logCost(costKey,prompt.slice(0,60)+` (×${urls.length})`,urls.length);
       toast(`✨ ${urls.length} images generated via ${providerLabel}!`,"success");
@@ -3916,12 +3916,12 @@ async function sendIgChatPrompt(){
 
   const returnedUrls=(result.urls&&result.urls.length)?result.urls:[result.url];
   if(returnedUrls.length>1){
-    const savedAssets=await Promise.all(returnedUrls.map(u=>createImageAsset(u,prompt,projectId)));
+    const savedAssets=await Promise.all(returnedUrls.map(u=>createImageAsset(u,prompt,projectId,{model,providerLabel:result.providerLabel,aspectRatio:ratio})));
     replaceIgLoadingBubble(loadingId,{role:"assistant",type:"images",content:returnedUrls,meta:{providerLabel:result.providerLabel,prompt,projectId,assetIds:savedAssets.map(a=>a.id)}});
     logCost(result.costKey,prompt.slice(0,60)+` (×${returnedUrls.length})`,returnedUrls.length);
     toast(`✨ ${returnedUrls.length} images generated via ${result.providerLabel} — saved to Gallery!`,"success");
   } else {
-    const savedAssetStd=await createImageAsset(result.url,prompt,projectId);
+    const savedAssetStd=await createImageAsset(result.url,prompt,projectId,{model,providerLabel:result.providerLabel,aspectRatio:ratio});
     replaceIgLoadingBubble(loadingId,{role:"assistant",type:"image",content:result.url,meta:{providerLabel:result.providerLabel,prompt,projectId,assetId:savedAssetStd.id}});
     logCost(result.costKey,prompt.slice(0,60));
     toast(`✨ Image generated via ${result.providerLabel} — saved to Gallery!`,"success");
@@ -3977,7 +3977,8 @@ async function rehostToStorage(url,pathPrefix){
   }
 }
 
-async function createImageAsset(url,prompt,projectId){
+async function createImageAsset(url,prompt,projectId,meta){
+  meta=meta||{};
   const wantsWatermark=gs("watermark",false)===true||gs("watermark",false)==="true";
   let finalUrl=url;
   if(wantsWatermark){
@@ -3988,7 +3989,8 @@ async function createImageAsset(url,prompt,projectId){
       toast("⚠️ Saved without watermark — this provider's images can't be watermarked in-browser (CORS)","");
     }
   }
-  const asset={id:"asset_"+Date.now(),type:"image",url:finalUrl,prompt,projectId:projectId||null,created:new Date().toISOString()};
+  const asset={id:"asset_"+Date.now(),type:"image",url:finalUrl,prompt,projectId:projectId||null,created:new Date().toISOString(),
+    model:meta.model||null,providerLabel:meta.providerLabel||null,aspectRatio:meta.aspectRatio||null,resolution:meta.resolution||null};
   S.assets.push(asset);
   save("assets");
   // Re-host in the background rather than making every save wait on the
@@ -4330,6 +4332,23 @@ const VC_RESULT_ICONS={
 // The glossy/transparent bottom sheet showing exactly what a generation was
 // made from — prompt, reference images, model, resolution — reusing the same
 // glass-sheet look as the Settings panel rather than inventing a new style.
+// Looks up a raw model id (e.g. "fal-ai/veo3.1", "gemini-3-pro-image") against
+// the same picker source data the model dropdowns use, so Generation Details
+// can show the actual human-readable name + version instead of a raw
+// endpoint string. Falls back to the raw id itself if not found in any group
+// (still better than nothing for models added outside the picker lists).
+function friendlyModelName(id){
+  if(!id)return null;
+  for(const kind of ["image","video","brain"]){
+    for(const g of MODEL_PICKER_SOURCES[kind]||[]){
+      for(const i of g.items){
+        if(i.value===id)return i.name;
+      }
+    }
+  }
+  return id;
+}
+
 function openGenerationInfoModal(meta){
   const existing=document.getElementById("vcInfoSheet");
   if(existing)existing.remove();
@@ -4341,21 +4360,44 @@ function openGenerationInfoModal(meta){
   const sheet=document.createElement("div");
   sheet.id="vcInfoSheet";
   sheet.className="ig-settings-sheet open";
+  sheet.style.cssText="background:linear-gradient(165deg,rgba(61,31,122,0.94),rgba(38,20,80,0.97));backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%)";
+  const isVideo=meta.mediaType==="video"||meta.mediaType==="Video";
+  const modelName=friendlyModelName(meta.model)||meta.providerLabel||"Unknown";
   sheet.innerHTML=`
-    <div class="ig-sheet-handle" ontouchstart="sheetSwipeStart(event)" ontouchmove="sheetSwipeMove(event,'vcInfoSheet')" ontouchend="sheetSwipeEnd(event,'vcInfoSheet','closeGenerationInfoModal')"></div>
-    <div style="padding:6px 20px 24px">
+    <div style="position:absolute;inset:0;border-radius:26px 26px 0 0;overflow:hidden;pointer-events:none">
+      <div style="position:absolute;top:-50%;left:-20%;width:140%;height:90%;background:radial-gradient(ellipse at top,rgba(255,255,255,0.14),transparent 60%)"></div>
+    </div>
+    <div class="ig-sheet-handle" ontouchstart="sheetSwipeStart(event)" ontouchmove="sheetSwipeMove(event,'vcInfoSheet')" ontouchend="sheetSwipeEnd(event,'vcInfoSheet','closeGenerationInfoModal')" style="position:relative"></div>
+    <div style="padding:6px 20px 24px;position:relative">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">Generation Details</div>
-        <button class="ig-icon-btn" onclick="closeGenerationInfoModal()">✕</button>
+        <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,0.3)">Generation Details</div>
+        <button onclick="closeGenerationInfoModal()" style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.1);color:#fff;cursor:pointer">✕</button>
       </div>
-      <div class="f-label">Prompt</div>
-      <div style="font-size:12.5px;color:var(--text);line-height:1.5;background:var(--pearl2);border-radius:10px;padding:10px 12px;margin-bottom:14px;white-space:pre-wrap">${(meta.prompt||"—")}</div>
-      ${(meta.refImages&&meta.refImages.length)?`<div class="f-label">Reference Images</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${meta.refImages.map(u=>`<img src="${u}" style="width:52px;height:52px;border-radius:8px;object-fit:cover">`).join('')}</div>`:''}
-      <div class="f-label">Model</div>
-      <div style="font-size:12.5px;color:var(--text);margin-bottom:14px">${meta.providerLabel||meta.model||"—"}</div>
-      <div class="f-label">Resolution</div>
-      <div style="font-size:12.5px;color:var(--text)">${meta.resolution||"Fixed per model — no manual selection"}</div>
+      ${meta.mediaUrl?`<div style="border-radius:16px;overflow:hidden;margin-bottom:16px;box-shadow:0 8px 28px rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.15)">
+        ${isVideo?`<video src="${meta.mediaUrl}" controls style="width:100%;max-height:46vh;display:block;background:#000"></video>`:`<img src="${meta.mediaUrl}" style="width:100%;max-height:46vh;object-fit:contain;display:block;background:#000">`}
+      </div>`:''}
+      <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px">Prompt</div>
+      <div style="font-size:12.5px;color:#fff;line-height:1.5;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:10px 12px;margin-bottom:16px;white-space:pre-wrap">${(meta.prompt||"—")}</div>
+      ${(meta.refImages&&meta.refImages.length)?`<div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px">Reference Images</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">${meta.refImages.map(u=>`<img src="${u}" style="width:52px;height:52px;border-radius:8px;object-fit:cover;border:1px solid rgba(255,255,255,0.2)">`).join('')}</div>`:''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Model</div>
+          <div style="font-size:12.5px;color:#fff;font-weight:600">${modelName}</div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Resolution</div>
+          <div style="font-size:12.5px;color:#fff;font-weight:600">${meta.resolution||"Unknown"}</div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Aspect Ratio</div>
+          <div style="font-size:12.5px;color:#fff;font-weight:600">${meta.aspectRatio||"Unknown"}</div>
+        </div>
+        ${isVideo?`<div>
+          <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Duration</div>
+          <div style="font-size:12.5px;color:#fff;font-weight:600">${meta.duration||"Unknown"}</div>
+        </div>`:''}
+      </div>
     </div>`;
   document.body.appendChild(sheet);
 }
@@ -4363,13 +4405,15 @@ function openGenerationInfoModal(meta){
 function showVcGenerationInfo(msgId){
   const msg=S.vcChatHistory.find(m=>m.id===msgId);
   if(!msg)return;
-  openGenerationInfoModal(msg.meta||{});
+  const meta=msg.meta||{};
+  openGenerationInfoModal({...meta,mediaUrl:msg.content,mediaType:"video",duration:meta.totalDuration?meta.totalDuration+"s":meta.duration});
 }
 
 function closeGenerationInfoModal(){
   document.getElementById("vcInfoSheet")?.remove();
   document.getElementById("vcInfoBackdrop")?.remove();
 }
+
 
 function sanitizeFilenamePart(text){
   return (text||"").trim().replace(/[^a-zA-Z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,40)||"media";
@@ -6458,7 +6502,7 @@ async function sendVcChatPrompt(){
       const startImage=S.vcMultiImages.length?S.vcMultiImages[0].dataUrl:null;
       videoUrl=await genViaVeoDirect(prompt,ratio,model,startImage);
       providerLabel="Veo 3 Direct (Gemini API)";costKey=model;
-      const savedAssetVcDirect=createVideoAsset(videoUrl,prompt,"");
+      const savedAssetVcDirect=createVideoAsset(videoUrl,prompt,"",{model,providerLabel,aspectRatio:ratio,resolution:"Fixed by model (no manual selection)",duration:"~8s (fixed)"});
       replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel,prompt,totalDuration:parseInt(duration,10),assetId:savedAssetVcDirect.id,model,resolution:"",refImages:[]}});
       // amountOverride:0 — this is Google's own free-tier API, not fal.ai's
       // paid proxy, so there's no per-call charge to log against COST_TABLE.
@@ -6567,7 +6611,7 @@ async function sendVcChatPrompt(){
       videoUrl=await pollFalVideoResult(endpoint,submitData,apiKey);
       providerLabel=model.includes("kling")?"Kling":model.includes("veo")?"Veo 3.1":"Seedance 2.0";costKey=model;
     }
-    const savedAssetVc=createVideoAsset(videoUrl,prompt,"");
+    const savedAssetVc=createVideoAsset(videoUrl,prompt,"",{model,providerLabel,aspectRatio:ratio,resolution:model.startsWith("fal-ai/kling-video")?"Fixed by model (up to 1080p)":(document.getElementById("vcRes")?.value||""),duration:duration+"s"});
     replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel,prompt,totalDuration:parseInt(duration,10),assetId:savedAssetVc.id,model,resolution:model.startsWith("fal-ai/kling-video")?"Fixed by model (up to 1080p)":(document.getElementById("vcRes")?.value||""),refImages:hostedImages}});
     // Real, resolution-aware cost, not the flat COST_TABLE number — that
     // table has one fixed price per model regardless of what resolution
@@ -6889,8 +6933,10 @@ async function generateShotVideo(shotId){
 }
 
 
-function createVideoAsset(url,prompt,projectId){
-  const asset={id:"asset_"+Date.now(),type:"video",url,prompt,projectId:projectId||null,created:new Date().toISOString()};
+function createVideoAsset(url,prompt,projectId,meta){
+  meta=meta||{};
+  const asset={id:"asset_"+Date.now(),type:"video",url,prompt,projectId:projectId||null,created:new Date().toISOString(),
+    model:meta.model||null,providerLabel:meta.providerLabel||null,aspectRatio:meta.aspectRatio||null,resolution:meta.resolution||null,duration:meta.duration||null};
   S.assets.push(asset);
   save("assets");
   // Videos can be multi-MB — re-hosting in the background (not awaited)

@@ -95,7 +95,7 @@ function galleryCardHTML(a){
         <button class="btn ${isSelected?'btn-primary':'btn-outline'} btn-xs" style="flex:1" onclick="toggleCompareSelect('${a.id}')">${isSelected?'✓ Selected':'Select'}</button>
         <button class="vc-result-icon-btn" style="width:28px;height:28px;border-radius:8px" title="Add to Collection" onclick="openCollectionPicker('asset','${a.id}')">${VC_RESULT_ICONS.collection}</button>
         <button class="vc-result-icon-btn" style="width:28px;height:28px;border-radius:8px" title="Download" onclick="downloadWithName('${a.url.replace(/'/g,"\\'")}','KosmicKat_${sanitizeFilenamePart(a.prompt)}.${a.type==='video'?'mp4':a.type==='audio'?'mp3':'png'}')">${VC_RESULT_ICONS.download}</button>
-        <button class="vc-result-icon-btn" style="width:28px;height:28px;border-radius:8px" title="Details" onclick="openGenerationInfoModal({prompt:'${(a.prompt||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',providerLabel:a.type,resolution:''})">${VC_RESULT_ICONS.info}</button>
+        <button class="vc-result-icon-btn" style="width:28px;height:28px;border-radius:8px" title="Details" onclick="openGenerationInfoModal({prompt:'${(a.prompt||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',mediaUrl:'${a.url}',mediaType:'${a.type}',model:'${a.model||''}',providerLabel:'${a.providerLabel||a.type}',resolution:'${a.resolution||''}',aspectRatio:'${a.aspectRatio||''}',duration:'${a.duration||''}'})">${VC_RESULT_ICONS.info}</button>
         <button class="btn btn-danger btn-xs" onclick="deleteAsset('${a.id}')">🗑</button>
       </div>
     </div>`;

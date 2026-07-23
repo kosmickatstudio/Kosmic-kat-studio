@@ -127,13 +127,13 @@ function renderHome(el){
     ${!recentImages.length&&!recentVideos.length?`<div class="panel" style="text-align:center"><div style="font-size:11px;color:var(--textm)">Your generated images and videos will show up here.</div></div>`:''}
     ${recentImages.length?`<div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.04em;margin:0 2px 6px">Images</div>
     <div style="display:flex;gap:10px;overflow-x:auto;padding:2px 2px 10px;margin-bottom:${recentVideos.length?'4':'14'}px">
-      ${recentImages.map(a=>`<div onclick="openGenerationInfoModal({prompt:'${(a.prompt||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',providerLabel:'Image',resolution:''})" style="flex-shrink:0;width:140px;border-radius:16px;overflow:hidden;background:var(--surface);border:1px solid var(--border);box-shadow:0 3px 14px rgba(61,31,122,0.08);cursor:pointer">
+      ${recentImages.map(a=>`<div onclick="openGenerationInfoModal({prompt:'${(a.prompt||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',mediaUrl:'${a.url}',mediaType:'image',model:'${a.model||''}',providerLabel:'${a.providerLabel||'Image'}',resolution:'${a.resolution||''}',aspectRatio:'${a.aspectRatio||''}'})" style="flex-shrink:0;width:140px;border-radius:16px;overflow:hidden;background:var(--surface);border:1px solid var(--border);box-shadow:0 3px 14px rgba(61,31,122,0.08);cursor:pointer">
         <img src="${a.url}" style="width:140px;height:140px;object-fit:cover;display:block">
       </div>`).join('')}
     </div>`:''}
     ${recentVideos.length?`<div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.04em;margin:0 2px 6px">Videos</div>
     <div style="display:flex;gap:10px;overflow-x:auto;padding:2px 2px 14px">
-      ${recentVideos.map(a=>`<div onclick="openGenerationInfoModal({prompt:'${(a.prompt||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',providerLabel:'Video',resolution:''})" style="flex-shrink:0;width:200px;border-radius:16px;overflow:hidden;background:var(--surface);border:1px solid var(--border);box-shadow:0 3px 14px rgba(61,31,122,0.08);cursor:pointer">
+      ${recentVideos.map(a=>`<div onclick="openGenerationInfoModal({prompt:'${(a.prompt||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',mediaUrl:'${a.url}',mediaType:'video',model:'${a.model||''}',providerLabel:'${a.providerLabel||'Video'}',resolution:'${a.resolution||''}',aspectRatio:'${a.aspectRatio||''}',duration:'${a.duration||''}'})" style="flex-shrink:0;width:200px;border-radius:16px;overflow:hidden;background:var(--surface);border:1px solid var(--border);box-shadow:0 3px 14px rgba(61,31,122,0.08);cursor:pointer">
         <video src="${a.url}" style="width:200px;height:130px;object-fit:cover;display:block" muted></video>
       </div>`).join('')}
     </div>`:''}
