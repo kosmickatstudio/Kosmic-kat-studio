@@ -62,6 +62,7 @@ function renderKosmicEngineModule(el){
           <button class="btn btn-ghost btn-xs" onclick="KosmicEngine.reset()">↻ New Chat</button>
         </div>
       </div>
+      <div id="dcTaskPanel"></div>
       <div class="ig-chat-thread" id="dcThread"></div>
       <div style="position:relative;background:var(--glass);backdrop-filter:blur(18px);border-top:1.5px solid var(--glass-brd);padding:12px 14px;display:flex;gap:10px;align-items:flex-end">
         <textarea class="ig-input-textarea-v2" id="dcInput" placeholder="Type your reply…" rows="1" style="flex:1;min-height:38px;background:var(--surface);border:1.5px solid var(--border);border-radius:16px;padding:9px 14px" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();KosmicEngine.send();}"></textarea>
@@ -77,6 +78,11 @@ function renderKosmicEngineModule(el){
   } else {
     KosmicEngine.renderThread();
   }
+  // Explicit initial paint: the two branches above only guarantee a task-panel
+  // render via save()/push() side effects, which don't fire when an existing
+  // session is restored with no new message. Without this, reopening a
+  // mid-production session would show an empty panel until the next event.
+  KosmicEngine.renderTaskPanel();
 }
 
 // ── KOSMIC ENGINE ENTRY GATE ── Reuses the exact Project card format and
@@ -120,6 +126,18 @@ const KosmicEngine=(function(){
     window.save?window.save("directorChat"):localStorage.setItem("kk_director_chat",JSON.stringify(S.directorChat));
     clearTimeout(_cloudSyncTimer);
     _cloudSyncTimer=setTimeout(syncToCloud,1200); // debounced — not every single message/task update
+    // Repaint the live task panel here rather than at each individual status
+    // transition: save() is already called at every single one of them
+    // (dispatchTasks' running/done/error writes, the dynamic task insertions
+    // in char_plan/loc_plan, approve/reject), so hooking it once here is the
+    // only way to guarantee no transition is ever missed as this file grows.
+    //
+    // Wrapped defensively on purpose: save() is load-bearing for persistence
+    // AND is called mid-pipeline. An uncaught render error here would both
+    // lose state and abort an in-flight production — a display concern must
+    // never be able to do that.
+    try{ renderTaskPanel(); }
+    catch(err){ console.warn("Task panel render failed (non-blocking):",err); }
   }
   let _cloudSyncTimer=null;
   function chatDocId(){
@@ -559,6 +577,104 @@ const KosmicEngine=(function(){
     }
   }
 
+  // ── LIVE TASK PANEL ─────────────────────────────────────────────────
+  // Surfaces the task graph that already drives dispatchTasks(). Purely a
+  // read-only view — it never mutates task state, so it cannot affect the
+  // pipeline's actual behaviour.
+  //
+  // Self-contained escaper rather than reusing index.html's escapeHtml():
+  // several task labels interpolate AI-authored text (character names from
+  // the Promptwriter, location names from loc_plan), so these strings are
+  // genuinely untrusted. Keeping the escaper local means this module can't
+  // break if that global is ever renamed or moved during a future split.
+  function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+  let _taskPanelCollapsed=false;
+  function toggleTaskPanel(){_taskPanelCollapsed=!_taskPanelCollapsed;renderTaskPanel();}
+
+  // Groups a flat task into a human-meaningful section. Episode tasks carry
+  // epIndex; everything else is identified by type. Order matters — this
+  // drives display order, and it deliberately matches real dependency order
+  // so the list never appears to jump backwards as work progresses.
+  function taskGroupOf(t){
+    if(t.epIndex)return{key:"ep_"+t.epIndex,label:`Episode ${t.epIndex}`,order:100+t.epIndex};
+    if(t.type==="plan"||t.type==="model_select")return{key:"setup",label:"Setup",order:1};
+    if(t.type==="char_plan"||t.type==="charsheet_single"||t.type==="charsheet_side"||t.type==="charsheet_review")return{key:"chars",label:"Characters",order:2};
+    if(t.type==="loc_plan"||t.type==="loc_img"||t.type==="loc_review")return{key:"locs",label:"Locations",order:3};
+    return{key:"other",label:"Other",order:99};
+  }
+  function taskStatusVisual(status){
+    if(status==="done")return{icon:`<span style="color:var(--green);display:flex">${pIcon('check',13)}</span>`,color:"var(--textm)",weight:"400"};
+    if(status==="running")return{icon:`<span class="spinner" style="width:13px;height:13px;border-width:2px"></span>`,color:"var(--violet)",weight:"700"};
+    if(status==="awaiting_approval")return{icon:`<span style="width:13px;height:13px;border-radius:50%;background:var(--gold);display:inline-block;animation:pulse 1.4s ease-in-out infinite;flex-shrink:0"></span>`,color:"var(--gold)",weight:"700"};
+    if(status==="error")return{icon:`<span style="color:var(--red);font-weight:800;font-size:13px;line-height:1">✕</span>`,color:"var(--red)",weight:"700"};
+    return{icon:`<span style="width:13px;height:13px;border-radius:50%;border:1.5px solid var(--border);display:inline-block;flex-shrink:0"></span>`,color:"var(--textm)",weight:"400"};
+  }
+  function renderTaskPanel(){
+    const panel=document.getElementById("dcTaskPanel");
+    if(!panel)return; // gate screen, or module not currently mounted
+    const tasks=S.directorChat.tasks;
+    if(!tasks||!tasks.length){panel.innerHTML="";panel.style.display="none";return;}
+    panel.style.display="block";
+    const total=tasks.length;
+    const doneCount=tasks.filter(t=>t.status==="done").length;
+    const pct=total?Math.round((doneCount/total)*100):0;
+    const hasError=tasks.some(t=>t.status==="error");
+
+    // Group, preserving each group's first-appearance task order within it.
+    const groups=[];
+    tasks.forEach(t=>{
+      const g=taskGroupOf(t);
+      let bucket=groups.find(x=>x.key===g.key);
+      if(!bucket){bucket={...g,items:[]};groups.push(bucket);}
+      bucket.items.push(t);
+    });
+    groups.sort((a,b)=>a.order-b.order);
+
+    const listHTML=groups.map(g=>{
+      const gDone=g.items.filter(t=>t.status==="done").length;
+      return `<div style="margin-bottom:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;font-size:9.5px;font-weight:800;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">
+          <span>${esc(g.label)}</span><span>${gDone}/${g.items.length}</span>
+        </div>
+        ${g.items.map(t=>{
+          const v=taskStatusVisual(t.status);
+          const isActive=t.status==="running"||t.status==="awaiting_approval";
+          return `<div data-active="${isActive?1:0}" style="display:flex;align-items:flex-start;gap:7px;padding:3px 4px;border-radius:6px;${isActive?'background:rgba(98,64,176,0.07)':''}">
+            <div style="flex-shrink:0;width:13px;height:13px;display:flex;align-items:center;justify-content:center;margin-top:1px">${v.icon}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:11px;color:${v.color};font-weight:${v.weight};line-height:1.35">${esc(t.label)}</div>
+              ${t.status==="error"&&t.error?`<div style="font-size:9.5px;color:var(--red);opacity:0.85;line-height:1.3;margin-top:1px">${esc(String(t.error).slice(0,120))}</div>`:''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }).join('');
+
+    panel.innerHTML=`
+      <div style="border-bottom:1px solid var(--border);background:var(--pearl2)">
+        <div onclick="KosmicEngine.toggleTaskPanel()" style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer">
+          <div style="font-size:10px;font-weight:800;color:var(--violet);text-transform:uppercase;letter-spacing:0.06em">Production Progress</div>
+          <div style="flex:1;height:4px;border-radius:2px;background:var(--lav);overflow:hidden">
+            <div style="width:${pct}%;height:100%;background:${hasError?'var(--red)':'linear-gradient(90deg,var(--violet),var(--ice))'};transition:width 0.3s"></div>
+          </div>
+          <div style="font-size:10px;font-weight:700;color:var(--textm);flex-shrink:0">${doneCount}/${total}</div>
+          <div style="color:var(--textm);transform:rotate(${_taskPanelCollapsed?0:180}deg);display:flex">${pIcon('chevron',13)}</div>
+        </div>
+        ${_taskPanelCollapsed?'':`<div id="dcTaskList" style="max-height:190px;overflow-y:auto;padding:2px 12px 10px">${listHTML}</div>`}
+      </div>`;
+
+    // Keep the in-progress task visible without yanking the whole page —
+    // scrollIntoView() would scroll the nearest scrollable ancestor chain and
+    // can jump the module view on mobile, so this positions the inner list
+    // directly instead.
+    if(!_taskPanelCollapsed){
+      const list=document.getElementById("dcTaskList");
+      const active=list&&list.querySelector('[data-active="1"]');
+      if(list&&active)list.scrollTop=Math.max(0,active.offsetTop-list.clientHeight/2);
+    }
+  }
+
   function renderThread(){
     const thread=document.getElementById("dcThread");
     if(!thread)return;
@@ -792,6 +908,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel};
 })();
 
