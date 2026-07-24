@@ -80,7 +80,7 @@ function renderHome(el){
         <option value="claude" ${gs("ai_model","claude")==="claude"?"selected":""}>Claude (Anthropic) (Best quality, supports images)</option>
         <option value="gemini" ${gs("ai_model","claude")==="gemini"?"selected":""}>Google Gemini (Vision-capable, cheap, supports images)</option>
         <option value="openai" ${gs("ai_model","claude")==="openai"?"selected":""}>OpenAI GPT-4o (Supports images)</option>
-        <option value="groq" ${gs("ai_model","claude")==="groq"?"selected":""}>Groq Llama 3.3 (Free & fast, text only)</option>
+        <option value="groq" ${gs("ai_model","claude")==="groq"?"selected":""}>Groq GPT-OSS 120B (Free & fast, text only)</option>
         <option value="deepseek" ${gs("ai_model","claude")==="deepseek"?"selected":""}>DeepSeek V4 Flash (Ultra cheap, text only)</option>
         <option value="aicredits" ${gs("ai_model","claude")==="aicredits"?"selected":""}>AICredits Gateway (Routes to whichever model you pick below, images if that model supports them)</option>
         </select>
@@ -193,7 +193,7 @@ function renderHome(el){
               {id:"claude",label:"Claude",ready:!!gs("api_anthropic")},
               {id:"gemini",label:"Gemini",ready:!!gs("api_gemini")},
               {id:"openai",label:"GPT-4o",ready:!!gs("api_openai")},
-              {id:"groq",label:"Groq Llama",ready:!!gs("api_groq")},
+              {id:"groq",label:"Groq GPT-OSS",ready:!!gs("api_groq")},
               {id:"deepseek",label:"DeepSeek V4",ready:!!gs("api_deepseek")},
               {id:"aicredits",label:"AICredits",ready:!!gs("api_aicredits")},
             ].map(m=>{const active=gs("ai_model","claude")===m.id;return `<div onclick="setBrainModelQuick('${m.id}')" style="padding:4px 2px;cursor:pointer;display:flex;align-items:baseline;gap:4px">
