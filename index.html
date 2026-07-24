@@ -2713,6 +2713,39 @@ const BRAIN_MODEL_GROUPS=[
   ]},
 ];
 const MODEL_PICKER_SOURCES={image:IMAGE_MODEL_GROUPS,video:VIDEO_MODEL_GROUPS,brain:BRAIN_MODEL_GROUPS};
+// Curated version options per Brain provider — previously each provider was
+// hardcoded to exactly one model (Claude always Opus, Gemini always 3.5
+// Flash, etc.) with no way to pick a cheaper/faster/older variant, unlike
+// AICredits which already had its own sub-model picker. Defaults below match
+// what was previously hardcoded, so existing setups don't silently change.
+const BRAIN_SUBMODELS={
+  claude:[
+    {id:"claude-opus-4-8",label:"Opus 4.8 — best quality"},
+    {id:"claude-sonnet-4-6",label:"Sonnet 4.6 — balanced"},
+    {id:"claude-haiku-4-5",label:"Haiku 4.5 — fast, cheap"},
+  ],
+  gemini:[
+    {id:"gemini-3.5-flash",label:"3.5 Flash — balanced"},
+    {id:"gemini-3.1-pro",label:"3.1 Pro — best quality"},
+    {id:"gemini-3-flash",label:"3 Flash — fast, cheap"},
+  ],
+  openai:[
+    {id:"gpt-4o-mini",label:"GPT-4o mini — fast, cheap"},
+    {id:"gpt-4o",label:"GPT-4o — balanced"},
+    {id:"gpt-5.5",label:"GPT-5.5 — best quality"},
+  ],
+  groq:[
+    {id:"openai/gpt-oss-120b",label:"GPT-OSS 120B — best quality (current flagship)"},
+    {id:"openai/gpt-oss-20b",label:"GPT-OSS 20B — faster, cheaper"},
+    {id:"qwen/qwen3.6-27b",label:"Qwen3.6 27B — alternative, multimodal-capable"},
+  ],
+  deepseek:[
+    {id:"deepseek-v4-flash",label:"V4 Flash — fast, cheap"},
+    {id:"deepseek-v4",label:"V4 — full model, higher quality"},
+  ],
+};
+function brainModelSetting(provider){return provider+"_brain_model";}
+function getBrainModel(provider){return gs(brainModelSetting(provider),(BRAIN_SUBMODELS[provider]&&BRAIN_SUBMODELS[provider][0].id)||"");}
 // Curated subsets for tools that don't offer every video model (e.g. no
 // multi-reference options where that tool has no reference-image input).
 const SE_MODEL_ALLOWED=["bytedance/seedance-2.0/fast/text-to-video","bytedance/seedance-2.0/text-to-video","fal-ai/kling-video/v2.1/master/text-to-video","fal-ai/kling-video/v2.6/pro/text-to-video","fal-ai/kling-video/v3/standard/text-to-video","fal-ai/kling-video/v3/pro/text-to-video","fal-ai/veo3.1"];
@@ -8452,7 +8485,7 @@ async function callAiVision(images,userPrompt,systemPrompt,modelOverride){
     const response=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-opus-4-8",max_tokens:1200,system:systemPrompt,messages:[{role:"user",content}]})
+      body:JSON.stringify({model:getBrainModel("claude"),max_tokens:1200,system:systemPrompt,messages:[{role:"user",content}]})
     });
     const data=await response.json();
     if(data.error)throw new Error(data.error.message);
@@ -8462,7 +8495,7 @@ async function callAiVision(images,userPrompt,systemPrompt,modelOverride){
       {text:userPrompt},
       ...images.map(img=>({inline_data:{mime_type:"image/jpeg",data:img.dataUrl.split(",")[1]}}))
     ];
-    const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`,{
+    const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${getBrainModel("gemini")}:generateContent`,{
       method:"POST",
       headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
       body:JSON.stringify({system_instruction:{parts:[{text:systemPrompt}]},contents:[{parts}]})
@@ -8491,7 +8524,7 @@ async function callAiVision(images,userPrompt,systemPrompt,modelOverride){
     const response=await fetch("https://api.openai.com/v1/chat/completions",{
       method:"POST",
       headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
-      body:JSON.stringify({model:"gpt-4o-mini",messages:[{role:"system",content:systemPrompt},{role:"user",content}],max_tokens:1200})
+      body:JSON.stringify({model:getBrainModel("openai"),messages:[{role:"system",content:systemPrompt},{role:"user",content}],max_tokens:1200})
     });
     const data=await response.json();
     if(data.error)throw new Error(data.error.message);
@@ -10513,13 +10546,13 @@ async function callAiSimple(userPrompt,systemPrompt,modelOverride){
     const response=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-opus-4-8",max_tokens:1200,system:systemPrompt,messages:[{role:"user",content:userPrompt}]})
+      body:JSON.stringify({model:getBrainModel("claude"),max_tokens:1200,system:systemPrompt,messages:[{role:"user",content:userPrompt}]})
     });
     const data=await response.json();
     if(data.error)throw new Error(data.error.message);
     return data.content[0].text;
   } else if(model==="gemini"){
-    const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`,{
+    const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${getBrainModel("gemini")}:generateContent`,{
       method:"POST",
       headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
       body:JSON.stringify({system_instruction:{parts:[{text:systemPrompt}]},contents:[{parts:[{text:userPrompt}]}]})
@@ -10532,7 +10565,7 @@ async function callAiSimple(userPrompt,systemPrompt,modelOverride){
     // docs) — same request/response shape as OpenAI itself, just a different
     // base URL and a user-chosen model name instead of a fixed one.
     const endpoints={groq:"https://api.groq.com/openai/v1/chat/completions",deepseek:"https://api.deepseek.com/v1/chat/completions",openai:"https://api.openai.com/v1/chat/completions",aicredits:"https://api.aicredits.in/v1/chat/completions"};
-    const modelIds={groq:"openai/gpt-oss-120b",deepseek:"deepseek-v4-flash",openai:"gpt-4o-mini",aicredits:gs("aicredits_model","")||"gpt-4o-mini"};
+    const modelIds={groq:getBrainModel("groq"),deepseek:getBrainModel("deepseek"),openai:getBrainModel("openai"),aicredits:gs("aicredits_model","")||"gpt-4o-mini"};
     if(model==="aicredits"&&!gs("aicredits_model",""))throw new Error("Set which model AICredits should use in Settings (e.g. claude-3-5-sonnet, gpt-4o)");
     const response=await fetch(endpoints[model],{
       method:"POST",
@@ -10576,7 +10609,7 @@ async function sendAiPrompt(){
       const response=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",
         headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-        body:JSON.stringify({model:"claude-opus-4-8",max_tokens:800,system:systemPrompt,messages:S.aiHistory.slice(-10)})
+        body:JSON.stringify({model:getBrainModel("claude"),max_tokens:800,system:systemPrompt,messages:S.aiHistory.slice(-10)})
       });
       const data=await response.json();
       if(data.error){appendAiMsg("assistant","❌ Error: "+data.error.message);}
@@ -10586,7 +10619,7 @@ async function sendAiPrompt(){
         S.aiHistory.push({role:"assistant",content:reply});
       }
     } else if(model==="gemini"){
-      const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`,{
+      const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${getBrainModel("gemini")}:generateContent`,{
         method:"POST",
         headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
         body:JSON.stringify({system_instruction:{parts:[{text:systemPrompt}]},contents:S.aiHistory.slice(-10).map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]}))})
@@ -10601,7 +10634,7 @@ async function sendAiPrompt(){
     } else {
       // Groq / OpenAI / AICredits — all OpenAI-compatible
       const endpoints={groq:"https://api.groq.com/openai/v1/chat/completions",deepseek:"https://api.deepseek.com/v1/chat/completions",openai:"https://api.openai.com/v1/chat/completions",aicredits:"https://api.aicredits.in/v1/chat/completions"};
-      const modelIds={groq:"openai/gpt-oss-120b",deepseek:"deepseek-v4-flash",openai:"gpt-4o-mini",aicredits:gs("aicredits_model","")||"gpt-4o-mini"};
+      const modelIds={groq:getBrainModel("groq"),deepseek:getBrainModel("deepseek"),openai:getBrainModel("openai"),aicredits:gs("aicredits_model","")||"gpt-4o-mini"};
       const response=await fetch(endpoints[model],{
         method:"POST",
         headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},

@@ -76,7 +76,7 @@ function renderHome(el){
       <div class="panel-title">✧ AI Director Brain</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Which AI powers your Director chat and prompt help — moved here from Settings.</div>
       <div class="f-group">
-        <select class="f-select" id="aiModelSelect" onchange="saveSetting('ai_model',this.value);updateAiModelLabel();updateAicreditsModelVisibility();renderModelTrigger('aiModelSelect','brain')" style="display:none">
+        <select class="f-select" id="aiModelSelect" onchange="saveSetting('ai_model',this.value);updateAiModelLabel();updateAicreditsModelVisibility();updateBrainSubModelVisibility();renderModelTrigger('aiModelSelect','brain')" style="display:none">
         <option value="claude" ${gs("ai_model","claude")==="claude"?"selected":""}>Claude (Anthropic) (Best quality, supports images)</option>
         <option value="gemini" ${gs("ai_model","claude")==="gemini"?"selected":""}>Google Gemini (Vision-capable, cheap, supports images)</option>
         <option value="openai" ${gs("ai_model","claude")==="openai"?"selected":""}>OpenAI GPT-4o (Supports images)</option>
@@ -85,6 +85,10 @@ function renderHome(el){
         <option value="aicredits" ${gs("ai_model","claude")==="aicredits"?"selected":""}>AICredits Gateway (Routes to whichever model you pick below, images if that model supports them)</option>
         </select>
         <div id="aiModelSelectTrigger" onclick="openModelPicker('aiModelSelect','brain')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
+      <div class="f-group" id="brainSubModelWrap" style="display:none;margin-top:8px">
+        <label class="f-label">Version <span style="font-weight:400;color:var(--texts)" id="brainSubModelLabel"></span></label>
+        <select class="f-select" id="brainSubModelSelect" onchange="saveSetting(document.getElementById('aiModelSelect').value+'_brain_model',this.value)"></select>
       </div>
       <div class="f-group" id="aicreditsModelWrap" style="display:none;margin-top:8px">
         <label class="f-label">AICredits Model <span style="font-weight:400;color:var(--texts)">(300+ available — curated list below, or type any exact ID)</span></label>
@@ -219,6 +223,23 @@ function renderHome(el){
   renderModelTrigger("aiModelSelect","brain");
   updateAicreditsModelVisibility();
   restoreAicreditsModelUI();
+  updateBrainSubModelVisibility();
+}
+
+function updateBrainSubModelVisibility(){
+  const providerSel=document.getElementById("aiModelSelect");
+  const wrap=document.getElementById("brainSubModelWrap");
+  const sel=document.getElementById("brainSubModelSelect");
+  const label=document.getElementById("brainSubModelLabel");
+  if(!providerSel||!wrap||!sel)return;
+  const provider=providerSel.value;
+  const options=BRAIN_SUBMODELS[provider];
+  if(!options){wrap.style.display="none";return;}
+  wrap.style.display="block";
+  const providerNames={claude:"Claude",gemini:"Gemini",openai:"OpenAI",groq:"Groq",deepseek:"DeepSeek"};
+  if(label)label.textContent=`(which ${providerNames[provider]||provider} model to actually use)`;
+  const current=getBrainModel(provider);
+  sel.innerHTML=options.map(o=>`<option value="${o.id}" ${o.id===current?"selected":""}>${o.label}</option>`).join('');
 }
 
 function sendHomeAgentPrompt(){
