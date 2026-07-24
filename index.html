@@ -1630,6 +1630,10 @@ const COST_TABLE={
   "sync-lipsync-v2":3.00,
   "fal-ai/kling-video/lipsync/audio-to-video":3.00,
   "fal-ai/flux-lora-fast-training":2.00,
+  // Generation using a trained LoRA — confirmed $0.035/megapixel on fal's own
+  // pricing for this FLUX-family LoRA endpoint; ~0.035 is the flat 1-megapixel
+  // estimate used elsewhere in this table for similar FLUX Dev-tier models.
+  "fal-ai/flux-lora":0.035,
   "fal-ai/kling-video/v3/pro/motion-control":1.34,
 };
 
@@ -3106,6 +3110,15 @@ function renderImageGen(el){
         </div>
         ${S.projects.length?`<div class="f-group"><label class="f-label">Save to Project</label><select class="f-select" id="igProject"><option value="">No project</option>${S.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`:''}
 
+        ${(S.characters||[]).some(c=>c.loraStatus&&c.loraStatus.state==="ready")?`<div class="f-group" id="igLoraWrap" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+          <label class="f-label">${pIcon('sparkle',12)} Character LoRA <span style="font-weight:400;color:var(--texts)">(optional — locks in a trained character's exact look, overrides Model above)</span></label>
+          <select class="f-select" id="igLoraSelect" onchange="updateIgLoraNote()">
+            <option value="">None</option>
+            ${S.characters.filter(c=>c.loraStatus&&c.loraStatus.state==="ready").map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
+          </select>
+          <div id="igLoraNote" style="font-size:11px;color:var(--textm);margin-top:6px"></div>
+        </div>`:''}
+
         <div class="f-group" id="igSingleRefWrap" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
           <label class="f-label">${pIcon('image',12)} Reference Image <span style="font-weight:400;color:var(--texts)">(optional)</span></label>
           <div id="igRefOverrideWarning" style="display:none;font-size:11px;color:var(--gold);background:var(--gold-p);border-radius:8px;padding:7px 10px;margin-bottom:8px;line-height:1.4">${pIcon('search',11)} Attaching an image here <b>switches generation to FLUX Dev Image-to-Image</b>, replacing whatever model you picked above — the model you selected doesn't support single-image reference yet, only FLUX Dev does.</div>
@@ -3153,6 +3166,7 @@ function renderImageGen(el){
   renderVisualTrigger("igRatio","ratio");
   renderVisualTrigger("igBatchCount","count");
   updateIgRefOverrideWarning();
+  updateIgLoraNote();
 }
 
 // ── INLINE GALLERY VIEW — shows images generated in this chat, no navigation away ──
@@ -3633,6 +3647,16 @@ function updateIgAttachmentBar(){
 }
 
 S.igRefDataUrl=S.igRefDataUrl||"";
+function updateIgLoraNote(){
+  const sel=document.getElementById("igLoraSelect");
+  const note=document.getElementById("igLoraNote");
+  if(!sel||!note)return;
+  if(!sel.value){note.textContent="";return;}
+  const c=S.characters.find(x=>x.id===sel.value);
+  if(!c||!c.loraStatus){note.textContent="";return;}
+  note.textContent=`Trigger word "${c.loraStatus.triggerWord}" will be added to your prompt automatically. Routes through FLUX LoRA — Style Preset and any reference images above are ignored while a Character LoRA is selected.`;
+}
+
 function updateIgRefOverrideWarning(){
   const warn=document.getElementById("igRefOverrideWarning");
   if(!warn)return;
@@ -3993,6 +4017,32 @@ async function genViaOpenAI(prompt,ratio){
   return {url:imgUrl,providerLabel:"OpenAI (gpt-image-2)",costKey:"openai/gpt-image-2"};
 }
 
+// ── FLUX LoRA GENERATION — real fal-ai/flux-lora endpoint. This is the
+// consumption half of the LoRA pipeline: characters.js's launchLoraTraining()
+// already trains a real custom LoRA per character and stores the resulting
+// weights URL + trigger word on c.loraStatus, but until now nothing actually
+// used it afterward — training worked, applying the trained model anywhere
+// didn't. Confirmed schema straight from fal's own docs: loras is a list of
+// {path, scale}, trigger word convention is to prepend it to the prompt.
+async function genViaFluxLora(prompt,ratio,loraUrl){
+  const apiKey=gs("api_falai","");
+  if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+  const sizeMap={"16:9":"landscape_16_9","1:1":"square_hd","9:16":"portrait_16_9","4:3":"landscape_4_3","3:4":"portrait_4_3"};
+  const response=await fetch("https://fal.run/fal-ai/flux-lora",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+    body:JSON.stringify({prompt,image_size:sizeMap[ratio]||"landscape_4_3",loras:[{path:loraUrl,scale:1}]})
+  });
+  const data=await response.json();
+  if(!response.ok||data.error){
+    const msg=(data.detail&&(Array.isArray(data.detail)?data.detail[0]?.msg:data.detail))||data.error||response.statusText||"Unknown error";
+    throw new Error(msg);
+  }
+  const url=data.images&&data.images[0]&&data.images[0].url;
+  if(!url)throw new Error("No image returned from fal.ai");
+  return {url,providerLabel:"fal.ai (Character LoRA)",costKey:"fal-ai/flux-lora"};
+}
+
 async function sendIgChatPrompt(){
   const inputEl=document.getElementById("igChatInput");
   const rawPrompt=inputEl.value.trim();
@@ -4018,6 +4068,37 @@ async function sendIgChatPrompt(){
   const loadingId="igLoading_"+Date.now();
   const sendBtn=document.getElementById("igSendBtn");
   sendBtn.disabled=true;
+
+  // Character LoRA takes priority over everything else in this function —
+  // it's an explicit, visible user choice (unlike the old single-ref-image
+  // override, which did this silently and got flagged for it). Trigger word
+  // gets prepended per the standard LoRA-usage convention; Style Preset and
+  // Model selection are intentionally skipped since the trained LoRA IS the
+  // style/identity now.
+  const loraSel=document.getElementById("igLoraSelect");
+  const loraCharId=loraSel?loraSel.value:"";
+  if(loraCharId){
+    const loraChar=S.characters.find(x=>x.id===loraCharId);
+    if(!loraChar||!loraChar.loraStatus||loraChar.loraStatus.state!=="ready"){
+      pushIgChatMessage({role:"assistant",type:"error",content:"That character's LoRA isn't ready anymore — check Characters."});
+      sendBtn.disabled=false;
+      return;
+    }
+    pushIgChatMessage({id:loadingId,role:"assistant",type:"loading",content:`Generating with ${loraChar.name}'s trained LoRA…`});
+    const loraPrompt=`${loraChar.loraStatus.triggerWord}, ${rawPrompt}`;
+    try{
+      const result=await genViaFluxLora(loraPrompt,ratio,loraChar.loraStatus.modelUrl);
+      const savedAsset=await createImageAsset(result.url,loraPrompt,projectId,{model:"fal-ai/flux-lora",providerLabel:result.providerLabel,aspectRatio:ratio});
+      replaceIgLoadingBubble(loadingId,{role:"assistant",type:"image",content:result.url,meta:{providerLabel:result.providerLabel,prompt:loraPrompt,projectId,assetId:savedAsset.id}});
+      logCost(result.costKey,loraPrompt.slice(0,60));
+      toast(`✨ Generated with ${loraChar.name}'s LoRA!`,"success");
+    }catch(err){
+      replaceIgLoadingBubble(loadingId,{role:"assistant",type:"error",content:err.message});
+      toast("❌ Generation failed: "+err.message,"error");
+    }
+    sendBtn.disabled=false;
+    return;
+  }
 
   // NOTE: this gate used to fire for cap.multiRef regardless of provider —
   // but multiRef only means "requires a reference image" for the fal.ai
