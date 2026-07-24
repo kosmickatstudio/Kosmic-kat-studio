@@ -256,11 +256,11 @@ function sendHomeAgentPrompt(){
   // exactly what happens if the user manually taps the Kosmic Engine tab and
   // types the same message themselves: switchMod does the real module
   // switch/render, then we drop the message into its input and send it.
-  switchMod("directorchat",document.querySelector('[data-mod="directorchat"]'));
+  switchMod("kosmicengine",document.querySelector('[data-mod="kosmicengine"]'));
   const dcInput=document.getElementById("dcInput");
   if(dcInput){
     dcInput.value=msg;
-    DirectorChat.send();
+    KosmicEngine.send();
   }
 }
 

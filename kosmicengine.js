@@ -1,14 +1,22 @@
 // ══════════════════════════════════════════════════════════════════════
-// KOSMIC ENGINE MODULE (Director Chat) — sixteenth extraction from
-// index.html (module split phase 16). Plain global script, not an ES
-// module. Same clean profile as nodecanvas.js: only 2 top-level names
-// exist in this whole ~660-line file — renderDirectorChatModule (entry
-// point) and DirectorChat (a const assigned from an IIFE). Everything
-// else is closure-private.
+// KOSMIC ENGINE MODULE — sixteenth extraction from index.html (module
+// split phase 16). Officially renamed from "Director Chat" — the module
+// id, render function, and global object are now kosmicengine/
+// renderKosmicEngineModule/KosmicEngine throughout. (The underlying state
+// property S.directorChat was deliberately left as-is during this rename —
+// it's a storage/sync key already used in existing users' saved data and
+// Firebase documents; renaming it would orphan anyone's in-progress
+// session. It's an internal implementation detail, invisible to the user,
+// so leaving it alone carries no real cost.)
+//
+// Plain global script, not an ES module. Same clean profile as
+// nodecanvas.js: only 2 top-level names exist in this whole ~660-line
+// file — renderKosmicEngineModule (entry point) and KosmicEngine (a const
+// assigned from an IIFE). Everything else is closure-private.
 //
 // Verified before extracting: the IIFE's own top-level body (function
 // declarations, one bare `let _cloudSyncTimer=null`) never touches S/gs()
-// at immediate execution time. Confirmed zero references to DirectorChat.*
+// at immediate execution time. Confirmed zero references to KosmicEngine.*
 // anywhere outside this module — checked both the rest of index.html and
 // every already-extracted file.
 //
@@ -24,7 +32,20 @@
 // LOAD ORDER: must load AFTER index.html's main inline script.
 // ══════════════════════════════════════════════════════════════════════
 
-function renderDirectorChatModule(el){
+function renderKosmicEngineModule(el){
+  if(!S.kosmicEngineProjectId){
+    renderKosmicEngineGate(el);
+    return;
+  }
+  const scopedProject=S.projects.find(p=>p.id===S.kosmicEngineProjectId);
+  if(!scopedProject){
+    // The scoped project was deleted/archived out from under an active
+    // session — fall back to the gate rather than silently continuing
+    // against a project that no longer exists.
+    S.kosmicEngineProjectId=null;
+    renderKosmicEngineGate(el);
+    return;
+  }
   el.innerHTML=`
     <div style="margin-bottom:10px">
       <div style="font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--violet)">🎬 Kosmic Engine</div>
@@ -32,27 +53,69 @@ function renderDirectorChatModule(el){
     </div>
     <div class="ig-chat-shell" style="min-height:60vh">
       <div class="ig-chat-header">
-        <div><b onclick="DirectorChat.renameDirector()" style="cursor:pointer;text-decoration:underline dotted" title="Tap to rename">${S.directorChat.directorName}</b> <span style="font-size:10px;color:var(--textm)">· ${S.directorChat.productionId?'production in progress':'no active production'}</span></div>
-        <button class="btn btn-ghost btn-xs" onclick="DirectorChat.reset()">↻ New Chat</button>
+        <div>
+          <b onclick="KosmicEngine.renameDirector()" style="cursor:pointer;text-decoration:underline dotted" title="Tap to rename">${S.directorChat.directorName}</b>
+          <span style="font-size:10px;color:var(--textm)">· ${scopedProject.name}${S.directorChat.productionId?' · production in progress':''}</span>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-xs" onclick="switchKosmicEngineProject()" title="Switch to a different Project">⇄ Switch Project</button>
+          <button class="btn btn-ghost btn-xs" onclick="KosmicEngine.reset()">↻ New Chat</button>
+        </div>
       </div>
       <div class="ig-chat-thread" id="dcThread"></div>
-      <div class="ig-chat-inputbar">
-        <textarea class="ig-chat-textarea" id="dcInput" placeholder="Type your reply…" rows="1" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();DirectorChat.send();}"></textarea>
-        <button class="ig-send-btn" onclick="DirectorChat.send()">➤</button>
+      <div style="position:relative;background:var(--glass);backdrop-filter:blur(18px);border-top:1.5px solid var(--glass-brd);padding:12px 14px;display:flex;gap:10px;align-items:flex-end">
+        <textarea class="ig-input-textarea-v2" id="dcInput" placeholder="Type your reply…" rows="1" style="flex:1;min-height:38px;background:var(--surface);border:1.5px solid var(--border);border-radius:16px;padding:9px 14px" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();KosmicEngine.send();}"></textarea>
+        <button class="ig-send-btn" onclick="KosmicEngine.send()">➤</button>
       </div>
     </div>
   `;
   if(!S.directorChat.messages.length||S.directorChat.tasks===undefined){
     (async()=>{
-      const foundCloudSession=await DirectorChat.loadFromCloud();
-      if(!foundCloudSession)DirectorChat.reset();
+      const foundCloudSession=await KosmicEngine.loadFromCloud();
+      if(!foundCloudSession)KosmicEngine.reset();
     })();
   } else {
-    DirectorChat.renderThread();
+    KosmicEngine.renderThread();
   }
 }
 
-const DirectorChat=(function(){
+// ── KOSMIC ENGINE ENTRY GATE ── Reuses the exact Project card format and
+// creation modal the Projects module already has — no new UI invented for
+// this, per the explicit ask to reuse what already exists. Deliberately
+// NOT the interaction redesign discussed separately (structured screen vs.
+// chat) — that's still pending a real discussion before touching it; this
+// gate only decides *which Project* the conversation is scoped to.
+function renderKosmicEngineGate(el){
+  const activeProjects=S.projects.filter(p=>!p.archived);
+  el.innerHTML=`
+    <div style="margin-bottom:14px">
+      <div style="font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--violet)">🎬 Kosmic Engine</div>
+      <div style="font-size:11px;color:var(--textm);margin-top:2px">Pick a Project to work in, or start a new one — Kosmic Engine builds the whole pipeline (script, character sheet, storyboard, scenes) inside that Project.</div>
+    </div>
+    <div class="grid2">
+      <div onclick="openKosmicEngineProjectCreate()" style="cursor:pointer;border:1.5px dashed var(--vs);border-radius:14px;min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--pearl2)">
+        <div style="width:44px;height:44px;border-radius:50%;background:var(--lav);color:var(--violet);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700">+</div>
+        <div style="font-size:12.5px;font-weight:700;color:var(--violet)">Create Project</div>
+      </div>
+      ${activeProjects.map(p=>projectCardHTML(p,`selectKosmicEngineProject('${p.id}')`)).join('')}
+    </div>
+    ${!activeProjects.length?`<div style="font-size:11px;color:var(--textm);margin-top:12px;text-align:center">No projects yet — tap + to create your first one.</div>`:''}
+  `;
+}
+function openKosmicEngineProjectCreate(){
+  S.kosmicEngineLaunchPending=true;
+  openProjectModal();
+}
+function selectKosmicEngineProject(id){
+  S.kosmicEngineProjectId=id;
+  renderModule("kosmicengine");
+}
+function switchKosmicEngineProject(){
+  S.kosmicEngineProjectId=null;
+  renderModule("kosmicengine");
+}
+
+const KosmicEngine=(function(){
   function save(){
     window.save?window.save("directorChat"):localStorage.setItem("kk_director_chat",JSON.stringify(S.directorChat));
     clearTimeout(_cloudSyncTimer);
@@ -508,8 +571,8 @@ const DirectorChat=(function(){
         ${m.approval.text?`<div style="font-size:11px;color:var(--text);white-space:pre-wrap">${m.approval.text}</div>`:''}
         ${m.approval.qaNote?`<div style="font-size:10px;color:var(--gold);background:rgba(212,175,55,0.1);border-radius:6px;padding:5px 8px;margin-top:6px">🔍 QA note: ${m.approval.qaNote}</div>`:''}
         <div class="dc-approval-actions">
-          <button class="btn btn-primary btn-xs" onclick="DirectorChat.approve()">✅ Approve</button>
-          <button class="btn btn-danger btn-xs" onclick="DirectorChat.reject()">❌ Reject</button>
+          <button class="btn btn-primary btn-xs" onclick="KosmicEngine.approve()">✅ Approve</button>
+          <button class="btn btn-danger btn-xs" onclick="KosmicEngine.reject()">❌ Reject</button>
         </div>
       </div>`;
       if(m.error){
@@ -518,7 +581,7 @@ const DirectorChat=(function(){
         // already retried and resolved (or superseded) shouldn't offer a
         // button that would silently act on a different, unrelated task.
         const stillPending=m.retryable&&m.retryTaskIds&&m.retryTaskIds.some(id=>{const t=findTask(id);return t&&t.status==="error";});
-        extra=`<div class="dc-error-card">❌ ${m.error}${stillPending?`<div style="margin-top:6px"><button class="btn btn-outline btn-xs" onclick="DirectorChat.retry(${i})">🔄 Retry</button></div>`:''}</div>`;
+        extra=`<div class="dc-error-card">❌ ${m.error}${stillPending?`<div style="margin-top:6px"><button class="btn btn-outline btn-xs" onclick="KosmicEngine.retry(${i})">🔄 Retry</button></div>`:''}</div>`;
       }
       return `<div class="ig-bubble-assistant">${m.content}${extra}</div>`;
     }).join('');
@@ -681,7 +744,7 @@ const DirectorChat=(function(){
     const name=await showPromptDialog("Name your Director","Director")||"Director";
     S.directorChat.directorName=name;
     save();
-    renderModule("directorchat");
+    renderModule("kosmicengine");
   }
   // ── AUTO-PILOT BRIDGE ── Hands an existing Production Pipeline (manual
   // wizard) production over to run autonomously from here. Deliberately

@@ -613,7 +613,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
       <button class="mod-btn" data-mod="productionstudio" onclick="switchMod('productionstudio',this)">
         <span class="mod-icon">🎞</span><span class="mod-label">Production Pipeline</span>
       </button>
-      <button class="mod-btn" data-mod="directorchat" onclick="switchMod('directorchat',this)">
+      <button class="mod-btn" data-mod="kosmicengine" onclick="switchMod('kosmicengine',this)">
         <span class="mod-icon">🎬</span><span class="mod-label">Kosmic Engine</span>
         <span class="mod-badge new">NEW</span>
       </button>
@@ -1122,6 +1122,12 @@ const S = {
   flowProjects: [],
   assetRegistry: [],
   directorChat: {active:false,productionId:null,directorName:"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief"},
+  // Which Project the current Kosmic Engine session is scoped to — null
+  // means the entry gate shows (pick or create a Project) instead of the
+  // chat itself. Deliberately separate from directorChat.productionId,
+  // which tracks an actual generated production *within* that scoping,
+  // not which Project the conversation belongs to.
+  kosmicEngineProjectId: null,
   worldMemory: {characters:[],locations:[],styleNotes:"",updated:0},
 };
 
@@ -1860,7 +1866,7 @@ function renderModule(mod){
   const fn={
     home:renderHome,
     productionstudio:renderProductionStudio,
-    directorchat:renderDirectorChatModule,
+    kosmicengine:renderKosmicEngineModule,
     flow:renderFlow,
     nodecanvas:renderNodeCanvasModule,
     projects:renderProjects,
@@ -2007,22 +2013,23 @@ function toggleArchivedView(){
   renderModule("projects");
 }
 
-function projectCardHTML(p){
+function projectCardHTML(p,onClickOverride){
   const statusColor={Development:"var(--blue)",Production:"var(--green)","Pre-production":"var(--yellow)",Post:"var(--violet)",Complete:"#059669",Released:"#b45309"}[p.status]||"var(--blue)";
   const baseColor=p.color||"#7c3aed";
   const thumbStyle=p.thumbImage
     ?`background:linear-gradient(180deg,rgba(10,5,20,0.05),rgba(10,5,20,0.35)),url('${p.thumbImage}') center/cover no-repeat`
     :`background:radial-gradient(circle at 30% 20%,${baseColor}dd,${baseColor} 60%,${baseColor}cc),radial-gradient(circle at 80% 75%,rgba(255,255,255,0.14),transparent 40%)`;
+  const clickHandler=onClickOverride||`openProject('${p.id}')`;
   return `
-    <div class="project-card${S.activeProject===p.id?' active-project':''}" id="pc-${p.id}" onclick="openProject('${p.id}')" style="cursor:pointer">
+    <div class="project-card${S.activeProject===p.id?' active-project':''}" id="pc-${p.id}" onclick="${clickHandler}" style="cursor:pointer">
       <div class="project-card-thumb" style="${thumbStyle}">
         ${p.thumbImage?'':`<div style="width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,0.14);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1px rgba(255,255,255,0.25) inset"><span style="font-size:24px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.25))">⚡</span></div>`}
       </div>
-      <div class="project-card-menu">
+      ${onClickOverride?'':`<div class="project-card-menu">
         <button class="pc-menu-btn" onclick="event.stopPropagation();editProject('${p.id}')" title="Edit">✏️</button>
         <button class="pc-menu-btn" onclick="event.stopPropagation();toggleArchiveProject('${p.id}')" title="${p.archived?'Unarchive':'Archive'}">${p.archived?'📂':'🗄'}</button>
         <button class="pc-menu-btn" onclick="event.stopPropagation();deleteProject('${p.id}')" title="Delete">🗑</button>
-      </div>
+      </div>`}
       <div class="project-card-body">
         <div class="project-card-title">${p.name||'Untitled'}</div>
         <div class="project-card-meta">${p.genre||'—'} · ${p.status||'Development'}</div>
@@ -2428,7 +2435,7 @@ function openProjectModal(editId=null){
   modal.classList.add("show");
 }
 
-function closeProjectModal(){document.getElementById("projectModal").classList.remove("show");}
+function closeProjectModal(){document.getElementById("projectModal").classList.remove("show");S.kosmicEngineLaunchPending=false;}
 
 function pickThumbColor(el){
   S.thumbColor=el.dataset.color;
@@ -2491,6 +2498,16 @@ function saveProject(){
       S.projects.push(p);
       save("projects");
       toast("🎉 Project created!","success");
+      if(S.kosmicEngineLaunchPending){
+        S.kosmicEngineLaunchPending=false;
+        S.editingProjectId=null;
+        closeProjectModal();
+        requestAnimationFrame(()=>{
+          S.kosmicEngineProjectId=p.id;
+          renderModule("kosmicengine");
+        });
+        return;
+      }
     }
     S.editingProjectId=null;
     closeProjectModal();
@@ -9904,8 +9921,8 @@ async function publishViaWebhook(prodId){
 // of building the correct resume state; this just triggers it and switches
 // the screen to actually watch it run.
 function handToKosmicEngine(prodId){
-  DirectorChat.resumeExistingProduction(prodId);
-  renderModule("directorchat");
+  KosmicEngine.resumeExistingProduction(prodId);
+  renderModule("kosmicengine");
 }
 
 async function finalizeProductionToEditor(prodId){
@@ -9936,7 +9953,7 @@ async function finalizeProductionToEditor(prodId){
 // generateEpisodeScript/Storyboard/Scene, approve/rejectEpisodeStage). This
 // is a front-end/narration layer only — the underlying pipeline is untouched.
 // ══════════════════════════════════════════════════════════════════════
-// ── KOSMIC ENGINE (Director Chat) ── (moved to kosmicengine.js — loaded via <script src="kosmicengine.js"> near the end of <body>, sixteenth module extracted from this file)
+// ── KOSMIC ENGINE ── (moved to kosmicengine.js — loaded via <script src="kosmicengine.js"> near the end of <body>, sixteenth module extracted from this file — officially renamed from "Director Chat")
 // ── DIRECTOR HIERARCHY ── (renderHierarchyPanel/renderDirectors/etc moved to directors.js — loaded via <script src="directors.js"> near the end of <body>, fourteenth module extracted from this file)
 // ── AUDIO ── (moved to audio.js — loaded via <script src="audio.js"> near the end of <body>, first module extracted from this file)
 // ── ASSETS ── (moved to assets.js — loaded via <script src="assets.js"> near the end of <body>, eleventh module extracted from this file; the Cross-Module Picker below stayed here, it's genuinely shared infrastructure, not Assets-specific)
