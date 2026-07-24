@@ -52,9 +52,11 @@ function renderHome(el){
       </div>
     </div>
 
-    <div class="ig-chat-inputbar" style="margin-bottom:14px;background:var(--glass);backdrop-filter:blur(18px);border:1.5px solid var(--glass-brd);border-radius:24px;box-shadow:0 4px 20px rgba(0,0,0,0.06)">
-      <textarea class="ig-chat-textarea" id="homeAgentInput" rows="1" placeholder="Tell Kosmic Engine what you want to make…" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendHomeAgentPrompt();}"></textarea>
-      <button class="ig-send-btn" onclick="sendHomeAgentPrompt()">➤</button>
+    <div style="position:relative;background:var(--glass);backdrop-filter:blur(18px);border:1.5px solid var(--glass-brd);border-radius:22px;box-shadow:0 6px 24px rgba(61,31,122,0.08);padding:18px 18px 14px;margin-bottom:14px;min-height:170px;display:flex;flex-direction:column">
+      <textarea id="homeAgentInput" placeholder="Plan a script, storyboard, or video…" style="flex:1;width:100%;border:none;background:transparent;resize:none;font-size:15px;line-height:1.5;font-family:inherit;color:var(--text);outline:none;min-height:96px" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendHomeAgentPrompt();}"></textarea>
+      <div style="display:flex;align-items:center;justify-content:flex-end;margin-top:6px">
+        <button class="ig-send-btn" onclick="sendHomeAgentPrompt()">➤</button>
+      </div>
     </div>
 
     <div class="panel">

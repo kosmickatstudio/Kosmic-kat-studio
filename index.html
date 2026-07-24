@@ -2775,8 +2775,9 @@ function modelVisualMeta(value){
   return{grad:"linear-gradient(135deg,var(--vs),var(--violet))",mono:"?"};
 }
 function imageModelOptionsHTML(){
-  return groupsForPicker("image").map(g=>`<optgroup label="${g.label}">${g.items.map(i=>`<option value="${i.value}">${i.name}${i.sub?' ('+i.sub+')':''}</option>`).join('')}</optgroup>`).join('')
-    +`${(gs("custom_image_models",[])||[]).map(m=>`<option value="${m.endpoint}">${m.label} (custom)</option>`).join('')}`;
+  const selectedValue=gs("default_image_model","fal-ai/flux/schnell");
+  return groupsForPicker("image").map(g=>`<optgroup label="${g.label}">${g.items.map(i=>`<option value="${i.value}" ${i.value===selectedValue?'selected':''}>${i.name}${i.sub?' ('+i.sub+')':''}</option>`).join('')}</optgroup>`).join('')
+    +`${(gs("custom_image_models",[])||[]).map(m=>`<option value="${m.endpoint}" ${m.endpoint===selectedValue?'selected':''}>${m.label} (custom)</option>`).join('')}`;
 }
 function groupsForPicker(kind,allowed){
   const groups=MODEL_PICKER_SOURCES[kind]||[];
@@ -5030,7 +5031,7 @@ function renderVideoCanvas(el){
           ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:10px">Add a <b>fal.ai</b> API key in Settings — this one key powers Seedance, Kling, and Veo.</div>`:''}
           <div class="f-group">
             <label class="f-label">Model</label>
-            <select class="f-select" id="vcModel" onchange="updateVcModelUI()" style="display:none">${modelOptionsHTML("video")}</select>
+            <select class="f-select" id="vcModel" onchange="updateVcModelUI()" style="display:none">${modelOptionsHTML("video",null,gs("default_video_model","bytedance/seedance-2.0/fast/text-to-video"))}</select>
             <div id="vcModelTrigger" onclick="openModelPicker('vcModel','video')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
             <div id="vcModelNote" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
           </div>
