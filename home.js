@@ -90,7 +90,8 @@ function renderHome(el){
       </div>
       <div class="f-group" id="brainSubModelWrap" style="display:none;margin-top:8px">
         <label class="f-label">Version <span style="font-weight:400;color:var(--texts)" id="brainSubModelLabel"></span></label>
-        <select class="f-select" id="brainSubModelSelect" onchange="saveSetting(document.getElementById('aiModelSelect').value+'_brain_model',this.value)"></select>
+        <select class="f-select" id="brainSubModelSelect" onchange="saveSetting(document.getElementById('aiModelSelect').value+'_brain_model',this.value);renderSimpleTrigger('brainSubModelSelect')" style="display:none"></select>
+        <div id="brainSubModelSelectTrigger" onclick="openSimplePicker('brainSubModelSelect','Choose Version')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
       </div>
       <div class="f-group" id="aicreditsModelWrap" style="display:none;margin-top:8px">
         <label class="f-label">AICredits Model <span style="font-weight:400;color:var(--texts)">(300+ available — curated list below, or type any exact ID)</span></label>
@@ -242,6 +243,7 @@ function updateBrainSubModelVisibility(){
   if(label)label.textContent=`(which ${providerNames[provider]||provider} model to actually use)`;
   const current=getBrainModel(provider);
   sel.innerHTML=options.map(o=>`<option value="${o.id}" ${o.id===current?"selected":""}>${o.label}</option>`).join('');
+  renderSimpleTrigger("brainSubModelSelect");
 }
 
 function sendHomeAgentPrompt(){

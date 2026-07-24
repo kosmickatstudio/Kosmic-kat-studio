@@ -2722,21 +2722,38 @@ const MODEL_PICKER_SOURCES={image:IMAGE_MODEL_GROUPS,video:VIDEO_MODEL_GROUPS,br
 // Flash, etc.) with no way to pick a cheaper/faster/older variant, unlike
 // AICredits which already had its own sub-model picker. Defaults below match
 // what was previously hardcoded, so existing setups don't silently change.
+// Curated version options per Brain provider — verified against each
+// provider's own release notes as of July 25, 2026. Updated from an earlier
+// pass that had gone stale within about a month:
+//  - Claude Opus 5 shipped July 24, 2026 (yesterday) — same price as 4.8,
+//    genuine upgrade, now the default "best quality" pick
+//  - GPT-5.6 family (Sol/Terra/Luna) went GA July 9, 2026, replacing the
+//    4o/4o-mini/5.5 lineup entirely
+//  - Gemini 3.6 Flash shipped July 21, 2026; 3.5 Pro (the true Pro-tier
+//    successor to 3.1 Pro) is still partner-only with no GA date, so 3.1 Pro
+//    remains the right 'best quality' pick until that ships
+//  - DeepSeek: fixed a wrong ID — 'deepseek-v4' was never a real model ID,
+//    the actual quality-tier ID is deepseek-v4-pro
+//  - Groq: NO Llama option exists anymore in any form. This isn't an
+//    oversight — Groq deprecated every Llama variant they ever hosted
+//    (3.1 8B and 3.3 70B in June 2026, 4 Scout the same month, and 4
+//    Maverick all the way back in March 2026). There is currently no
+//    working Llama model on Groq to offer.
 const BRAIN_SUBMODELS={
   claude:[
-    {id:"claude-opus-4-8",label:"Opus 4.8 — best quality"},
-    {id:"claude-sonnet-4-6",label:"Sonnet 4.6 — balanced"},
-    {id:"claude-haiku-4-5",label:"Haiku 4.5 — fast, cheap"},
+    {id:"claude-opus-5",label:"Opus 5 — best quality (new, same price as 4.8)"},
+    {id:"claude-sonnet-5",label:"Sonnet 5 — balanced"},
+    {id:"claude-haiku-4-5-20251001",label:"Haiku 4.5 — fast, cheap"},
   ],
   gemini:[
-    {id:"gemini-3.5-flash",label:"3.5 Flash — balanced"},
-    {id:"gemini-3.1-pro",label:"3.1 Pro — best quality"},
-    {id:"gemini-3-flash",label:"3 Flash — fast, cheap"},
+    {id:"gemini-3.6-flash",label:"3.6 Flash — balanced (new, cheaper than 3.5)"},
+    {id:"gemini-3.1-pro",label:"3.1 Pro — best quality (3.5 Pro not GA yet)"},
+    {id:"gemini-3.5-flash-lite",label:"3.5 Flash-Lite — fast, cheap"},
   ],
   openai:[
-    {id:"gpt-4o-mini",label:"GPT-4o mini — fast, cheap"},
-    {id:"gpt-4o",label:"GPT-4o — balanced"},
-    {id:"gpt-5.5",label:"GPT-5.5 — best quality"},
+    {id:"gpt-5.6-luna",label:"5.6 Luna — fast, cheap"},
+    {id:"gpt-5.6-terra",label:"5.6 Terra — balanced"},
+    {id:"gpt-5.6-sol",label:"5.6 Sol — best quality (new flagship)"},
   ],
   groq:[
     {id:"openai/gpt-oss-120b",label:"GPT-OSS 120B — best quality (current flagship)"},
@@ -2745,7 +2762,7 @@ const BRAIN_SUBMODELS={
   ],
   deepseek:[
     {id:"deepseek-v4-flash",label:"V4 Flash — fast, cheap"},
-    {id:"deepseek-v4",label:"V4 — full model, higher quality"},
+    {id:"deepseek-v4-pro",label:"V4 Pro — full model, higher quality"},
   ],
 };
 function brainModelSetting(provider){return provider+"_brain_model";}
