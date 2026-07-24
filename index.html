@@ -3074,7 +3074,8 @@ function renderImageGen(el){
         ${S.projects.length?`<div class="f-group"><label class="f-label">Save to Project</label><select class="f-select" id="igProject"><option value="">No project</option>${S.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`:''}
 
         <div class="f-group" id="igSingleRefWrap" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-          <label class="f-label">${pIcon('image',12)} Reference Image <span style="font-weight:400;color:var(--texts)">(optional — enables Image-to-Image via FLUX Dev)</span></label>
+          <label class="f-label">${pIcon('image',12)} Reference Image <span style="font-weight:400;color:var(--texts)">(optional)</span></label>
+          <div id="igRefOverrideWarning" style="display:none;font-size:11px;color:var(--gold);background:var(--gold-p);border-radius:8px;padding:7px 10px;margin-bottom:8px;line-height:1.4">${pIcon('search',11)} Attaching an image here <b>switches generation to FLUX Dev Image-to-Image</b>, replacing whatever model you picked above — the model you selected doesn't support single-image reference yet, only FLUX Dev does.</div>
           <input type="file" accept="image/*" id="igRefFile" style="display:none" onchange="handleIgRefUpload(event)">
           <div style="display:flex;align-items:center;gap:10px">
             <div id="igRefPreview" style="width:56px;height:56px;border-radius:8px;background:var(--lav);color:var(--violet);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;cursor:pointer" onclick="document.getElementById('igRefFile').click()">${pIcon('camera',22)}</div>
@@ -3118,6 +3119,7 @@ function renderImageGen(el){
   renderVisualTrigger("igStyle","style");
   renderVisualTrigger("igRatio","ratio");
   renderVisualTrigger("igBatchCount","count");
+  updateIgRefOverrideWarning();
 }
 
 // ── INLINE GALLERY VIEW — shows images generated in this chat, no navigation away ──
@@ -3457,6 +3459,7 @@ function updateIgModelUI(){
   const cap=IMAGE_MODEL_CAPABILITIES[model]||{};
   updateIgRatioOptions(cap);
   updateIgCostHint();
+  updateIgRefOverrideWarning();
   const singleWrap=document.getElementById("igSingleRefWrap");
   const multiWrap=document.getElementById("igMultiRefWrap");
   const batchWrap=document.getElementById("igBatchWrap");
@@ -3597,6 +3600,13 @@ function updateIgAttachmentBar(){
 }
 
 S.igRefDataUrl=S.igRefDataUrl||"";
+function updateIgRefOverrideWarning(){
+  const warn=document.getElementById("igRefOverrideWarning");
+  if(!warn)return;
+  const modelEl=document.getElementById("igModel");
+  const isAlreadyFluxDev=modelEl&&modelEl.value==="fal-ai/flux/dev";
+  warn.style.display=(S.igRefDataUrl&&!isAlreadyFluxDev)?"block":"none";
+}
 function handleIgRefUpload(event){
   const file=event.target.files[0];
   if(!file)return;
@@ -3617,7 +3627,8 @@ function handleIgRefUpload(event){
       document.getElementById("igRefClearBtn").style.display="inline-block";
       document.getElementById("igStrengthWrap").style.display="block";
       updateIgAttachmentBar();
-      toast("📷 Reference image ready — generation will use Image-to-Image (FLUX Dev)","success");
+      updateIgRefOverrideWarning();
+      toast("Reference image ready — generation will use Image-to-Image (FLUX Dev)","success");
     };
     img.src=e.target.result;
   };
@@ -3629,6 +3640,7 @@ function clearIgRef(){
   document.getElementById("igRefClearBtn").style.display="none";
   document.getElementById("igStrengthWrap").style.display="none";
   updateIgAttachmentBar();
+  updateIgRefOverrideWarning();
 }
 
 // ── MAGIC PROMPT (LLM-based enhancement) ──
