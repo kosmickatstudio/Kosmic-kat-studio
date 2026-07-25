@@ -397,6 +397,10 @@ const KosmicEngine=(function(){
       S.pendingProductionDraft=S.directorChat.draft;
       // Consumed — cleared so they aren't silently reused by the next brief.
       S.directorChat.pendingRefs=[];
+      // Repaint, or the thumbnails stay on screen after the images have been
+      // consumed — which reads as "still attached" and invites the user to
+      // send again expecting them to apply a second time.
+      renderRefStrip();
       const {prodId:newId,parsed}=await runPromptwriter(true);
       S.directorChat.productionId=newId;
       S.directorChat.episodeCount=parsed.episodes.length;
@@ -1119,6 +1123,12 @@ const KosmicEngine=(function(){
     if(_engineTab==="notebook"){
       try{ renderNotebook(); }catch(err){ console.warn("Notebook render failed (non-blocking):",err); }
     }
+    // Same reasoning as the Notebook hook above: enterProject() is async and
+    // swaps the session on several exit paths, all of which repaint through
+    // renderThread(). The module-level renderRefStrip() call fires BEFORE that
+    // resolves, so without this the strip would show the OUTGOING session's
+    // thumbnails after a project switch.
+    try{ renderRefStrip(); }catch(err){ console.warn("Ref strip render failed (non-blocking):",err); }
   }
 
   // Routes a character-sheet generation through whichever reference-capable
@@ -1830,7 +1840,7 @@ const KosmicEngine=(function(){
     stashCurrentSession();
     const el=document.getElementById("dcRecoverModal");
     if(el)el.remove();
-    renderThread();renderTaskPanel();
+    renderThread();renderTaskPanel();renderRefStrip();
     toast("Session restored","success");
   }
 
@@ -1892,9 +1902,12 @@ const KosmicEngine=(function(){
     // Falls back to the live selection so the existing no-arg callers (the
     // "New Chat" button) keep working unchanged.
     const pid=projectId||S.kosmicEngineProjectId||null;
-    S.directorChat={active:true,productionId:null,projectId:pid,directorName:directorName(),messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief",qaAnswers:{},awaitingPermissionIds:null,permissionPaused:false};
+    S.directorChat={active:true,productionId:null,projectId:pid,directorName:directorName(),messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief",qaAnswers:{},awaitingPermissionIds:null,pendingRefs:[],permissionPaused:false};
     save();
     renderThread();
+    // Replacing the session clears refs in STATE, but the strip's DOM still
+    // holds the old thumbnails until something repaints it.
+    renderRefStrip();
     push("agent",`<b>Hey — I'm ${esc(directorName())}.</b><br>Tell me the story you want to make: genre, setting, what happens.<br><br><b>Then I'll run the whole pipeline:</b><br>• Write the script<br>• Build the character sheets (6 views, generated in parallel)<br>• Design the locations<br>• Board every shot<br>• Generate the scenes<br><br>You approve or reject at each checkpoint — nothing moves on without you.`);
   }
   function send(){
@@ -1942,7 +1955,7 @@ const KosmicEngine=(function(){
         continuity:"both",brainModel:gs("ai_model","claude"),refImages:refs,reviewedCharacterDesc:remembered?remembered.desc:"",hasFullScript:false,fullScriptText:briefText,episodeCount:1,
       };
       save();
-      push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}"${remembered.semantic?', recalled by meaning — '+Math.round(remembered.score*100)+'% match':''}) — I'll keep their approved look consistent unless you tell me otherwise.`:""} Before I start, set the four things below — or just say "go" to run with the defaults (1 episode, ~8s, 720p, 16:9, narrative + visual continuity).`,{questions:true});
+      push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}"${remembered.semantic?', recalled by meaning — '+Math.round(remembered.score*100)+'% match':''}) — I'll keep their approved look consistent unless you tell me otherwise.`:""} Before I start, set the ${intakeQuestions().length} things below — or just say "go" to run with the defaults (1 episode, ~8s, 720p, 16:9, narrative + visual continuity).`,{questions:true});
       S.directorChat.intakeStage="confirm_plan";
       S.directorChat.qaAnswers={};
       save();
