@@ -475,7 +475,7 @@ const KosmicEngine=(function(){
       // Rejection feedback is appended rather than replacing anything: the
       // user is correcting a specific fault, not restating the whole brief.
       const csFix=p.charSheetFeedback?`. IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.charSheetFeedback}`:"";
-      const prompt=`${c.desc}, full character reference turnaround sheet, single composite image arranged in a grid showing: front full-body view, back full-body view, 3/4 angle full-body view, and a close-up face portrait — consistent character design across all views, clean plain background, professional character design sheet, only this one character, no other people${csFix}`;
+      const prompt=`${c.desc}, full character reference turnaround sheet, single composite image arranged in a grid showing: front full-body view, back full-body view, 3/4 angle full-body view, and a close-up face portrait — consistent character design across all views, clean plain background, professional character design sheet, only this one character, no other people${csFix}${rulesSuffix(p)}`;
       // Pass the uploaded reference to the generator itself on models that
       // accept one, for actual visual likeness rather than likeness by
       // description alone. Falls through to the plain path when the selected
@@ -499,7 +499,7 @@ const KosmicEngine=(function(){
       const sides=characters.filter(c=>c.tier==="SIDE");
       const lineup=sides.map(c=>`${c.name} (${c.desc})`).join("; ");
       const sideFix=p.charSheetFeedback?` IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.charSheetFeedback}`:"";
-      const prompt=`Character lineup reference sheet, ${sides.length} distinct background/side characters standing side by side for comparison, each clearly separated: ${lineup}. Clean plain background, consistent lighting, simple standing poses, professional character design reference — each character visually distinct from the others.${sideFix}`;
+      const prompt=`Character lineup reference sheet, ${sides.length} distinct background/side characters standing side by side for comparison, each clearly separated: ${lineup}. Clean plain background, consistent lighting, simple standing poses, professional character design reference — each character visually distinct from the others.${sideFix}${rulesSuffix(p)}`;
       // A side-character LINEUP is inherently wide, so it keeps 16:9 unless the
       // production is vertical, where a wide plate would letterbox badly.
       const sideRatio=(p.aspectRatio==="9:16")?"9:16":"16:9";
@@ -575,7 +575,7 @@ const KosmicEngine=(function(){
       const p=S.productions.find(x=>x.id===S.directorChat.productionId);
       const loc=p.locationBible[task.locIndex];
       const locFix=p.locationFeedback?`. IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.locationFeedback}`:"";
-      const prompt=`${loc.desc}, wide establishing shot, cinematic environment reference, no people, detailed background art${locFix}`;
+      const prompt=`${loc.desc}, wide establishing shot, cinematic environment reference, no people, detailed background art${locFix}${rulesSuffix(p)}`;
       let result;
       // Follows the production's chosen aspect ratio instead of a hardcoded
       // 16:9 — a vertical production needs vertical establishing plates too.
@@ -1170,6 +1170,46 @@ const KosmicEngine=(function(){
     return {was,now:best};
   }
 
+  // ── PER-PROJECT STANDING RULES ──────────────────────────────────────
+  // The Director/Style Intelligence system is GLOBAL — one active director
+  // across the whole app — so every project has been sharing a single
+  // aesthetic. These are per-project constraints that apply to everything
+  // Kosmic Engine makes inside that project, and to nothing outside it.
+  //
+  // Applied at two levels on purpose:
+  //   1. Folded into the brief, so the promptwriter writes them into the
+  //      character and location descriptions — which is what carries them
+  //      downstream into storyboard and scene prompts.
+  //   2. Appended directly to the sheet and location image prompts, because
+  //      purely visual rules ("no text in frame", "always overcast") survive
+  //      that route more reliably than being paraphrased through a script.
+  const MAX_RULES=400;
+  function projectRules(projectId){
+    const proj=(S.projects||[]).find(x=>x.id===(projectId||S.kosmicEngineProjectId));
+    const r=proj&&proj.engineRules;
+    return (typeof r==="string"?r.trim():"").slice(0,MAX_RULES);
+  }
+  function rulesSuffix(p){
+    // Reads from the PRODUCTION's project, not the currently open one — a
+    // production can still be running while the user has switched the gate
+    // elsewhere, and it must keep obeying the rules it started under.
+    const r=projectRules(p&&p.projectId);
+    return r?`. Project rules that must be followed: ${r}`:"";
+  }
+  async function editProjectRules(){
+    const pid=S.kosmicEngineProjectId;
+    const proj=(S.projects||[]).find(x=>x.id===pid);
+    if(!proj){toast("Open a project first","error");return;}
+    const cur=projectRules(pid);
+    const next=await showPromptDialog(
+      `Standing rules for "${proj.name}" — applied to everything Kosmic Engine makes in this project.\n\ne.g. "Always overcast lighting. No text or logos in frame. Muted colour palette."`,
+      cur,{title:"Project Rules",okLabel:"Save",multiline:true});
+    if(next===null)return; // cancelled — leave as-is
+    proj.engineRules=String(next).trim().slice(0,MAX_RULES);
+    window.save&&window.save("projects");
+    toast(proj.engineRules?"Project rules saved":"Project rules cleared","success");
+  }
+
   // ── REFERENCE IMAGES ────────────────────────────────────────────────
   // Two genuinely different jobs, both done, because either alone is a
   // half-feature:
@@ -1706,6 +1746,7 @@ const KosmicEngine=(function(){
       {label:"Restore a session",sub:"Load previously saved progress into this project",fn:"openSessionRecovery()"},
       {label:"Generation permissions",sub:"When to check with you before spending credits",fn:"openPermissionSettings()"},
       {label:"Auto-review",sub:"How much approving Kosmic Engine does for you",fn:"openAutoReviewSettings()"},
+      {label:"Project rules",sub:"Standing constraints for everything made in this project",fn:"editProjectRules()"},
       {label:"Switch project",sub:"Work in a different project",fn:"__switch"},
       {label:"Rename director",sub:"Change what this agent is called",fn:"renameDirector()"},
       {label:"New chat",sub:"Start this project's session over",fn:"reset()"},
@@ -1730,7 +1771,7 @@ const KosmicEngine=(function(){
     // switchKosmicEngineProject lives outside this IIFE (it owns the gate),
     // so it is dispatched by name rather than through the KosmicEngine map.
     if(fn==="__switch"){switchKosmicEngineProject();return;}
-    const map={"openSessionRecovery()":openSessionRecovery,"openPermissionSettings()":openPermissionSettings,"openAutoReviewSettings()":openAutoReviewSettings,"renameDirector()":renameDirector,"reset()":reset};
+    const map={"openSessionRecovery()":openSessionRecovery,"openPermissionSettings()":openPermissionSettings,"openAutoReviewSettings()":openAutoReviewSettings,"editProjectRules()":editProjectRules,"renameDirector()":renameDirector,"reset()":reset};
     const f=map[fn];
     if(typeof f==="function")f();
   }
@@ -1886,7 +1927,14 @@ const KosmicEngine=(function(){
         if(refDesc)push("agent",`<b>Here's what I see:</b><br>${esc(refDesc)}<br><br>I'll keep the character consistent with this.`);
         else push("agent","I couldn't read that image (your AI Brain may not support vision) — I'll work from your text, and still pass the image to the character sheet if the image model accepts references.");
       }
-      const briefText=refDesc?`${text}\n\nVisual reference for the main character: ${refDesc}`:text;
+      const rules=projectRules();
+      // Order matters: the user's own words first, then the reference
+      // description, then the standing rules — so nothing overrides the brief
+      // they actually typed.
+      const briefText=[text,
+        refDesc?`Visual reference for the main character: ${refDesc}`:"",
+        rules?`Standing rules for this project that must be followed throughout: ${rules}`:""
+      ].filter(Boolean).join("\n\n");
       const remembered=await SemanticMemory.recallCharacter(text);
       S.directorChat.draft={
         projectId,concept:text.slice(0,200),imageModel:"fal-ai/nano-banana-pro",videoModel:"bytedance/seedance-2.0/fast/reference-to-video",
@@ -2137,6 +2185,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,handleRefUpload,removeRef,renderRefStrip,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,editProjectRules,projectRules,handleRefUpload,removeRef,renderRefStrip,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode};
 })();
 
