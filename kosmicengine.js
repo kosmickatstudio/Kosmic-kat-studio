@@ -552,7 +552,13 @@ const KosmicEngine=(function(){
       else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/flux/dev","16:9",false);
       loc.url=result.url;
       save2Productions();
-      logCost(p.imageModel,`Location Bible — ${loc.name}`);
+      // trackProductionCost, not logCost: the bare logCost records the spend
+      // in the global cost log but never adds to p.costSpent, which is what
+      // the Production Pipeline's "$X spent so far on this production" line
+      // reads. This was the only generation in the whole production path
+      // using the bare version, so that per-production figure silently
+      // under-reported by every location image ever generated.
+      trackProductionCost(p,p.imageModel,`Location Bible — ${loc.name}`);
       return{};
     }
     if(task.type==="loc_review"){
@@ -638,7 +644,12 @@ const KosmicEngine=(function(){
   function requestPermission(batch){
     S.directorChat.awaitingPermissionIds=batch.map(t=>t.id);
     save();
-    push("agent",`⏸ Ready to run ${describeBatch(batch)} — this spends real credits on your API keys.\n\n${batch.map(t=>`• ${t.label}`).join("\n")}`,{permission:true});
+    // The running total belongs here specifically: this is the one moment the
+    // user is being asked to authorise more spend, so it's the one moment the
+    // figure changes a decision.
+    const prod=(S.productions||[]).find(x=>x.id===S.directorChat.productionId);
+    const sofar=prod&&prod.costSpent?` This production has cost about $${prod.costSpent.toFixed(2)} so far.`:"";
+    push("agent",`⏸ Ready to run ${describeBatch(batch)} — this spends real credits on your API keys.${sofar}\n\n${batch.map(t=>`• ${t.label}`).join("\n")}`,{permission:true});
   }
   function allowGeneration(){
     const ids=S.directorChat.awaitingPermissionIds||[];
@@ -898,6 +909,14 @@ const KosmicEngine=(function(){
     const doneCount=tasks.filter(t=>t.status==="done").length;
     const pct=total?Math.round((doneCount/total)*100):0;
     const hasError=tasks.some(t=>t.status==="error");
+    // Live spend for THIS production. Kosmic Engine is the screen that
+    // actually spends the money — it ran the whole pipeline autonomously —
+    // yet the only place this figure existed was the Production Pipeline's
+    // detail view, which you have to navigate away to see. Showing it beside
+    // the progress bar is what makes the permission gate an informed choice
+    // rather than a blind one.
+    const prod=(S.productions||[]).find(x=>x.id===S.directorChat.productionId);
+    const spent=prod?(prod.costSpent||0):0;
 
     // Group, preserving each group's first-appearance task order within it.
     const groups=[];
@@ -937,6 +956,7 @@ const KosmicEngine=(function(){
             <div style="width:${pct}%;height:100%;background:${hasError?'var(--red)':'linear-gradient(90deg,var(--violet),var(--ice))'};transition:width 0.3s"></div>
           </div>
           <div style="font-size:10px;font-weight:700;color:var(--textm);flex-shrink:0">${doneCount}/${total}</div>
+          ${prod?`<div style="font-size:10px;font-weight:800;color:var(--gold);flex-shrink:0" title="Estimated spend on this production so far">$${spent.toFixed(2)}</div>`:''}
           <div style="color:var(--textm);transform:rotate(${_taskPanelCollapsed?0:180}deg);display:flex">${pIcon('chevron',13)}</div>
         </div>
         ${_taskPanelCollapsed?'':`<div id="dcTaskList" style="max-height:190px;overflow-y:auto;padding:2px 12px 10px">${listHTML}</div>`}
