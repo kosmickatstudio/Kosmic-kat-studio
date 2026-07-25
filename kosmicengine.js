@@ -111,6 +111,11 @@ function selectKosmicEngineProject(id){
   renderModule("kosmicengine");
 }
 function switchKosmicEngineProject(){
+  // Preserve the current session before dropping the selection. The gate
+  // returns early without calling enterProject(), so if the user leaves the
+  // module from here instead of picking another project, nothing else would
+  // have written the in-progress session to its per-project home.
+  KosmicEngine.stashCurrentSession();
   S.kosmicEngineProjectId=null;
   renderModule("kosmicengine");
 }
@@ -147,16 +152,53 @@ const KosmicEngine=(function(){
     const base=(S.user&&S.user.uid)?S.user.uid:deviceId();
     return "kosmicEngineChat_"+base+"_"+(projectId||"noproject");
   }
-  async function syncToCloud(){
+  // Takes the session EXPLICITLY rather than reading S.directorChat at call
+  // time. Switching projects replaces S.directorChat immediately, so a
+  // debounced or in-flight sync that read the live value would either write
+  // the wrong session or write nothing at all for the outgoing one.
+  async function syncSessionToCloud(session){
+    if(!session||!session.projectId)return;
     try{
-      // Deliberately keyed on the SESSION's own projectId, not the currently
-      // selected one. syncToCloud is debounced ~1200ms, so a fast project
-      // switch can fire this after the selection already moved — reading the
-      // live selection here would write the outgoing project's conversation
-      // into the incoming project's document.
-      await fbDB.collection("public").doc(chatDocIdFor(S.directorChat.projectId)).set({chat:S.directorChat,updatedAt:Date.now()});
+      await fbDB.collection("public").doc(chatDocIdFor(session.projectId)).set({chat:session,updatedAt:Date.now()});
     }
     catch(err){ console.warn("Kosmic Engine cloud sync failed — kept locally only:",err.message); }
+  }
+  async function syncToCloud(){ return syncSessionToCloud(S.directorChat); }
+
+  // Pre-per-project document id. Writes moved to the per-project id, so this
+  // one has not been written since — it still holds whatever session was
+  // active before that change, which is the only recovery route for work
+  // that was lost when switching projects discarded the live session.
+  function legacyChatDocId(){
+    const base=(S.user&&S.user.uid)?S.user.uid:deviceId();
+    return "kosmicEngineChat_"+base;
+  }
+  async function loadLegacySession(){
+    if(gs("ke_legacy_migrated",false)===true)return null;
+    try{
+      const doc=await fbDB.collection("public").doc(legacyChatDocId()).get();
+      if(doc.exists&&doc.data().chat&&doc.data().chat.messages&&doc.data().chat.messages.length)return doc.data().chat;
+      return null;
+    }catch(err){ console.warn("Legacy Kosmic Engine session lookup failed:",err.message); return null; }
+  }
+
+  // Snapshots the outgoing session into the per-project map and flushes it to
+  // its OWN cloud doc immediately. Without this, switching away discarded the
+  // live session: the single local storage key got overwritten by the
+  // incoming session, and any pending debounced cloud write was either
+  // cancelled or redirected — losing the outgoing work from both places.
+  function stashCurrentSession(){
+    const s=S.directorChat;
+    if(!s||!s.projectId)return;
+    if(!s.messages||!s.messages.length)return; // nothing worth preserving
+    let snapshot;
+    try{ snapshot=JSON.parse(JSON.stringify(s)); }
+    catch(err){ console.warn("Couldn't snapshot session:",err); return; }
+    S.kosmicEngineSessions=S.kosmicEngineSessions||{};
+    S.kosmicEngineSessions[s.projectId]=snapshot;
+    window.save&&window.save("kosmicEngineSessions");
+    clearTimeout(_cloudSyncTimer); // the pending write is superseded by this immediate one
+    syncSessionToCloud(snapshot);
   }
   async function loadFromCloud(){
     try{
@@ -1027,20 +1069,51 @@ const KosmicEngine=(function(){
     const hasContent=!!(s.messages&&s.messages.length);
     // Already the right session — paint it.
     if(s.projectId===projectId&&hasContent){renderThread();renderTaskPanel();return;}
-    // Legacy session saved before per-project scoping existed. Adopt it into
-    // whichever project is being opened rather than discarding it — silently
-    // eating someone's in-progress conversation on update would be worse
-    // than attributing it to the project they opened next.
+    // Legacy in-memory session from before per-project scoping. Adopt rather
+    // than discard — silently eating an in-progress conversation on update
+    // would be worse than attributing it to the project opened next.
     if(!s.projectId&&hasContent){
       S.directorChat.projectId=projectId;
+      save();
+      stashCurrentSession();
+      renderThread();renderTaskPanel();
+      return;
+    }
+    // CRITICAL: preserve the outgoing session BEFORE anything can replace it.
+    // This is what was missing — switching mid-production discarded live work
+    // because reset() overwrote S.directorChat (and the single local storage
+    // key) before the outgoing session had been written anywhere.
+    stashCurrentSession();
+
+    // Recovery is attempted widest-net-last, so a real session is never
+    // passed over in favour of a blank one.
+    // 1. Locally stashed session — fastest, and works offline or when
+    //    Firebase is unreachable.
+    const local=(S.kosmicEngineSessions||{})[projectId];
+    if(local&&local.messages&&local.messages.length){
+      S.directorChat=local;
+      S.directorChat.projectId=projectId; // defensive: trust the map key
       save();
       renderThread();renderTaskPanel();
       return;
     }
-    // Different project (or nothing loaded) — pull that project's own doc.
+    // 2. This project's own cloud document.
     const found=await loadFromCloud();
     if(found&&S.directorChat.projectId===projectId){renderThread();renderTaskPanel();return;}
-    // Defensive: a doc that loaded but belongs elsewhere must not be shown.
+    // 3. Recovery: the pre-per-project document. Adopted ONCE (flagged), so
+    //    it cannot be duplicated into every project opened afterwards.
+    const legacy=await loadLegacySession();
+    if(legacy){
+      legacy.projectId=projectId;
+      S.directorChat=legacy;
+      saveSetting("ke_legacy_migrated",true);
+      save();
+      stashCurrentSession();
+      renderThread();renderTaskPanel();
+      toast("Recovered your earlier Kosmic Engine progress","success");
+      return;
+    }
+    // 4. Nothing anywhere — genuinely a fresh start for this project.
     reset(projectId);
     renderTaskPanel();
   }
@@ -1278,6 +1351,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession};
 })();
 

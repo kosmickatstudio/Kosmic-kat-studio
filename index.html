@@ -1128,6 +1128,10 @@ const S = {
   // which tracks an actual generated production *within* that scoping,
   // not which Project the conversation belongs to.
   kosmicEngineProjectId: null,
+  // Per-project Kosmic Engine sessions. directorChat holds only the ACTIVE
+  // one, and its storage key is single — so without this map, opening a
+  // second project overwrites the first project's saved session.
+  kosmicEngineSessions: {},
   worldMemory: {characters:[],locations:[],styleNotes:"",updated:0},
 };
 
@@ -1184,7 +1188,7 @@ function idbGetAllKeys(){
 // Same key strings as before (kk_projects etc) so the migration read from
 // localStorage below can reuse them directly — this map is the one place
 // that knows the S-key <-> storage-key relationship, save()/gs() both use it.
-const STATE_KEY_MAP={settings:"kk_settings",projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",activityLog:"kk_activity",productions:"kk_productions",collections:"kk_collections",igChatHistory:"kk_ig_chat",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",flowProjects:"kk_flow_projects",assetRegistry:"kk_asset_registry",directorChat:"kk_director_chat",worldMemory:"kk_world_memory"};
+const STATE_KEY_MAP={settings:"kk_settings",projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",activityLog:"kk_activity",productions:"kk_productions",collections:"kk_collections",igChatHistory:"kk_ig_chat",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",flowProjects:"kk_flow_projects",assetRegistry:"kk_asset_registry",directorChat:"kk_director_chat",kosmicEngineSessions:"kk_ke_sessions",worldMemory:"kk_world_memory"};
 async function loadStateFromStorage(){
   try{
     const existingIdbKeys=await idbGetAllKeys();
