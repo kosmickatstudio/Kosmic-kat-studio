@@ -57,11 +57,8 @@ function renderKosmicEngineModule(el){
           <b onclick="KosmicEngine.renameDirector()" style="cursor:pointer;text-decoration:underline dotted" title="Tap to rename">${S.directorChat.directorName}</b>
           <span style="font-size:10px;color:var(--textm)">· ${scopedProject.name}${S.directorChat.productionId?' · production in progress':''}</span>
         </div>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-ghost btn-xs" onclick="KosmicEngine.openSessionRecovery()" title="Load a previously saved session into this project">↺ Restore</button>
-          <button class="btn btn-ghost btn-xs" onclick="KosmicEngine.openPermissionSettings()" title="When should Kosmic Engine check with you before spending credits?">⚡ Permissions</button>
-          <button class="btn btn-ghost btn-xs" onclick="switchKosmicEngineProject()" title="Switch to a different Project">⇄ Switch Project</button>
-          <button class="btn btn-ghost btn-xs" onclick="KosmicEngine.reset()">↻ New Chat</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn btn-ghost btn-xs" onclick="KosmicEngine.toggleEngineMenu(event)" title="More actions">⋯</button>
         </div>
       </div>
       <div id="dcTaskPanel"></div>
@@ -857,8 +854,8 @@ const KosmicEngine=(function(){
       if(m.role==="user")return `<div class="ig-bubble-user">${m.content}</div>`;
       let extra="";
       if(m.approval)extra=`<div class="dc-approval-card">
-        ${m.approval.images?`<div style="display:flex;gap:4px;overflow-x:auto">${m.approval.images.map(u=>`<img src="${u}" style="width:70px;height:70px;object-fit:cover;flex-shrink:0">`).join('')}</div>`:''}
-        ${m.approval.video?`<video src="${m.approval.video}" controls style="width:100%"></video>`:''}
+        ${m.approval.images?`<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px">${m.approval.images.filter(Boolean).map(u=>`<img src="${esc(u)}" onclick="KosmicEngine.viewGeneration('${esc(u)}','image')" style="width:150px;height:150px;object-fit:cover;flex-shrink:0;border-radius:10px;border:1px solid var(--glass-brd);cursor:pointer">`).join('')}</div>`:''}
+        ${m.approval.video?`<video src="${esc(m.approval.video)}" controls playsinline style="width:100%;border-radius:10px;border:1px solid var(--glass-brd)"></video>`:''}
         ${m.approval.text?`<div style="font-size:11px;color:var(--text);white-space:pre-wrap">${m.approval.text}</div>`:''}
         ${m.approval.qaNote?`<div style="font-size:10px;color:var(--gold);background:rgba(212,175,55,0.1);border-radius:6px;padding:5px 8px;margin-top:6px">🔍 QA note: ${m.approval.qaNote}</div>`:''}
         <div class="dc-approval-actions">
@@ -1072,6 +1069,84 @@ const KosmicEngine=(function(){
   // that actually exists and lets the user put it where it belongs, instead
   // of the app guessing. Deliberately ignores ke_legacy_migrated: the whole
   // point is to recover after the automatic pass went somewhere unhelpful.
+  // ── ENGINE ACTION MENU ──────────────────────────────────────────────
+  // Four labelled buttons in the header needed ~426px on a ~330px phone
+  // content width, and .ig-chat-header is a non-wrapping flex row — so they
+  // silently overflowed and the Restore button was simply not reachable.
+  // Collapsing to a menu also means future actions cost no header width at
+  // all, rather than pushing the next one off-screen again.
+  // Approval decisions were being made against 70px thumbnails — too small to
+  // actually judge a character sheet or storyboard frame on a phone, which is
+  // the entire point of an approval gate. Cards now show usable previews and
+  // open full size on tap.
+  function viewGeneration(url,kind){
+    if(!url)return;
+    // If this output was also saved as a Gallery asset, hand off to the real
+    // detail sheet so the approve/reject review controls come with it rather
+    // than duplicating them here.
+    const asset=(S.assets||[]).find(a=>a.url===url);
+    if(asset&&typeof openGenerationInfoModal==="function"){
+      openGenerationInfoModal({
+        assetId:asset.id,mediaUrl:asset.url,mediaType:asset.type,
+        prompt:asset.prompt||"",model:asset.model||"",providerLabel:asset.providerLabel||asset.type,
+        resolution:asset.resolution||"",aspectRatio:asset.aspectRatio||"",duration:asset.duration||"",
+      });
+      return;
+    }
+    // Otherwise a plain lightbox — Kosmic Engine writes character sheets and
+    // storyboards onto the production record, and not every one of those has
+    // a corresponding Gallery asset to look up.
+    const prev=document.getElementById("dcLightbox");
+    if(prev)prev.remove();
+    const overlay=document.createElement("div");
+    overlay.id="dcLightbox";
+    overlay.style.cssText="position:fixed;inset:0;z-index:320;background:rgba(10,5,20,0.9);display:flex;align-items:center;justify-content:center;padding:16px";
+    overlay.onclick=()=>overlay.remove();
+    overlay.innerHTML=kind==="video"
+      ?`<video src="${esc(url)}" controls playsinline autoplay style="max-width:100%;max-height:90vh;border-radius:12px"></video>`
+      :`<img src="${esc(url)}" style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:12px">`;
+    document.body.appendChild(overlay);
+  }
+
+  function closeEngineMenu(){
+    const el=document.getElementById("dcEngineMenu");
+    if(el)el.remove();
+  }
+  function toggleEngineMenu(ev){
+    if(ev&&ev.stopPropagation)ev.stopPropagation();
+    if(document.getElementById("dcEngineMenu")){closeEngineMenu();return;}
+    const items=[
+      {label:"Restore a session",sub:"Load previously saved progress into this project",fn:"openSessionRecovery()"},
+      {label:"Generation permissions",sub:"When to check with you before spending credits",fn:"openPermissionSettings()"},
+      {label:"Switch project",sub:"Work in a different project",fn:"__switch"},
+      {label:"Rename director",sub:"Change what this agent is called",fn:"renameDirector()"},
+      {label:"New chat",sub:"Start this project's session over",fn:"reset()"},
+    ];
+    const overlay=document.createElement("div");
+    overlay.id="dcEngineMenu";
+    // Full-screen dismiss layer rather than an anchored popover: an anchored
+    // element would be clipped by the same overflow that caused this bug.
+    overlay.style.cssText="position:fixed;inset:0;z-index:300;background:rgba(20,10,40,0.35);display:flex;align-items:flex-end;justify-content:center";
+    overlay.onclick=(e)=>{if(e.target===overlay)closeEngineMenu();};
+    overlay.innerHTML=`<div style="background:var(--glass-solid);backdrop-filter:blur(20px);border:1px solid var(--glass-brd);border-bottom:none;border-radius:22px 22px 0 0;width:100%;max-width:520px;padding:10px 12px calc(16px + env(safe-area-inset-bottom,0px));box-shadow:0 -12px 40px rgba(61,31,122,0.25)">
+      <div style="width:38px;height:4px;border-radius:2px;background:var(--border);margin:4px auto 12px"></div>
+      ${items.map(i=>`<div onclick="KosmicEngine.runMenuAction('${i.fn}')" style="padding:11px 12px;border-radius:12px;cursor:pointer">
+        <div style="font-size:13.5px;font-weight:700;color:var(--text)">${esc(i.label)}</div>
+        <div style="font-size:11px;color:var(--textm);margin-top:1px">${esc(i.sub)}</div>
+      </div>`).join('')}
+    </div>`;
+    document.body.appendChild(overlay);
+  }
+  function runMenuAction(fn){
+    closeEngineMenu();
+    // switchKosmicEngineProject lives outside this IIFE (it owns the gate),
+    // so it is dispatched by name rather than through the KosmicEngine map.
+    if(fn==="__switch"){switchKosmicEngineProject();return;}
+    const map={"openSessionRecovery()":openSessionRecovery,"openPermissionSettings()":openPermissionSettings,"renameDirector()":renameDirector,"reset()":reset};
+    const f=map[fn];
+    if(typeof f==="function")f();
+  }
+
   async function openSessionRecovery(){
     const el=document.getElementById("dcRecoverModal");
     if(el)el.remove();
@@ -1417,6 +1492,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration};
 })();
 
