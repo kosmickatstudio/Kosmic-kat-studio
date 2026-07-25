@@ -61,9 +61,11 @@ function renderKosmicEngineModule(el){
           <button class="btn btn-ghost btn-xs" onclick="KosmicEngine.toggleEngineMenu(event)" title="More actions">⋯</button>
         </div>
       </div>
+      <div id="dcTabs" style="display:flex;border-bottom:1px solid var(--border)"></div>
       <div id="dcTaskPanel"></div>
       <div class="ig-chat-thread" id="dcThread"></div>
-      <div style="position:relative;background:var(--glass);backdrop-filter:blur(18px);border-top:1.5px solid var(--glass-brd);padding:12px 14px;display:flex;gap:10px;align-items:flex-end">
+      <div id="dcNotebook" style="display:none;overflow-y:auto;max-height:60vh"></div>
+      <div id="dcInputBar" style="position:relative;background:var(--glass);backdrop-filter:blur(18px);border-top:1.5px solid var(--glass-brd);padding:12px 14px;display:flex;gap:10px;align-items:flex-end">
         <textarea class="ig-input-textarea-v2" id="dcInput" placeholder="Type your reply…" rows="1" style="flex:1;min-height:38px;background:var(--surface);border:1.5px solid var(--border);border-radius:16px;padding:9px 14px" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();KosmicEngine.send();}"></textarea>
         <button class="ig-send-btn" onclick="KosmicEngine.send()">➤</button>
       </div>
@@ -75,6 +77,9 @@ function renderKosmicEngineModule(el){
   // this one's.
   KosmicEngine.enterProject(S.kosmicEngineProjectId);
   KosmicEngine.renderTaskPanel();
+  // Paints the tab bar and applies whichever tab was last active. Must run
+  // after innerHTML above, since it targets nodes that only exist now.
+  KosmicEngine.setEngineTab(KosmicEngine.currentTab());
 }
 
 // ── KOSMIC ENGINE ENTRY GATE ── Reuses the exact Project card format and
@@ -135,8 +140,18 @@ const KosmicEngine=(function(){
     // never be able to do that.
     try{ renderTaskPanel(); }
     catch(err){ console.warn("Task panel render failed (non-blocking):",err); }
+    // Notebook only repaints while it is the visible tab — it renders every
+    // generated image in the production, so refreshing it on every save while
+    // hidden would be pure waste during a long run. Guarded for the same
+    // reason as above: save() is load-bearing and runs mid-pipeline.
+    try{ if(_engineTab==="notebook")renderNotebook(); }
+    catch(err){ console.warn("Notebook render failed (non-blocking):",err); }
   }
   let _cloudSyncTimer=null;
+  // Declared up here rather than beside renderNotebook: save() reads it, and
+  // a `let` further down would sit in the temporal dead zone if anything is
+  // ever added to this IIFE's top-level body that calls save() during load.
+  let _engineTab="chat";
   function deviceId(){
     let devId=localStorage.getItem("kk_device_id");
     if(!devId){devId="dev_"+Date.now()+"_"+Math.random().toString(36).slice(2,8);localStorage.setItem("kk_device_id",devId);}
@@ -899,6 +914,13 @@ const KosmicEngine=(function(){
       return `<div class="ig-bubble-assistant">${m.content}${extra}</div>`;
     }).join('');
     thread.scrollTop=thread.scrollHeight;
+    // enterProject() is async and repaints via renderThread() on every one of
+    // its several exit paths. Without this, opening the module while the
+    // Notebook tab was active would leave it showing the pre-load empty state
+    // until the next unrelated event. Cheap no-op while the Chat tab is up.
+    if(_engineTab==="notebook"){
+      try{ renderNotebook(); }catch(err){ console.warn("Notebook render failed (non-blocking):",err); }
+    }
   }
 
   // ── STRUCTURED INTAKE Q&A ───────────────────────────────────────────
@@ -1075,6 +1097,107 @@ const KosmicEngine=(function(){
   // silently overflowed and the Restore button was simply not reachable.
   // Collapsing to a menu also means future actions cost no header width at
   // all, rather than pushing the next one off-screen again.
+  // ── NOTEBOOK ────────────────────────────────────────────────────────
+  // A structured document view of what the production has actually produced,
+  // as opposed to the chat log's chronological narration. The chat answers
+  // "what happened"; the Notebook answers "what do I have". Reads straight
+  // off the production record rather than off chat messages, so it stays
+  // correct even after a session restore, a New Chat, or a resumed
+  // production where the narration no longer exists.
+  function setEngineTab(tab){
+    _engineTab=tab==="notebook"?"notebook":"chat";
+    const chat=document.getElementById("dcThread");
+    const nb=document.getElementById("dcNotebook");
+    const bar=document.getElementById("dcInputBar");
+    const tabs=document.getElementById("dcTabs");
+    if(chat)chat.style.display=_engineTab==="chat"?"":"none";
+    if(nb)nb.style.display=_engineTab==="notebook"?"":"none";
+    // The input bar is meaningless on the Notebook — there is nothing to
+    // reply to there — and on a phone it costs real vertical space.
+    if(bar)bar.style.display=_engineTab==="chat"?"":"none";
+    if(tabs)tabs.innerHTML=engineTabsHTML();
+    if(_engineTab==="notebook")renderNotebook();
+    else renderThread();
+  }
+  function engineTabsHTML(){
+    const mk=(id,label)=>`<button onclick="KosmicEngine.setEngineTab('${id}')" style="flex:1;padding:8px 4px;border:none;background:none;cursor:pointer;font-size:11.5px;font-weight:${_engineTab===id?'800':'600'};color:${_engineTab===id?'var(--violet)':'var(--textm)'};border-bottom:2px solid ${_engineTab===id?'var(--violet)':'transparent'}">${label}</button>`;
+    return mk("chat","Chat")+mk("notebook","Notebook");
+  }
+  function nbSection(n,title,sub,body){
+    return `<div style="margin-bottom:22px">
+      <div style="display:flex;align-items:baseline;gap:7px;margin-bottom:2px">
+        <span style="font-size:11px;font-weight:800;color:var(--vs)">#${n}</span>
+        <span style="font-family:'Cinzel',serif;font-size:14px;font-weight:700;color:var(--text)">${esc(title)}</span>
+      </div>
+      ${sub?`<div style="font-size:10.5px;color:var(--textm);margin-bottom:8px">${esc(sub)}</div>`:'<div style="height:6px"></div>'}
+      ${body}
+    </div>`;
+  }
+  function nbImage(url,caption,meta){
+    return `<div style="margin-bottom:10px">
+      <img src="${esc(url)}" loading="lazy" onclick="KosmicEngine.viewGeneration('${esc(url)}','image')" style="width:100%;border-radius:12px;border:1px solid var(--glass-brd);cursor:pointer;display:block">
+      ${caption?`<div style="font-size:11.5px;font-weight:600;color:var(--text);margin-top:5px">${esc(caption)}</div>`:''}
+      ${meta?`<div style="font-size:10px;color:var(--textm);margin-top:1px">${esc(meta)}</div>`:''}
+    </div>`;
+  }
+  function renderNotebook(){
+    const el=document.getElementById("dcNotebook");
+    if(!el)return;
+    const p=(S.productions||[]).find(x=>x.id===S.directorChat.productionId);
+    if(!p){
+      el.innerHTML=`<div style="padding:34px 20px;text-align:center">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">Nothing produced yet</div>
+        <div style="font-size:11.5px;color:var(--textm);line-height:1.5">Start a production in the Chat tab. Everything Kosmic Engine generates — character sheets, locations, storyboards and scenes — collects here as a document you can scroll.</div>
+      </div>`;
+      return;
+    }
+    let n=0;
+    const parts=[];
+    const sheets=(p.characterSheets||[]).filter(s=>s&&s.sheetUrl);
+    if(sheets.length){
+      n++;
+      parts.push(nbSection(n,"Character Sheets",`${sheets.length} sheet${sheets.length!==1?'s':''}`,
+        sheets.map(s=>nbImage(s.sheetUrl,s.name||"Character",s.tier?`${s.tier}${s.desc?" · "+String(s.desc).slice(0,90):""}`:"")).join('')));
+    }
+    const locs=(p.locationBible||[]).filter(l=>l&&l.url);
+    if(locs.length){
+      n++;
+      parts.push(nbSection(n,"Location Bible",`${locs.length} location${locs.length!==1?'s':''}`,
+        locs.map(l=>nbImage(l.url,l.name||"Location",l.desc?String(l.desc).slice(0,110):"")).join('')));
+    }
+    (p.episodes||[]).forEach(e=>{
+      const frames=(e.storyboard||[]).filter(s=>s&&s.url);
+      const shots=(e.shots||[]).filter(s=>s&&s.videoUrl);
+      const hasScript=e.script&&e.scriptStatus!=="pending";
+      if(!frames.length&&!shots.length&&!hasScript)return; // nothing produced for this episode yet
+      n++;
+      const bits=[];
+      if(hasScript){
+        bits.push(`<details style="margin-bottom:10px">
+          <summary style="font-size:11.5px;font-weight:700;color:var(--violet);cursor:pointer">Script</summary>
+          <div style="font-size:11.5px;color:var(--text);line-height:1.55;white-space:pre-wrap;background:var(--glass);border:1px solid var(--glass-brd);border-radius:10px;padding:10px 12px;margin-top:6px">${esc(e.script)}</div>
+        </details>`);
+      }
+      if(frames.length){
+        bits.push(`<div style="font-size:10px;font-weight:800;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em;margin:8px 0 6px">Storyboard${e.storyboardStatus==="partial"?" (partial)":""}</div>`);
+        bits.push(frames.map((s,i)=>nbImage(s.url,`Shot ${i+1}`,"")).join(''));
+      }
+      if(shots.length){
+        bits.push(`<div style="font-size:10px;font-weight:800;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em;margin:8px 0 6px">Scene${e.sceneStatus==="partial"?" (partial)":""}</div>`);
+        bits.push(shots.map(s=>`<video src="${esc(s.videoUrl)}" controls playsinline preload="metadata" style="width:100%;border-radius:12px;border:1px solid var(--glass-brd);margin-bottom:10px;display:block"></video>`).join(''));
+      }
+      parts.push(nbSection(n,`Episode ${e.index}`,"",bits.join('')));
+    });
+    if(!parts.length){
+      el.innerHTML=`<div style="padding:34px 20px;text-align:center">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">Production started</div>
+        <div style="font-size:11.5px;color:var(--textm);line-height:1.5">Nothing has finished generating yet. Completed character sheets, locations, storyboards and scenes will appear here.</div>
+      </div>`;
+      return;
+    }
+    el.innerHTML=`<div style="padding:16px 16px 24px">${parts.join('')}</div>`;
+  }
+
   // Approval decisions were being made against 70px thumbnails — too small to
   // actually judge a character sheet or storyboard frame on a phone, which is
   // the entire point of an approval gate. Cards now show usable previews and
@@ -1492,6 +1615,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,currentTab:()=>_engineTab};
 })();
 
