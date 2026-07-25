@@ -58,6 +58,7 @@ function renderKosmicEngineModule(el){
           <span style="font-size:10px;color:var(--textm)">· ${scopedProject.name}${S.directorChat.productionId?' · production in progress':''}</span>
         </div>
         <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-xs" onclick="KosmicEngine.openPermissionSettings()" title="When should Kosmic Engine check with you before spending credits?">⚡ Permissions</button>
           <button class="btn btn-ghost btn-xs" onclick="switchKosmicEngineProject()" title="Switch to a different Project">⇄ Switch Project</button>
           <button class="btn btn-ghost btn-xs" onclick="KosmicEngine.reset()">↻ New Chat</button>
         </div>
@@ -516,14 +517,133 @@ const KosmicEngine=(function(){
   // explicitly to avoid silently calling the wrong one.
   function save2Productions(){ window.save("productions"); }
 
+  // ── GENERATION PERMISSION GATE ──────────────────────────────────────
+  // Kosmic Engine runs the whole pipeline autonomously against the user's
+  // own paid API keys. Left alone, a single "go" can queue every character
+  // sheet, every location plate, every storyboard and every scene video
+  // without another confirmation. This lets the user require a checkpoint
+  // before the steps that actually cost money.
+  //
+  // Only these types call a paid image/video endpoint. Everything else
+  // (plan, model_select, char_plan, loc_plan, script) hits the text brain,
+  // and the *_review types generate nothing at all — gating those would be
+  // pure friction for no saving.
+  const GENERATING_TASK_TYPES={charsheet_single:"image",charsheet_side:"image",loc_img:"image",storyboard:"image",scene:"video"};
+  function permissionMode(){
+    const m=gs("ke_permission_mode","always_allow");
+    return ["always_allow","ask_videos","always_ask"].includes(m)?m:"always_allow";
+  }
+  function needsPermission(t){
+    if(!t||t.permitted)return false; // already granted — never re-ask, including on retry
+    const kind=GENERATING_TASK_TYPES[t.type];
+    if(!kind)return false;
+    const mode=permissionMode();
+    if(mode==="always_ask")return true;
+    if(mode==="ask_videos")return kind==="video";
+    return false;
+  }
+  function describeBatch(batch){
+    const vids=batch.filter(t=>GENERATING_TASK_TYPES[t.type]==="video");
+    const imgs=batch.filter(t=>GENERATING_TASK_TYPES[t.type]==="image");
+    const parts=[];
+    // Deliberately describes WHAT will run rather than quoting a dollar
+    // figure. Storyboard and scene tasks each fan out into an unknown number
+    // of shots decided downstream, so any number shown here would be a
+    // guess — and a wrong cost estimate is worse than none on a screen whose
+    // entire purpose is spending confidence.
+    if(vids.length)parts.push(`${vids.length} video generation${vids.length!==1?'s':''}`);
+    if(imgs.length)parts.push(`${imgs.length} image generation${imgs.length!==1?'s':''}`);
+    return parts.join(" + ")||"generation";
+  }
+  function requestPermission(batch){
+    S.directorChat.awaitingPermissionIds=batch.map(t=>t.id);
+    save();
+    push("agent",`⏸ Ready to run ${describeBatch(batch)} — this spends real credits on your API keys.\n\n${batch.map(t=>`• ${t.label}`).join("\n")}`,{permission:true});
+  }
+  function allowGeneration(){
+    const ids=S.directorChat.awaitingPermissionIds||[];
+    if(!ids.length)return;
+    ids.forEach(id=>{const t=findTask(id);if(t)t.permitted=true;});
+    S.directorChat.awaitingPermissionIds=null;
+    S.directorChat.permissionPaused=false;
+    save();
+    dispatchTasks();
+  }
+  function declineGeneration(){
+    if(!S.directorChat.awaitingPermissionIds)return;
+    // Deliberately does NOT skip the task or mark it done. Every generating
+    // task has dependents that read its output, so "skip" would leave the
+    // pipeline structurally broken in a way that only surfaces later, deep
+    // in an unrelated step. Pausing keeps the graph intact and fully
+    // resumable.
+    S.directorChat.awaitingPermissionIds=null;
+    S.directorChat.permissionPaused=true;
+    save();
+    push("agent","Paused — nothing else will run until you resume. Nothing was lost; the production picks up exactly where it stopped.",{resumable:true});
+  }
+  function resumeProduction(){
+    if(!S.directorChat.permissionPaused)return;
+    S.directorChat.permissionPaused=false;
+    save();
+    dispatchTasks();
+  }
+  function setPermissionMode(mode){
+    if(!["always_allow","ask_videos","always_ask"].includes(mode))return;
+    saveSetting("ke_permission_mode",mode);
+    closePermissionSettings();
+    const label={always_allow:"run freely",ask_videos:"ask before videos",always_ask:"ask before every generation"}[mode];
+    toast(`Kosmic Engine will ${label}`,"success");
+    renderThread();
+  }
+  function closePermissionSettings(){
+    const el=document.getElementById("dcPermModal");
+    if(el)el.remove();
+  }
+  function openPermissionSettings(){
+    closePermissionSettings();
+    const cur=permissionMode();
+    const opts=[
+      {v:"always_allow",t:"Always allow",d:"Kosmic Engine generates freely without asking."},
+      {v:"ask_videos",t:"Ask before videos",d:"Asks before generating video — by far the most expensive step. Images and text run freely."},
+      {v:"always_ask",t:"Always ask",d:"Asks before every image and video generation."},
+    ];
+    const overlay=document.createElement("div");
+    overlay.className="modal-overlay show";
+    overlay.id="dcPermModal";
+    overlay.onclick=(e)=>{if(e.target===overlay)closePermissionSettings();};
+    overlay.innerHTML=`<div class="modal" style="width:420px">
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:4px">Generation permissions</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:16px">Kosmic Engine runs the whole pipeline on your own API keys. Choose when it should stop and check with you first.</div>
+      ${opts.map(o=>`<div onclick="KosmicEngine.setPermissionMode('${o.v}')" style="display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border-radius:12px;cursor:pointer;margin-bottom:6px;border:1.5px solid ${cur===o.v?'var(--vs)':'var(--border)'};background:${cur===o.v?'var(--lav)':'transparent'}">
+        <div style="width:16px;height:16px;border-radius:50%;border:1.5px solid ${cur===o.v?'var(--violet)':'var(--border)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">${cur===o.v?'<div style="width:8px;height:8px;border-radius:50%;background:var(--violet)"></div>':''}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700;color:${cur===o.v?'var(--violet)':'var(--text)'}">${o.t}</div>
+          <div style="font-size:11px;color:var(--textm);line-height:1.4;margin-top:2px">${o.d}</div>
+        </div>
+      </div>`).join('')}
+      <div style="text-align:right;margin-top:14px"><button class="btn btn-ghost" onclick="KosmicEngine.closePermissionSettings()">Close</button></div>
+    </div>`;
+    document.body.appendChild(overlay);
+  }
+
   async function dispatchTasks(){
     const tasks=S.directorChat.tasks;
-    if(!tasks||S.directorChat.awaitingApprovalTaskId)return; // don't dispatch further while a card is waiting on the user
+    // Extends the existing "don't dispatch while waiting on the user" guard
+    // rather than adding a parallel mechanism — awaiting approval, awaiting
+    // permission and paused are all the same class of stop condition, and
+    // splitting them across different checks is how re-entrancy bugs get in.
+    if(!tasks||S.directorChat.awaitingApprovalTaskId||S.directorChat.awaitingPermissionIds||S.directorChat.permissionPaused)return;
     const ready=tasks.filter(t=>t.status==="pending"&&depsSatisfied(t));
     if(!ready.length)return;
     const parallelReady=ready.filter(t=>t.parallel);
     const sequentialReady=ready.filter(t=>!t.parallel);
     if(parallelReady.length){
+      // Asked once for the whole batch, not once per task: character sheets
+      // and location plates fan out to one task per character/location, so
+      // per-task prompts would mean 5+ identical dialogs back to back for a
+      // single logical step.
+      const gated=parallelReady.filter(needsPermission);
+      if(gated.length){requestPermission(gated);return;}
       parallelReady.forEach(t=>t.status="running");
       save();
       await Promise.allSettled(parallelReady.map(async t=>{
@@ -548,6 +668,7 @@ const KosmicEngine=(function(){
     }
     if(sequentialReady.length){
       const t=sequentialReady[0];
+      if(needsPermission(t)){requestPermission([t]);return;}
       t.status="running";
       save();
       if(!t.requiresApproval&&t.type!=="plan")push("agent",`⏳ ${t.label}…`);
@@ -709,6 +830,20 @@ const KosmicEngine=(function(){
       // production has actually started, this card's button would act on a
       // stage that no longer exists, so it stops being offered rather than
       // sitting there looking actionable.
+      // Same staleness reasoning as the Retry button above: these only stay
+      // actionable while the state they act on is still live, so an old card
+      // can't fire an action against a production that already moved on.
+      if(m.permission&&S.directorChat.awaitingPermissionIds&&S.directorChat.awaitingPermissionIds.length){
+        extra+=`<div class="dc-approval-card">
+          <div class="dc-approval-actions">
+            <button class="btn btn-primary btn-xs" onclick="KosmicEngine.allowGeneration()">▶ Generate</button>
+            <button class="btn btn-outline btn-xs" onclick="KosmicEngine.declineGeneration()">⏸ Not now</button>
+          </div>
+        </div>`;
+      }
+      if(m.resumable&&S.directorChat.permissionPaused){
+        extra+=`<div style="margin-top:8px"><button class="btn btn-primary btn-xs" onclick="KosmicEngine.resumeProduction()">▶ Resume production</button></div>`;
+      }
       if(m.questions&&S.directorChat.intakeStage==="confirm_plan"){
         const total=intakeQuestions().length;
         const done=answeredCount();
@@ -879,7 +1014,7 @@ const KosmicEngine=(function(){
 
 
   function reset(){
-    S.directorChat={active:true,productionId:null,directorName:S.directorChat.directorName||"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief",qaAnswers:{}};
+    S.directorChat={active:true,productionId:null,directorName:S.directorChat.directorName||"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief",qaAnswers:{},awaitingPermissionIds:null,permissionPaused:false};
     save();
     renderThread();
     push("agent",`Hey, I'm your ${S.directorChat.directorName}. Tell me the story you want to make — genre, setting, what happens. I'll plan it, write it, and build the character sheet, storyboard, and scenes from there. The Character Sheet's 6 views now generate in parallel — you approve or reject at each checkpoint.`);
@@ -1071,7 +1206,7 @@ const KosmicEngine=(function(){
       toast("This production already has episode work started — Auto-Pilot only bridges productions where no episode has begun yet","error");
       return;
     }
-    S.directorChat={active:true,productionId:prodId,directorName:S.directorChat.directorName||"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:{episodeCount:p.episodes.length},intakeStage:"running"};
+    S.directorChat={active:true,productionId:prodId,directorName:S.directorChat.directorName||"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:{episodeCount:p.episodes.length},intakeStage:"running",qaAnswers:{},awaitingPermissionIds:null,permissionPaused:false};
     const tasks=buildTaskGraph(p.episodes.length);
     // plan/model_select created the production and picked models in the
     // normal flow — both already happened via the manual wizard, so mark
@@ -1096,6 +1231,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction};
 })();
 
