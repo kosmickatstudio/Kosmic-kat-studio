@@ -426,6 +426,8 @@ const KosmicEngine=(function(){
         const reasonMatch=reply.match(/REASON:\s*(.+)/);
         if(imgMatch&&VALID_IMAGE.includes(imgMatch[1]))p.imageModel=imgMatch[1];
         if(vidMatch&&VALID_VIDEO.includes(vidMatch[1]))p.videoModel=vidMatch[1];
+        const clamped=clampQualityToModel(p);
+        if(clamped)push("agent",`Note: ${clamped.was} isn't available on the chosen video model — using ${clamped.now}.`);
         save2Productions();
         return{summary:`🧠 Models chosen — Image: ${p.imageModel.includes('nano-banana')?'Nano Banana Pro':'Seedream 5.0 Pro'}, Video: ${p.videoModel.includes('/fast/')?'Seedance 2.0 Fast':'Seedance 2.0 Standard'}.${reasonMatch?' '+reasonMatch[1].trim():''}`};
       }catch(err){
@@ -480,7 +482,7 @@ const KosmicEngine=(function(){
       // model has no reference endpoint — the description already written into
       // the brief carries the likeness in that case, so this degrades rather
       // than failing.
-      const result=await genSheetWithRefs(p,prompt,"1:1");
+      const result=await genSheetWithRefs(p,prompt,p.aspectRatio||"1:1");
       p.characterSheets=p.characterSheets||[];
       // Model recorded at generation time. p.imageModel is user-settable and
       // model_select can change it mid-production, so reading it later would
@@ -498,10 +500,13 @@ const KosmicEngine=(function(){
       const lineup=sides.map(c=>`${c.name} (${c.desc})`).join("; ");
       const sideFix=p.charSheetFeedback?` IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.charSheetFeedback}`:"";
       const prompt=`Character lineup reference sheet, ${sides.length} distinct background/side characters standing side by side for comparison, each clearly separated: ${lineup}. Clean plain background, consistent lighting, simple standing poses, professional character design reference — each character visually distinct from the others.${sideFix}`;
+      // A side-character LINEUP is inherently wide, so it keeps 16:9 unless the
+      // production is vertical, where a wide plate would letterbox badly.
+      const sideRatio=(p.aspectRatio==="9:16")?"9:16":"16:9";
       let result;
-      if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(prompt,"16:9",p.imageModel);
-      else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,"16:9");
-      else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/nano-banana-pro","16:9",false);
+      if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(prompt,sideRatio,p.imageModel);
+      else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,sideRatio);
+      else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/nano-banana-pro",sideRatio,false);
       p.characterSheets=p.characterSheets||[];
       p.characterSheets.push({tier:"SIDE",name:sides.map(c=>c.name).join(", "),desc:lineup,sheetUrl:result.url,model:p.imageModel||null});
       save2Productions();
@@ -572,9 +577,12 @@ const KosmicEngine=(function(){
       const locFix=p.locationFeedback?`. IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.locationFeedback}`:"";
       const prompt=`${loc.desc}, wide establishing shot, cinematic environment reference, no people, detailed background art${locFix}`;
       let result;
-      if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(prompt,"16:9",p.imageModel);
-      else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,"16:9");
-      else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/flux/dev","16:9",false);
+      // Follows the production's chosen aspect ratio instead of a hardcoded
+      // 16:9 — a vertical production needs vertical establishing plates too.
+      const locRatio=p.aspectRatio||"16:9";
+      if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(prompt,locRatio,p.imageModel);
+      else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,locRatio);
+      else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/flux/dev",locRatio,false);
       loc.url=result.url;
       loc.model=p.imageModel||null;
       save2Productions();
@@ -1144,6 +1152,24 @@ const KosmicEngine=(function(){
     return genViaFal(prompt,"",p.imageModel||"fal-ai/nano-banana-pro",ratio,false);
   }
 
+  // A chosen resolution can be impossible on the chosen model: the default
+  // seedance-2.0/fast tier tops out at 720p while Standard reaches 4k, and
+  // model_select can switch between them AFTER intake. So this is applied once
+  // the model is finally known rather than at answer time.
+  function clampQualityToModel(p){
+    if(!p||!p.videoModel||!p.quality)return null;
+    const allowed=(typeof VIDEO_MODEL_RESOLUTIONS!=="undefined"&&VIDEO_MODEL_RESOLUTIONS[p.videoModel])||null;
+    if(!allowed||allowed.includes(p.quality))return null;
+    const order=["480p","720p","1080p","4k"];
+    const want=order.indexOf(p.quality);
+    // Steps DOWN to the best supported option, never up — silently upgrading
+    // resolution would spend more of the user's money than they agreed to.
+    const best=allowed.filter(r=>order.indexOf(r)<=want).sort((x,y)=>order.indexOf(y)-order.indexOf(x))[0]||allowed[0];
+    const was=p.quality;
+    p.quality=best;
+    return {was,now:best};
+  }
+
   // ── REFERENCE IMAGES ────────────────────────────────────────────────
   // Two genuinely different jobs, both done, because either alone is a
   // half-feature:
@@ -1203,7 +1229,13 @@ const KosmicEngine=(function(){
           pendingRefs().push(canvas.toDataURL("image/jpeg",0.78));
           save();
           renderRefStrip();
-          toast("Reference added — I'll look at it when you send","success");
+          // Warned at UPLOAD time, not after sending. Groq's GPT-OSS models and
+          // DeepSeek are text-only, so on those brains the image can still be
+          // passed to a reference-capable image model but can never be READ.
+          // Finding that out only after committing a brief is the wrong moment.
+          const brain=gs("ai_model","claude");
+          const canSee=(typeof isPdBrainVisionCapable==="function")?isPdBrainVisionCapable(brain):["claude","openai","gemini"].includes(brain);
+          toast(canSee?"Reference added — I'll look at it when you send":"Reference added, but your AI Brain can't read images — switch to Claude, Gemini or OpenAI to have it described","success");
         };
         img.src=e.target.result;
       };
@@ -1260,6 +1292,15 @@ const KosmicEngine=(function(){
        hint:`${INTAKE_LIMITS.duration.min}–${INTAKE_LIMITS.duration.max} seconds`,
        options:[{v:"8",l:"8 seconds"},{v:"15",l:"15 seconds"},{v:"30",l:"30 seconds"},{v:"60",l:"60 seconds"}],
        value:a.duration!==undefined?a.duration:String(d.totalDurationRounded||8)},
+      {id:"quality",label:"Video resolution?",kind:"enum",
+       hint:"1080p needs the Standard video tier",
+       // 480p added, and 1080p offered honestly rather than hidden: the
+       // DEFAULT video model (seedance-2.0/fast) tops out at 720p per
+       // VIDEO_MODEL_RESOLUTIONS, so 1080p is only reachable on the Standard
+       // tier. It is clamped once the model is actually known — see
+       // clampQualityToModel().
+       options:[{v:"480p",l:"480p — cheapest"},{v:"720p",l:"720p — balanced"},{v:"1080p",l:"1080p — best"}],
+       value:a.quality!==undefined?a.quality:(d.quality||"720p")},
       {id:"aspectRatio",label:"Aspect ratio?",kind:"enum",
        // Only ratios supported by EVERY video model this pipeline can pick
        // (verified against PD_ASPECT_RATIOS across the Seedance and Kling
@@ -1380,12 +1421,15 @@ const KosmicEngine=(function(){
     const ratio=validRatios.includes(a.aspectRatio)?a.aspectRatio:(d.aspectRatio||"16:9");
     const validCont=["both","narrative","visual","none"];
     const cont=validCont.includes(a.continuity)?a.continuity:(d.continuity||"both");
+    const validQual=["480p","720p","1080p"];
+    const qual=validQual.includes(a.quality)?a.quality:(d.quality||"720p");
 
     d.episodeCount=eps;
     d.totalDurationRequested=dur;
     d.totalDurationRounded=dur;
     d.aspectRatio=ratio;
     d.continuity=cont;
+    d.quality=qual;
 
     // Advance the stage BEFORE any await. Submit is async (dispatchTasks is
     // awaited below), so leaving the stage unchanged across that boundary
@@ -1396,7 +1440,7 @@ const KosmicEngine=(function(){
     closeIntakeQuestions();
 
     const contLabel={both:"narrative + visual",narrative:"narrative only",visual:"visual only",none:"none"}[cont];
-    push("agent",`Locked in:\n• Episodes → ${eps}\n• Total length → ${dur}s\n• Aspect ratio → ${ratio}\n• Continuity → ${contLabel}\n\nStarting now.`);
+    push("agent",`Locked in:\n• Episodes → ${eps}\n• Total length → ${dur}s\n• Resolution → ${qual}\n• Aspect ratio → ${ratio}\n• Continuity → ${contLabel}\n\nStarting now.`);
 
     S.directorChat.tasks=buildTaskGraph(eps);
     save();
