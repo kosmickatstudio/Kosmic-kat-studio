@@ -71,18 +71,11 @@ function renderKosmicEngineModule(el){
       </div>
     </div>
   `;
-  if(!S.directorChat.messages.length||S.directorChat.tasks===undefined){
-    (async()=>{
-      const foundCloudSession=await KosmicEngine.loadFromCloud();
-      if(!foundCloudSession)KosmicEngine.reset();
-    })();
-  } else {
-    KosmicEngine.renderThread();
-  }
-  // Explicit initial paint: the two branches above only guarantee a task-panel
-  // render via save()/push() side effects, which don't fire when an existing
-  // session is restored with no new message. Without this, reopening a
-  // mid-production session would show an empty panel until the next event.
+  // Session loading is entirely enterProject's job now — the old check here
+  // ("are there any messages?") had no notion of which project a session
+  // belonged to, so a session from another project rendered as if it were
+  // this one's.
+  KosmicEngine.enterProject(S.kosmicEngineProjectId);
   KosmicEngine.renderTaskPanel();
 }
 
@@ -141,21 +134,33 @@ const KosmicEngine=(function(){
     catch(err){ console.warn("Task panel render failed (non-blocking):",err); }
   }
   let _cloudSyncTimer=null;
-  function chatDocId(){
-    // Scope the cloud doc per user — a single global doc would mean every
-    // visitor to the site shares (and overwrites) one chat session.
-    if(S.user&&S.user.uid)return "kosmicEngineChat_"+S.user.uid;
+  function deviceId(){
     let devId=localStorage.getItem("kk_device_id");
     if(!devId){devId="dev_"+Date.now()+"_"+Math.random().toString(36).slice(2,8);localStorage.setItem("kk_device_id",devId);}
-    return "kosmicEngineChat_"+devId;
+    return devId;
+  }
+  // Scoped per user AND per project. Per-user alone meant every project in
+  // an account shared one chat document, so switching projects kept the
+  // previous project's entire conversation, task graph and in-flight
+  // production — the switch only changed the header label.
+  function chatDocIdFor(projectId){
+    const base=(S.user&&S.user.uid)?S.user.uid:deviceId();
+    return "kosmicEngineChat_"+base+"_"+(projectId||"noproject");
   }
   async function syncToCloud(){
-    try{ await fbDB.collection("public").doc(chatDocId()).set({chat:S.directorChat,updatedAt:Date.now()}); }
+    try{
+      // Deliberately keyed on the SESSION's own projectId, not the currently
+      // selected one. syncToCloud is debounced ~1200ms, so a fast project
+      // switch can fire this after the selection already moved — reading the
+      // live selection here would write the outgoing project's conversation
+      // into the incoming project's document.
+      await fbDB.collection("public").doc(chatDocIdFor(S.directorChat.projectId)).set({chat:S.directorChat,updatedAt:Date.now()});
+    }
     catch(err){ console.warn("Kosmic Engine cloud sync failed — kept locally only:",err.message); }
   }
   async function loadFromCloud(){
     try{
-      const doc=await fbDB.collection("public").doc(chatDocId()).get();
+      const doc=await fbDB.collection("public").doc(chatDocIdFor(S.kosmicEngineProjectId)).get();
       if(doc.exists&&doc.data().chat&&doc.data().chat.messages&&doc.data().chat.messages.length){
         clearTimeout(_cloudSyncTimer); // don't let a pending local sync overwrite what we just loaded
         S.directorChat=doc.data().chat;
@@ -1013,8 +1018,38 @@ const KosmicEngine=(function(){
   }
 
 
-  function reset(){
-    S.directorChat={active:true,productionId:null,directorName:S.directorChat.directorName||"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief",qaAnswers:{},awaitingPermissionIds:null,permissionPaused:false};
+  // Single owner of "which session should be on screen for this project".
+  // Previously the module-entry logic only asked "are there any messages?",
+  // which is why a session belonging to a different project rendered happily
+  // after a switch.
+  async function enterProject(projectId){
+    const s=S.directorChat||{};
+    const hasContent=!!(s.messages&&s.messages.length);
+    // Already the right session — paint it.
+    if(s.projectId===projectId&&hasContent){renderThread();renderTaskPanel();return;}
+    // Legacy session saved before per-project scoping existed. Adopt it into
+    // whichever project is being opened rather than discarding it — silently
+    // eating someone's in-progress conversation on update would be worse
+    // than attributing it to the project they opened next.
+    if(!s.projectId&&hasContent){
+      S.directorChat.projectId=projectId;
+      save();
+      renderThread();renderTaskPanel();
+      return;
+    }
+    // Different project (or nothing loaded) — pull that project's own doc.
+    const found=await loadFromCloud();
+    if(found&&S.directorChat.projectId===projectId){renderThread();renderTaskPanel();return;}
+    // Defensive: a doc that loaded but belongs elsewhere must not be shown.
+    reset(projectId);
+    renderTaskPanel();
+  }
+
+  function reset(projectId){
+    // Falls back to the live selection so the existing no-arg callers (the
+    // "New Chat" button) keep working unchanged.
+    const pid=projectId||S.kosmicEngineProjectId||null;
+    S.directorChat={active:true,productionId:null,projectId:pid,directorName:S.directorChat.directorName||"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief",qaAnswers:{},awaitingPermissionIds:null,permissionPaused:false};
     save();
     renderThread();
     push("agent",`Hey, I'm your ${S.directorChat.directorName}. Tell me the story you want to make — genre, setting, what happens. I'll plan it, write it, and build the character sheet, storyboard, and scenes from there. The Character Sheet's 6 views now generate in parallel — you approve or reject at each checkpoint.`);
@@ -1030,7 +1065,13 @@ const KosmicEngine=(function(){
   async function handleUserMessage(text){
     const stage=S.directorChat.intakeStage;
     if(stage==="awaiting_brief"){
-      const projectId=S.activeProject||(S.projects.find(p=>!p.archived)||{}).id;
+      // The project chosen in the Kosmic Engine gate is authoritative here.
+      // This previously read S.activeProject (owned by the Projects module)
+      // and otherwise fell back to "first non-archived project", so the gate
+      // selection never reached production creation at all — work generated
+      // from Kosmic Engine could land in a completely different project than
+      // the one on screen.
+      const projectId=S.kosmicEngineProjectId||S.activeProject||(S.projects.find(p=>!p.archived)||{}).id;
       if(!projectId){ push("agent","You'll need at least one Project first — head to Projects, create one, then come back and tell me the story again."); return; }
       const remembered=await SemanticMemory.recallCharacter(text);
       S.directorChat.draft={
@@ -1206,7 +1247,13 @@ const KosmicEngine=(function(){
       toast("This production already has episode work started — Auto-Pilot only bridges productions where no episode has begun yet","error");
       return;
     }
-    S.directorChat={active:true,productionId:prodId,directorName:S.directorChat.directorName||"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:{episodeCount:p.episodes.length},intakeStage:"running",qaAnswers:{},awaitingPermissionIds:null,permissionPaused:false};
+    // Stamped from the PRODUCTION's own project, not the current selection —
+    // this can be invoked from Production Pipeline while Kosmic Engine is
+    // scoped elsewhere (or nowhere), and an unstamped session would fall
+    // into enterProject's legacy-adoption branch and get misattributed to
+    // whichever project happened to be open next.
+    if(p.projectId)S.kosmicEngineProjectId=p.projectId;
+    S.directorChat={active:true,productionId:prodId,projectId:p.projectId||S.kosmicEngineProjectId||null,directorName:S.directorChat.directorName||"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:{episodeCount:p.episodes.length},intakeStage:"running",qaAnswers:{},awaitingPermissionIds:null,permissionPaused:false};
     const tasks=buildTaskGraph(p.episodes.length);
     // plan/model_select created the production and picked models in the
     // normal flow — both already happened via the manual wizard, so mark
@@ -1231,6 +1278,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject};
 })();
 
