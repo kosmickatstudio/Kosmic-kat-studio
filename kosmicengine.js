@@ -789,7 +789,7 @@ const KosmicEngine=(function(){
           const out=await runTaskWork(t);
           t.status="done";
           t.error=null;
-          if(out&&out.summary)push("agent",out.summary,out.approval?{approval:out.approval}:{});
+          if(out&&out.summary)push("agent",out.summary,out.approval?{approval:out.approval,taskId:t.id}:{taskId:t.id});
         }catch(err){
           t.status="error";
           t.error=err.message;
@@ -809,7 +809,7 @@ const KosmicEngine=(function(){
       if(needsPermission(t)){requestPermission([t]);return;}
       t.status="running";
       save();
-      if(!t.requiresApproval&&t.type!=="plan")push("agent",`⏳ ${t.label}…`);
+      if(!t.requiresApproval&&t.type!=="plan")push("agent",`⏳ ${t.label}…`,{taskId:t.id});
       else if(t.type==="plan")push("agent","📋 Planning your production…");
       try{
         const out=await runTaskWork(t);
@@ -817,13 +817,13 @@ const KosmicEngine=(function(){
           t.status="awaiting_approval";
           S.directorChat.awaitingApprovalTaskId=t.id;
           save();
-          if(out&&out.summary)push("agent",out.summary,{approval:out.approval});
+          if(out&&out.summary)push("agent",out.summary,{approval:out.approval,taskId:t.id});
           // Routed through the exact approve() the user's button calls, so
           // auto-approval and manual approval cannot drift apart in what they
           // actually do (memory writes, stage advancement, re-dispatch).
           const reason=autoApproveReason(t);
           if(reason){
-            push("agent",`✓ Auto-approved — ${reason}.`);
+            push("agent",`✓ Auto-approved — ${reason}.`,{taskId:t.id});
             await approve();
           }
           return; // wait for the user
@@ -831,13 +831,13 @@ const KosmicEngine=(function(){
         t.status="done";
         t.error=null;
         save();
-        if(out&&out.summary)push("agent",out.summary);
+        if(out&&out.summary)push("agent",out.summary,{taskId:t.id});
       }catch(err){
         t.status="error";
         t.error=err.message;
         save();
         const normalized=await normalizeError(err.message,guessProvider(t));
-        push("agent","",{error:normalized,retryable:true,retryTaskIds:[t.id]});
+        push("agent","",{error:normalized,retryable:true,retryTaskIds:[t.id],taskId:t.id});
         return;
       }
       await dispatchTasks();
@@ -948,10 +948,10 @@ const KosmicEngine=(function(){
     }
   }
 
-  function renderThread(){
-    const thread=document.getElementById("dcThread");
-    if(!thread)return;
-    thread.innerHTML=S.directorChat.messages.map((m,i)=>{
+  // Per-message rendering, split out of renderThread so the thread can group
+  // messages into collapsible per-task blocks without duplicating any of the
+  // extra-card logic (approval / error / permission / questions / resume).
+  function renderMessage(m,i){
       if(m.role==="user")return `<div class="ig-bubble-user">${m.content}</div>`;
       let extra="";
       if(m.approval)extra=`<div class="dc-approval-card">
@@ -998,7 +998,60 @@ const KosmicEngine=(function(){
         </div>`;
       }
       return `<div class="ig-bubble-assistant">${m.content}${extra}</div>`;
-    }).join('');
+  }
+
+  // Manual open/closed overrides, keyed by task id. Ephemeral on purpose:
+  // which sections you had folded is a viewing preference, not production
+  // state, and persisting it would sync noise to Firebase on every toggle.
+  const _blockOverride={};
+  function isBlockOpen(taskId,t){
+    if(taskId in _blockOverride)return _blockOverride[taskId];
+    // Default: finished work folds away, anything still live stays open.
+    // Errors stay open too — a collapsed failure is a failure you miss.
+    return !t||t.status!=="done";
+  }
+  function toggleBlock(taskId){
+    const t=findTask(taskId);
+    _blockOverride[taskId]=!isBlockOpen(taskId,t);
+    renderThread();
+  }
+  function renderBlock(b){
+    const inner=b.items.map(([m,i])=>renderMessage(m,i)).join('');
+    if(!b.taskId)return inner;
+    const t=findTask(b.taskId);
+    // A task can genuinely vanish from under its messages — New Chat clears
+    // the graph while the transcript is still on screen, and a restored
+    // session can carry messages whose tasks were never rebuilt. Falling back
+    // to flat rendering keeps that content visible instead of hiding it
+    // behind a header that has nothing to describe it.
+    if(!t)return inner;
+    const open=isBlockOpen(b.taskId,t);
+    const v=taskStatusVisual(t.status);
+    return `<div style="border:1px solid var(--glass-brd);border-radius:12px;margin-bottom:8px;overflow:hidden;background:var(--glass)">
+      <div onclick="KosmicEngine.toggleBlock('${esc(b.taskId)}')" style="display:flex;align-items:center;gap:8px;padding:9px 11px;cursor:pointer">
+        <div style="width:13px;height:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${v.icon}</div>
+        <div style="flex:1;min-width:0;font-size:11.5px;font-weight:${open?'700':'600'};color:${open?'var(--text)':'var(--textm)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.label)}</div>
+        <div style="color:var(--textm);flex-shrink:0;transform:rotate(${open?180:0}deg);display:flex">${pIcon('chevron',12)}</div>
+      </div>
+      ${open?`<div style="padding:0 11px 10px">${inner}</div>`:''}
+    </div>`;
+  }
+  function renderThread(){
+    const thread=document.getElementById("dcThread");
+    if(!thread)return;
+    // Consecutive agent messages sharing a taskId become one collapsible
+    // block. Runs of messages are grouped rather than all messages with the
+    // same id, so a task that reports again later (a retry) reads as a
+    // separate block in the transcript instead of being folded backwards
+    // into the original attempt.
+    const blocks=[];
+    S.directorChat.messages.forEach((m,i)=>{
+      const gid=(m.role!=="user"&&m.taskId)?m.taskId:null;
+      const last=blocks[blocks.length-1];
+      if(gid&&last&&last.taskId===gid){last.items.push([m,i]);return;}
+      blocks.push({taskId:gid,items:[[m,i]]});
+    });
+    thread.innerHTML=blocks.map(renderBlock).join('');
     thread.scrollTop=thread.scrollHeight;
     // enterProject() is async and repaints via renderThread() on every one of
     // its several exit paths. Without this, opening the module while the
@@ -1071,6 +1124,24 @@ const KosmicEngine=(function(){
     save();
     const counter=document.getElementById("dcQaCounter");
     if(counter)counter.textContent=`${answeredCount()} of ${intakeQuestions().length} answered`;
+    // Out-of-range values are clamped on submit. Doing that silently meant a
+    // typed 12 quietly became 10 with no feedback until the summary appeared
+    // afterwards, which reads as the app ignoring the input.
+    const warn=document.getElementById("dcQaWarn_"+id);
+    if(warn){
+      const lim=id==="episodeCount"?INTAKE_LIMITS.episodeCount:id==="duration"?INTAKE_LIMITS.duration:null;
+      const raw=String(value).trim();
+      const n=parseInt(raw,10);
+      if(lim&&raw!==""&&isFinite(n)&&(n<lim.min||n>lim.max)){
+        warn.textContent=`Max is ${lim.max}${lim.min>1?` and min is ${lim.min}`:''} — ${n} will be used as ${Math.min(lim.max,Math.max(lim.min,n))}.`;
+        warn.style.display="block";
+      } else if(lim&&raw!==""&&!isFinite(n)){
+        warn.textContent="That isn't a number — the default will be used.";
+        warn.style.display="block";
+      } else {
+        warn.style.display="none";
+      }
+    }
   }
   function openIntakeQuestions(){
     if(S.directorChat.intakeStage!=="confirm_plan"||!S.directorChat.draft){
@@ -1109,7 +1180,7 @@ const KosmicEngine=(function(){
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${q.kind==="int"?'6px':'0'}">
             ${q.options.map(o=>`<button type="button" class="btn ${cur===o.v?'btn-primary':'btn-outline'} btn-xs" onclick="KosmicEngine.setIntakeAnswer('${esc(q.id)}','${esc(o.v)}')">${esc(o.l)}</button>`).join('')}
           </div>
-          ${q.kind==="int"?`<input class="f-input" style="font-size:12px;padding:7px 10px" inputmode="numeric" placeholder="Or type your own number…" value="${isPreset?'':esc(cur)}" oninput="KosmicEngine.setIntakeAnswerText('${esc(q.id)}',this.value)">`:''}
+          ${q.kind==="int"?`<input class="f-input" style="font-size:12px;padding:7px 10px" inputmode="numeric" placeholder="Or type your own number…" value="${isPreset?'':esc(cur)}" oninput="KosmicEngine.setIntakeAnswerText('${esc(q.id)}',this.value)"><div id="dcQaWarn_${esc(q.id)}" style="font-size:10.5px;color:var(--gold);margin-top:4px;display:none"></div>`:''}
         </div>`;
       }).join('')}
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
@@ -1702,6 +1773,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode};
 })();
 
