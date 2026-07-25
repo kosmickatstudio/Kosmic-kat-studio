@@ -68,9 +68,14 @@ function renderKosmicEngineModule(el){
       <div id="dcTaskPanel"></div>
       <div class="ig-chat-thread" id="dcThread"></div>
       <div id="dcNotebook" style="display:none;overflow-y:auto;max-height:60vh"></div>
-      <div id="dcInputBar" style="position:relative;background:var(--glass);backdrop-filter:blur(18px);border-top:1.5px solid var(--glass-brd);padding:12px 14px;display:flex;gap:10px;align-items:flex-end">
+      <div id="dcInputBar" style="position:relative;background:var(--glass);backdrop-filter:blur(18px);border-top:1.5px solid var(--glass-brd);padding:12px 14px">
+      <div id="dcRefStrip" style="display:none;gap:7px;flex-wrap:wrap;margin-bottom:9px"></div>
+      <div style="display:flex;gap:9px;align-items:flex-end">
+        <input type="file" accept="image/*" multiple id="dcRefFile" style="display:none" onchange="KosmicEngine.handleRefUpload(event)">
+        <button onclick="document.getElementById('dcRefFile').click()" title="Add a reference image" style="width:36px;height:36px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--violet);font-size:19px;line-height:1;cursor:pointer;flex-shrink:0">+</button>
         <textarea class="ig-input-textarea-v2" id="dcInput" placeholder="Type your reply…" rows="1" style="flex:1;min-height:38px;background:var(--surface);border:1.5px solid var(--border);border-radius:16px;padding:9px 14px" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();KosmicEngine.send();}"></textarea>
         <button class="ig-send-btn" onclick="KosmicEngine.send()">➤</button>
+      </div>
       </div>
     </div>
   `;
@@ -83,6 +88,7 @@ function renderKosmicEngineModule(el){
   // Paints the tab bar and applies whichever tab was last active. Must run
   // after innerHTML above, since it targets nodes that only exist now.
   KosmicEngine.setEngineTab(KosmicEngine.currentTab());
+  KosmicEngine.renderRefStrip();
 }
 
 // ── KOSMIC ENGINE ENTRY GATE ── Reuses the exact Project card format and
@@ -175,7 +181,15 @@ const KosmicEngine=(function(){
   async function syncSessionToCloud(session){
     if(!session||!session.projectId)return;
     try{
-      await fbDB.collection("public").doc(chatDocIdFor(session.projectId)).set({chat:session,updatedAt:Date.now()});
+      // Reference images are stripped from the CLOUD copy only. They are
+      // base64 and can run to hundreds of KB each; Firestore documents are
+      // capped at 1MB, so syncing them risks failing the write outright and
+      // taking the entire conversation's sync down with it. They stay in
+      // localStorage, so they survive reloads on this device — the tradeoff is
+      // that a pending (not yet sent) reference doesn't follow you to another
+      // device, which is far better than breaking sync for everything.
+      const cloudCopy={...session,pendingRefs:[]};
+      await fbDB.collection("public").doc(chatDocIdFor(session.projectId)).set({chat:cloudCopy,updatedAt:Date.now()});
     }
     catch(err){ console.warn("Kosmic Engine cloud sync failed — kept locally only:",err.message); }
   }
@@ -381,6 +395,8 @@ const KosmicEngine=(function(){
     const prodId=S.directorChat.productionId;
     if(task.type==="plan"){
       S.pendingProductionDraft=S.directorChat.draft;
+      // Consumed — cleared so they aren't silently reused by the next brief.
+      S.directorChat.pendingRefs=[];
       const {prodId:newId,parsed}=await runPromptwriter(true);
       S.directorChat.productionId=newId;
       S.directorChat.episodeCount=parsed.episodes.length;
@@ -458,10 +474,13 @@ const KosmicEngine=(function(){
       // user is correcting a specific fault, not restating the whole brief.
       const csFix=p.charSheetFeedback?`. IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.charSheetFeedback}`:"";
       const prompt=`${c.desc}, full character reference turnaround sheet, single composite image arranged in a grid showing: front full-body view, back full-body view, 3/4 angle full-body view, and a close-up face portrait — consistent character design across all views, clean plain background, professional character design sheet, only this one character, no other people${csFix}`;
-      let result;
-      if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(prompt,"1:1",p.imageModel);
-      else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,"1:1");
-      else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/nano-banana-pro","1:1",false);
+      // Pass the uploaded reference to the generator itself on models that
+      // accept one, for actual visual likeness rather than likeness by
+      // description alone. Falls through to the plain path when the selected
+      // model has no reference endpoint — the description already written into
+      // the brief carries the likeness in that case, so this degrades rather
+      // than failing.
+      const result=await genSheetWithRefs(p,prompt,"1:1");
       p.characterSheets=p.characterSheets||[];
       // Model recorded at generation time. p.imageModel is user-settable and
       // model_select can change it mid-production, so reading it later would
@@ -1094,7 +1113,123 @@ const KosmicEngine=(function(){
     }
   }
 
-  // ── STRUCTURED INTAKE Q&A ───────────────────────────────────────────
+  // Routes a character-sheet generation through whichever reference-capable
+  // endpoint the selected model actually has. Checked against
+  // IMAGE_MODEL_CAPABILITIES rather than assumed: gemini-3-pro-image takes
+  // inline data URLs directly (maxRef 4), fal-ai/nano-banana-pro needs its
+  // /edit endpoint and HOSTED urls (maxRef 2), and other models have no
+  // reference path at all.
+  async function genSheetWithRefs(p,prompt,ratio){
+    const refs=(p.refImages||[]).filter(Boolean);
+    const cap=(typeof IMAGE_MODEL_CAPABILITIES!=="undefined"&&IMAGE_MODEL_CAPABILITIES[p.imageModel])||{};
+    if(refs.length&&cap.multiRef){
+      try{
+        if(cap.provider==="gemini"){
+          return await genViaGemini(prompt,ratio,p.imageModel,refs.slice(0,cap.maxRef||2));
+        }
+        if(cap.provider==="flux-edit"&&cap.editModel){
+          const apiKey=gs("api_falai","");
+          if(apiKey){
+            const hosted=await uploadRefsToFal(refs.slice(0,cap.maxRef||2).map(d=>({dataUrl:d})),apiKey);
+            if(hosted&&hosted.length)return await genViaFluxEdit(prompt,hosted,ratio,cap.editModel,1);
+          }
+        }
+      }catch(err){
+        // A reference-path failure must never lose the sheet entirely.
+        console.warn("Reference-guided sheet failed, falling back to plain generation:",err.message);
+      }
+    }
+    if(p.imageModel&&p.imageModel.startsWith("gemini-"))return genViaGemini(prompt,ratio,p.imageModel);
+    if(p.imageModel==="gpt-image-2")return genViaOpenAI(prompt,ratio);
+    return genViaFal(prompt,"",p.imageModel||"fal-ai/nano-banana-pro",ratio,false);
+  }
+
+  // ── REFERENCE IMAGES ────────────────────────────────────────────────
+  // Two genuinely different jobs, both done, because either alone is a
+  // half-feature:
+  //   1. READ — the brain looks at the image and writes what it sees into the
+  //      brief. That description then flows through the promptwriter into the
+  //      script, character description, storyboard and scene prompts, so the
+  //      upload influences the whole production regardless of which image
+  //      model is selected.
+  //   2. USE — the image itself is passed to the character-sheet generator on
+  //      models that accept references, for actual visual likeness.
+  // Doing only (2) would be the "fake reference" case: it would silently do
+  // nothing the moment the selected model can't take references.
+  const MAX_REFS=2; // fal nano-banana-pro's edit endpoint caps at 2; gemini allows 4
+  function pendingRefs(){return (S.directorChat.pendingRefs=S.directorChat.pendingRefs||[]);}
+  function renderRefStrip(){
+    const el=document.getElementById("dcRefStrip");
+    if(!el)return;
+    const refs=pendingRefs();
+    if(!refs.length){el.style.display="none";el.innerHTML="";return;}
+    el.style.display="flex";
+    el.innerHTML=refs.map((r,i)=>`<div style="position:relative;flex-shrink:0">
+      <img src="${esc(r)}" style="width:46px;height:46px;object-fit:cover;border-radius:9px;border:1px solid var(--glass-brd)">
+      <button onclick="KosmicEngine.removeRef(${i})" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;border:none;background:var(--red);color:#fff;font-size:11px;line-height:1;cursor:pointer">✕</button>
+    </div>`).join('');
+  }
+  function removeRef(i){
+    const refs=pendingRefs();
+    refs.splice(i,1);
+    save();
+    renderRefStrip();
+  }
+  function handleRefUpload(event){
+    const files=[...(event.target.files||[])];
+    event.target.value="";
+    if(!files.length)return;
+    const refs=pendingRefs();
+    const room=MAX_REFS-refs.length;
+    if(room<=0){toast(`Up to ${MAX_REFS} reference images`,"error");return;}
+    files.slice(0,room).forEach(file=>{
+      if(!file.type.startsWith("image/")){toast("Images only","error");return;}
+      const reader=new FileReader();
+      reader.onload=e=>{
+        const img=new Image();
+        img.onload=()=>{
+          // Downscaled hard on purpose. These are held in the session, which is
+          // serialised to localStorage and (minus these) synced to Firestore —
+          // full-size base64 would be megabytes per image and could push the
+          // whole session past Firestore's 1MB document ceiling, which would
+          // break cloud sync entirely rather than just being wasteful.
+          const maxDim=768;
+          let w=img.width,h=img.height;
+          if(w>h&&w>maxDim){h=Math.round(h*(maxDim/w));w=maxDim;}
+          else if(h>maxDim){w=Math.round(w*(maxDim/h));h=maxDim;}
+          const canvas=document.createElement("canvas");
+          canvas.width=w;canvas.height=h;
+          canvas.getContext("2d").drawImage(img,0,0,w,h);
+          pendingRefs().push(canvas.toDataURL("image/jpeg",0.78));
+          save();
+          renderRefStrip();
+          toast("Reference added — I'll look at it when you send","success");
+        };
+        img.src=e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  // The READ half. Returns a description to fold into the brief, or "" if
+  // vision genuinely couldn't run — never a fabricated description, since a
+  // made-up one would silently steer the entire production.
+  async function describeRefs(refs,brainModel){
+    if(!refs||!refs.length)return "";
+    try{
+      const desc=await callAiVision(
+        refs.map(dataUrl=>({dataUrl})),
+        "Describe the subject of this reference image for use in a film production. Cover: apparent age range and build, hair, face, clothing, and any distinguishing visual features. Be concrete and specific — this will be used to keep the character consistent across generated shots. Do not mention that it is a photograph. 60 words maximum.",
+        "You are a character designer writing a reference description from a supplied image. Describe only what is visibly present.",
+        brainModel
+      );
+      return (desc||"").trim();
+    }catch(err){
+      console.warn("Reference image analysis failed (non-blocking):",err.message);
+      return "";
+    }
+  }
+
+
   // Replaces the undiscoverable "type '3 episodes' or '20 seconds'" regex
   // flow as the PRIMARY way to set up a production. The regex path is
   // deliberately kept working alongside this (some flows/muscle memory rely
@@ -1696,11 +1831,23 @@ const KosmicEngine=(function(){
       // the one on screen.
       const projectId=S.kosmicEngineProjectId||S.activeProject||(S.projects.find(p=>!p.archived)||{}).id;
       if(!projectId){ push("agent","You'll need at least one Project first — head to Projects, create one, then come back and tell me the story again."); return; }
+      // Consume the uploaded references: analyse them BEFORE the draft is
+      // built, so the description is part of the brief the promptwriter sees
+      // rather than something bolted on afterwards.
+      const refs=pendingRefs().slice(0,MAX_REFS);
+      let refDesc="";
+      if(refs.length){
+        push("agent",`Looking at your reference image${refs.length>1?"s":""}…`);
+        refDesc=await describeRefs(refs,gs("ai_model","claude"));
+        if(refDesc)push("agent",`<b>Here's what I see:</b><br>${esc(refDesc)}<br><br>I'll keep the character consistent with this.`);
+        else push("agent","I couldn't read that image (your AI Brain may not support vision) — I'll work from your text, and still pass the image to the character sheet if the image model accepts references.");
+      }
+      const briefText=refDesc?`${text}\n\nVisual reference for the main character: ${refDesc}`:text;
       const remembered=await SemanticMemory.recallCharacter(text);
       S.directorChat.draft={
         projectId,concept:text.slice(0,200),imageModel:"fal-ai/nano-banana-pro",videoModel:"bytedance/seedance-2.0/fast/reference-to-video",
         quality:"720p",aspectRatio:"16:9",clipLen:8,totalDurationRequested:8,totalDurationRounded:8,totalShots:1,shotsPerEp:1,
-        continuity:"both",brainModel:gs("ai_model","claude"),refImages:[],reviewedCharacterDesc:remembered?remembered.desc:"",hasFullScript:false,fullScriptText:text,episodeCount:1,
+        continuity:"both",brainModel:gs("ai_model","claude"),refImages:refs,reviewedCharacterDesc:remembered?remembered.desc:"",hasFullScript:false,fullScriptText:briefText,episodeCount:1,
       };
       save();
       push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}"${remembered.semantic?', recalled by meaning — '+Math.round(remembered.score*100)+'% match':''}) — I'll keep their approved look consistent unless you tell me otherwise.`:""} Before I start, set the four things below — or just say "go" to run with the defaults (1 episode, ~8s, 720p, 16:9, narrative + visual continuity).`,{questions:true});
@@ -1946,6 +2093,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,handleRefUpload,removeRef,renderRefStrip,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode};
 })();
 
