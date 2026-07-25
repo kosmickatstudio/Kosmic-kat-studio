@@ -587,7 +587,13 @@ const KosmicEngine=(function(){
   // the Promptwriter, location names from loc_plan), so these strings are
   // genuinely untrusted. Keeping the escaper local means this module can't
   // break if that global is ever renamed or moved during a future split.
-  function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+  //
+  // Escapes quotes as well as angle brackets, which index.html's escapeHtml
+  // does NOT — the intake Q&A echoes free-text answers back into a value=""
+  // attribute, where an unescaped quote breaks out of the attribute. Quote
+  // escaping is harmless in text-node positions (renders as a literal quote),
+  // so one escaper stays correct in both contexts.
+  function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
 
   let _taskPanelCollapsed=false;
   function toggleTaskPanel(){_taskPanelCollapsed=!_taskPanelCollapsed;renderTaskPanel();}
@@ -699,13 +705,181 @@ const KosmicEngine=(function(){
         const stillPending=m.retryable&&m.retryTaskIds&&m.retryTaskIds.some(id=>{const t=findTask(id);return t&&t.status==="error";});
         extra=`<div class="dc-error-card">❌ ${m.error}${stillPending?`<div style="margin-top:6px"><button class="btn btn-outline btn-xs" onclick="KosmicEngine.retry(${i})">🔄 Retry</button></div>`:''}</div>`;
       }
+      // Same staleness reasoning as the Retry button above: once the
+      // production has actually started, this card's button would act on a
+      // stage that no longer exists, so it stops being offered rather than
+      // sitting there looking actionable.
+      if(m.questions&&S.directorChat.intakeStage==="confirm_plan"){
+        const total=intakeQuestions().length;
+        const done=answeredCount();
+        extra+=`<div style="margin-top:8px">
+          <button class="btn btn-primary btn-xs" onclick="KosmicEngine.openIntakeQuestions()">◆ Set up production${done?` · ${done}/${total} answered`:''}</button>
+        </div>`;
+      }
       return `<div class="ig-bubble-assistant">${m.content}${extra}</div>`;
     }).join('');
     thread.scrollTop=thread.scrollHeight;
   }
 
+  // ── STRUCTURED INTAKE Q&A ───────────────────────────────────────────
+  // Replaces the undiscoverable "type '3 episodes' or '20 seconds'" regex
+  // flow as the PRIMARY way to set up a production. The regex path is
+  // deliberately kept working alongside this (some flows/muscle memory rely
+  // on it) — this is additive, not a replacement.
+  //
+  // Scope note: these are the STRUCTURAL questions the pipeline genuinely
+  // needs, each mapping to a real existing draft field. Agent-One-style
+  // *creative* questions ("which moment should lead?") are a separate,
+  // later thing — they'd feed the concept text rather than draft fields,
+  // and would need an AI call with its own failure handling. Building the
+  // deterministic set first means the modal infrastructure exists with zero
+  // new AI-failure surface.
+  const INTAKE_LIMITS={episodeCount:{min:1,max:10},duration:{min:4,max:60}};
+  function clampInt(v,min,max,fallback){
+    const n=parseInt(v,10);
+    if(!isFinite(n))return fallback;
+    return Math.min(max,Math.max(min,n));
+  }
+  function intakeQuestions(){
+    const d=S.directorChat.draft||{};
+    const a=S.directorChat.qaAnswers||{};
+    return [
+      {id:"episodeCount",label:"How many episodes?",kind:"int",
+       hint:`${INTAKE_LIMITS.episodeCount.min}–${INTAKE_LIMITS.episodeCount.max}`,
+       options:[{v:"1",l:"1 episode"},{v:"2",l:"2 episodes"},{v:"3",l:"3 episodes"},{v:"5",l:"5 episodes"}],
+       value:a.episodeCount!==undefined?a.episodeCount:String(d.episodeCount||1)},
+      {id:"duration",label:"How long, in total?",kind:"int",
+       hint:`${INTAKE_LIMITS.duration.min}–${INTAKE_LIMITS.duration.max} seconds`,
+       options:[{v:"8",l:"8 seconds"},{v:"15",l:"15 seconds"},{v:"30",l:"30 seconds"},{v:"60",l:"60 seconds"}],
+       value:a.duration!==undefined?a.duration:String(d.totalDurationRounded||8)},
+      {id:"aspectRatio",label:"Aspect ratio?",kind:"enum",
+       // Only ratios supported by EVERY video model this pipeline can pick
+       // (verified against PD_ASPECT_RATIOS across the Seedance and Kling
+       // families) — offering one the chosen model rejects would fail at
+       // generation time, long after the user made the choice.
+       options:[{v:"16:9",l:"16:9 cinematic"},{v:"9:16",l:"9:16 vertical"},{v:"1:1",l:"1:1 square"}],
+       value:a.aspectRatio!==undefined?a.aspectRatio:(d.aspectRatio||"16:9")},
+      {id:"continuity",label:"Continuity between shots?",kind:"enum",
+       options:[{v:"both",l:"Narrative + visual"},{v:"narrative",l:"Narrative only"},{v:"visual",l:"Visual only"},{v:"none",l:"None"}],
+       value:a.continuity!==undefined?a.continuity:(d.continuity||"both")},
+    ];
+  }
+  function answeredCount(){
+    const a=S.directorChat.qaAnswers||{};
+    return intakeQuestions().filter(q=>a[q.id]!==undefined&&String(a[q.id]).trim()!=="").length;
+  }
+  function setIntakeAnswer(id,value){
+    S.directorChat.qaAnswers=S.directorChat.qaAnswers||{};
+    S.directorChat.qaAnswers[id]=value;
+    save();
+    renderIntakeModal();
+  }
+  // Free-text updates deliberately do NOT re-render the modal: rebuilding
+  // innerHTML on every keystroke destroys the input and loses focus/caret
+  // mid-typing. Only the counter is patched in place.
+  function setIntakeAnswerText(id,value){
+    S.directorChat.qaAnswers=S.directorChat.qaAnswers||{};
+    S.directorChat.qaAnswers[id]=value;
+    save();
+    const counter=document.getElementById("dcQaCounter");
+    if(counter)counter.textContent=`${answeredCount()} of ${intakeQuestions().length} answered`;
+  }
+  function openIntakeQuestions(){
+    if(S.directorChat.intakeStage!=="confirm_plan"||!S.directorChat.draft){
+      toast("Setup questions are only available before a production starts","");
+      return;
+    }
+    renderIntakeModal();
+  }
+  function closeIntakeQuestions(){
+    const el=document.getElementById("dcQaModal");
+    if(el)el.remove();
+  }
+  function renderIntakeModal(){
+    closeIntakeQuestions();
+    const qs=intakeQuestions();
+    const a=S.directorChat.qaAnswers||{};
+    const overlay=document.createElement("div");
+    overlay.className="modal-overlay show";
+    overlay.id="dcQaModal";
+    overlay.onclick=(e)=>{if(e.target===overlay)closeIntakeQuestions();};
+    overlay.innerHTML=`<div class="modal" style="width:440px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">${esc(S.directorChat.directorName)} is waiting</div>
+        <span class="badge badge-violet" id="dcQaCounter">${answeredCount()} of ${qs.length} answered</span>
+      </div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:16px">Set these before I start — or Skip to use the defaults shown.</div>
+      ${qs.map((q,i)=>{
+        const cur=a[q.id]!==undefined?String(a[q.id]):String(q.value);
+        const isPreset=q.options.some(o=>o.v===cur);
+        return `<div style="margin-bottom:16px">
+          <div style="display:flex;align-items:baseline;gap:7px;margin-bottom:7px">
+            <span style="width:18px;height:18px;border-radius:50%;background:var(--lav);color:var(--violet);font-size:10px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</span>
+            <span style="font-size:13px;font-weight:700;color:var(--text)">${esc(q.label)}</span>
+            ${q.hint?`<span style="font-size:10px;color:var(--texts)">${esc(q.hint)}</span>`:''}
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${q.kind==="int"?'6px':'0'}">
+            ${q.options.map(o=>`<button type="button" class="btn ${cur===o.v?'btn-primary':'btn-outline'} btn-xs" onclick="KosmicEngine.setIntakeAnswer('${esc(q.id)}','${esc(o.v)}')">${esc(o.l)}</button>`).join('')}
+          </div>
+          ${q.kind==="int"?`<input class="f-input" style="font-size:12px;padding:7px 10px" inputmode="numeric" placeholder="Or type your own number…" value="${isPreset?'':esc(cur)}" oninput="KosmicEngine.setIntakeAnswerText('${esc(q.id)}',this.value)">`:''}
+        </div>`;
+      }).join('')}
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+        <button class="btn btn-ghost" onclick="KosmicEngine.skipIntakeQuestions()">Skip</button>
+        <button class="btn btn-primary" onclick="KosmicEngine.submitIntakeAnswers()">Submit answers</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+  }
+  function skipIntakeQuestions(){
+    closeIntakeQuestions();
+    push("agent",`No problem — I'll use the defaults. Say "go" whenever you're ready.`);
+  }
+  async function submitIntakeAnswers(){
+    // Stale-modal guard. The modal can outlive the stage it belongs to: the
+    // user can leave it open, type "go" in the chat to start production the
+    // old way, then come back and hit Submit. Without this, that would
+    // rewrite the draft and rebuild the task graph underneath a production
+    // that is already running.
+    if(S.directorChat.intakeStage!=="confirm_plan"||!S.directorChat.draft){
+      closeIntakeQuestions();
+      toast("That production already started — those answers weren't applied","");
+      return;
+    }
+    const a=S.directorChat.qaAnswers||{};
+    const d=S.directorChat.draft;
+    const eps=clampInt(a.episodeCount,INTAKE_LIMITS.episodeCount.min,INTAKE_LIMITS.episodeCount.max,d.episodeCount||1);
+    const dur=clampInt(a.duration,INTAKE_LIMITS.duration.min,INTAKE_LIMITS.duration.max,d.totalDurationRounded||8);
+    const validRatios=["16:9","9:16","1:1"];
+    const ratio=validRatios.includes(a.aspectRatio)?a.aspectRatio:(d.aspectRatio||"16:9");
+    const validCont=["both","narrative","visual","none"];
+    const cont=validCont.includes(a.continuity)?a.continuity:(d.continuity||"both");
+
+    d.episodeCount=eps;
+    d.totalDurationRequested=dur;
+    d.totalDurationRounded=dur;
+    d.aspectRatio=ratio;
+    d.continuity=cont;
+
+    // Advance the stage BEFORE any await. Submit is async (dispatchTasks is
+    // awaited below), so leaving the stage unchanged across that boundary
+    // would let a fast double-tap pass the guard twice and build the task
+    // graph — and start the production — two times over.
+    S.directorChat.intakeStage="running";
+    S.directorChat.qaAnswers={};
+    closeIntakeQuestions();
+
+    const contLabel={both:"narrative + visual",narrative:"narrative only",visual:"visual only",none:"none"}[cont];
+    push("agent",`Locked in:\n• Episodes → ${eps}\n• Total length → ${dur}s\n• Aspect ratio → ${ratio}\n• Continuity → ${contLabel}\n\nStarting now.`);
+
+    S.directorChat.tasks=buildTaskGraph(eps);
+    save();
+    await dispatchTasks();
+  }
+
+
   function reset(){
-    S.directorChat={active:true,productionId:null,directorName:S.directorChat.directorName||"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief"};
+    S.directorChat={active:true,productionId:null,directorName:S.directorChat.directorName||"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief",qaAnswers:{}};
     save();
     renderThread();
     push("agent",`Hey, I'm your ${S.directorChat.directorName}. Tell me the story you want to make — genre, setting, what happens. I'll plan it, write it, and build the character sheet, storyboard, and scenes from there. The Character Sheet's 6 views now generate in parallel — you approve or reject at each checkpoint.`);
@@ -730,8 +904,9 @@ const KosmicEngine=(function(){
         continuity:"both",brainModel:gs("ai_model","claude"),refImages:[],reviewedCharacterDesc:remembered?remembered.desc:"",hasFullScript:false,fullScriptText:text,episodeCount:1,
       };
       save();
-      push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}"${remembered.semantic?', recalled by meaning — '+Math.round(remembered.score*100)+'% match':''}) — I'll keep their approved look consistent unless you tell me otherwise.`:""} Going with sensible defaults so we can move — 1 episode, ~8s, Seedance 2.0 Fast (multi-ref), 720p, 16:9, both narrative + visual continuity. Say "3 episodes", "20 seconds", or "narrative only"/"visual only" before I start if you want different — otherwise just say "go" and I'll start planning.`);
+      push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}"${remembered.semantic?', recalled by meaning — '+Math.round(remembered.score*100)+'% match':''}) — I'll keep their approved look consistent unless you tell me otherwise.`:""} Before I start, set the four things below — or just say "go" to run with the defaults (1 episode, ~8s, 720p, 16:9, narrative + visual continuity).`,{questions:true});
       S.directorChat.intakeStage="confirm_plan";
+      S.directorChat.qaAnswers={};
       save();
       return;
     }
@@ -739,8 +914,17 @@ const KosmicEngine=(function(){
       const lower=text.toLowerCase();
       const epMatch=lower.match(/(\d+)\s*episodes?/);
       const durMatch=lower.match(/(\d+)\s*(?:sec|second)/);
-      if(epMatch)S.directorChat.draft.episodeCount=parseInt(epMatch[1],10);
-      if(durMatch){S.directorChat.draft.totalDurationRequested=parseInt(durMatch[1],10);S.directorChat.draft.totalDurationRounded=parseInt(durMatch[1],10);}
+      // Clamped, where the original wasn't at all. "500 episodes" parsed
+      // straight through to buildTaskGraph(500) — 1506 tasks, every one of
+      // them re-serialized to localStorage AND pushed to Firebase on every
+      // single save() call, plus 500 episodes' worth of real paid generation
+      // queued behind it. Same reasoning for duration.
+      if(epMatch)S.directorChat.draft.episodeCount=clampInt(epMatch[1],INTAKE_LIMITS.episodeCount.min,INTAKE_LIMITS.episodeCount.max,1);
+      if(durMatch){
+        const dur=clampInt(durMatch[1],INTAKE_LIMITS.duration.min,INTAKE_LIMITS.duration.max,8);
+        S.directorChat.draft.totalDurationRequested=dur;
+        S.directorChat.draft.totalDurationRounded=dur;
+      }
       // Continuity as text overrides, same conversational pattern as episode
       // count/duration above — defaults to both narrative+visual (set at
       // draft creation) unless told otherwise.
@@ -755,7 +939,11 @@ const KosmicEngine=(function(){
         return;
       }
       S.directorChat.intakeStage="running";
-      S.directorChat.tasks=buildTaskGraph(S.directorChat.draft.episodeCount||1);
+      // Clamped again here on purpose, not just at parse time: a draft
+      // restored from a cloud session saved BEFORE the parse-time clamp
+      // existed can still carry an unbounded episodeCount, and this is the
+      // single choke point every start path funnels through.
+      S.directorChat.tasks=buildTaskGraph(clampInt(S.directorChat.draft.episodeCount,INTAKE_LIMITS.episodeCount.min,INTAKE_LIMITS.episodeCount.max,1));
       save();
       await dispatchTasks();
       return;
@@ -908,6 +1096,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions};
 })();
 
