@@ -9591,7 +9591,7 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
         result=await genViaFal(`${shotDescsForImage[i]}, ${p.characterDesc}${p.locationDesc?", "+p.locationDesc:""}${storyboardFeedbackSuffix}`,"",p.imageModel,p.aspectRatio,false);
       }
       }
-      e.storyboard.push({shotIndex:i,url:result.url,desc:shotDescs[i]});
+      e.storyboard.push({shotIndex:i,url:result.url,desc:shotDescs[i],model:p.imageModel||null});
       e.storyboard.sort((a,b)=>a.shotIndex-b.shotIndex);
       trackProductionCost(p,shotChars.length>=2?(shotChars.length<=2?"fal-ai/nano-banana-pro":"fal-ai/nano-banana-2"):p.imageModel,`Ep${epIndex} storyboard shot ${i+1}`);
     }catch(err){
@@ -9844,7 +9844,7 @@ async function generateEpisodeScene(prodId,epIndex,retryOnly=false){
     const endImage=p.videoModel.includes("/image-to-video")&&e.storyboard[i+1]?e.storyboard[i+1].url:null;
     try{
       const videoUrl=await runProductionVideoGen(p.videoModel,`${sb.desc}, ${p.characterDesc}`,p.aspectRatio,e.duration,p.quality,videoRef,e.negativePrompt,endImage);
-      e.shots.push({shotIndex:i,videoUrl,refImage});
+      e.shots.push({shotIndex:i,videoUrl,refImage,model:p.videoModel||null});
       e.shots.sort((a,b)=>a.shotIndex-b.shotIndex);
       if(p.projectId)advanceProjectStatusIfBehind(p.projectId,"Post");
       // Real, resolution-aware cost (p.quality) — not the flat COST_TABLE

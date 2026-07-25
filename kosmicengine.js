@@ -460,7 +460,10 @@ const KosmicEngine=(function(){
       else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,"1:1");
       else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/nano-banana-pro","1:1",false);
       p.characterSheets=p.characterSheets||[];
-      p.characterSheets.push({tier:c.tier,name:c.name,desc:c.desc,sheetUrl:result.url});
+      // Model recorded at generation time. p.imageModel is user-settable and
+      // model_select can change it mid-production, so reading it later would
+      // attribute an old sheet to whatever is selected NOW.
+      p.characterSheets.push({tier:c.tier,name:c.name,desc:c.desc,sheetUrl:result.url,model:p.imageModel||null});
       save2Productions();
       trackProductionCost(p,p.imageModel,`Character Sheet — ${c.name}`);
       createImageAsset(result.url,`Character Sheet — ${c.name} (${p.concept.slice(0,40)})`,p.projectId);
@@ -478,7 +481,7 @@ const KosmicEngine=(function(){
       else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,"16:9");
       else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/nano-banana-pro","16:9",false);
       p.characterSheets=p.characterSheets||[];
-      p.characterSheets.push({tier:"SIDE",name:sides.map(c=>c.name).join(", "),desc:lineup,sheetUrl:result.url});
+      p.characterSheets.push({tier:"SIDE",name:sides.map(c=>c.name).join(", "),desc:lineup,sheetUrl:result.url,model:p.imageModel||null});
       save2Productions();
       trackProductionCost(p,p.imageModel,"Character Sheet — Side characters lineup");
       createImageAsset(result.url,`Character Sheet — Side characters (${p.concept.slice(0,40)})`,p.projectId);
@@ -551,6 +554,7 @@ const KosmicEngine=(function(){
       else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,"16:9");
       else result=await genViaFal(prompt,"",p.imageModel||"fal-ai/flux/dev","16:9",false);
       loc.url=result.url;
+      loc.model=p.imageModel||null;
       save2Productions();
       // trackProductionCost, not logCost: the bare logCost records the spend
       // in the global cost log but never adds to p.costSpent, which is what
@@ -1387,6 +1391,17 @@ const KosmicEngine=(function(){
 
   // Prior attempts render as a collapsed <details> beneath the live version,
   // so history is discoverable without pushing the current work down the page.
+  // Provenance label. Deliberately returns nothing when the model wasn't
+  // recorded rather than falling back to p.imageModel: that field is
+  // user-settable and model_select can change it mid-production, so the
+  // fallback would confidently mis-attribute older items. No attribution is
+  // better than wrong attribution on a screen used to decide what to change.
+  function nbModelLabel(item,uploadedFlag){
+    if(uploadedFlag)return "uploaded";
+    if(!item||!item.model)return "";
+    return (typeof friendlyModelName==="function"&&friendlyModelName(item.model))||item.model;
+  }
+
   function nbHistory(p,kind){
     const key=kind==="chars"?"charSheetHistory":"locationHistory";
     const hist=(p[key]||[]).filter(h=>h&&h.items&&h.items.length);
@@ -1424,13 +1439,13 @@ const KosmicEngine=(function(){
     if(sheets.length){
       n++;
       parts.push(nbSection(n,"Character Sheets",`${sheets.length} sheet${sheets.length!==1?'s':''}`,
-        sheets.map(s=>nbImage(s.sheetUrl,s.name||"Character",s.tier?`${s.tier}${s.desc?" · "+String(s.desc).slice(0,90):""}`:"")).join('')+nbHistory(p,"chars")));
+        sheets.map(s=>{const mdl=nbModelLabel(s);const meta=[s.tier,mdl].filter(Boolean).join(" · ");return nbImage(s.sheetUrl,s.name||"Character",meta);}).join('')+nbHistory(p,"chars")));
     }
     const locs=(p.locationBible||[]).filter(l=>l&&l.url);
     if(locs.length){
       n++;
       parts.push(nbSection(n,"Location Bible",`${locs.length} location${locs.length!==1?'s':''}`,
-        locs.map(l=>nbImage(l.url,l.name||"Location",l.desc?String(l.desc).slice(0,110):"")).join('')+nbHistory(p,"locs")));
+        locs.map(l=>{const mdl=nbModelLabel(l);const meta=[l.desc?String(l.desc).slice(0,80):"",mdl].filter(Boolean).join(" · ");return nbImage(l.url,l.name||"Location",meta);}).join('')+nbHistory(p,"locs")));
     }
     (p.episodes||[]).forEach(e=>{
       const frames=(e.storyboard||[]).filter(s=>s&&s.url);
@@ -1447,11 +1462,11 @@ const KosmicEngine=(function(){
       }
       if(frames.length){
         bits.push(`<div style="font-size:10px;font-weight:800;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em;margin:8px 0 6px">Storyboard${e.storyboardStatus==="partial"?" (partial)":""}</div>`);
-        bits.push(frames.map((s,i)=>nbImage(s.url,`Shot ${i+1}`,"")).join(''));
+        bits.push(frames.map((s,i)=>nbImage(s.url,`Shot ${i+1}`,nbModelLabel(s,s.uploaded))).join(''));
       }
       if(shots.length){
         bits.push(`<div style="font-size:10px;font-weight:800;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em;margin:8px 0 6px">Scene${e.sceneStatus==="partial"?" (partial)":""}</div>`);
-        bits.push(shots.map(s=>`<video src="${esc(s.videoUrl)}" controls playsinline preload="metadata" style="width:100%;border-radius:12px;border:1px solid var(--glass-brd);margin-bottom:10px;display:block"></video>`).join(''));
+        bits.push(shots.map((s,i)=>{const mdl=nbModelLabel(s);return `<div style="margin-bottom:10px"><video src="${esc(s.videoUrl)}" controls playsinline preload="metadata" style="width:100%;border-radius:12px;border:1px solid var(--glass-brd);display:block"></video>${mdl?`<div style="font-size:10px;color:var(--textm);margin-top:3px">Shot ${i+1} · ${esc(mdl)}</div>`:''}</div>`;}).join(''));
       }
       parts.push(nbSection(n,`Episode ${e.index}`,"",bits.join('')));
     });
