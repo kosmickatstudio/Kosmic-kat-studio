@@ -451,7 +451,10 @@ const KosmicEngine=(function(){
       // One composite image containing front/back/3-4/face views, using ONLY
       // this character's own description — not the whole cast's combined
       // text, which is what caused multiple people to appear in one sheet.
-      const prompt=`${c.desc}, full character reference turnaround sheet, single composite image arranged in a grid showing: front full-body view, back full-body view, 3/4 angle full-body view, and a close-up face portrait — consistent character design across all views, clean plain background, professional character design sheet, only this one character, no other people`;
+      // Rejection feedback is appended rather than replacing anything: the
+      // user is correcting a specific fault, not restating the whole brief.
+      const csFix=p.charSheetFeedback?`. IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.charSheetFeedback}`:"";
+      const prompt=`${c.desc}, full character reference turnaround sheet, single composite image arranged in a grid showing: front full-body view, back full-body view, 3/4 angle full-body view, and a close-up face portrait — consistent character design across all views, clean plain background, professional character design sheet, only this one character, no other people${csFix}`;
       let result;
       if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(prompt,"1:1",p.imageModel);
       else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,"1:1");
@@ -468,7 +471,8 @@ const KosmicEngine=(function(){
       const characters=(p.characters&&p.characters.length)?p.characters:[];
       const sides=characters.filter(c=>c.tier==="SIDE");
       const lineup=sides.map(c=>`${c.name} (${c.desc})`).join("; ");
-      const prompt=`Character lineup reference sheet, ${sides.length} distinct background/side characters standing side by side for comparison, each clearly separated: ${lineup}. Clean plain background, consistent lighting, simple standing poses, professional character design reference — each character visually distinct from the others.`;
+      const sideFix=p.charSheetFeedback?` IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.charSheetFeedback}`:"";
+      const prompt=`Character lineup reference sheet, ${sides.length} distinct background/side characters standing side by side for comparison, each clearly separated: ${lineup}. Clean plain background, consistent lighting, simple standing poses, professional character design reference — each character visually distinct from the others.${sideFix}`;
       let result;
       if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(prompt,"16:9",p.imageModel);
       else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,"16:9");
@@ -540,7 +544,8 @@ const KosmicEngine=(function(){
     if(task.type==="loc_img"){
       const p=S.productions.find(x=>x.id===S.directorChat.productionId);
       const loc=p.locationBible[task.locIndex];
-      const prompt=`${loc.desc}, wide establishing shot, cinematic environment reference, no people, detailed background art`;
+      const locFix=p.locationFeedback?`. IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.locationFeedback}`:"";
+      const prompt=`${loc.desc}, wide establishing shot, cinematic environment reference, no people, detailed background art${locFix}`;
       let result;
       if(p.imageModel&&p.imageModel.startsWith("gemini-"))result=await genViaGemini(prompt,"16:9",p.imageModel);
       else if(p.imageModel==="gpt-image-2")result=await genViaOpenAI(prompt,"16:9");
@@ -1629,6 +1634,12 @@ const KosmicEngine=(function(){
     const prodId=S.directorChat.productionId;
     if(task.type==="charsheet_review"){
       approveCharacterSheet(prodId);
+      // Feedback has done its job once the result is accepted. Clearing it
+      // here is the same precaution the storyboard path already documents:
+      // a lingering note would silently reapply to an unrelated future
+      // regeneration of a completely different character.
+      const pClear=S.productions.find(x=>x.id===prodId);
+      if(pClear&&pClear.charSheetFeedback){pClear.charSheetFeedback=null;save2Productions();}
       // World memory: remember each approved MC/LEAD character individually —
       // now real embedding-backed memory per character, not one combined blob
       // for the whole cast (which would've made recall meaningless once a
@@ -1675,27 +1686,48 @@ const KosmicEngine=(function(){
     const prodId=S.directorChat.productionId;
     S.directorChat.awaitingApprovalTaskId=null;
     if(task.type==="charsheet_review"){
+      // Ask WHY before redoing anything. The episode stages already collect
+      // this (rejectEpisodeStage prompts, and the pipeline injects it into the
+      // script/storyboard prompts) — character sheets did not, so rejecting one
+      // was a blind re-roll of the same prompt. Sheets are the foundation every
+      // downstream shot references, which makes that the worst place to be
+      // rolling dice.
+      const fb=(await showPromptDialog("What's wrong with these character sheets? (optional — it's fed straight into the regeneration)","",{title:"Rejection Feedback",okLabel:"Reject & Regenerate",multiline:true}))||"";
+      const p=S.productions.find(x=>x.id===prodId);
+      // Assigned unconditionally, so submitting empty feedback CLEARS a stale
+      // note rather than silently reapplying an old one to a new attempt.
+      if(p)p.charSheetFeedback=fb;
       // Regenerate every character sheet in parallel again — clear first, since
       // charsheet_single/charsheet_side each push() onto p.characterSheets;
       // without clearing, a regenerate would leave duplicate old entries
       // sitting alongside the new ones instead of replacing them.
-      const p=S.productions.find(x=>x.id===prodId);
       if(p)p.characterSheets=[];
+      save2Productions();
       const csIds=task.deps;
       csIds.forEach(id=>{const t=findTask(id);if(t){t.status="pending";t.error=null;}});
       task.status="pending";
       save();
-      push("agent","🔄 Regenerating the Character Sheets, in parallel…");
+      push("agent",fb?`🔄 Regenerating the Character Sheets, addressing: "${esc(fb)}"`:"🔄 Regenerating the Character Sheets, in parallel…");
       await dispatchTasks();
       return;
     }
     if(task.type==="loc_review"){
+      const pLocClear=S.productions.find(x=>x.id===prodId);
+      if(pLocClear&&pLocClear.locationFeedback){pLocClear.locationFeedback=null;save2Productions();}
+      // Same reasoning as character sheets: locations anchor every storyboard
+      // shot, so re-rolling them blind is expensive in both credits and time.
+      const fb=(await showPromptDialog("What's wrong with these locations? (optional — it's fed straight into the regeneration)","",{title:"Rejection Feedback",okLabel:"Reject & Regenerate",multiline:true}))||"";
+      const pLoc=S.productions.find(x=>x.id===prodId);
+      // Assigned unconditionally so empty feedback clears a stale note rather
+      // than silently reapplying it to a fresh attempt.
+      if(pLoc)pLoc.locationFeedback=fb;
+      if(pLoc)save2Productions();
       // Regenerate the location establishing images (tasks already exist from
       // the dynamic insertion — just reset them); the location list itself is kept.
       task.deps.forEach(id=>{const t=findTask(id);if(t){t.status="pending";t.error=null;}});
       task.status="pending";
       save();
-      push("agent","🔄 Regenerating the Location Bible references, in parallel…");
+      push("agent",fb?`🔄 Regenerating the Location Bible references, addressing: "${esc(fb)}"`:"🔄 Regenerating the Location Bible references, in parallel…");
       await dispatchTasks();
       return;
     }
