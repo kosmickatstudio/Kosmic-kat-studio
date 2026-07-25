@@ -310,9 +310,16 @@ const KosmicEngine=(function(){
       reader.readAsDataURL(blob);
     });
   }
-  async function runQACheck(imageUrl,description){
+  // Returns a STRUCTURED result because "no note" is genuinely ambiguous:
+  // the old boolean-ish null was returned for a passed check, a missing
+  // image, an unparseable model reply AND a thrown error alike. That is fine
+  // for an advisory note, but auto-approval must never treat "the check
+  // didn't run" as "the check passed" — with no vision-capable brain
+  // configured, every check fails silently, and approving on null would
+  // rubber-stamp an entire production while appearing to have verified it.
+  async function runQACheckDetailed(imageUrl,description){
+    if(!imageUrl)return{ran:false,passed:false,note:null,reason:"no image to check"};
     try{
-      if(!imageUrl)return null;
       const dataUrl=await urlToDataUrl(imageUrl);
       const result=await callAiVision(
         [{dataUrl}],
@@ -320,13 +327,18 @@ const KosmicEngine=(function(){
         "You are doing a quick quality check on AI-generated production art for a human who will make the final call either way. Be lenient — only flag genuinely broken results, not minor stylistic differences or artistic license."
       );
       const statusMatch=result.match(/STATUS:\s*(pass|flag)/i);
+      if(!statusMatch)return{ran:false,passed:false,note:null,reason:"couldn't read the quality check's answer"};
+      const flagged=statusMatch[1].toLowerCase()==="flag";
       const noteMatch=result.match(/NOTE:\s*(.+)/i);
-      if(statusMatch&&statusMatch[1].toLowerCase()==="flag")return noteMatch?noteMatch[1].trim():"Possible quality issue — worth a closer look";
-      return null;
+      return{ran:true,passed:!flagged,note:flagged?(noteMatch?noteMatch[1].trim():"Possible quality issue — worth a closer look"):null,reason:null};
     }catch(err){
       console.warn("QA check skipped (not blocking):",err.message);
-      return null; // QA is an enhancement, not a requirement — never blocks the flow on its own failure
+      return{ran:false,passed:false,note:null,reason:err.message}; // never blocks the flow on its own failure
     }
+  }
+  async function runQACheck(imageUrl,description){
+    const r=await runQACheckDetailed(imageUrl,description);
+    return r.note;
   }
 
   function findTask(id){ return (S.directorChat.tasks||[]).find(t=>t.id===id); }
@@ -474,7 +486,8 @@ const KosmicEngine=(function(){
       save2Productions();
       const sheets=p.characterSheets||[];
       const mc=sheets.find(s=>s.tier==="MC");
-      const qaNote=mc?await runQACheck(mc.sheetUrl,mc.desc):null;
+      const qa=mc?await runQACheckDetailed(mc.sheetUrl,mc.desc):{ran:false,passed:false,note:null,reason:"no sheet to check"};
+      task.qa=qa; const qaNote=qa.note;
       return{summary:`🎭 Character Sheet${sheets.length!==1?'s':''} ready — ${sheets.map(s=>s.tier==='SIDE'?'Side characters':s.name).join(', ')}:`,approval:{images:sheets.map(s=>s.sheetUrl),qaNote}};
     }
     if(task.type==="loc_plan"){
@@ -544,7 +557,8 @@ const KosmicEngine=(function(){
       p.locationDesc=p.locationBible.map(l=>`${l.name}: ${l.desc}`).join("; ");
       save2Productions();
       const firstLoc=p.locationBible[0];
-      const qaNote=firstLoc?await runQACheck(firstLoc.url,firstLoc.desc):null;
+      const qa=firstLoc?await runQACheckDetailed(firstLoc.url,firstLoc.desc):{ran:false,passed:false,note:null,reason:"no location image to check"};
+      task.qa=qa; const qaNote=qa.note;
       return{summary:"📍 Location Bible ready — these environments will anchor every storyboard shot:",approval:{images:p.locationBible.map(l=>l.url).filter(Boolean),qaNote}};
     }
     if(task.type==="script"){
@@ -559,7 +573,8 @@ const KosmicEngine=(function(){
       const p=S.productions.find(x=>x.id===prodId);
       const e=getEpisode(p,task.epIndex);
       if(e.storyboardStatus==="pending")throw new Error("Storyboard generation failed — every shot errored out");
-      const qaNote=e.storyboard[0]?await runQACheck(e.storyboard[0].url,e.masterPrompt):null;
+      const qa=e.storyboard[0]?await runQACheckDetailed(e.storyboard[0].url,e.masterPrompt):{ran:false,passed:false,note:null,reason:"no storyboard frame to check"};
+      task.qa=qa; const qaNote=qa.note;
       return{summary:`🖼 Episode ${task.epIndex} storyboard ready${e.storyboardStatus==='partial'?' (partial — some shots failed)':''}:`,approval:{images:e.storyboard.map(s=>s.url),qaNote}};
     }
     if(task.type==="scene"){
@@ -686,6 +701,69 @@ const KosmicEngine=(function(){
     document.body.appendChild(overlay);
   }
 
+  // ── AUTO-REVIEW ─────────────────────────────────────────────────────
+  // The permission gate controls SPEND; this controls ATTENTION. A five
+  // episode production currently needs roughly seventeen manual approvals,
+  // which makes an otherwise autonomous pipeline something you have to babysit.
+  function autoReviewMode(){
+    const m=gs("ke_auto_review","off");
+    return ["off","qa_pass","all"].includes(m)?m:"off";
+  }
+  // Returns a human-readable REASON when auto-approval applies, or null to
+  // leave the gate for the user. Reason-not-boolean so the chat can say why
+  // it approved — an approval the user didn't make should never be silent.
+  function autoApproveReason(t){
+    const mode=autoReviewMode();
+    if(mode==="off")return null;
+    if(mode==="all")return "auto-review is set to approve everything";
+    // qa_pass: the ONLY safe signal is a check that genuinely ran and passed.
+    // A missing verdict means the check never happened (no vision brain, an
+    // unreadable reply, a network error) — that is not evidence of quality,
+    // so it waits. Script and scene tasks have no image to check at all and
+    // therefore always wait in this mode, which is correct: those are
+    // creative calls, not quality calls.
+    const qa=t.qa;
+    if(qa&&qa.ran&&qa.passed)return "quality check passed";
+    return null;
+  }
+  function closeAutoReviewSettings(){
+    const el=document.getElementById("dcAutoModal");
+    if(el)el.remove();
+  }
+  function setAutoReviewMode(mode){
+    if(!["off","qa_pass","all"].includes(mode))return;
+    saveSetting("ke_auto_review",mode);
+    closeAutoReviewSettings();
+    toast({off:"Every checkpoint will wait for you",qa_pass:"Passing quality checks will auto-approve",all:"All checkpoints will auto-approve"}[mode],"success");
+    renderThread();
+  }
+  function openAutoReviewSettings(){
+    closeAutoReviewSettings();
+    const cur=autoReviewMode();
+    const opts=[
+      {v:"off",t:"Review everything myself",d:"Every checkpoint waits for your Approve or Reject. This is the default."},
+      {v:"qa_pass",t:"Auto-approve when the quality check passes",d:"Character sheets, locations and storyboards approve themselves only if the vision quality check actually ran and passed. Scripts and scenes still wait for you — those are creative calls, and they have no image to check."},
+      {v:"all",t:"Auto-approve everything",d:"Nothing waits. The whole production runs start to finish unattended. Spending is still governed separately by Generation permissions."},
+    ];
+    const overlay=document.createElement("div");
+    overlay.className="modal-overlay show";
+    overlay.id="dcAutoModal";
+    overlay.onclick=(e)=>{if(e.target===overlay)closeAutoReviewSettings();};
+    overlay.innerHTML=`<div class="modal" style="width:440px">
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:4px">Auto-review</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:16px">How much of the approving should Kosmic Engine do on your behalf?</div>
+      ${opts.map(o=>`<div onclick="KosmicEngine.setAutoReviewMode('${o.v}')" style="display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border-radius:12px;cursor:pointer;margin-bottom:6px;border:1.5px solid ${cur===o.v?'var(--vs)':'var(--border)'};background:${cur===o.v?'var(--lav)':'transparent'}">
+        <div style="width:16px;height:16px;border-radius:50%;border:1.5px solid ${cur===o.v?'var(--violet)':'var(--border)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">${cur===o.v?'<div style="width:8px;height:8px;border-radius:50%;background:var(--violet)"></div>':''}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700;color:${cur===o.v?'var(--violet)':'var(--text)'}">${o.t}</div>
+          <div style="font-size:11px;color:var(--textm);line-height:1.4;margin-top:2px">${o.d}</div>
+        </div>
+      </div>`).join('')}
+      <div style="text-align:right;margin-top:14px"><button class="btn btn-ghost" onclick="KosmicEngine.closeAutoReviewSettings()">Close</button></div>
+    </div>`;
+    document.body.appendChild(overlay);
+  }
+
   async function dispatchTasks(){
     const tasks=S.directorChat.tasks;
     // Extends the existing "don't dispatch while waiting on the user" guard
@@ -740,6 +818,14 @@ const KosmicEngine=(function(){
           S.directorChat.awaitingApprovalTaskId=t.id;
           save();
           if(out&&out.summary)push("agent",out.summary,{approval:out.approval});
+          // Routed through the exact approve() the user's button calls, so
+          // auto-approval and manual approval cannot drift apart in what they
+          // actually do (memory writes, stage advancement, re-dispatch).
+          const reason=autoApproveReason(t);
+          if(reason){
+            push("agent",`✓ Auto-approved — ${reason}.`);
+            await approve();
+          }
           return; // wait for the user
         }
         t.status="done";
@@ -1241,6 +1327,7 @@ const KosmicEngine=(function(){
     const items=[
       {label:"Restore a session",sub:"Load previously saved progress into this project",fn:"openSessionRecovery()"},
       {label:"Generation permissions",sub:"When to check with you before spending credits",fn:"openPermissionSettings()"},
+      {label:"Auto-review",sub:"How much approving Kosmic Engine does for you",fn:"openAutoReviewSettings()"},
       {label:"Switch project",sub:"Work in a different project",fn:"__switch"},
       {label:"Rename director",sub:"Change what this agent is called",fn:"renameDirector()"},
       {label:"New chat",sub:"Start this project's session over",fn:"reset()"},
@@ -1265,7 +1352,7 @@ const KosmicEngine=(function(){
     // switchKosmicEngineProject lives outside this IIFE (it owns the gate),
     // so it is dispatched by name rather than through the KosmicEngine map.
     if(fn==="__switch"){switchKosmicEngineProject();return;}
-    const map={"openSessionRecovery()":openSessionRecovery,"openPermissionSettings()":openPermissionSettings,"renameDirector()":renameDirector,"reset()":reset};
+    const map={"openSessionRecovery()":openSessionRecovery,"openPermissionSettings()":openPermissionSettings,"openAutoReviewSettings()":openAutoReviewSettings,"renameDirector()":renameDirector,"reset()":reset};
     const f=map[fn];
     if(typeof f==="function")f();
   }
@@ -1615,6 +1702,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,currentTab:()=>_engineTab};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode};
 })();
 
