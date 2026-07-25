@@ -49,12 +49,15 @@ function renderKosmicEngineModule(el){
   el.innerHTML=`
     <div style="margin-bottom:10px">
       <div style="font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--violet)">🎬 Kosmic Engine</div>
-      <div style="font-size:11px;color:var(--textm);margin-top:2px">One conversation drives the whole pipeline — script, character sheet, storyboard, and scenes — with the same generation your Production Pipeline already uses.</div>
+      <div style="font-size:11px;color:var(--textm);margin-top:3px;line-height:1.5">One conversation drives the whole pipeline:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">
+        ${["Script","Character sheets","Locations","Storyboard","Scenes"].map((x,i)=>`<span style="font-size:10px;font-weight:700;color:var(--violet);background:var(--lav);border-radius:20px;padding:3px 9px">${i+1}. ${x}</span>`).join('')}
+      </div>
     </div>
     <div class="ig-chat-shell" style="min-height:60vh">
       <div class="ig-chat-header">
         <div>
-          <b onclick="KosmicEngine.renameDirector()" style="cursor:pointer;text-decoration:underline dotted" title="Tap to rename">${S.directorChat.directorName}</b>
+          <b onclick="KosmicEngine.renameDirector()" style="cursor:pointer;text-decoration:underline dotted" title="Tap to rename">${KosmicEngine.directorName()}</b>
           <span style="font-size:10px;color:var(--textm)">· ${scopedProject.name}${S.directorChat.productionId?' · production in progress':''}</span>
         </div>
         <div style="display:flex;gap:6px;align-items:center">
@@ -93,7 +96,7 @@ function renderKosmicEngineGate(el){
   el.innerHTML=`
     <div style="margin-bottom:14px">
       <div style="font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--violet)">🎬 Kosmic Engine</div>
-      <div style="font-size:11px;color:var(--textm);margin-top:2px">Pick a Project to work in, or start a new one — Kosmic Engine builds the whole pipeline (script, character sheet, storyboard, scenes) inside that Project.</div>
+      <div style="font-size:11px;color:var(--textm);margin-top:3px;line-height:1.5">Pick a Project to work in, or start a new one. Everything Kosmic Engine builds is saved inside that Project.</div>
     </div>
     <div class="grid2">
       <div onclick="openKosmicEngineProjectCreate()" style="cursor:pointer;border:1.5px dashed var(--vs);border-radius:14px;min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--pearl2)">
@@ -1193,7 +1196,7 @@ const KosmicEngine=(function(){
     overlay.onclick=(e)=>{if(e.target===overlay)closeIntakeQuestions();};
     overlay.innerHTML=`<div class="modal" style="width:440px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">${esc(S.directorChat.directorName)} is waiting</div>
+        <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">${esc(directorName())} is waiting</div>
         <span class="badge badge-violet" id="dcQaCounter">${answeredCount()} of ${qs.length} answered</span>
       </div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:16px">Set these before I start — or Skip to use the defaults shown.</div>
@@ -1669,10 +1672,10 @@ const KosmicEngine=(function(){
     // Falls back to the live selection so the existing no-arg callers (the
     // "New Chat" button) keep working unchanged.
     const pid=projectId||S.kosmicEngineProjectId||null;
-    S.directorChat={active:true,productionId:null,projectId:pid,directorName:S.directorChat.directorName||"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief",qaAnswers:{},awaitingPermissionIds:null,permissionPaused:false};
+    S.directorChat={active:true,productionId:null,projectId:pid,directorName:directorName(),messages:[],tasks:null,awaitingApprovalTaskId:null,draft:null,intakeStage:"awaiting_brief",qaAnswers:{},awaitingPermissionIds:null,permissionPaused:false};
     save();
     renderThread();
-    push("agent",`Hey, I'm your ${S.directorChat.directorName}. Tell me the story you want to make — genre, setting, what happens. I'll plan it, write it, and build the character sheet, storyboard, and scenes from there. The Character Sheet's 6 views now generate in parallel — you approve or reject at each checkpoint.`);
+    push("agent",`<b>Hey — I'm ${esc(directorName())}.</b><br>Tell me the story you want to make: genre, setting, what happens.<br><br><b>Then I'll run the whole pipeline:</b><br>• Write the script<br>• Build the character sheets (6 views, generated in parallel)<br>• Design the locations<br>• Board every shot<br>• Generate the scenes<br><br>You approve or reject at each checkpoint — nothing moves on without you.`);
   }
   function send(){
     const input=document.getElementById("dcInput");
@@ -1873,8 +1876,20 @@ const KosmicEngine=(function(){
     renderThread(); // re-render so this card's now-resolved Retry button disappears immediately
     dispatchTasks();
   }
+  // Your agent's name is a property of YOU, not of one conversation. It used
+  // to live only on S.directorChat, which enterProject() replaces wholesale
+  // when switching project or loading a stashed/cloud session — so the name
+  // silently reverted to "Director" while older messages still carried the
+  // old one baked into their text. Reads any legacy per-session value once so
+  // an existing name isn't lost on upgrade.
+  function directorName(){
+    return gs("ke_director_name","")||(S.directorChat&&S.directorChat.directorName)||"Director";
+  }
   async function renameDirector(){
-    const name=await showPromptDialog("Name your Director","Director")||"Director";
+    const name=(await showPromptDialog("Name your Director",directorName()))||directorName();
+    saveSetting("ke_director_name",name);
+    // Kept in sync on the session too, so anything still reading the old
+    // field (and any session synced to another device) agrees.
     S.directorChat.directorName=name;
     save();
     renderModule("kosmicengine");
@@ -1906,7 +1921,7 @@ const KosmicEngine=(function(){
     // into enterProject's legacy-adoption branch and get misattributed to
     // whichever project happened to be open next.
     if(p.projectId)S.kosmicEngineProjectId=p.projectId;
-    S.directorChat={active:true,productionId:prodId,projectId:p.projectId||S.kosmicEngineProjectId||null,directorName:S.directorChat.directorName||"Director",messages:[],tasks:null,awaitingApprovalTaskId:null,draft:{episodeCount:p.episodes.length},intakeStage:"running",qaAnswers:{},awaitingPermissionIds:null,permissionPaused:false};
+    S.directorChat={active:true,productionId:prodId,projectId:p.projectId||S.kosmicEngineProjectId||null,directorName:directorName(),messages:[],tasks:null,awaitingApprovalTaskId:null,draft:{episodeCount:p.episodes.length},intakeStage:"running",qaAnswers:{},awaitingPermissionIds:null,permissionPaused:false};
     const tasks=buildTaskGraph(p.episodes.length);
     // plan/model_select created the production and picked models in the
     // normal flow — both already happened via the manual wizard, so mark
@@ -1931,6 +1946,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode};
 })();
 
