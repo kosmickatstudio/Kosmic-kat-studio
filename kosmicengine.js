@@ -1322,6 +1322,91 @@ const KosmicEngine=(function(){
       ${meta?`<div style="font-size:10px;color:var(--textm);margin-top:1px">${esc(meta)}</div>`:''}
     </div>`;
   }
+  // ── ATTEMPT HISTORY ─────────────────────────────────────────────────
+  // Rejecting destroyed the previous attempt outright: character sheets were
+  // cleared with p.characterSheets=[] and location images were overwritten in
+  // place with loc.url=result.url. Because regeneration is non-deterministic,
+  // a "fix" can easily come back worse than what it replaced — and there was
+  // no way back to it. Archiving costs almost nothing: these are hosted URL
+  // strings, not image data.
+  const ATTEMPT_HISTORY_CAP=5;
+  function archiveAttempt(p,kind,items,feedback){
+    if(!p||!items||!items.length)return;
+    const key=kind==="chars"?"charSheetHistory":"locationHistory";
+    p[key]=p[key]||[];
+    // Derived from the highest version seen, NOT from array length. Using
+    // length+1 breaks the moment the cap trims the front: the list stays at 5
+    // so every subsequent attempt is numbered 6, and restoreAttempt matches on
+    // that number — it would silently restore the wrong version.
+    const nextV=p[key].reduce((m,h)=>Math.max(m,h&&h.v||0),0)+1;
+    p[key].push({
+      v:nextV,
+      at:new Date().toISOString(),
+      feedback:feedback||"",
+      // Deep-copied so a later in-place mutation (loc.url=... on regenerate)
+      // cannot reach back and rewrite the archived copy — which is exactly
+      // how locations lost their previous version in the first place.
+      items:JSON.parse(JSON.stringify(items)),
+    });
+    // Capped, and trimmed from the front: this whole object is serialised to
+    // localStorage and pushed to Firebase on every production save, so an
+    // uncapped list would grow the sync payload on every rejection forever.
+    if(p[key].length>ATTEMPT_HISTORY_CAP)p[key]=p[key].slice(-ATTEMPT_HISTORY_CAP);
+  }
+  function restoreAttempt(kind,version){
+    const p=(S.productions||[]).find(x=>x.id===S.directorChat.productionId);
+    if(!p){toast("That production no longer exists","error");return;}
+    // Refused mid-run on purpose: restoring while generation tasks are still
+    // writing into the same arrays would have them overwrite the restored
+    // version moments later, which looks like the restore silently failing.
+    const busy=(S.directorChat.tasks||[]).some(t=>t.status==="running");
+    if(busy){toast("Wait for the current step to finish first","error");return;}
+    const key=kind==="chars"?"charSheetHistory":"locationHistory";
+    const entry=(p[key]||[]).find(x=>x.v===version);
+    if(!entry){toast("That version is no longer available","error");return;}
+    if(kind==="chars"){
+      // Archive what's on screen first, so restoring is itself undoable
+      // rather than being a second destructive overwrite.
+      archiveAttempt(p,"chars",p.characterSheets,"replaced by restoring v"+version);
+      p.characterSheets=JSON.parse(JSON.stringify(entry.items));
+    } else {
+      archiveAttempt(p,"locs",p.locationBible,"replaced by restoring v"+version);
+      const restored=JSON.parse(JSON.stringify(entry.items));
+      // Matched by name rather than index: the location list can legitimately
+      // be rebuilt between attempts, and positional restore would put the
+      // wrong image on the wrong location.
+      (p.locationBible||[]).forEach(l=>{
+        const was=restored.find(r=>r.name===l.name);
+        if(was&&was.url)l.url=was.url;
+      });
+    }
+    save2Productions();
+    renderNotebook();
+    toast(`Restored version ${version}`,"success");
+  }
+
+  // Prior attempts render as a collapsed <details> beneath the live version,
+  // so history is discoverable without pushing the current work down the page.
+  function nbHistory(p,kind){
+    const key=kind==="chars"?"charSheetHistory":"locationHistory";
+    const hist=(p[key]||[]).filter(h=>h&&h.items&&h.items.length);
+    if(!hist.length)return "";
+    return `<details style="margin-top:2px">
+      <summary style="font-size:11px;font-weight:700;color:var(--violet);cursor:pointer">Previous attempts (${hist.length})</summary>
+      ${hist.slice().reverse().map(h=>{
+        const urls=h.items.map(it=>kind==="chars"?it.sheetUrl:it.url).filter(Boolean);
+        return `<div style="border:1px solid var(--glass-brd);border-radius:10px;padding:9px 10px;margin-top:6px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span class="badge badge-gray">v${h.v}</span>
+            <span style="flex:1;font-size:10.5px;color:var(--textm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.feedback?esc(h.feedback):"no reason given"}</span>
+            <button class="btn btn-outline btn-xs" onclick="KosmicEngine.restoreAttempt('${kind}',${h.v})">Restore</button>
+          </div>
+          <div style="display:flex;gap:5px;overflow-x:auto">${urls.map(u=>`<img src="${esc(u)}" loading="lazy" onclick="KosmicEngine.viewGeneration('${esc(u)}','image')" style="width:74px;height:74px;object-fit:cover;border-radius:7px;border:1px solid var(--glass-brd);flex-shrink:0;cursor:pointer">`).join('')}</div>
+        </div>`;
+      }).join('')}
+    </details>`;
+  }
+
   function renderNotebook(){
     const el=document.getElementById("dcNotebook");
     if(!el)return;
@@ -1339,13 +1424,13 @@ const KosmicEngine=(function(){
     if(sheets.length){
       n++;
       parts.push(nbSection(n,"Character Sheets",`${sheets.length} sheet${sheets.length!==1?'s':''}`,
-        sheets.map(s=>nbImage(s.sheetUrl,s.name||"Character",s.tier?`${s.tier}${s.desc?" · "+String(s.desc).slice(0,90):""}`:"")).join('')));
+        sheets.map(s=>nbImage(s.sheetUrl,s.name||"Character",s.tier?`${s.tier}${s.desc?" · "+String(s.desc).slice(0,90):""}`:"")).join('')+nbHistory(p,"chars")));
     }
     const locs=(p.locationBible||[]).filter(l=>l&&l.url);
     if(locs.length){
       n++;
       parts.push(nbSection(n,"Location Bible",`${locs.length} location${locs.length!==1?'s':''}`,
-        locs.map(l=>nbImage(l.url,l.name||"Location",l.desc?String(l.desc).slice(0,110):"")).join('')));
+        locs.map(l=>nbImage(l.url,l.name||"Location",l.desc?String(l.desc).slice(0,110):"")).join('')+nbHistory(p,"locs")));
     }
     (p.episodes||[]).forEach(e=>{
       const frames=(e.storyboard||[]).filter(s=>s&&s.url);
@@ -1717,6 +1802,9 @@ const KosmicEngine=(function(){
       // Assigned unconditionally, so submitting empty feedback CLEARS a stale
       // note rather than silently reapplying an old one to a new attempt.
       if(p)p.charSheetFeedback=fb;
+      // Preserve what's being thrown away BEFORE clearing it. Regeneration is
+      // non-deterministic, so the replacement can come back worse.
+      if(p)archiveAttempt(p,"chars",p.characterSheets,fb);
       // Regenerate every character sheet in parallel again — clear first, since
       // charsheet_single/charsheet_side each push() onto p.characterSheets;
       // without clearing, a regenerate would leave duplicate old entries
@@ -1741,6 +1829,9 @@ const KosmicEngine=(function(){
       // Assigned unconditionally so empty feedback clears a stale note rather
       // than silently reapplying it to a fresh attempt.
       if(pLoc)pLoc.locationFeedback=fb;
+      // Location images are overwritten in place on regenerate (loc.url=...),
+      // so the previous URLs have to be captured here or they are simply gone.
+      if(pLoc)archiveAttempt(pLoc,"locs",pLoc.locationBible,fb);
       if(pLoc)save2Productions();
       // Regenerate the location establishing images (tasks already exist from
       // the dynamic insertion — just reset them); the location list itself is kept.
@@ -1825,6 +1916,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode};
 })();
 
