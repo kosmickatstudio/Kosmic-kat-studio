@@ -4697,7 +4697,32 @@ function friendlyModelName(id){
   return id;
 }
 
+// Marks a generated asset approved/rejected. Tapping the already-active
+// state clears it — a review mark is an opinion, and there was otherwise no
+// way to take one back after a mis-tap.
+function reviewAsset(assetId,status){
+  const a=(S.assets||[]).find(x=>x.id===assetId);
+  if(!a){toast("That asset no longer exists","error");return;}
+  a.reviewStatus=(a.reviewStatus===status)?null:status;
+  a.reviewedAt=a.reviewStatus?new Date().toISOString():null;
+  save("assets");
+  toast(a.reviewStatus==="approved"?"Marked approved":a.reviewStatus==="rejected"?"Marked rejected":"Review cleared","success");
+  // Repaint whichever surfaces are actually on screen. Guarded individually
+  // because the modal can be opened from Home or from Gallery, and calling a
+  // renderer for a module that isn't mounted would throw on a missing node.
+  const sheet=document.getElementById("vcInfoSheet");
+  if(sheet){
+    // Rebuild the sheet so the buttons reflect the new state, reusing the
+    // exact meta it was opened with rather than reconstructing it.
+    const meta=_lastGenerationInfoMeta;
+    if(meta)openGenerationInfoModal(meta);
+  }
+  if(S.mod==="home"&&document.getElementById("moduleContent"))renderHome(document.getElementById("moduleContent"));
+  if(S.mod==="gallery"&&document.getElementById("moduleContent"))renderGallery(document.getElementById("moduleContent"));
+}
+let _lastGenerationInfoMeta=null;
 function openGenerationInfoModal(meta){
+  _lastGenerationInfoMeta=meta;
   const existing=document.getElementById("vcInfoSheet");
   if(existing)existing.remove();
   const backdrop=document.createElement("div");
@@ -4746,6 +4771,18 @@ function openGenerationInfoModal(meta){
           <div style="font-size:12.5px;color:var(--text);font-weight:600">${meta.duration||"Unknown"}</div>
         </div>`:''}
       </div>
+      ${meta.assetId?(()=>{
+        const a=(S.assets||[]).find(x=>x.id===meta.assetId);
+        const st=a?a.reviewStatus:null;
+        return `<div style="margin-top:18px;border-top:1px solid var(--glass-brd);padding-top:14px">
+          <div style="font-size:10px;font-weight:800;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Review</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn ${st==="approved"?'btn-primary':'btn-outline'} btn-sm" style="flex:1" onclick="reviewAsset('${meta.assetId}','approved')">${pIcon('check',13)} ${st==="approved"?'Approved':'Approve'}</button>
+            <button class="btn ${st==="rejected"?'btn-danger':'btn-outline'} btn-sm" style="flex:1" onclick="reviewAsset('${meta.assetId}','rejected')">✕ ${st==="rejected"?'Rejected':'Reject'}</button>
+          </div>
+          ${st?`<div style="font-size:10.5px;color:var(--textm);margin-top:7px;text-align:center">Tap the active one again to clear this mark.</div>`:''}
+        </div>`;
+      })():''}
     </div>`;
   document.body.appendChild(sheet);
 }

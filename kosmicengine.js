@@ -58,6 +58,7 @@ function renderKosmicEngineModule(el){
           <span style="font-size:10px;color:var(--textm)">· ${scopedProject.name}${S.directorChat.productionId?' · production in progress':''}</span>
         </div>
         <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-xs" onclick="KosmicEngine.openSessionRecovery()" title="Load a previously saved session into this project">↺ Restore</button>
           <button class="btn btn-ghost btn-xs" onclick="KosmicEngine.openPermissionSettings()" title="When should Kosmic Engine check with you before spending credits?">⚡ Permissions</button>
           <button class="btn btn-ghost btn-xs" onclick="switchKosmicEngineProject()" title="Switch to a different Project">⇄ Switch Project</button>
           <button class="btn btn-ghost btn-xs" onclick="KosmicEngine.reset()">↻ New Chat</button>
@@ -1064,6 +1065,71 @@ const KosmicEngine=(function(){
   // Previously the module-entry logic only asked "are there any messages?",
   // which is why a session belonging to a different project rendered happily
   // after a switch.
+  // ── MANUAL SESSION RECOVERY ─────────────────────────────────────────
+  // The automatic legacy adoption in enterProject fires on the FIRST project
+  // opened after the update and then flags itself done — which is wrong if
+  // that wasn't the project the work belonged to. This lists every session
+  // that actually exists and lets the user put it where it belongs, instead
+  // of the app guessing. Deliberately ignores ke_legacy_migrated: the whole
+  // point is to recover after the automatic pass went somewhere unhelpful.
+  async function openSessionRecovery(){
+    const el=document.getElementById("dcRecoverModal");
+    if(el)el.remove();
+    const rows=[];
+    const stashed=S.kosmicEngineSessions||{};
+    Object.keys(stashed).forEach(pid=>{
+      const s=stashed[pid];
+      if(!s||!s.messages||!s.messages.length)return;
+      const proj=S.projects.find(p=>p.id===pid);
+      rows.push({key:"stash:"+pid,title:proj?proj.name:"(deleted project)",sub:`${s.messages.length} messages`,session:s});
+    });
+    let legacy=null;
+    try{
+      const doc=await fbDB.collection("public").doc(legacyChatDocId()).get();
+      if(doc.exists&&doc.data().chat&&doc.data().chat.messages&&doc.data().chat.messages.length)legacy=doc.data().chat;
+    }catch(err){ console.warn("Legacy lookup failed:",err.message); }
+    if(legacy)rows.push({key:"legacy",title:"Earlier session (before project scoping)",sub:`${legacy.messages.length} messages`,session:legacy});
+
+    const target=S.projects.find(p=>p.id===S.kosmicEngineProjectId);
+    const overlay=document.createElement("div");
+    overlay.className="modal-overlay show";
+    overlay.id="dcRecoverModal";
+    overlay.onclick=(e)=>{if(e.target===overlay)overlay.remove();};
+    overlay.innerHTML=`<div class="modal" style="width:440px">
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet);margin-bottom:4px">Restore a session</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:14px">${target?`Loads into <b>${esc(target.name)}</b>, replacing what's currently open there.`:"Open a project first."}</div>
+      ${rows.length?rows.map(r=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;margin-bottom:6px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:700;color:var(--text)">${esc(r.title)}</div>
+          <div style="font-size:10.5px;color:var(--textm)">${esc(r.sub)}</div>
+        </div>
+        <button class="btn btn-primary btn-xs" onclick="KosmicEngine.restoreSession('${esc(r.key)}')" ${target?'':'disabled'}>Restore</button>
+      </div>`).join(''):`<div style="font-size:12px;color:var(--textm);text-align:center;padding:18px 0">No other saved sessions found.</div>`}
+      <div style="text-align:right;margin-top:14px"><button class="btn btn-ghost" onclick="document.getElementById('dcRecoverModal').remove()">Close</button></div>
+    </div>`;
+    document.body.appendChild(overlay);
+    _recoveryRows=rows;
+  }
+  let _recoveryRows=[];
+  function restoreSession(key){
+    const target=S.kosmicEngineProjectId;
+    if(!target)return;
+    const row=_recoveryRows.find(r=>r.key===key);
+    if(!row)return;
+    // Preserve whatever is currently open before overwriting it, so a
+    // restore can itself be undone by restoring the other way.
+    stashCurrentSession();
+    const restored=JSON.parse(JSON.stringify(row.session));
+    restored.projectId=target;
+    S.directorChat=restored;
+    save();
+    stashCurrentSession();
+    const el=document.getElementById("dcRecoverModal");
+    if(el)el.remove();
+    renderThread();renderTaskPanel();
+    toast("Session restored","success");
+  }
+
   async function enterProject(projectId){
     const s=S.directorChat||{};
     const hasContent=!!(s.messages&&s.messages.length);
@@ -1351,6 +1417,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession};
 })();
 
