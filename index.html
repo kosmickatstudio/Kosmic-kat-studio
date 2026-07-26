@@ -9009,7 +9009,7 @@ function episodeCardHTML(p,e){
 
     <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <span style="font-size:11px;font-weight:700;color:var(--violet)">1. SCRIPT</span>${stageBadge(e.scriptStatus,{pending:'Not written',ready:'Awaiting your approval',approved:'Approved',rejected:'Rejected — rewriting'})}
+        <span style="font-size:11px;font-weight:700;color:var(--violet)">1. SCRIPT</span>${stageBadge(e.scriptStatus,{pending:'Not written',generating:'Writing…',ready:'Awaiting your approval',approved:'Approved',rejected:'Rejected — rewriting'})}
       </div>
       ${e.scriptStatus==='pending'?`<button class="btn btn-primary btn-sm" onclick="generateEpisodeScript('${p.id}',${e.index})">${pIcon('pencil',13)} Write Script</button>`:''}
       ${e.script&&!isEditingScript?`<div style="font-size:9px;font-weight:700;color:var(--violet);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px">Episode ${e.index} — Shot</div><div style="font-size:11px;color:var(--textm);line-height:1.6;white-space:pre-wrap;max-height:160px;overflow-y:auto;background:rgba(61,31,122,0.04);border-radius:6px;padding:8px;margin-bottom:6px">${formatScriptForDisplay(e.script)}</div>`:''}
@@ -9061,7 +9061,7 @@ function episodeCardHTML(p,e){
         <span style="font-size:11px;font-weight:700;color:var(--violet)">3. SCENE (VIDEO)</span>
         <div style="display:flex;align-items:center;gap:6px">
           <button class="btn btn-ghost btn-xs" onclick="goToPreviousStage('${p.id}',${e.index},'scene')" title="Go back to revise the storyboard">${pIcon('back',11)} Back to Storyboard</button>
-          ${stageBadge(e.sceneStatus,{pending:'Not generated',ready:'Awaiting your approval',partial:'Incomplete',approved:'Approved'})}
+          ${stageBadge(e.sceneStatus,{pending:'Not generated',generating:'Generating…',ready:'Awaiting your approval',partial:'Incomplete',approved:'Approved'})}
         </div>
       </div>
       ${e.sceneStatus==='pending'?`<button class="btn btn-primary btn-sm" onclick="generateEpisodeScene('${p.id}',${e.index})">${pIcon('film',13)} Generate Scene</button>`:''}
@@ -9278,7 +9278,34 @@ const GENRE_PROMPT_FORMULAS={
   },
 };
 
+// ── GENERATION RE-ENTRANCY GUARD ────────────────────────────────────────
+// The episode stage buttons render on status==='pending', but these three
+// generators never changed status before their first await — so the button
+// stayed live for the whole generation and a second tap fired a second real,
+// paid generation. generateCharacterSheet already guarded itself this way;
+// the episode stages simply never got the same treatment.
+//
+// Two mechanisms on purpose. The Set is the CORRECTNESS guard: it cannot be
+// defeated by any status the UI happens to render. The status flip is the UX
+// guard: it removes the button so the situation doesn't arise. The finally
+// block releases both, and specifically un-sticks a status left on
+// "generating" by a throw — without that, a failure mid-generation would hide
+// the retry button permanently and strand the episode.
+const _genInFlight=new Set();
+function _genKey(prodId,epIndex,stage){return prodId+"|"+epIndex+"|"+stage;}
+
 async function generateEpisodeScript(prodId,epIndex){
+  const _p0=S.productions.find(x=>x.id===prodId);
+  if(!_p0)return; // production deleted or never existed — getEpisode(undefined) would throw
+  const _e0=getEpisode(_p0,epIndex);
+  if(!_e0)return; // episode index no longer present
+  const _k=_genKey(prodId,epIndex,"script");
+  if(_genInFlight.has(_k)){toast("Already generating — give it a moment","");return;}
+  _genInFlight.add(_k);
+  _e0.scriptStatus="generating";
+  save("productions");
+  openProductionDetail(prodId);
+  try{
   const p=S.productions.find(x=>x.id===prodId);
   const e=getEpisode(p,epIndex);
   e.shotsExpected=1; // each episode's duration is already clamped to fit one clip — see parsePromptwriterOutput
@@ -9389,6 +9416,12 @@ async function generateEpisodeScript(prodId,epIndex){
     toast(`✍️ Episode ${epIndex} script ready for your approval`,"success");
   }catch(err){
     toast(`❌ Episode ${epIndex} script failed: ${err.message}`,"error");
+  }
+  }finally{
+    _genInFlight.delete(_k);
+    // If a throw skipped the normal status write, release it so the retry
+    // button reappears instead of the episode sitting on "generating".
+    if(_e0.scriptStatus==="generating"){_e0.scriptStatus="pending";save("productions");openProductionDetail(prodId);}
   }
 }
 
@@ -9516,6 +9549,17 @@ async function uploadEpisodeStoryboard(prodId,epIndex,event){
 }
 
 async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
+  const _p0=S.productions.find(x=>x.id===prodId);
+  if(!_p0)return; // production deleted or never existed — getEpisode(undefined) would throw
+  const _e0=getEpisode(_p0,epIndex);
+  if(!_e0)return; // episode index no longer present
+  const _k=_genKey(prodId,epIndex,"storyboard");
+  if(_genInFlight.has(_k)){toast("Already generating — give it a moment","");return;}
+  _genInFlight.add(_k);
+  _e0.storyboardStatus="generating";
+  save("productions");
+  openProductionDetail(prodId);
+  try{
   const p=S.productions.find(x=>x.id===prodId);
   const e=getEpisode(p,epIndex);
   if(p.characterSheetStatus!=="approved"){
@@ -9607,6 +9651,12 @@ async function generateEpisodeStoryboard(prodId,epIndex,retryOnly=false){
   openProductionDetail(prodId);
   if(complete)toast(`🖼 Episode ${epIndex} storyboard ready for your approval`,"success");
   else if(e.storyboard.length>0)toast(`⚠️ Episode ${epIndex} storyboard incomplete — ${e.storyboard.length} of ${shotDescs.length} shots generated`,"error");
+  }finally{
+    _genInFlight.delete(_k);
+    // If a throw skipped the normal status write, release it so the retry
+    // button reappears instead of the episode sitting on "generating".
+    if(_e0.storyboardStatus==="generating"){_e0.storyboardStatus="pending";save("productions");openProductionDetail(prodId);}
+  }
 }
 
 // ── EPISODE SCENE (real video gen per shot, with continuity chaining) ──
@@ -9790,6 +9840,17 @@ async function getChainedReferenceFrame(fallbackUrl,videoUrl){
 }
 
 async function generateEpisodeScene(prodId,epIndex,retryOnly=false){
+  const _p0=S.productions.find(x=>x.id===prodId);
+  if(!_p0)return; // production deleted or never existed — getEpisode(undefined) would throw
+  const _e0=getEpisode(_p0,epIndex);
+  if(!_e0)return; // episode index no longer present
+  const _k=_genKey(prodId,epIndex,"scene");
+  if(_genInFlight.has(_k)){toast("Already generating — give it a moment","");return;}
+  _genInFlight.add(_k);
+  _e0.sceneStatus="generating";
+  save("productions");
+  openProductionDetail(prodId);
+  try{
   const p=S.productions.find(x=>x.id===prodId);
   const e=getEpisode(p,epIndex);
   const useVisualChain=p.continuity==="visual"||p.continuity==="both";
@@ -9863,6 +9924,12 @@ async function generateEpisodeScene(prodId,epIndex,retryOnly=false){
   if(complete)toast(`🎬 Episode ${epIndex} scene ready for your approval`,"success");
   else if(e.shots.length>0)toast(`⚠️ Episode ${epIndex} scene incomplete — ${e.shots.length} of ${e.storyboard.length} clips generated`,"error");
   openProductionDetail(prodId);
+  }finally{
+    _genInFlight.delete(_k);
+    // If a throw skipped the normal status write, release it so the retry
+    // button reappears instead of the episode sitting on "generating".
+    if(_e0.sceneStatus==="generating"){_e0.sceneStatus="pending";save("productions");openProductionDetail(prodId);}
+  }
 }
 
 function reshootEpisodeScene(prodId,epIndex){
