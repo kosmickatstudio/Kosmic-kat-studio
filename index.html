@@ -4549,6 +4549,20 @@ async function validateKlingV3Assets(images,videos,prompt,negPrompt){
 // each therefore needs its own extra angle — which is exactly what keeps a
 // character consistent in Kling. Images are paired up in order.
 // groupAsOneElement=true: all images are angles of ONE subject.
+// Preferred path: the user built Elements explicitly, so each card maps
+// straight to one schema element and nothing has to be inferred.
+function buildKlingV3ElementsExplicit(hostedByElement,videoUrls){
+  const elements=hostedByElement
+    .filter(e=>e&&e.frontal&&e.angles&&e.angles.length)
+    .map(e=>{
+      const el={frontal_image_url:e.frontal,reference_image_urls:e.angles.slice(0,3)};
+      if(e.voiceId)el.voice_id=e.voiceId;
+      return el;
+    });
+  // Schema: "A request can only have one element with a video."
+  if((videoUrls||[]).length)elements.push({video_url:videoUrls[0]});
+  return elements;
+}
 function buildKlingV3Elements(imageUrls,videoUrls,groupAsOneElement,voiceIds){
   const imgs=(imageUrls||[]).filter(Boolean);
   const vids=(videoUrls||[]).filter(Boolean);
@@ -5271,6 +5285,19 @@ function renderVideoCanvas(el){
             <div style="font-size:10px;color:var(--textm);margin-top:3px">Lower = more creative motion/variation. Higher = sticks closer to your exact prompt. Kling's own default is 0.5.</div>
           </div>
 
+          <div class="f-group" id="vcElementsWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+            <label class="f-label">${pIcon('sparkle',12)} Elements <span style="font-weight:400;color:var(--texts)">(characters / objects to keep consistent)</span></label>
+            <div style="font-size:10px;color:var(--textm);margin:-2px 0 8px">Each Element is ONE character or object. Kling needs a main view plus at least one other angle of that same subject — that pairing is what holds it consistent across the shot.</div>
+            <div id="vcElementsList"></div>
+            <button type="button" class="btn btn-outline btn-sm" id="vcAddElementBtn" onclick="addVcElement()">+ Add Element</button>
+            <input type="file" accept="image/*" id="vcElementFrontalFile" style="display:none" onchange="handleVcElementImage(event,'frontal')">
+            <input type="file" accept="image/*" multiple id="vcElementAngleFile" style="display:none" onchange="handleVcElementImage(event,'angle')">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openSaveCharacterPresetModal()">${pIcon('save',13)} Save as Preset</button>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openLoadCharacterPresetModal()">${pIcon('folder',13)} Load Preset</button>
+            </div>
+            <div style="font-size:9.5px;color:var(--textm);margin-top:5px">Presets are saved in this app only, for fast reuse — fal doesn't expose Kling's own Element Library via its API, so Elements are built per generation rather than registered once.</div>
+          </div>
           <div class="f-group" id="vcMultiImageWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
             <label class="f-label" id="vcMultiImageLabel">Reference Images</label>
             <input type="file" accept="image/*" multiple id="vcMultiImageFile" style="display:none" onchange="handleVcMultiImageUpload(event)">
@@ -5417,6 +5444,102 @@ function renderVideoCanvas(el){
 
 // ── VIDEO CHAT UI — model-driven dynamic settings ──
 S.vcMultiImages=S.vcMultiImages||[];
+// ── EXPLICIT KLING ELEMENTS ─────────────────────────────────────────────
+// Replaces the flat "up to 4 reference images, auto-paired" model, which was
+// genuinely confusing: the user could not see which image belonged to which
+// character, and 4 uploads silently became 2 characters. Both Kling's own app
+// and fal's playground present this the same way — discrete Element cards,
+// each with a main view plus its own extra angles, and an Add Element button.
+// fal's schema is literally that shape too: elements[] of
+// {frontal_image_url, reference_image_urls, voice_id}.
+S.vcElements=S.vcElements||[];
+let _vcElementTarget=null; // which element+slot an upload is destined for
+const VC_MAX_ELEMENTS=4, VC_MAX_ANGLES=3;
+
+function addVcElement(){
+  if(S.vcElements.length>=VC_MAX_ELEMENTS){toast(`Up to ${VC_MAX_ELEMENTS} Elements`,"error");return;}
+  S.vcElements.push({frontal:null,angles:[],voiceId:null});
+  renderVcElements();
+}
+function removeVcElement(i){ S.vcElements.splice(i,1); renderVcElements(); }
+function removeVcElementAngle(i,j){ if(S.vcElements[i])S.vcElements[i].angles.splice(j,1); renderVcElements(); }
+function pickVcElementImage(i,slot){
+  _vcElementTarget={i,slot};
+  document.getElementById(slot==="frontal"?"vcElementFrontalFile":"vcElementAngleFile").click();
+}
+function handleVcElementImage(event,slot){
+  const files=[...(event.target.files||[])];
+  event.target.value="";
+  const t=_vcElementTarget; _vcElementTarget=null;
+  if(!files.length||!t||!S.vcElements[t.i])return;
+  const el=S.vcElements[t.i];
+  const room=slot==="frontal"?1:Math.max(0,VC_MAX_ANGLES-el.angles.length);
+  files.slice(0,room).forEach(file=>{
+    if(!file.type.startsWith("image/")){toast("Images only","error");return;}
+    const r=new FileReader();
+    r.onload=e=>{
+      const item={dataUrl:e.target.result,name:file.name};
+      if(slot==="frontal")el.frontal=item; else el.angles.push(item);
+      renderVcElements();
+    };
+    r.readAsDataURL(file);
+  });
+}
+function vcElementIsValid(el){ return !!(el&&el.frontal&&el.angles.length>=1); }
+function renderVcElements(){
+  const list=document.getElementById("vcElementsList");
+  if(!list)return;
+  const slot=(img,onClick,onRemove,label)=>img
+    ?`<div style="position:relative;width:58px;height:58px;flex-shrink:0">
+        <img src="${img.dataUrl}" style="width:58px;height:58px;object-fit:cover;border-radius:9px;border:1px solid var(--glass-brd)">
+        <button onclick="${onRemove}" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;border:none;background:var(--red);color:#fff;font-size:11px;line-height:1;cursor:pointer">✕</button>
+      </div>`
+    :`<div onclick="${onClick}" style="width:58px;height:58px;flex-shrink:0;border:1.5px dashed var(--border);border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--textm);font-size:9px;text-align:center;line-height:1.1">
+        <div style="font-size:15px">+</div>${label}
+      </div>`;
+  list.innerHTML=S.vcElements.map((el,i)=>{
+    const ok=vcElementIsValid(el);
+    return `<div style="border:1px solid ${ok?'var(--glass-brd)':'var(--gold)'};border-radius:12px;padding:10px;margin-bottom:8px;background:var(--glass)">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
+        <span class="badge ${ok?'badge-violet':'badge-gray'}">@Element${i+1}</span>
+        <span style="flex:1;font-size:10px;color:${ok?'var(--textm)':'var(--gold)'}">${ok?`Reference as @Element${i+1} in your prompt`:"Needs a main view + at least 1 other angle"}</span>
+        <button class="btn btn-ghost btn-xs" onclick="removeVcElement(${i})">Remove</button>
+      </div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-start">
+        ${slot(el.frontal,`pickVcElementImage(${i},'frontal')`,`removeVcElement(${i});addVcElement()`,"Main view")}
+        <div style="width:1px;align-self:stretch;background:var(--border)"></div>
+        ${el.angles.map((a,j)=>slot(a,"",`removeVcElementAngle(${i},${j})`,"")).join("")}
+        ${el.angles.length<VC_MAX_ANGLES?slot(null,`pickVcElementImage(${i},'angle')`,"",`Angle ${el.angles.length+1}`):""}
+      </div>
+    </div>`;
+  }).join("")||`<div style="font-size:11px;color:var(--textm);padding:8px 0">No Elements yet — add one to keep a character consistent.</div>`;
+  const btn=document.getElementById("vcAddElementBtn");
+  if(btn)btn.style.display=S.vcElements.length>=VC_MAX_ELEMENTS?"none":"inline-flex";
+}
+// Flattened for upload: only VALID elements are sent, so a half-filled card
+// never reaches fal (which would reject it for the missing angle).
+function vcElementsForUpload(){
+  return S.vcElements.filter(vcElementIsValid).map(el=>({frontal:el.frontal,angles:el.angles.slice(0,VC_MAX_ANGLES),voiceId:el.voiceId}));
+}
+
+// Uploads each Element's images in ONE batched call, then re-splits the hosted
+// URLs back into their element groupings. Batching matters: uploading per
+// element would fire a separate round trip per card, which on mobile is the
+// slowest part of the whole request.
+async function uploadVcElements(apiKey){
+  const els=vcElementsForUpload();
+  if(!els.length)return [];
+  const flat=[];
+  els.forEach(e=>{flat.push(e.frontal);e.angles.forEach(a=>flat.push(a));});
+  const hosted=await uploadRefsToFal(flat,apiKey);
+  let k=0;
+  return els.map(e=>{
+    const frontal=hosted[k++];
+    const angles=e.angles.map(()=>hosted[k++]).filter(Boolean);
+    return {frontal,angles,voiceId:e.voiceId};
+  }).filter(e=>e.frontal&&e.angles.length);
+}
+
 // Local, app-side saved character presets — NOT a registered Kling Element.
 // fal doesn't expose Kling's own persistent Element Library (create/name/
 // tag/save/reuse with AI-assisted angle generation and voice binding) via
@@ -6197,7 +6320,13 @@ function updateVcModelUI(){
   // Gating this to O3 meant v3 was silently locked to "separate characters"
   // with no way to say four uploads are four angles of one subject — which is
   // precisely what Kling's own "Add Additional Angles" flow is for.
-  const groupApplicable=(cap.provider==="kling-o3-ref"||cap.elements)&&S.vcMultiImages.length>1;
+  // Element-capable models now use the explicit Element cards instead of the
+  // flat image bucket, so the old grouping toggle is redundant for them — the
+  // user says which images belong together by putting them in one card.
+  const elementsUI=!!(cap.elements||cap.provider==="kling-o3-ref");
+  const elWrap=document.getElementById("vcElementsWrap");
+  if(elWrap){elWrap.style.display=elementsUI?"block":"none";if(elementsUI)renderVcElements();}
+  const groupApplicable=false;
   const groupWrap=document.getElementById("vcElementGroupWrap");
   if(groupWrap){
     groupWrap.style.display=groupApplicable?"block":"none";
@@ -6308,7 +6437,13 @@ function refreshMotionBrushVisibility(){
   // Gating this to O3 meant v3 was silently locked to "separate characters"
   // with no way to say four uploads are four angles of one subject — which is
   // precisely what Kling's own "Add Additional Angles" flow is for.
-  const groupApplicable=(cap.provider==="kling-o3-ref"||cap.elements)&&S.vcMultiImages.length>1;
+  // Element-capable models now use the explicit Element cards instead of the
+  // flat image bucket, so the old grouping toggle is redundant for them — the
+  // user says which images belong together by putting them in one card.
+  const elementsUI=!!(cap.elements||cap.provider==="kling-o3-ref");
+  const elWrap=document.getElementById("vcElementsWrap");
+  if(elWrap){elWrap.style.display=elementsUI?"block":"none";if(elementsUI)renderVcElements();}
+  const groupApplicable=false;
     groupWrap.style.display=groupApplicable?"block":"none";
     if(!groupApplicable)S.vcElementGroupMode=false;
     const groupToggle=document.getElementById("vcElementGroupToggle");
@@ -6938,6 +7073,7 @@ async function sendVcMultiShotPrompt(){
       if(problems.length)throw new Error("Kling can't accept these yet:\n• "+problems.join("\n• "));
     }
     const hostedImages=S.vcMultiImages.length?await uploadRefsToFal(S.vcMultiImages,apiKey):[];
+    const hostedElements=await uploadVcElements(apiKey);
     const hostedVideos=S.vcMultiVideos.length?await uploadRefsToFal(S.vcMultiVideos,apiKey):[];
     patchVcUserMessageRefs(userMsgId,hostedImages,hostedVideos,[]);
     if(cap.elements&&hostedImages.length===1){
@@ -6997,7 +7133,9 @@ async function sendVcMultiShotPrompt(){
         const missing=hostedImages.map((u,i)=>!u?i+1:null).filter(Boolean);
         if(missing.length)throw new Error(`Reference image ${missing.join(", ")} has no usable URL — remove and re-attach it, then try again`);
         if(i2v){endpoint=i2v.endpoint;body[i2v.field]=hostedImages[0];}
-        body.elements=buildKlingV3Elements(hostedImages,hostedVideos,S.vcElementGroupMode,S.klingSelectedVoices);
+        body.elements=hostedElements&&hostedElements.length
+          ?buildKlingV3ElementsExplicit(hostedElements,hostedVideos)
+          :buildKlingV3Elements(hostedImages,hostedVideos,S.vcElementGroupMode,S.klingSelectedVoices);
       } else if(S.vcMultiImages.length&&i2v){
         endpoint=i2v.endpoint;
         body[i2v.field]=hostedImages[0];
@@ -7180,6 +7318,7 @@ async function sendVcChatPrompt(){
       if(problems.length)throw new Error("Kling can't accept these yet:\n• "+problems.join("\n• "));
     }
     const hostedImages=S.vcMultiImages.length?await uploadRefsToFal(S.vcMultiImages,apiKeyEarly):[];
+    const hostedElements=await uploadVcElements(apiKeyEarly);
     const hostedVideos=S.vcMultiVideos.length?await uploadRefsToFal(S.vcMultiVideos,apiKeyEarly):[];
     const hostedAudios=S.vcMultiAudios.length?await uploadRefsToFal(S.vcMultiAudios,apiKeyEarly):[];
     // Patch the snapshot with the lightweight hosted URLs instead of the raw
@@ -7249,7 +7388,9 @@ async function sendVcChatPrompt(){
           const missing=hostedImages.map((u,i)=>!u?i+1:null).filter(Boolean);
           if(missing.length)throw new Error(`Reference image ${missing.join(", ")} has no usable URL — remove and re-attach it, then try again`);
           if(i2v){endpoint=i2v.endpoint;body[i2v.field]=hostedImages[0];}
-          body.elements=buildKlingV3Elements(hostedImages,hostedVideos,S.vcElementGroupMode,S.klingSelectedVoices);
+          body.elements=hostedElements&&hostedElements.length
+          ?buildKlingV3ElementsExplicit(hostedElements,hostedVideos)
+          :buildKlingV3Elements(hostedImages,hostedVideos,S.vcElementGroupMode,S.klingSelectedVoices);
         } else if(i2v&&S.vcMultiImages.length){
           // Exactly 1 reference image — swap to the real image-to-video endpoint
           // and use that tier's actual field name (image_url or start_image_url —
