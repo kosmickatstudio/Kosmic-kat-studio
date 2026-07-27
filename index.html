@@ -4499,6 +4499,29 @@ function measureVideo(dataUrl){
     v.src=dataUrl;
   });
 }
+
+// Every image that will actually be sent, labelled so an error names the right
+// one. Built because the validator was only ever handed S.vcMultiImages — the
+// end frame and all Element images (frontal + angles) bypassed it entirely and
+// would only fail after being uploaded to fal.
+function collectKlingV3Images(){
+  const out=[];
+  (S.vcMultiImages||[]).forEach((it,i)=>{ if(it&&it.dataUrl)out.push({...it,name:it.name||`Start frame`}); });
+  if(S.vcEndFrame&&S.vcEndFrame.dataUrl)out.push({...S.vcEndFrame,name:S.vcEndFrame.name||"End frame"});
+  (S.vcElements||[]).forEach((el,i)=>{
+    const who=el.name?`"${el.name}"`:`@Element${i+1}`;
+    if(el&&el.frontal&&el.frontal.dataUrl)out.push({...el.frontal,name:`${who} main view`});
+    (el.angles||[]).forEach((a,j)=>{ if(a&&a.dataUrl)out.push({...a,name:`${who} angle ${j+1}`}); });
+  });
+  return out;
+}
+function collectKlingV3Videos(){
+  const out=[...(S.vcMultiVideos||[])];
+  (S.vcElements||[]).forEach((el,i)=>{
+    if(el&&el.video&&el.video.dataUrl)out.push({...el.video,name:`${el.name?`"${el.name}"`:`@Element${i+1}`} video`});
+  });
+  return out;
+}
 // Returns an array of human-readable problems, empty when everything passes.
 async function validateKlingV3Assets(images,videos,prompt,negPrompt){
   const problems=[];
@@ -5302,6 +5325,8 @@ function renderVideoCanvas(el){
             <input type="file" accept="image/*" id="vcStartFrameFile" style="display:none" onchange="handleVcStartFrameUpload(event)">
             <input type="file" accept="image/*" id="vcFramesEndFile" style="display:none" onchange="handleVcEndFrameUpload(event)">
             <div style="font-size:9.5px;color:var(--textm);margin-top:7px">Kling animates from the start frame to the end frame. Leave both empty to generate purely from the prompt.</div>
+            <div style="font-size:9.5px;color:var(--textm);margin-top:3px">Both frames must be at least 300×300, under 10MB, and between 2:5 and 5:2 — so 16:9, 9:16, 1:1, 4:5 and 21:9 are all fine; only extreme letterbox or sliver crops are rejected.</div>
+            <div id="vcFramesMismatch" style="display:none;font-size:9.5px;color:var(--gold);margin-top:5px"></div>
           </div>
           <div class="f-group" id="vcElementsWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
             <label class="f-label">${pIcon('sparkle',12)} Elements <span style="font-weight:400;color:var(--texts)">(characters / objects to keep consistent)</span></label>
@@ -5507,6 +5532,25 @@ function renderVcFrames(){
   endSlot.innerHTML=start
     ? box(end,"document.getElementById('vcFramesEndFile').click()","clearVcEndFrame()","Add end frame")
     : `<div style="height:96px;border:1.5px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--texts);font-size:10px;text-align:center;padding:0 8px;opacity:0.6">Add a start frame first</div>`;
+  // Aspect MISMATCH between the two frames is a warning, not a block: fal's
+  // schema constrains each frame's own ratio but says nothing about them
+  // matching each other. Rather than invent a rule, flag it — interpolating
+  // between different shapes usually crops or distorts, and that is worth
+  // knowing before spending, not after.
+  const mm=document.getElementById("vcFramesMismatch");
+  if(mm){
+    mm.style.display="none";
+    if(start&&end){
+      Promise.all([measureImage(start.dataUrl),measureImage(end.dataUrl)]).then(([a,b])=>{
+        if(!a||!b||!a.h||!b.h)return;
+        const ra=a.w/a.h, rb=b.w/b.h;
+        if(Math.abs(ra-rb)>0.05){
+          mm.textContent=`Heads up: your start frame is ${ra.toFixed(2)}:1 and the end frame is ${rb.toFixed(2)}:1. Kling will interpolate between them anyway, but mismatched shapes usually crop or stretch.`;
+          mm.style.display="block";
+        }
+      });
+    }
+  }
 }
 // ── EXPLICIT KLING ELEMENTS ─────────────────────────────────────────────
 // Replaces the flat "up to 4 reference images, auto-paired" model, which was
@@ -7163,7 +7207,7 @@ async function sendVcSequentialShots(){
     // Same pre-upload validation as the other Kling paths — this is the
     // sequential multi-shot route, which uploads once and then generates
     // repeatedly, so a bad asset here wastes every subsequent shot too.
-    const problems=await validateKlingV3Assets(S.vcMultiImages,S.vcMultiVideos,null,negPrompt);
+    const problems=await validateKlingV3Assets(collectKlingV3Images(),collectKlingV3Videos(),null,negPrompt);
     if(problems.length){
       pushVcChatMessage({role:"assistant",type:"error",content:"Kling can't accept these yet:\n• "+problems.join("\n• ")});
       sendBtn.disabled=false;
@@ -7267,7 +7311,7 @@ async function sendVcMultiShotPrompt(){
     // wastes the transfer and the wait — and on mobile, real data allowance.
     // Only applies to Kling v3, whose limits these are.
     if(/kling-video\/v3\//.test(model||"")){
-      const problems=await validateKlingV3Assets(S.vcMultiImages,S.vcMultiVideos,prompt,negPrompt);
+      const problems=await validateKlingV3Assets(collectKlingV3Images(),collectKlingV3Videos(),prompt,negPrompt);
       if(problems.length)throw new Error("Kling can't accept these yet:\n• "+problems.join("\n• "));
     }
     const hostedImages=S.vcMultiImages.length?await uploadRefsToFal(S.vcMultiImages,apiKey):[];
@@ -7530,7 +7574,7 @@ async function sendVcChatPrompt(){
     // wastes the transfer and the wait — and on mobile, real data allowance.
     // Only applies to Kling v3, whose limits these are.
     if(/kling-video\/v3\//.test(model||"")){
-      const problems=await validateKlingV3Assets(S.vcMultiImages,S.vcMultiVideos,prompt,negPrompt);
+      const problems=await validateKlingV3Assets(collectKlingV3Images(),collectKlingV3Videos(),prompt,negPrompt);
       if(problems.length)throw new Error("Kling can't accept these yet:\n• "+problems.join("\n• "));
     }
     const hostedImages=S.vcMultiImages.length?await uploadRefsToFal(S.vcMultiImages,apiKeyEarly):[];
