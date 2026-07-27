@@ -4458,6 +4458,78 @@ function normalizeKlingV3Body(endpoint,body){
   body.generate_audio=gs("kling_generate_audio",true)!==false;
   return body;
 }
+// ── KLING V3 ASSET VALIDATION ───────────────────────────────────────────
+// fal's schema carries hard limits on every asset these endpoints accept.
+// Without checking locally, an oversized or wrong-shaped file is uploaded to
+// fal first and only then rejected — wasting the upload, the wait, and on a
+// mobile connection a real amount of the user's data.
+//
+// Deliberately checks ONLY what a browser can measure reliably: pixel
+// dimensions, aspect ratio, video duration, and decoded byte size. Frame rate
+// (schema: 24-60fps) is NOT checked, because there is no dependable way to
+// read fps from a video element — guessing it and blocking a valid upload
+// would be worse than letting fal make that specific call.
+const KLING_V3_LIMITS={
+  image:{minW:300,minH:300,minAspect:0.4,maxAspect:2.5,maxBytes:10485760},
+  video:{minW:720,minH:720,maxW:2160,maxH:2160,minDur:3,maxDur:10.05,maxBytes:209715200},
+  text:{maxPrompt:2500},
+};
+function dataUrlBytes(dataUrl){
+  if(!dataUrl)return 0;
+  const i=dataUrl.indexOf(",");
+  if(i<0)return 0;
+  const b64=dataUrl.slice(i+1);
+  // base64 decodes to 3 bytes per 4 chars, minus padding
+  return Math.floor(b64.length*0.75)-(b64.endsWith("==")?2:b64.endsWith("=")?1:0);
+}
+function measureImage(dataUrl){
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>resolve({w:img.naturalWidth,h:img.naturalHeight});
+    img.onerror=()=>resolve(null); // unreadable — let fal decide rather than block
+    img.src=dataUrl;
+  });
+}
+function measureVideo(dataUrl){
+  return new Promise(resolve=>{
+    const v=document.createElement("video");
+    v.preload="metadata";
+    v.onloadedmetadata=()=>resolve({w:v.videoWidth,h:v.videoHeight,dur:v.duration});
+    v.onerror=()=>resolve(null);
+    v.src=dataUrl;
+  });
+}
+// Returns an array of human-readable problems, empty when everything passes.
+async function validateKlingV3Assets(images,videos,prompt,negPrompt){
+  const problems=[];
+  const L=KLING_V3_LIMITS;
+  for(let i=0;i<(images||[]).length;i++){
+    const it=images[i]; if(!it||!it.dataUrl)continue;
+    const label=it.name||`Image ${i+1}`;
+    const bytes=dataUrlBytes(it.dataUrl);
+    if(bytes>L.image.maxBytes)problems.push(`${label} is ${(bytes/1048576).toFixed(1)}MB — the limit is 10MB.`);
+    const m=await measureImage(it.dataUrl);
+    if(!m)continue; // unreadable, don't block
+    if(m.w<L.image.minW||m.h<L.image.minH)problems.push(`${label} is ${m.w}×${m.h} — the minimum is 300×300.`);
+    const ar=m.h?m.w/m.h:1;
+    if(ar<L.image.minAspect||ar>L.image.maxAspect)problems.push(`${label} has an aspect ratio of ${ar.toFixed(2)} — Kling accepts 0.40 to 2.50 (so nothing narrower than roughly 2:5 or wider than 5:2).`);
+  }
+  for(let i=0;i<(videos||[]).length;i++){
+    const it=videos[i]; if(!it||!it.dataUrl)continue;
+    const label=it.name||`Video ${i+1}`;
+    const bytes=dataUrlBytes(it.dataUrl);
+    if(bytes>L.video.maxBytes)problems.push(`${label} is ${(bytes/1048576).toFixed(0)}MB — the limit is 200MB.`);
+    const m=await measureVideo(it.dataUrl);
+    if(!m)continue;
+    if(m.w<L.video.minW||m.h<L.video.minH)problems.push(`${label} is ${m.w}×${m.h} — the minimum is 720×720.`);
+    if(m.w>L.video.maxW||m.h>L.video.maxH)problems.push(`${label} is ${m.w}×${m.h} — the maximum is 2160×2160.`);
+    if(isFinite(m.dur)&&(m.dur<L.video.minDur||m.dur>L.video.maxDur))problems.push(`${label} is ${m.dur.toFixed(1)}s — Kling accepts 3s to 10s for a reference video.`);
+  }
+  if(prompt&&prompt.length>L.text.maxPrompt)problems.push(`Your prompt is ${prompt.length} characters — the limit is 2500.`);
+  if(negPrompt&&negPrompt.length>L.text.maxPrompt)problems.push(`Your negative prompt is ${negPrompt.length} characters — the limit is 2500.`);
+  return problems;
+}
+
 // ── KLING V3 ELEMENT BUILDER ────────────────────────────────────────────
 // Built from fal's OpenAPI schema for the v3 image-to-video endpoints, not
 // from Kling's first-party app. The two differ: Kling's own Create Element
@@ -6716,6 +6788,17 @@ async function sendVcSequentialShots(){
   sendBtn.disabled=true;
 
   let hostedImages=[];
+  if(/kling-video\/v3\//.test(model||"")){
+    // Same pre-upload validation as the other Kling paths — this is the
+    // sequential multi-shot route, which uploads once and then generates
+    // repeatedly, so a bad asset here wastes every subsequent shot too.
+    const problems=await validateKlingV3Assets(S.vcMultiImages,S.vcMultiVideos,null,negPrompt);
+    if(problems.length){
+      pushVcChatMessage({role:"assistant",type:"error",content:"Kling can't accept these yet:\n• "+problems.join("\n• ")});
+      sendBtn.disabled=false;
+      return;
+    }
+  }
   if(S.vcMultiImages.length){
     const uploadId="vcLoading_"+Date.now();
     pushVcChatMessage({id:uploadId,role:"assistant",type:"loading",content:"Uploading reference files…"});
@@ -6808,6 +6891,14 @@ async function sendVcMultiShotPrompt(){
     const apiKey=gs("api_falai","");
     if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
     if(S.vcMultiImages.length||S.vcMultiVideos.length)replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Uploading reference files…"});
+    // Validated BEFORE upload on purpose: an oversized or wrong-shaped asset
+    // would otherwise be uploaded to fal in full and only then rejected, which
+    // wastes the transfer and the wait — and on mobile, real data allowance.
+    // Only applies to Kling v3, whose limits these are.
+    if(/kling-video\/v3\//.test(model||"")){
+      const problems=await validateKlingV3Assets(S.vcMultiImages,S.vcMultiVideos,prompt,negPrompt);
+      if(problems.length)throw new Error("Kling can't accept these yet:\n• "+problems.join("\n• "));
+    }
     const hostedImages=S.vcMultiImages.length?await uploadRefsToFal(S.vcMultiImages,apiKey):[];
     const hostedVideos=S.vcMultiVideos.length?await uploadRefsToFal(S.vcMultiVideos,apiKey):[];
     patchVcUserMessageRefs(userMsgId,hostedImages,hostedVideos,[]);
@@ -7042,6 +7133,14 @@ async function sendVcChatPrompt(){
     // risk a job that "completes" with no video and no clear reason why).
     const anyRefs=S.vcMultiImages.length||S.vcMultiVideos.length||S.vcMultiAudios.length;
     if(anyRefs)pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Uploading reference files…"});
+    // Validated BEFORE upload on purpose: an oversized or wrong-shaped asset
+    // would otherwise be uploaded to fal in full and only then rejected, which
+    // wastes the transfer and the wait — and on mobile, real data allowance.
+    // Only applies to Kling v3, whose limits these are.
+    if(/kling-video\/v3\//.test(model||"")){
+      const problems=await validateKlingV3Assets(S.vcMultiImages,S.vcMultiVideos,prompt,negPrompt);
+      if(problems.length)throw new Error("Kling can't accept these yet:\n• "+problems.join("\n• "));
+    }
     const hostedImages=S.vcMultiImages.length?await uploadRefsToFal(S.vcMultiImages,apiKeyEarly):[];
     const hostedVideos=S.vcMultiVideos.length?await uploadRefsToFal(S.vcMultiVideos,apiKeyEarly):[];
     const hostedAudios=S.vcMultiAudios.length?await uploadRefsToFal(S.vcMultiAudios,apiKeyEarly):[];
