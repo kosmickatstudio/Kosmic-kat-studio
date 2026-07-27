@@ -5286,6 +5286,22 @@ function renderVideoCanvas(el){
             <div style="font-size:10px;color:var(--textm);margin-top:3px">Lower = more creative motion/variation. Higher = sticks closer to your exact prompt. Kling's own default is 0.5.</div>
           </div>
 
+          <div class="f-group" id="vcFramesWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+            <label class="f-label">${pIcon('film',12)} Frames <span style="font-weight:400;color:var(--texts)">(optional — where the shot starts and ends)</span></label>
+            <div style="display:flex;gap:10px;align-items:stretch">
+              <div style="flex:1">
+                <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px">Start frame</div>
+                <div id="vcStartFrameSlot"></div>
+              </div>
+              <div style="display:flex;align-items:center;color:var(--textm);font-size:16px;padding-top:16px">→</div>
+              <div style="flex:1">
+                <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px">End frame</div>
+                <div id="vcEndFrameSlot"></div>
+              </div>
+            </div>
+            <input type="file" accept="image/*" id="vcStartFrameFile" style="display:none" onchange="handleVcStartFrameUpload(event)">
+            <div style="font-size:9.5px;color:var(--textm);margin-top:7px">Kling animates from the start frame to the end frame. Leave both empty to generate purely from the prompt.</div>
+          </div>
           <div class="f-group" id="vcElementsWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
             <label class="f-label">${pIcon('sparkle',12)} Elements <span style="font-weight:400;color:var(--texts)">(characters / objects to keep consistent)</span></label>
             <div style="font-size:10px;color:var(--textm);margin:-2px 0 8px">Each Element is ONE character or object. Kling needs a main view plus at least one other angle of that same subject — that pairing is what holds it consistent across the shot.</div>
@@ -5446,6 +5462,51 @@ function renderVideoCanvas(el){
 
 // ── VIDEO CHAT UI — model-driven dynamic settings ──
 S.vcMultiImages=S.vcMultiImages||[];
+
+// ── FRAMES (start + end) ────────────────────────────────────────────────
+// On element-capable models the old flat image bucket was doing two unrelated
+// jobs: holding the start frame AND holding character references. Splitting
+// them is what makes the screen legible — Frames owns the shot's first and
+// last image, Elements owns the characters.
+function handleVcStartFrameUpload(event){
+  const file=(event.target.files||[])[0];
+  event.target.value="";
+  if(!file)return;
+  if(!file.type.startsWith("image/")){toast("Images only","error");return;}
+  const r=new FileReader();
+  r.onload=e=>{
+    // Start frame IS vcMultiImages[0] on these endpoints — it becomes
+    // start_image_url. Kept in the same place so every existing upload,
+    // validation and request path keeps working unchanged.
+    S.vcMultiImages=[{dataUrl:e.target.result,name:file.name}];
+    renderVcFrames();
+    if(typeof updateVcMultiImagePreview==="function")updateVcMultiImagePreview();
+    updateVcModelUI();
+  };
+  r.readAsDataURL(file);
+}
+function clearVcStartFrame(){ S.vcMultiImages=[]; renderVcFrames(); if(typeof updateVcMultiImagePreview==="function")updateVcMultiImagePreview(); updateVcModelUI(); }
+function clearVcEndFrame(){ S.vcEndFrame=null; renderVcFrames(); }
+function renderVcFrames(){
+  const startSlot=document.getElementById("vcStartFrameSlot");
+  const endSlot=document.getElementById("vcEndFrameSlot");
+  if(!startSlot||!endSlot)return;
+  const start=S.vcMultiImages&&S.vcMultiImages[0];
+  const end=S.vcEndFrame;
+  const box=(img,pick,clear,placeholder)=>img
+    ?`<div style="position:relative">
+        <img src="${img.dataUrl}" style="width:100%;height:96px;object-fit:cover;border-radius:10px;border:1px solid var(--glass-brd);display:block">
+        <button onclick="${clear}" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--red);color:#fff;font-size:12px;line-height:1;cursor:pointer">✕</button>
+      </div>`
+    :`<div onclick="${pick}" style="height:96px;border:1.5px dashed var(--border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--textm);font-size:10.5px;gap:3px">
+        <div style="font-size:20px;line-height:1">+</div>${placeholder}
+      </div>`;
+  startSlot.innerHTML=box(start,"document.getElementById('vcStartFrameFile').click()","clearVcStartFrame()","Add start frame");
+  // The end frame is only meaningful once there is a start frame to move FROM.
+  endSlot.innerHTML=start
+    ? box(end,"document.getElementById('vcEndFrameFile').click()","clearVcEndFrame()","Add end frame")
+    : `<div style="height:96px;border:1.5px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--texts);font-size:10px;text-align:center;padding:0 8px;opacity:0.6">Add a start frame first</div>`;
+}
 // ── EXPLICIT KLING ELEMENTS ─────────────────────────────────────────────
 // Replaces the flat "up to 4 reference images, auto-paired" model, which was
 // genuinely confusing: the user could not see which image belonged to which
@@ -5525,10 +5586,42 @@ function openKlingVoiceModal(elIndex){
     <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet);margin-bottom:4px">Voice for @Element${elIndex+1}</div>
     <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Optional. Kling binds the voice to this character, so any line it speaks in the prompt uses it.</div>
     ${voices.length?voices.map(v=>`<div onclick="setVcElementField(${elIndex},'voiceId','${v.id}');renderVcElements();document.getElementById('vcElVoiceModal').remove()" style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text)">${v.name}</div>`).join("")
-      :`<div style="font-size:11.5px;color:var(--textm);text-align:center;padding:14px 0">No cloned voices yet. Clone one from an audio clip in the Dialogue Voices section, then it'll appear here.</div>`}
+      :`<div style="font-size:11.5px;color:var(--textm);text-align:center;padding:10px 0 4px">No voices yet — upload a 5–30s sample below to make one.</div>`}
+    <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px">
+      <button class="btn btn-outline btn-sm" style="width:100%" onclick="document.getElementById('vcElVoiceSampleFile').click()">${pIcon('upload',13)} Upload voice sample (5–30s)</button>
+      <div style="font-size:9.5px;color:var(--textm);margin-top:6px">Uploaded here so you don't have to leave this Element. Voices cloned in Dialogue Voices appear in this list too.</div>
+    </div>
     <div style="text-align:right;margin-top:12px"><button class="btn btn-ghost" onclick="document.getElementById('vcElVoiceModal').remove()">Close</button></div>
   </div>`;
   document.body.appendChild(overlay);
+  let fi=document.getElementById("vcElVoiceSampleFile");
+  if(!fi){
+    fi=document.createElement("input");
+    fi.type="file"; fi.accept="audio/*"; fi.id="vcElVoiceSampleFile"; fi.style.display="none";
+    fi.onchange=handleVcElementVoiceSample;
+    document.body.appendChild(fi);
+  }
+  fi.dataset.elIndex=String(elIndex);
+}
+// Clones through the same real fal-ai/kling-video/create-voice path the
+// Dialogue Voices section uses, then binds the result straight to the element
+// that asked — otherwise the user clones a voice and still has to come back
+// and select it manually.
+async function handleVcElementVoiceSample(event){
+  const file=(event.target.files||[])[0];
+  const idx=parseInt(event.target.dataset.elIndex||"-1",10);
+  event.target.value="";
+  if(!file||idx<0)return;
+  const modal=document.getElementById("vcElVoiceModal");
+  if(modal)modal.remove();
+  const before=(S.klingVoices||[]).length;
+  await createKlingVoice(file,file.name);
+  const after=S.klingVoices||[];
+  if(after.length>before&&S.vcElements[idx]){
+    S.vcElements[idx].voiceId=after[after.length-1].id;
+    renderVcElements();
+    toast(`Voice bound to @Element${idx+1}`,"success");
+  }
 }
 function vcElementIsValid(el){ return !!(el&&el.frontal&&el.angles.length>=1); }
 function renderVcElements(){
@@ -6400,6 +6493,15 @@ function updateVcModelUI(){
   const elementsUI=!!(cap.elements||cap.provider==="kling-o3-ref");
   const elWrap=document.getElementById("vcElementsWrap");
   if(elWrap){elWrap.style.display=elementsUI?"block":"none";if(elementsUI)renderVcElements();}
+  const framesWrap=document.getElementById("vcFramesWrap");
+  if(framesWrap){framesWrap.style.display=elementsUI?"block":"none";if(elementsUI)renderVcFrames();}
+  // On element models the flat bucket and the standalone End Frame block are
+  // both superseded by Frames — leaving them visible was the actual complaint:
+  // a "Reference Images (up to 4)" control that no longer holds references.
+  const flatWrap=document.getElementById("vcMultiImageWrap");
+  if(flatWrap&&elementsUI)flatWrap.style.display="none";
+  const oldEnd=document.getElementById("vcEndFrameWrap");
+  if(oldEnd&&elementsUI)oldEnd.style.display="none";
   const groupApplicable=false;
   const groupWrap=document.getElementById("vcElementGroupWrap");
   if(groupWrap){
@@ -6450,7 +6552,15 @@ function updateVcModelUI(){
 
   if(cap.multiRef||cap.multiImage){
     const modelLabel=model.includes("kling")?"Kling":model.includes("seedance")?"Seedance":model.includes("veo")?"Veo":"this model";
-    document.getElementById("vcMultiImageLabel").textContent=`Reference Images for ${modelLabel} (up to ${cap.maxImages})`;
+    // Two separate sites were setting this label and only one was updated
+    // before, so element-capable models kept showing "Reference Images (up to
+    // 4)" — a control that no longer holds references at all. On those models
+    // the flat bucket is now hidden entirely; Frames owns start/end and
+    // Elements owns references.
+    const labelEl=document.getElementById("vcMultiImageLabel");
+    if(labelEl)labelEl.textContent=(cap.elements||cap.provider==="kling-o3-ref")
+      ?"Start Frame"
+      :`Reference Images for ${modelLabel} (up to ${cap.maxImages})`;
   }
   const note=document.getElementById("vcModelNote");
   if(KLING_FIXED_RESOLUTION_NOTE[model])note.textContent=KLING_FIXED_RESOLUTION_NOTE[model];
@@ -6517,6 +6627,15 @@ function refreshMotionBrushVisibility(){
   const elementsUI=!!(cap.elements||cap.provider==="kling-o3-ref");
   const elWrap=document.getElementById("vcElementsWrap");
   if(elWrap){elWrap.style.display=elementsUI?"block":"none";if(elementsUI)renderVcElements();}
+  const framesWrap=document.getElementById("vcFramesWrap");
+  if(framesWrap){framesWrap.style.display=elementsUI?"block":"none";if(elementsUI)renderVcFrames();}
+  // On element models the flat bucket and the standalone End Frame block are
+  // both superseded by Frames — leaving them visible was the actual complaint:
+  // a "Reference Images (up to 4)" control that no longer holds references.
+  const flatWrap=document.getElementById("vcMultiImageWrap");
+  if(flatWrap&&elementsUI)flatWrap.style.display="none";
+  const oldEnd=document.getElementById("vcEndFrameWrap");
+  if(oldEnd&&elementsUI)oldEnd.style.display="none";
   const groupApplicable=false;
     groupWrap.style.display=groupApplicable?"block":"none";
     if(!groupApplicable)S.vcElementGroupMode=false;
