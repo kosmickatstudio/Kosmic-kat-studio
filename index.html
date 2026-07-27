@@ -4557,6 +4557,7 @@ function buildKlingV3ElementsExplicit(hostedByElement,videoUrls){
     .map(e=>{
       const el={frontal_image_url:e.frontal,reference_image_urls:e.angles.slice(0,3)};
       if(e.voiceId)el.voice_id=e.voiceId;
+      if(e.video)el.video_url=e.video;
       return el;
     });
   // Schema: "A request can only have one element with a video."
@@ -5292,6 +5293,7 @@ function renderVideoCanvas(el){
             <button type="button" class="btn btn-outline btn-sm" id="vcAddElementBtn" onclick="addVcElement()">+ Add Element</button>
             <input type="file" accept="image/*" id="vcElementFrontalFile" style="display:none" onchange="handleVcElementImage(event,'frontal')">
             <input type="file" accept="image/*" multiple id="vcElementAngleFile" style="display:none" onchange="handleVcElementImage(event,'angle')">
+            <input type="file" accept="video/*" id="vcElementVideoFile" style="display:none" onchange="handleVcElementVideo(event)">
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
               <button type="button" class="btn btn-ghost btn-sm" onclick="openSaveCharacterPresetModal()">${pIcon('save',13)} Save as Preset</button>
               <button type="button" class="btn btn-ghost btn-sm" onclick="openLoadCharacterPresetModal()">${pIcon('folder',13)} Load Preset</button>
@@ -5458,7 +5460,7 @@ const VC_MAX_ELEMENTS=4, VC_MAX_ANGLES=3;
 
 function addVcElement(){
   if(S.vcElements.length>=VC_MAX_ELEMENTS){toast(`Up to ${VC_MAX_ELEMENTS} Elements`,"error");return;}
-  S.vcElements.push({frontal:null,angles:[],voiceId:null});
+  S.vcElements.push({name:"",tag:"Characters",desc:"",frontal:null,angles:[],video:null,voiceId:null});
   renderVcElements();
 }
 function removeVcElement(i){ S.vcElements.splice(i,1); renderVcElements(); }
@@ -5485,6 +5487,49 @@ function handleVcElementImage(event,slot){
     r.readAsDataURL(file);
   });
 }
+
+const VC_ELEMENT_TAGS=["Characters","Animals","Items","Costumes","Scenes","Effects","Others"];
+function setVcElementField(i,field,value){
+  if(!S.vcElements[i])return;
+  S.vcElements[i][field]=value;
+  // No re-render on text input — rebuilding innerHTML per keystroke destroys
+  // the field and drops the caret mid-word.
+  if(field==="tag")renderVcElements();
+}
+function pickVcElementVideo(i){ _vcElementTarget={i,slot:"video"}; document.getElementById("vcElementVideoFile").click(); }
+function handleVcElementVideo(event){
+  const file=(event.target.files||[])[0];
+  event.target.value="";
+  const t=_vcElementTarget; _vcElementTarget=null;
+  if(!file||!t||!S.vcElements[t.i])return;
+  // Schema: only ONE element in a request may carry a video.
+  const other=S.vcElements.findIndex((e,idx)=>idx!==t.i&&e.video);
+  if(other>=0){toast(`Only one Element can have a video — @Element${other+1} already does`,"error");return;}
+  const r=new FileReader();
+  r.onload=e=>{S.vcElements[t.i].video={dataUrl:e.target.result,name:file.name};renderVcElements();};
+  r.readAsDataURL(file);
+}
+function removeVcElementVideo(i){ if(S.vcElements[i])S.vcElements[i].video=null; renderVcElements(); }
+
+// Binds one of the already-cloned Kling voices to a specific Element. Voice is
+// per-element in the v3 schema, which is why this is a per-card action rather
+// than the old global voice list — that list was sent as a top-level voice_ids
+// field the endpoint does not define, so it never did anything.
+function openKlingVoiceModal(elIndex){
+  const prev=document.getElementById("vcElVoiceModal"); if(prev)prev.remove();
+  const voices=S.klingVoices||[];
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show"; overlay.id="vcElVoiceModal";
+  overlay.onclick=(e)=>{if(e.target===overlay)overlay.remove();};
+  overlay.innerHTML=`<div class="modal" style="width:400px">
+    <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet);margin-bottom:4px">Voice for @Element${elIndex+1}</div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Optional. Kling binds the voice to this character, so any line it speaks in the prompt uses it.</div>
+    ${voices.length?voices.map(v=>`<div onclick="setVcElementField(${elIndex},'voiceId','${v.id}');renderVcElements();document.getElementById('vcElVoiceModal').remove()" style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text)">${v.name}</div>`).join("")
+      :`<div style="font-size:11.5px;color:var(--textm);text-align:center;padding:14px 0">No cloned voices yet. Clone one from an audio clip in the Dialogue Voices section, then it'll appear here.</div>`}
+    <div style="text-align:right;margin-top:12px"><button class="btn btn-ghost" onclick="document.getElementById('vcElVoiceModal').remove()">Close</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
 function vcElementIsValid(el){ return !!(el&&el.frontal&&el.angles.length>=1); }
 function renderVcElements(){
   const list=document.getElementById("vcElementsList");
@@ -5505,12 +5550,28 @@ function renderVcElements(){
         <span style="flex:1;font-size:10px;color:${ok?'var(--textm)':'var(--gold)'}">${ok?`Reference as @Element${i+1} in your prompt`:"Needs a main view + at least 1 other angle"}</span>
         <button class="btn btn-ghost btn-xs" onclick="removeVcElement(${i})">Remove</button>
       </div>
+      <div style="display:flex;gap:6px;margin-bottom:7px">
+        <input class="f-input" style="flex:1;font-size:12px;padding:6px 9px" maxlength="20" placeholder="Name (e.g. Sedi)" value="${(el.name||"").replace(/"/g,"&quot;")}" oninput="setVcElementField(${i},'name',this.value)">
+        <select class="f-select" style="width:118px;font-size:11.5px;padding:6px 8px" onchange="setVcElementField(${i},'tag',this.value)">
+          ${VC_ELEMENT_TAGS.map(t=>`<option value="${t}" ${el.tag===t?"selected":""}>${t}</option>`).join("")}
+        </select>
+      </div>
+      <input class="f-input" style="width:100%;font-size:11.5px;padding:6px 9px;margin-bottom:8px" maxlength="200" placeholder="Description — details to keep or discard (optional)" value="${(el.desc||"").replace(/"/g,"&quot;")}" oninput="setVcElementField(${i},'desc',this.value)">
       <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-start">
         ${slot(el.frontal,`pickVcElementImage(${i},'frontal')`,`removeVcElement(${i});addVcElement()`,"Main view")}
         <div style="width:1px;align-self:stretch;background:var(--border)"></div>
         ${el.angles.map((a,j)=>slot(a,"",`removeVcElementAngle(${i},${j})`,"")).join("")}
         ${el.angles.length<VC_MAX_ANGLES?slot(null,`pickVcElementImage(${i},'angle')`,"",`Angle ${el.angles.length+1}`):""}
       </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+        ${el.video
+          ?`<span class="badge badge-violet" style="cursor:pointer" onclick="removeVcElementVideo(${i})">${pIcon('film',10)} ${el.video.name.slice(0,18)} ✕</span>`
+          :`<button type="button" class="btn btn-ghost btn-xs" onclick="pickVcElementVideo(${i})">${pIcon('film',11)} Add Video</button>`}
+        ${el.voiceId
+          ?`<span class="badge badge-violet" style="cursor:pointer" onclick="setVcElementField(${i},'voiceId',null);renderVcElements()">${pIcon('mic',10)} voice set ✕</span>`
+          :`<button type="button" class="btn btn-ghost btn-xs" onclick="openKlingVoiceModal(${i})">${pIcon('mic',11)} Add Voice</button>`}
+      </div>
+      <div style="font-size:9px;color:var(--texts);margin-top:6px">Name, tag and description are saved in this app only — they're for finding this character again, and aren't sent to Kling. Only the images, video and voice are.</div>
     </div>`;
   }).join("")||`<div style="font-size:11px;color:var(--textm);padding:8px 0">No Elements yet — add one to keep a character consistent.</div>`;
   const btn=document.getElementById("vcAddElementBtn");
@@ -5531,12 +5592,16 @@ async function uploadVcElements(apiKey){
   if(!els.length)return [];
   const flat=[];
   els.forEach(e=>{flat.push(e.frontal);e.angles.forEach(a=>flat.push(a));});
+  // Element videos upload alongside, then get re-attached below.
+  const vidEls=els.map((e,i)=>e.video?{i,item:e.video}:null).filter(Boolean);
+  const hostedVids=vidEls.length?await uploadRefsToFal(vidEls.map(v=>v.item),apiKey):[];
   const hosted=await uploadRefsToFal(flat,apiKey);
   let k=0;
-  return els.map(e=>{
+  return els.map((e,idx)=>{
     const frontal=hosted[k++];
     const angles=e.angles.map(()=>hosted[k++]).filter(Boolean);
-    return {frontal,angles,voiceId:e.voiceId};
+    const vi=vidEls.findIndex(v=>v.i===idx);
+    return {frontal,angles,voiceId:e.voiceId,video:vi>=0?hostedVids[vi]:null};
   }).filter(e=>e.frontal&&e.angles.length);
 }
 
@@ -6274,7 +6339,16 @@ function updateVcModelUI(){
   document.getElementById("vcMultiImageWrap").style.display=(cap.multiRef||cap.multiImage)?"block":"none";
   if((cap.multiRef||cap.multiImage)&&cap.maxImages&&S.vcMultiImages.length>cap.maxImages){
     const removed=S.vcMultiImages.length-cap.maxImages;
-    S.vcMultiImages=S.vcMultiImages.slice(0,cap.maxImages);
+    // On element-capable models this control is the START FRAME, not a
+    // reference bucket — Kling v3 has no "4 reference images" concept at all,
+    // references live exclusively in Elements. Capping at 1 here because
+    // anything beyond the first was being uploaded and then silently dropped:
+    // only hostedImages[0] ever reaches start_image_url.
+    const flatCap=(cap.elements||cap.provider==="kling-o3-ref")?1:cap.maxImages;
+    if(S.vcMultiImages.length>flatCap){
+      S.vcMultiImages=S.vcMultiImages.slice(0,flatCap);
+      toast("Kling v3 uses one Start Frame — extra images belong in Elements below","");
+    }
     renderVcMultiPreview("vcMultiImagePreview",S.vcMultiImages,false);
     toast(`This model only supports ${cap.maxImages} reference images — removed the last ${removed}`,"error");
   }
