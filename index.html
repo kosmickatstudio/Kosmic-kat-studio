@@ -5300,6 +5300,7 @@ function renderVideoCanvas(el){
               </div>
             </div>
             <input type="file" accept="image/*" id="vcStartFrameFile" style="display:none" onchange="handleVcStartFrameUpload(event)">
+            <input type="file" accept="image/*" id="vcFramesEndFile" style="display:none" onchange="handleVcEndFrameUpload(event)">
             <div style="font-size:9.5px;color:var(--textm);margin-top:7px">Kling animates from the start frame to the end frame. Leave both empty to generate purely from the prompt.</div>
           </div>
           <div class="f-group" id="vcElementsWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
@@ -5504,7 +5505,7 @@ function renderVcFrames(){
   startSlot.innerHTML=box(start,"document.getElementById('vcStartFrameFile').click()","clearVcStartFrame()","Add start frame");
   // The end frame is only meaningful once there is a start frame to move FROM.
   endSlot.innerHTML=start
-    ? box(end,"document.getElementById('vcEndFrameFile').click()","clearVcEndFrame()","Add end frame")
+    ? box(end,"document.getElementById('vcFramesEndFile').click()","clearVcEndFrame()","Add end frame")
     : `<div style="height:96px;border:1.5px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--texts);font-size:10px;text-align:center;padding:0 8px;opacity:0.6">Add a start frame first</div>`;
 }
 // ── EXPLICIT KLING ELEMENTS ─────────────────────────────────────────────
@@ -5725,6 +5726,10 @@ function handleVcEndFrameUpload(event){
   reader.onload=e=>{
     S.vcEndFrame={dataUrl:e.target.result,name:file.name};
     renderVcEndFramePreview();
+    // Also repaint the Frames compartment — on element models the old preview
+    // node is inside a hidden container, so without this the upload succeeds
+    // but the slot still reads "Add end frame".
+    if(typeof renderVcFrames==="function")renderVcFrames();
     updateVcAttachmentBar();
   };
   reader.readAsDataURL(file);
@@ -7277,7 +7282,11 @@ async function sendVcMultiShotPrompt(){
     // changing the mode would look like the element feature just did nothing.
     toast("One image can't be an Element — Kling needs a second angle. Using it as a start frame instead.","");
   }
-  if(cap.elements&&hostedImages.length>1){
+  // Gated on hostedElements, NOT on hostedImages.length>1. That old condition
+  // became permanently false the moment the start-frame bucket was capped to a
+  // single image, which meant Elements were silently never sent — the user had
+  // a full Elements UI that produced nothing in the request.
+  if(cap.elements&&((hostedElements&&hostedElements.length)||hostedImages.length>1)){
       // Real diagnostic visibility, not just fal's response — after several
       // rounds where fal's own error kept saying elements were empty despite
       // real uploads, the missing piece was seeing the ACTUAL URLs this app
@@ -7325,7 +7334,21 @@ async function sendVcMultiShotPrompt(){
         // exactly instead of assuming elements works standalone.
         const missing=hostedImages.map((u,i)=>!u?i+1:null).filter(Boolean);
         if(missing.length)throw new Error(`Reference image ${missing.join(", ")} has no usable URL — remove and re-attach it, then try again`);
-        if(i2v){endpoint=i2v.endpoint;body[i2v.field]=hostedImages[0];}
+        if(i2v){
+          endpoint=i2v.endpoint;
+          // start_image_url is REQUIRED by the schema and every confirmed
+          // working multi-element example sends it alongside elements. When
+          // the user set no start frame, fall back to the first element's
+          // frontal image rather than sending undefined and being rejected.
+          const startUrl=hostedImages[0]||(hostedElements&&hostedElements[0]&&hostedElements[0].frontal)||null;
+          if(startUrl)body[i2v.field]=startUrl;
+          // The end frame was simply never carried on this branch — it was
+          // uploaded, stored, and then dropped before the request was built.
+          if(i2v.endField&&S.vcEndFrame){
+            const hostedEnd=await uploadRefsToFal([S.vcEndFrame],apiKey);
+            if(hostedEnd&&hostedEnd[0])body[i2v.endField]=hostedEnd[0];
+          }
+        }
         body.elements=hostedElements&&hostedElements.length
           ?buildKlingV3ElementsExplicit(hostedElements,hostedVideos)
           :buildKlingV3Elements(hostedImages,hostedVideos,S.vcElementGroupMode,S.klingSelectedVoices);
@@ -7518,7 +7541,11 @@ async function sendVcChatPrompt(){
     // base64 originally captured above — keeps chat history storage small
     // and means a future Retry reuses these directly instead of re-uploading.
     patchVcUserMessageRefs(userMsgId,hostedImages,hostedVideos,hostedAudios);
-    if(cap.elements&&hostedImages.length>1){
+    // Gated on hostedElements, NOT on hostedImages.length>1. That old condition
+  // became permanently false the moment the start-frame bucket was capped to a
+  // single image, which meant Elements were silently never sent — the user had
+  // a full Elements UI that produced nothing in the request.
+  if(cap.elements&&((hostedElements&&hostedElements.length)||hostedImages.length>1)){
       pushVcChatMessage({role:"assistant",type:"debug",content:`🔎 Debug — URLs about to be sent as elements:\n${hostedImages.map((u,i)=>`${i+1}. ${u}`).join("\n")}`});
     }
     if(cap.provider==="seedance-ref"){
@@ -7580,7 +7607,15 @@ async function sendVcChatPrompt(){
           // reference image, matching those examples exactly.
           const missing=hostedImages.map((u,i)=>!u?i+1:null).filter(Boolean);
           if(missing.length)throw new Error(`Reference image ${missing.join(", ")} has no usable URL — remove and re-attach it, then try again`);
-          if(i2v){endpoint=i2v.endpoint;body[i2v.field]=hostedImages[0];}
+          if(i2v){
+            endpoint=i2v.endpoint;
+            const startUrl=hostedImages[0]||(hostedElements&&hostedElements[0]&&hostedElements[0].frontal)||null;
+            if(startUrl)body[i2v.field]=startUrl;
+            if(i2v.endField&&S.vcEndFrame){
+              const hostedEnd=await uploadRefsToFal([S.vcEndFrame],apiKeyEarly);
+              if(hostedEnd&&hostedEnd[0])body[i2v.endField]=hostedEnd[0];
+            }
+          }
           body.elements=hostedElements&&hostedElements.length
           ?buildKlingV3ElementsExplicit(hostedElements,hostedVideos)
           :buildKlingV3Elements(hostedImages,hostedVideos,S.vcElementGroupMode,S.klingSelectedVoices);
