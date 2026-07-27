@@ -3496,7 +3496,7 @@ const MODEL_LOGOS={
   "fal-ai/kling-video/v3/pro/text-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/kling-video/o3/pro/reference-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/kling-video/o3/standard/image-to-video":{mono:"K",bg:"#1B5EFF"},
-  "fal-ai/kling-video/v3/4k/image-to-video":{mono:"K",bg:"#1B5EFF"},
+  "fal-ai/kling-video/v3/4k/image-to-video":{mono:"K",bg:"#1B5EFF"},"fal-ai/kling-video/v3/4k/text-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/veo3.1":{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
   "fal-ai/veo3.1/reference-to-video":{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
 };
@@ -4442,6 +4442,72 @@ const LENS_PRESETS=[
 // the field silently got ignored by fal since it isn't part of v3's schema, and
 // reference images were never actually applied). Verified against fal's actual
 // v3 API docs before fixing.
+// Applied AFTER the endpoint may have been swapped to image-to-video, because
+// that swap is whatdetermines which schema applies. Deliberately scoped to the
+// v3 IMAGE-to-video endpoints only: that is the schema actually verified from
+// fal, and text-to-video's shape (no required start_image_url) was not.
+const KLING_V3_I2V_FIELDS=new Set(["prompt","multi_prompt","start_image_url","duration","generate_audio","end_image_url","elements","shot_type","negative_prompt","cfg_scale"]);
+function normalizeKlingV3Body(endpoint,body){
+  if(!/kling-video\/v3\/(standard|pro|4k)\/image-to-video/.test(endpoint||""))return body;
+  Object.keys(body).forEach(k=>{
+    // aspect_ratio and voice_ids are the two this actually removes today —
+    // neither exists on the endpoint, so aspect_ratio was inert and voice_ids
+    // meant selected voices silently did nothing.
+    if(!KLING_V3_I2V_FIELDS.has(k))delete body[k];
+  });
+  body.generate_audio=gs("kling_generate_audio",true)!==false;
+  return body;
+}
+// ── KLING V3 ELEMENT BUILDER ────────────────────────────────────────────
+// Built from fal's OpenAPI schema for the v3 image-to-video endpoints, not
+// from Kling's first-party app. The two differ: Kling's own Create Element
+// screen requires a Name, Tag and Description, but fal's KlingV3ComboElementInput
+// has none of those — it is only {frontal_image_url, reference_image_urls,
+// video_url, voice_id}. Those fields exist so a HUMAN can find a saved
+// character again in Kling's library; the API takes the images directly.
+//
+// THE BUG THIS FIXES: every element the v3 path sent carried only a
+// frontal_image_url. The schema states plainly that reference_image_urls is
+// "Additional reference images from different angles. 1-3 images supported.
+// At least one image is required." So every element was under-provisioned and
+// fal rejected the request. The O3 path already built elements correctly —
+// that fix simply never reached v3.
+//
+// groupAsOneElement=false (default): each image is a SEPARATE character, and
+// each therefore needs its own extra angle — which is exactly what keeps a
+// character consistent in Kling. Images are paired up in order.
+// groupAsOneElement=true: all images are angles of ONE subject.
+function buildKlingV3Elements(imageUrls,videoUrls,groupAsOneElement,voiceIds){
+  const imgs=(imageUrls||[]).filter(Boolean);
+  const vids=(videoUrls||[]).filter(Boolean);
+  let elements=[];
+  if(groupAsOneElement&&imgs.length>1){
+    elements=[{frontal_image_url:imgs[0],reference_image_urls:imgs.slice(1,4)}];
+  } else if(imgs.length>1){
+    // Separate characters: pair each frontal with the NEXT image as its angle.
+    // An odd trailing image has no angle to pair with and would be an invalid
+    // element, so it is folded in as an extra angle of the last character
+    // rather than being sent as an element fal will reject.
+    for(let i=0;i<imgs.length;i+=2){
+      const frontal=imgs[i];
+      const angle=imgs[i+1];
+      if(angle)elements.push({frontal_image_url:frontal,reference_image_urls:[angle]});
+      else if(elements.length)elements[elements.length-1].reference_image_urls.push(frontal);
+      // A single leftover with no prior element cannot form a valid element at
+      // all; the caller handles that case before reaching here.
+    }
+  }
+  // "A request can only have one element with a video" — schema, verbatim.
+  if(vids.length)elements.push({video_url:vids[0]});
+  // voice_id is PER ELEMENT in v3, not a top-level voice_ids array (that field
+  // does not exist on this endpoint at all). Optional — an element without a
+  // voice is perfectly valid.
+  (voiceIds||[]).forEach((vid,i)=>{ if(vid&&elements[i]&&!elements[i].video_url)elements[i].voice_id=vid; });
+  return elements;
+}
+// True when the uploads genuinely cannot form even one valid element.
+function klingV3ElementsPossible(imageCount){ return imageCount>1; }
+
 const IMAGE_TO_VIDEO_MAP={
   "bytedance/seedance-2.0/fast/text-to-video":{endpoint:"bytedance/seedance-2.0/fast/image-to-video",field:"image_url"},
   "bytedance/seedance-2.0/text-to-video":{endpoint:"bytedance/seedance-2.0/image-to-video",field:"image_url"},
@@ -4467,7 +4533,7 @@ const IMAGE_TO_VIDEO_MAP={
   // from v3 Standard/Pro (which cap at 1080p). Same field shape as v3 Pro
   // (start_image_url, end_image_url, elements, multi_prompt all confirmed
   // supported), just a different endpoint and flat pricing.
-  "fal-ai/kling-video/v3/4k/image-to-video":{endpoint:"fal-ai/kling-video/v3/4k/image-to-video",field:"start_image_url",endField:"end_image_url"},
+  "fal-ai/kling-video/v3/4k/image-to-video":{endpoint:"fal-ai/kling-video/v3/4k/image-to-video",field:"start_image_url",endField:"end_image_url"},"fal-ai/kling-video/v3/4k/text-to-video":{endpoint:"fal-ai/kling-video/v3/4k/image-to-video",field:"start_image_url",endField:"end_image_url"},
   "fal-ai/veo3.1":{endpoint:"fal-ai/veo3.1/image-to-video",field:"image_url"},
 };
 
@@ -4895,7 +4961,7 @@ const VIDEO_MODEL_CAPABILITIES={
   // frame) PLUS elements for extra characters — same shape as v3 Standard/
   // Pro, not the dedicated always-reference provider path O3 Pro needs.
   "fal-ai/kling-video/o3/standard/image-to-video":{multiImage:true,maxImages:4,negPrompt:true,multiShot:true,elements:true,cfgScale:true,tagSyntax:"@Element1 (when 2+ reference images)"},
-  "fal-ai/kling-video/v3/4k/image-to-video":{multiImage:true,maxImages:4,negPrompt:true,multiShot:true,elements:true,cfgScale:true,tagSyntax:"@Element1 (when 2+ reference images)"},
+  "fal-ai/kling-video/v3/4k/image-to-video":{multiImage:true,maxImages:4,negPrompt:true,multiShot:true,elements:true,cfgScale:true,tagSyntax:"@Element1 (when 2+ reference images)"},"fal-ai/kling-video/v3/4k/text-to-video":{multiImage:true,maxImages:4,negPrompt:true,multiShot:true,elements:true,cfgScale:true,tagSyntax:"@Element1 (when 2+ reference images)"},
 };
 
 // ══════════════════════════════════════════════════════
@@ -5163,6 +5229,16 @@ function renderVideoCanvas(el){
               <input type="checkbox" id="vcMultiShotToggle" onchange="toggleMultiShotMode()">
               <span class="f-label" style="margin:0">${pIcon('film',12)} Multi-Shot Storyboard <span style="font-weight:400;color:var(--texts)">(up to 6 shots, one generation)</span></span>
             </label>
+            <div id="vcKlingAudioWrap" style="display:none;border-top:1px solid var(--border);padding-top:10px;margin-top:8px">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="checkbox" id="vcKlingAudioToggle" onchange="saveSetting('kling_generate_audio',this.checked);updateVcCostHint()">
+                <span class="f-label" style="margin:0">${pIcon('mic',12)} Native Audio <span style="font-weight:400;color:var(--texts)">(Kling v3 — off is ~33% cheaper)</span></span>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px">
+                <input type="checkbox" id="vcKlingSmartShotToggle" onchange="saveSetting('kling_shot_type',this.checked?'intelligent':'customize')">
+                <span class="f-label" style="margin:0">${pIcon('sparkle',12)} Smart Multi-Shot <span style="font-weight:400;color:var(--texts)">(let Kling decide the shot structure)</span></span>
+              </label>
+            </div>
             <div id="vcMultiShotBuilder" style="display:none">
               <div class="f-group">
                 <label class="f-label">Generation Mode</label>
@@ -5893,7 +5969,7 @@ const VIDEO_PRICING={
   // Confirmed via the same source that reported the discrepancy: v3
   // Standard is $0.084/s audio off — audio-on (what we actually always
   // send) is 1.5x that, same ratio fal confirms for the Pro tier below.
-  "fal-ai/kling-video/v3/standard/text-to-video":{perSec:0.126,elementsMultiplier:2},
+  "fal-ai/kling-video/v3/standard/text-to-video":{perSec:0.126,perSecNoAudio:0.084,perSecVoice:0.154,elementsMultiplier:2},
   // Confirmed directly, multiple times, on fal's own v3 Pro model pages:
   // $0.112/s audio off, $0.168/s audio on, $0.196/s with voice control.
   // elementsMultiplier: fal explicitly states image-to-video WITH elements
@@ -5911,7 +5987,7 @@ const VIDEO_PRICING={
   // whether audio is on or off" - a genuinely flat rate, not audio-gated
   // like every other Kling tier. audioIncluded marks it as a precise
   // number, not an approximation.
-  "fal-ai/kling-video/v3/4k/image-to-video":{perSec:0.42,audioIncluded:true},
+  "fal-ai/kling-video/v3/4k/image-to-video":{perSec:0.42,audioIncluded:true},"fal-ai/kling-video/v3/4k/text-to-video":{perSec:0.42,audioIncluded:true},
   "fal-ai/veo3.1":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
   "fal-ai/veo3.1/reference-to-video":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
 };
@@ -5930,6 +6006,16 @@ function estimateVideoCost(model,seconds,resolution,hasVideoRefs,usesElements){
     return{cost,approx:false};
   }
   let rate=(resolution==="4k"&&p.perSec4k)?p.perSec4k:p.perSec;
+  // Kling v3 bills in three tiers, confirmed on fal's own model page:
+  // $0.084/s audio off, $0.126/s audio on, $0.154/s when voice control is used
+  // while generating audio. Audio is now user-controlled, so the estimate has
+  // to follow the actual setting instead of always assuming the middle tier.
+  if(p.perSecNoAudio||p.perSecVoice){
+    const audioOn=gs("kling_generate_audio",true)!==false;
+    const usingVoice=audioOn&&!!(S.klingSelectedVoices&&S.klingSelectedVoices.length);
+    if(!audioOn&&p.perSecNoAudio)rate=p.perSecNoAudio;
+    else if(usingVoice&&p.perSecVoice)rate=p.perSecVoice;
+  }
   if(p.audioSurcharge)rate=rate*p.audioSurcharge; // Veo bills audio-on by default in this app (generate_audio true)
   if(usesElements&&p.elementsMultiplier)rate=rate*p.elementsMultiplier;
   const cost=rate*seconds;
@@ -6014,6 +6100,17 @@ function updateVcModelUI(){
   // as Motion Brush, and cleared the same way when it stops applying.
   const endFrameApplicable=!!IMAGE_TO_VIDEO_MAP[model]?.endField&&S.vcMultiImages.length===1;
   document.getElementById("vcEndFrameWrap").style.display=endFrameApplicable?"block":"none";
+  // Kling v3 only: generate_audio and shot_type are v3 fields. Showing them for
+  // Seedance/Veo would imply control the endpoint doesn't have.
+  const klingV3=/kling-video\/v3\//.test(model||"");
+  const kAudioWrap=document.getElementById("vcKlingAudioWrap");
+  if(kAudioWrap){
+    kAudioWrap.style.display=klingV3?"block":"none";
+    const aT=document.getElementById("vcKlingAudioToggle");
+    if(aT)aT.checked=gs("kling_generate_audio",true)!==false;
+    const sT=document.getElementById("vcKlingSmartShotToggle");
+    if(sT)sT.checked=gs("kling_shot_type","customize")==="intelligent";
+  }
   if(!endFrameApplicable&&S.vcEndFrame){S.vcEndFrame=null;}
   renderVcEndFramePreview();
   const groupApplicable=cap.provider==="kling-o3-ref"&&S.vcMultiImages.length>1;
@@ -6533,7 +6630,8 @@ async function runLipSync(msgId){
     const apiKey=gs("api_falai","");
     if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
     const endpoint="fal-ai/kling-video/lipsync/audio-to-video";
-    const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
+    normalizeKlingV3Body(endpoint,body);
+      const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
     const submitData=await submitRes.json();
     if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
     const videoUrl=await pollFalVideoResult(endpoint,submitData,apiKey);
@@ -6649,6 +6747,7 @@ async function sendVcSequentialShots(){
       const cfgScaleEl=document.getElementById("vcCfgScaleSlider");if(cfgScaleEl&&cap.cfgScale)body.cfg_scale=parseFloat(cfgScaleEl.value);
       if(S.klingSelectedVoices.length)body.voice_ids=S.klingSelectedVoices;
       if(refUrl&&i2v){endpoint=i2v.endpoint;body[i2v.field]=refUrl;}
+      normalizeKlingV3Body(endpoint,body);
       const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
       const submitData=await submitRes.json();
       if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
@@ -6712,7 +6811,15 @@ async function sendVcMultiShotPrompt(){
     const hostedImages=S.vcMultiImages.length?await uploadRefsToFal(S.vcMultiImages,apiKey):[];
     const hostedVideos=S.vcMultiVideos.length?await uploadRefsToFal(S.vcMultiVideos,apiKey):[];
     patchVcUserMessageRefs(userMsgId,hostedImages,hostedVideos,[]);
-    if(cap.elements&&hostedImages.length>1){
+    if(cap.elements&&hostedImages.length===1){
+    // One image cannot form a valid element: the schema requires at least one
+    // reference_image_urls angle alongside the frontal image. Falling back to
+    // plain image-to-video (which works fine with one image) rather than
+    // sending an element fal will reject — and saying so, because silently
+    // changing the mode would look like the element feature just did nothing.
+    toast("One image can't be an Element — Kling needs a second angle. Using it as a start frame instead.","");
+  }
+  if(cap.elements&&hostedImages.length>1){
       // Real diagnostic visibility, not just fal's response — after several
       // rounds where fal's own error kept saying elements were empty despite
       // real uploads, the missing piece was seeing the ACTUAL URLs this app
@@ -6732,12 +6839,18 @@ async function sendVcMultiShotPrompt(){
       const body={
         multi_prompt:shotsPayload.map(s=>({prompt:s.prompt,duration:String(s.duration)})),
         shot_type:shotType,
-        aspect_ratio:ratio,
-        generate_audio:true,
+        // aspect_ratio is NOT a field on the v3 image-to-video endpoints — the
+        // schema's property list is prompt/multi_prompt/start_image_url/
+        // duration/generate_audio/end_image_url/elements/shot_type/
+        // negative_prompt/cfg_scale. Aspect comes from the start image.
+        generate_audio:gs("kling_generate_audio",true)!==false,
       };
       if(negPrompt)body.negative_prompt=negPrompt;
       const cfgScaleEl=document.getElementById("vcCfgScaleSlider");if(cfgScaleEl&&cap.cfgScale)body.cfg_scale=parseFloat(cfgScaleEl.value);
-      if(S.klingSelectedVoices.length)body.voice_ids=S.klingSelectedVoices;
+      // voice_ids does not exist on the v3 endpoints. Voice is bound PER
+      // ELEMENT (voice_id inside each element) and is applied by
+      // buildKlingV3Elements below. Sending it here did nothing at all — the
+      // user picked voices and silently got none.
       const i2v=IMAGE_TO_VIDEO_MAP[model];
       if(S.vcMultiImages.length>1&&cap.elements){
         // CORRECTED: a previous version of this kept the request on the
@@ -6755,11 +6868,12 @@ async function sendVcMultiShotPrompt(){
         const missing=hostedImages.map((u,i)=>!u?i+1:null).filter(Boolean);
         if(missing.length)throw new Error(`Reference image ${missing.join(", ")} has no usable URL — remove and re-attach it, then try again`);
         if(i2v){endpoint=i2v.endpoint;body[i2v.field]=hostedImages[0];}
-        body.elements=hostedImages.map(u=>({frontal_image_url:u}));
+        body.elements=buildKlingV3Elements(hostedImages,hostedVideos,S.vcElementGroupMode,S.klingSelectedVoices);
       } else if(S.vcMultiImages.length&&i2v){
         endpoint=i2v.endpoint;
         body[i2v.field]=hostedImages[0];
       }
+      normalizeKlingV3Body(endpoint,body);
       const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
       const submitData=await submitRes.json();
       if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
@@ -6998,7 +7112,7 @@ async function sendVcChatPrompt(){
           const missing=hostedImages.map((u,i)=>!u?i+1:null).filter(Boolean);
           if(missing.length)throw new Error(`Reference image ${missing.join(", ")} has no usable URL — remove and re-attach it, then try again`);
           if(i2v){endpoint=i2v.endpoint;body[i2v.field]=hostedImages[0];}
-          body.elements=hostedImages.map(u=>({frontal_image_url:u}));
+          body.elements=buildKlingV3Elements(hostedImages,hostedVideos,S.vcElementGroupMode,S.klingSelectedVoices);
         } else if(i2v&&S.vcMultiImages.length){
           // Exactly 1 reference image — swap to the real image-to-video endpoint
           // and use that tier's actual field name (image_url or start_image_url —
@@ -7015,6 +7129,7 @@ async function sendVcChatPrompt(){
       } else {
         body.duration=formattedDuration;body.resolution=document.getElementById("vcRes").value;
       }
+      normalizeKlingV3Body(endpoint,body);
       const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
       const submitData=await submitRes.json();
       if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
@@ -7414,7 +7529,7 @@ const VIDEO_MODEL_DURATIONS={
   "fal-ai/kling-video/v3/pro/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/o3/pro/reference-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/o3/standard/image-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
-  "fal-ai/kling-video/v3/4k/image-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
+  "fal-ai/kling-video/v3/4k/image-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},"fal-ai/kling-video/v3/4k/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/veo3.1":{options:[4,6,8],format:n=>`${n}s`},
   "fal-ai/veo3.1/reference-to-video":{options:[4,6,8],format:n=>`${n}s`},
   // Veo 3 Direct (Gemini API): genViaVeoDirect doesn't currently send a
@@ -9769,7 +9884,8 @@ async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImag
   else if(endpoint==="fal-ai/veo3.1"){body.duration=formattedDuration;body.audio=true;body.resolution=quality;}
   else{body.duration=formattedDuration;body.resolution=quality;}
 
-  const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
+  normalizeKlingV3Body(endpoint,body);
+      const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
   const submitData=await submitRes.json();
   if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
   const requestId=submitData.request_id;
