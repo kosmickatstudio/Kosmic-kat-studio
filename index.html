@@ -6038,16 +6038,23 @@ const VIDEO_PRICING={
   // Confirmed directly, twice, on fal's own v2.6 Pro model pages:
   // $0.07/s audio off, $0.14/s audio on.
   "fal-ai/kling-video/v2.6/pro/text-to-video":{perSec:0.14},
-  // Confirmed via the same source that reported the discrepancy: v3
-  // Standard is $0.084/s audio off — audio-on (what we actually always
-  // send) is 1.5x that, same ratio fal confirms for the Pro tier below.
+  // All three v3 tiers now confirmed directly from fal's own model pages,
+  // and each rate cross-checked against fal's stated worked example:
+  //   Standard  $0.084 off / $0.126 on / $0.154 with voice control
+  //   Pro       $0.112 off / $0.168 on / $0.196 with voice control
+  //             (fal: "5s with audio on and voice control will cost $0.98"
+  //              -> 5 x 0.196 = 0.98, matches)
+  //   4K        $0.42 FLAT — fal's table lists audio-off and audio-on at the
+  //             SAME price and shows no voice-control row, so 4K deliberately
+  //             carries no audio or voice surcharge rather than an assumed one
+  //             (fal: 5s = $2.10, 10s = $4.20 -> both match 0.42/s).
   "fal-ai/kling-video/v3/standard/text-to-video":{perSec:0.126,perSecNoAudio:0.084,perSecVoice:0.154,elementsMultiplier:2},
   // Confirmed directly, multiple times, on fal's own v3 Pro model pages:
   // $0.112/s audio off, $0.168/s audio on, $0.196/s with voice control.
   // elementsMultiplier: fal explicitly states image-to-video WITH elements
   // costs exactly 2x the plain rate ($0.336/s audio-on) — a real, separate
   // pricing tier this app's estimate never accounted for at all before now.
-  "fal-ai/kling-video/v3/pro/text-to-video":{perSec:0.168,elementsMultiplier:2},
+  "fal-ai/kling-video/v3/pro/text-to-video":{perSec:0.168,perSecNoAudio:0.112,perSecVoice:0.196,elementsMultiplier:2},
   "fal-ai/kling-video/o3/pro/reference-to-video":{perSec:0.14},
   // Motion Control: confirmed $0.168/second directly from fal's own
   // Seedance-vs-Kling comparison article ("Motion control: $0.168/second").
@@ -6059,7 +6066,7 @@ const VIDEO_PRICING={
   // whether audio is on or off" - a genuinely flat rate, not audio-gated
   // like every other Kling tier. audioIncluded marks it as a precise
   // number, not an approximation.
-  "fal-ai/kling-video/v3/4k/image-to-video":{perSec:0.42,audioIncluded:true},"fal-ai/kling-video/v3/4k/text-to-video":{perSec:0.42,audioIncluded:true},
+  "fal-ai/kling-video/v3/4k/image-to-video":{perSec:0.42,perSecNoAudio:0.42,audioIncluded:true},"fal-ai/kling-video/v3/4k/text-to-video":{perSec:0.42,perSecNoAudio:0.42,audioIncluded:true},
   "fal-ai/veo3.1":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
   "fal-ai/veo3.1/reference-to-video":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
 };
