@@ -6192,7 +6192,12 @@ function updateVcModelUI(){
   }
   if(!endFrameApplicable&&S.vcEndFrame){S.vcEndFrame=null;}
   renderVcEndFramePreview();
-  const groupApplicable=cap.provider==="kling-o3-ref"&&S.vcMultiImages.length>1;
+  // v3 builds elements from inline images exactly like O3 does, so the same
+  // choice applies: are these N characters, or one character from N angles?
+  // Gating this to O3 meant v3 was silently locked to "separate characters"
+  // with no way to say four uploads are four angles of one subject — which is
+  // precisely what Kling's own "Add Additional Angles" flow is for.
+  const groupApplicable=(cap.provider==="kling-o3-ref"||cap.elements)&&S.vcMultiImages.length>1;
   const groupWrap=document.getElementById("vcElementGroupWrap");
   if(groupWrap){
     groupWrap.style.display=groupApplicable?"block":"none";
@@ -6216,7 +6221,28 @@ function updateVcModelUI(){
   if(cap.tagSyntax){
     tagHint.style.display="block";
     const exampleTag=(cap.tagSyntax.match(/@\w+\d+/)||["@Element1"])[0];
-    tagHint.textContent=`Reference your uploads in the prompt using ${cap.tagSyntax} — e.g. "${exampleTag} walks down a neon street".`;
+    // Spell out how many elements the current uploads actually produce. Kling
+    // requires every element to carry a frontal image PLUS at least one extra
+    // angle, so images are paired — 4 uploads make 2 characters, not 4. Saying
+    // only "@Element1 (when 2+ images)" implied one element per image, which is
+    // wrong and would have people writing @Element4 that never resolves.
+    const nImgs=S.vcMultiImages.length;
+    let pairingNote="";
+    if(cap.elements&&nImgs>1){
+      // floor, not ceil: buildKlingV3Elements folds an odd trailing image into
+      // the previous element as an extra angle rather than creating a lone
+      // element with no angle (which fal rejects). So 3 images make ONE
+      // character, not two — ceil here would advertise an @Element2 that never
+      // resolves, which is the exact confusion this hint exists to prevent.
+      const count=S.vcElementGroupMode?1:Math.floor(nImgs/2);
+      const tags=Array.from({length:count},(_,i)=>`@Element${i+1}`).join(", ");
+      pairingNote=S.vcElementGroupMode
+        ? ` Your ${nImgs} images are being treated as ${nImgs} angles of ONE character, so you have ${tags}.`
+        : ` Kling needs 2 images per character (a front view plus an angle), so your ${nImgs} images make ${count} character${count===1?"":"s"}: ${tags}.`;
+    } else if(cap.elements&&nImgs===1){
+      pairingNote=" One image can't form an Element — it'll be used as the start frame instead. Add a second angle to make a character.";
+    }
+    tagHint.textContent=`Reference your uploads in the prompt using ${cap.tagSyntax} — e.g. "${exampleTag} walks down a neon street".${pairingNote}`;
   } else tagHint.style.display="none";
 
   if(cap.multiRef||cap.multiImage){
@@ -6277,7 +6303,12 @@ function refreshMotionBrushVisibility(){
   }
   const groupWrap=document.getElementById("vcElementGroupWrap");
   if(groupWrap){
-    const groupApplicable=cap.provider==="kling-o3-ref"&&S.vcMultiImages.length>1;
+    // v3 builds elements from inline images exactly like O3 does, so the same
+  // choice applies: are these N characters, or one character from N angles?
+  // Gating this to O3 meant v3 was silently locked to "separate characters"
+  // with no way to say four uploads are four angles of one subject — which is
+  // precisely what Kling's own "Add Additional Angles" flow is for.
+  const groupApplicable=(cap.provider==="kling-o3-ref"||cap.elements)&&S.vcMultiImages.length>1;
     groupWrap.style.display=groupApplicable?"block":"none";
     if(!groupApplicable)S.vcElementGroupMode=false;
     const groupToggle=document.getElementById("vcElementGroupToggle");
