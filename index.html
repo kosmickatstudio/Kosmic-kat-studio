@@ -196,6 +196,16 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .f-input{width:100%;padding:8px 12px;border:1.5px solid var(--glass-brd);border-radius:10px;font-size:13px;font-family:'Inter',sans-serif;color:var(--text);background:var(--pearl);outline:none;transition:border-color 0.2s,box-shadow 0.2s}
 .f-input:focus{border-color:var(--ice);background:var(--surface);box-shadow:0 0 0 3px var(--glow-ice)}
 .f-select{width:100%;padding:8px 12px;border:1.5px solid var(--glass-brd);border-radius:10px;font-size:13px;font-family:'Inter',sans-serif;color:var(--text);background:var(--pearl);outline:none;cursor:pointer}
+/* Pill toggle switch — the app previously had no toggle-switch anywhere, only
+   plain checkboxes and radio-style cards, so a real on/off control needed one
+   built. Sibling-selector state (:checked ~ .kk-toggle-track) requires actual
+   CSS rather than inline styles, which is why this lives in the stylesheet. */
+.kk-toggle{position:relative;display:inline-flex;align-items:center;width:42px;height:24px;flex-shrink:0;cursor:pointer}
+.kk-toggle input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.kk-toggle-track{position:absolute;inset:0;background:var(--border);border-radius:12px;transition:background 0.15s}
+.kk-toggle-thumb{position:absolute;top:2px;left:2px;width:20px;height:20px;background:#fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.25);transition:transform 0.15s}
+.kk-toggle input:checked ~ .kk-toggle-track{background:var(--violet)}
+.kk-toggle input:checked ~ .kk-toggle-thumb{transform:translateX(18px)}
 .f-textarea{width:100%;padding:9px 12px;border:1.5px solid var(--glass-brd);border-radius:10px;font-size:13px;font-family:'Inter',sans-serif;color:var(--text);background:var(--pearl);outline:none;resize:vertical;min-height:80px;line-height:1.5;transition:border-color 0.2s,box-shadow 0.2s}
 .f-textarea:focus{border-color:var(--ice);background:var(--surface);box-shadow:0 0 0 3px var(--glow-ice)}
 input[type="range"]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:4px;background:linear-gradient(90deg,var(--ice),var(--gold) var(--range-fill,50%),var(--glass-brd) var(--range-fill,50%));outline:none;cursor:pointer;margin:6px 0}
@@ -5473,13 +5483,13 @@ function renderVideoCanvas(el){
             <label class="f-label">${pIcon('film',12)} Frames <span style="font-weight:400;color:var(--texts)">(optional — where the shot starts and ends)</span></label>
             <div style="display:flex;gap:10px;align-items:stretch">
               <div style="flex:1">
-                <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px">Start frame</div>
                 <div id="vcStartFrameSlot"></div>
+                <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.05em;margin-top:6px;text-align:center">Start frame</div>
               </div>
-              <div style="display:flex;align-items:center;color:var(--textm);font-size:16px;padding-top:16px">→</div>
+              <div style="display:flex;align-items:center;color:var(--textm);font-size:18px;padding-top:65px">→</div>
               <div style="flex:1">
-                <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px">End frame</div>
                 <div id="vcEndFrameSlot"></div>
+                <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.05em;margin-top:6px;text-align:center">End frame</div>
               </div>
             </div>
             <input type="file" accept="image/*" id="vcStartFrameFile" style="display:none" onchange="handleVcStartFrameUpload(event)">
@@ -5533,14 +5543,20 @@ function renderVideoCanvas(el){
               <span class="f-label" style="margin:0">${pIcon('film',12)} Multi-Shot Storyboard <span style="font-weight:400;color:var(--texts)">(up to 6 shots, one generation)</span></span>
             </label>
             <div id="vcKlingAudioWrap" style="display:none;border-top:1px solid var(--border);padding-top:10px;margin-top:8px">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                <input type="checkbox" id="vcKlingAudioToggle" onchange="saveSetting('kling_generate_audio',this.checked);updateVcCostHint()">
+              <div style="display:flex;align-items:center;gap:10px">
+                <label class="kk-toggle">
+                  <input type="checkbox" id="vcKlingAudioToggle" onchange="saveSetting('kling_generate_audio',this.checked);updateVcCostHint()">
+                  <span class="kk-toggle-track"></span><span class="kk-toggle-thumb"></span>
+                </label>
                 <span class="f-label" style="margin:0">${pIcon('mic',12)} Native Audio <span style="font-weight:400;color:var(--texts)">(Kling v3 — off is ~33% cheaper)</span></span>
-              </label>
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px">
-                <input type="checkbox" id="vcKlingSmartShotToggle" onchange="saveSetting('kling_shot_type',this.checked?'intelligent':'customize')">
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+                <label class="kk-toggle">
+                  <input type="checkbox" id="vcKlingSmartShotToggle" onchange="saveSetting('kling_shot_type',this.checked?'intelligent':'customize')">
+                  <span class="kk-toggle-track"></span><span class="kk-toggle-thumb"></span>
+                </label>
                 <span class="f-label" style="margin:0">${pIcon('sparkle',12)} Smart Multi-Shot <span style="font-weight:400;color:var(--texts)">(let Kling decide the shot structure)</span></span>
-              </label>
+              </div>
             </div>
             <div id="vcMultiShotBuilder" style="display:none">
               <div class="f-group">
@@ -5681,17 +5697,17 @@ function renderVcFrames(){
   const end=S.vcEndFrame;
   const box=(img,pick,clear,placeholder)=>img
     ?`<div style="position:relative">
-        <img src="${img.dataUrl}" style="width:100%;height:96px;object-fit:cover;border-radius:10px;border:1px solid var(--glass-brd);display:block">
+        <img src="${img.dataUrl}" style="width:100%;height:148px;object-fit:cover;border-radius:10px;border:1px solid var(--glass-brd);display:block">
         <button onclick="${clear}" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--red);color:#fff;font-size:12px;line-height:1;cursor:pointer">✕</button>
       </div>`
-    :`<div onclick="${pick}" style="height:96px;border:1.5px dashed var(--border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--textm);font-size:10.5px;gap:3px">
+    :`<div onclick="${pick}" style="height:148px;border:1.5px dashed var(--border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--textm);font-size:10.5px;gap:3px">
         <div style="font-size:20px;line-height:1">+</div>${placeholder}
       </div>`;
   startSlot.innerHTML=box(start,"document.getElementById('vcStartFrameFile').click()","clearVcStartFrame()","Add start frame");
   // The end frame is only meaningful once there is a start frame to move FROM.
   endSlot.innerHTML=start
     ? box(end,"document.getElementById('vcFramesEndFile').click()","clearVcEndFrame()","Add end frame")
-    : `<div style="height:96px;border:1.5px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--texts);font-size:10px;text-align:center;padding:0 8px;opacity:0.6">Add a start frame first</div>`;
+    : `<div style="height:148px;border:1.5px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--texts);font-size:10px;text-align:center;padding:0 8px;opacity:0.6">Add a start frame first</div>`;
   // Aspect MISMATCH between the two frames is a warning, not a block: fal's
   // schema constrains each frame's own ratio but says nothing about them
   // matching each other. Rather than invent a rule, flag it — interpolating
@@ -5863,9 +5879,13 @@ function renderVcElements(){
       </div>
       <div style="display:flex;gap:6px;margin-bottom:7px">
         <input class="f-input" style="flex:1;font-size:12px;padding:6px 9px" maxlength="20" placeholder="Name (e.g. Sedi)" value="${(el.name||"").replace(/"/g,"&quot;")}" oninput="setVcElementField(${i},'name',this.value)">
-        <select class="f-select" style="width:118px;font-size:11.5px;padding:6px 8px" onchange="setVcElementField(${i},'tag',this.value)">
+        <select id="vcElTagSel_${i}" style="display:none" onchange="setVcElementField(${i},'tag',this.value)">
           ${VC_ELEMENT_TAGS.map(t=>`<option value="${t}" ${el.tag===t?"selected":""}>${t}</option>`).join("")}
         </select>
+        <div id="vcElTagSel_${i}Trigger" onclick="openSimplePicker('vcElTagSel_${i}','Element Type')" style="width:118px;flex-shrink:0;display:flex;align-items:center;gap:5px;border:1px solid var(--border);border-radius:10px;padding:6px 8px;cursor:pointer;background:var(--surface)">
+          <span style="flex:1;font-size:11.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${el.tag||"Characters"}</span>
+          <span style="color:var(--textm)">${pIcon('chevron',12)}</span>
+        </div>
       </div>
       <input class="f-input" style="width:100%;font-size:11.5px;padding:6px 9px;margin-bottom:8px" maxlength="200" placeholder="Description — details to keep or discard (optional)" value="${(el.desc||"").replace(/"/g,"&quot;")}" oninput="setVcElementField(${i},'desc',this.value)">
       <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-start">
@@ -5973,7 +5993,13 @@ function removeVcEndFrame(){
 // base64 — avoiding the same localStorage bloat that caused real "Storage
 // full" problems earlier this session.
 function openSaveCharacterPresetModal(){
-  if(!S.vcMultiImages.length){toast("Attach at least 1 reference image first","error");return;}
+  // Rewritten to operate on S.vcElements. The previous version read
+  // S.vcMultiImages — which since the Frames split holds ONLY the start
+  // frame — so "Save as Preset" either errored with no start frame attached,
+  // or silently saved the start frame as a "character", never the Elements
+  // the user actually built.
+  const ready=(S.vcElements||[]).filter(e=>e&&e.frontal&&e.angles&&e.angles.length);
+  if(!ready.length){toast("Build at least one complete Element first (main view + 1 angle)","error");return;}
   document.getElementById("vcPresetSaveSheet")?.remove();
   document.getElementById("vcPresetSaveBackdrop")?.remove();
   const backdrop=document.createElement("div");
@@ -5988,14 +6014,15 @@ function openSaveCharacterPresetModal(){
     <div class="ig-sheet-handle"></div>
     <div style="padding:6px 20px 24px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">Save Character Preset</div>
+        <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">Save Element${ready.length!==1?'s':''} as Preset</div>
         <button class="ig-icon-btn" onclick="closeSaveCharacterPresetModal()">✕</button>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
-        ${S.vcMultiImages.map(i=>`<img src="${i.dataUrl}" style="width:52px;height:52px;border-radius:8px;object-fit:cover">`).join('')}
-      </div>
-      <label class="f-label">Name</label>
-      <input class="f-input" id="vcPresetNameInput" placeholder="e.g. Tina, Mercenary Woman…" style="margin-bottom:14px">
+      ${ready.map((el,i)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <img src="${el.frontal.dataUrl}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;border:1.5px solid var(--glass-brd)">
+        <div style="font-size:12px;color:var(--text)">${el.name?el.name:`@Element${i+1}`} <span style="color:var(--textm);font-size:10px">· ${el.angles.length} angle${el.angles.length!==1?'s':''}</span></div>
+      </div>`).join('')}
+      <label class="f-label">Preset name</label>
+      <input class="f-input" id="vcPresetNameInput" placeholder="e.g. Fharomorph Cast" style="margin-bottom:14px">
       <button class="btn btn-primary" style="width:100%" onclick="saveCharacterPreset()">Save Preset</button>
     </div>`;
   document.body.appendChild(sheet);
@@ -6010,20 +6037,41 @@ function closeSaveCharacterPresetModal(){
 async function saveCharacterPreset(){
   const name=document.getElementById("vcPresetNameInput")?.value.trim();
   if(!name){toast("Give this preset a name","error");return;}
+  const ready=(S.vcElements||[]).filter(e=>e&&e.frontal&&e.angles&&e.angles.length);
+  if(!ready.length){toast("Build at least one complete Element first","error");return;}
   closeSaveCharacterPresetModal();
   toast("Saving preset…","");
   try{
-    const hostedUrls=await Promise.all(S.vcMultiImages.map(async img=>{
-      if(!img.dataUrl.startsWith("data:"))return img.dataUrl; // already hosted
+    // One shared uploader for every image in every element — a data URL goes
+    // to Firebase Storage once and comes back as a stable download URL;
+    // anything already hosted (http/https) is passed through unchanged so
+    // re-saving a preset built from an earlier preset doesn't re-upload it.
+    const hostImg=async img=>{
+      if(!img||!img.dataUrl)return null;
+      if(!img.dataUrl.startsWith("data:"))return {dataUrl:img.dataUrl,name:img.name||""};
       const blob=dataUrlToBlob(img.dataUrl);
       const path=`character-presets/${Date.now()}_${Math.random().toString(36).slice(2,6)}.jpg`;
       const ref=fbStorage.ref(path);
       await ref.put(blob);
-      return ref.getDownloadURL();
-    }));
-    S.characterPresets.push({id:"preset_"+Date.now(),name,images:hostedUrls,createdAt:new Date().toISOString()});
+      return {dataUrl:await ref.getDownloadURL(),name:img.name||""};
+    };
+    const elements=await Promise.all(ready.map(async el=>({
+      name:el.name||"",
+      tag:el.tag||"Characters",
+      desc:el.desc||"",
+      frontal:await hostImg(el.frontal),
+      angles:(await Promise.all(el.angles.map(hostImg))).filter(Boolean),
+      // Video is uploaded the same way as any image (Firebase Storage
+      // accepts arbitrary blobs), so a preset with a bound video survives
+      // a reload the same as its images do.
+      video:el.video?await hostImg(el.video):null,
+      // voiceId is already a fal-side identifier, not a local file — nothing
+      // to upload, just carry it through as-is.
+      voiceId:el.voiceId||null,
+    })));
+    S.characterPresets.push({id:"preset_"+Date.now(),name,elements,createdAt:new Date().toISOString()});
     saveSetting("character_presets",S.characterPresets);
-    toast(`💾 "${name}" saved`,"success");
+    toast(`💾 "${name}" saved — ${elements.length} Element${elements.length!==1?'s':''}`,"success");
   }catch(err){
     toast("Couldn't save preset: "+err.message,"error");
   }
@@ -6047,15 +6095,23 @@ function openLoadCharacterPresetModal(){
         <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet)">Load Character Preset</div>
         <button class="ig-icon-btn" onclick="closeLoadCharacterPresetModal()">✕</button>
       </div>
-      ${!S.characterPresets.length?`<div class="empty-desc">No saved presets yet — attach some reference images and tap "Save as Preset" first.</div>`
-      :S.characterPresets.map(p=>`<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
-        <div style="display:flex;gap:-8px;flex-shrink:0">${p.images.slice(0,3).map((u,i)=>`<img src="${u}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;margin-left:${i>0?'-10px':'0'};border:2px solid var(--card-bg)">`).join('')}</div>
+      ${!S.characterPresets.length?`<div class="empty-desc">No saved presets yet — build at least one complete Element and tap "Save as Preset" first.</div>`
+      :S.characterPresets.map(p=>{
+        // Legacy shape support: presets saved under the old buggy version
+        // carry {images:[...]} instead of {elements:[...]}. Read either
+        // without erroring, so a preset saved before this fix still shows up
+        // and can still be loaded (via the same legacy path in
+        // loadCharacterPreset) rather than silently vanishing from the list.
+        const els=p.elements||(p.images?[{name:p.name,frontal:{dataUrl:p.images[0]},angles:p.images.slice(1).map(u=>({dataUrl:u}))}]:[]);
+        const thumbs=els.map(e=>e.frontal&&e.frontal.dataUrl).filter(Boolean);
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
+        <div style="display:flex;gap:-8px;flex-shrink:0">${thumbs.slice(0,3).map((u,i)=>`<img src="${u}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;margin-left:${i>0?'-10px':'0'};border:2px solid var(--card-bg)">`).join('')}</div>
         <div style="flex:1;min-width:0;cursor:pointer" onclick="loadCharacterPreset('${p.id}')">
           <div style="font-size:13px;font-weight:600;color:var(--text)">${p.name}</div>
-          <div style="font-size:10px;color:var(--textm)">${p.images.length} image${p.images.length===1?'':'s'}</div>
+          <div style="font-size:10px;color:var(--textm)">${els.length} Element${els.length!==1?'s':''}</div>
         </div>
         <button onclick="deleteCharacterPreset('${p.id}')" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:14px;flex-shrink:0">✕</button>
-      </div>`).join('')}
+      </div>`;}).join('')}
     </div>`;
   document.body.appendChild(sheet);
 }
@@ -6068,12 +6124,28 @@ function closeLoadCharacterPresetModal(){
 function loadCharacterPreset(id){
   const preset=S.characterPresets.find(p=>p.id===id);
   if(!preset)return;
-  S.vcMultiImages=preset.images.map(u=>({dataUrl:u,name:preset.name}));
-  renderVcMultiPreview("vcMultiImagePreview",S.vcMultiImages,false);
-  refreshMotionBrushVisibility();
-  updateVcAttachmentBar();
+  // Legacy shape: a preset saved before this fix has {images:[...]} instead
+  // of {elements:[...]}. Converted into a single Element on load rather than
+  // rejected, so nobody's old presets are silently made unusable by the fix.
+  const incoming=preset.elements||(preset.images?[{name:preset.name,tag:"Characters",desc:"",frontal:{dataUrl:preset.images[0],name:""},angles:preset.images.slice(1).map(u=>({dataUrl:u,name:""})),video:null,voiceId:null}]:[]);
+  if(!incoming.length){toast("This preset has nothing to load","error");return;}
+  S.vcElements=S.vcElements||[];
+  const room=VC_MAX_ELEMENTS-S.vcElements.length;
+  if(room<=0){toast(`Already have ${VC_MAX_ELEMENTS} Elements — remove one first`,"error");return;}
+  // Appended rather than replacing what's already built. A preset is meant to
+  // add a known character alongside whatever else is in progress, the same
+  // way "+ Add Element" adds one — replacing everything would silently
+  // discard other characters the user was already building.
+  incoming.slice(0,room).forEach(e=>S.vcElements.push({
+    name:e.name||"",tag:e.tag||"Characters",desc:e.desc||"",
+    frontal:e.frontal||null,angles:(e.angles||[]).slice(0,VC_MAX_ANGLES),
+    video:e.video||null,voiceId:e.voiceId||null,
+  }));
+  saveVcElements();
+  renderVcElements();
   closeLoadCharacterPresetModal();
-  toast(`📁 Loaded "${preset.name}" (${preset.images.length} image${preset.images.length===1?'':'s'})`,"success");
+  const added=Math.min(incoming.length,room);
+  toast(`📁 Loaded "${preset.name}" — ${added} Element${added!==1?'s':''} added`,"success");
 }
 
 async function deleteCharacterPreset(id){
