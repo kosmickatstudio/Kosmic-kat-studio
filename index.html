@@ -206,6 +206,8 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .kk-toggle-thumb{position:absolute;top:2px;left:2px;width:20px;height:20px;background:#fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.25);transition:transform 0.15s}
 .kk-toggle input:checked ~ .kk-toggle-track{background:var(--violet)}
 .kk-toggle input:checked ~ .kk-toggle-thumb{transform:translateX(18px)}
+@keyframes kk-tag-glow{0%,100%{box-shadow:0 0 0 1px var(--vs),0 0 6px 1px rgba(124,58,237,0.35)}50%{box-shadow:0 0 0 1px var(--vs),0 0 11px 3px rgba(124,58,237,0.55)}}
+.kk-tag-valid{animation:kk-tag-glow 2.2s ease-in-out infinite}
 .f-textarea{width:100%;padding:9px 12px;border:1.5px solid var(--glass-brd);border-radius:10px;font-size:13px;font-family:'Inter',sans-serif;color:var(--text);background:var(--pearl);outline:none;resize:vertical;min-height:80px;line-height:1.5;transition:border-color 0.2s,box-shadow 0.2s}
 .f-textarea:focus{border-color:var(--ice);background:var(--surface);box-shadow:0 0 0 3px var(--glow-ice)}
 input[type="range"]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:4px;background:linear-gradient(90deg,var(--ice),var(--gold) var(--range-fill,50%),var(--glass-brd) var(--range-fill,50%));outline:none;cursor:pointer;margin:6px 0}
@@ -5271,21 +5273,20 @@ function renderMcElementSlots(){
 function pickMcElementImage(slot){ _mcElTarget=slot; document.getElementById(slot==="frontal"?"mcElFrontalFile":"mcElAngleFile").click(); }
 function clearMcElementFrontal(){ S.mcElement.frontal=null; updateMcElementUI(); }
 function removeMcElementAngle(i){ S.mcElement.angles.splice(i,1); updateMcElementUI(); }
-function handleMcElementImage(event,slot){
+async function handleMcElementImage(event,slot){
   const files=[...(event.target.files||[])];
   event.target.value="";
   if(!files.length)return;
   const room=slot==="frontal"?1:Math.max(0,3-S.mcElement.angles.length);
-  files.slice(0,room).forEach(file=>{
-    if(!file.type.startsWith("image/")){toast("Images only","error");return;}
-    const r=new FileReader();
-    r.onload=e=>{
-      const item={dataUrl:e.target.result,name:file.name};
+  for(const file of files.slice(0,room)){
+    if(!file.type.startsWith("image/")){toast("Images only","error");continue;}
+    try{
+      const dataUrl=await downscaleImageFile(file);
+      const item={dataUrl,name:file.name};
       if(slot==="frontal")S.mcElement.frontal=item; else S.mcElement.angles.push(item);
       updateMcElementUI();
-    };
-    r.readAsDataURL(file);
-  });
+    }catch(err){ toast(err.message,"error"); }
+  }
 }
 function updateMcCostHint(){
   // Motion Control has no duration parameter — the output matches the
@@ -5301,13 +5302,16 @@ function updateMcCostHint(){
   if(hint)hint.textContent=est?formatCostLine(est):"";
 }
 
-function handleMcImageUpload(event){
+async function handleMcImageUpload(event){
   const file=event.target.files[0];
   if(!file)return;
   event.target.value="";
-  const reader=new FileReader();
-  reader.onload=e=>{S.mcImage={dataUrl:e.target.result,name:file.name};renderMcImagePreview();};
-  reader.readAsDataURL(file);
+  if(!file.type.startsWith("image/")){toast("Images only","error");return;}
+  try{
+    const dataUrl=await downscaleImageFile(file);
+    S.mcImage={dataUrl,name:file.name};
+    renderMcImagePreview();
+  }catch(err){ toast(err.message,"error"); }
 }
 
 function renderMcImagePreview(){
@@ -5615,10 +5619,11 @@ function renderVideoCanvas(el){
         <div class="ig-chat-thread" id="vcChatThread"></div>
 
         <div id="vcAttachmentBar" style="display:none;padding:4px 15px;font-size:11px;color:var(--textm);flex-direction:column;gap:4px"></div>
+        <div id="vcTagChips" style="display:none;padding:0 15px 6px;gap:5px;flex-wrap:wrap"></div>
 
         <div class="ig-chat-inputbar">
           <div class="ig-input-shell">
-            <textarea class="ig-input-textarea-v2" id="vcChatInput" rows="1" placeholder="${hasKey?'Describe the video you want…':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleVcChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,240)+'px';checkVcTagAutocomplete()" onblur="setTimeout(hideVcTagAutocomplete,150)"></textarea>
+            <textarea class="ig-input-textarea-v2" id="vcChatInput" rows="1" placeholder="${hasKey?'Describe the video you want…':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleVcChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,240)+'px';checkVcTagAutocomplete();renderVcTagChips()" onblur="setTimeout(hideVcTagAutocomplete,150)"></textarea>
             <div id="vcTagAutocomplete" style="display:none;position:absolute;bottom:100%;left:0;right:0;margin-bottom:6px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shv);max-height:160px;overflow-y:auto;z-index:10"></div>
             <div class="ig-input-toolbar">
               <button class="ig-tool-btn" onclick="toggleVcSettings()" title="Settings">⚙</button>
@@ -5670,22 +5675,21 @@ S.vcMultiImages=S.vcMultiImages||[];
 // jobs: holding the start frame AND holding character references. Splitting
 // them is what makes the screen legible — Frames owns the shot's first and
 // last image, Elements owns the characters.
-function handleVcStartFrameUpload(event){
+async function handleVcStartFrameUpload(event){
   const file=(event.target.files||[])[0];
   event.target.value="";
   if(!file)return;
   if(!file.type.startsWith("image/")){toast("Images only","error");return;}
-  const r=new FileReader();
-  r.onload=e=>{
+  try{
+    const dataUrl=await downscaleImageFile(file);
     // Start frame IS vcMultiImages[0] on these endpoints — it becomes
     // start_image_url. Kept in the same place so every existing upload,
     // validation and request path keeps working unchanged.
-    S.vcMultiImages=[{dataUrl:e.target.result,name:file.name}];
+    S.vcMultiImages=[{dataUrl,name:file.name}];
     renderVcFrames();
     if(typeof updateVcMultiImagePreview==="function")updateVcMultiImagePreview();
     updateVcModelUI();
-  };
-  r.readAsDataURL(file);
+  }catch(err){ toast(err.message,"error"); }
 }
 function clearVcStartFrame(){ S.vcMultiImages=[]; renderVcFrames(); if(typeof updateVcMultiImagePreview==="function")updateVcMultiImagePreview(); updateVcModelUI(); }
 function clearVcEndFrame(){ S.vcEndFrame=null; renderVcFrames(); }
@@ -5727,6 +5731,7 @@ function renderVcFrames(){
       });
     }
   }
+  if(typeof renderVcTagChips==="function")renderVcTagChips();
 }
 // ── EXPLICIT KLING ELEMENTS ─────────────────────────────────────────────
 // Replaces the flat "up to 4 reference images, auto-paired" model, which was
@@ -5763,23 +5768,55 @@ function pickVcElementImage(i,slot){
   _vcElementTarget={i,slot};
   document.getElementById(slot==="frontal"?"vcElementFrontalFile":"vcElementAngleFile").click();
 }
-function handleVcElementImage(event,slot){
+// Shared by every Kling reference/frame/element upload. All four handlers
+// stored the FileReader result completely raw — no downscaling at all — so
+// a modern phone photo (10-15MB+ at full resolution) went straight into
+// state, then straight into a Firebase Storage upload when saving a preset.
+// On a weak connection that is exactly what produces
+// "storage/retry-limit-exceeded": the SDK's own retry window ran out before
+// a multi-megabyte blob finished uploading. The same oversized payload also
+// slows down every real generation upload, not just presets. Matches the
+// same downscale approach already used for Kosmic Engine's reference
+// uploads (768px / JPEG 0.8) rather than inventing a different one here.
+function downscaleImageFile(file,maxDim=1024,quality=0.82){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error("Couldn't read that file"));
+    reader.onload=e=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error("Couldn't decode that image"));
+      img.onload=()=>{
+        let w=img.width,h=img.height;
+        if(w>maxDim||h>maxDim){
+          if(w>=h){h=Math.round(h*(maxDim/w));w=maxDim;}
+          else{w=Math.round(w*(maxDim/h));h=maxDim;}
+        }
+        const canvas=document.createElement("canvas");
+        canvas.width=w;canvas.height=h;
+        canvas.getContext("2d").drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL("image/jpeg",quality));
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+async function handleVcElementImage(event,slot){
   const files=[...(event.target.files||[])];
   event.target.value="";
   const t=_vcElementTarget; _vcElementTarget=null;
   if(!files.length||!t||!S.vcElements[t.i])return;
   const el=S.vcElements[t.i];
   const room=slot==="frontal"?1:Math.max(0,VC_MAX_ANGLES-el.angles.length);
-  files.slice(0,room).forEach(file=>{
-    if(!file.type.startsWith("image/")){toast("Images only","error");return;}
-    const r=new FileReader();
-    r.onload=e=>{
-      const item={dataUrl:e.target.result,name:file.name};
+  for(const file of files.slice(0,room)){
+    if(!file.type.startsWith("image/")){toast("Images only","error");continue;}
+    try{
+      const dataUrl=await downscaleImageFile(file);
+      const item={dataUrl,name:file.name};
       if(slot==="frontal")el.frontal=item; else el.angles.push(item);
       saveVcElements();renderVcElements();
-    };
-    r.readAsDataURL(file);
-  });
+    }catch(err){ toast(err.message,"error"); }
+  }
 }
 
 const VC_ELEMENT_TAGS=["Characters","Animals","Items","Costumes","Scenes","Effects","Others"];
@@ -5858,6 +5895,18 @@ async function handleVcElementVoiceSample(event){
   }
 }
 function vcElementIsValid(el){ return !!(el&&el.frontal&&el.angles.length>=1); }
+// THE single source of truth for "are there real Elements attached right now".
+// Six separate call sites had each grown their own copy of this check, and
+// five of them still tested S.vcMultiImages.length>1 — a condition that
+// became permanently false the moment the start-frame bucket was capped to
+// one image, and which caused Elements to be silently omitted from an actual
+// generation request (confirmed: fal returned "Only 0 elements provided"
+// despite 2 complete Elements being visibly attached in the UI). One helper,
+// used everywhere, so this class of bug can only be wrong in one place at a
+// time instead of drifting across six.
+function vcHasRealElements(cap){
+  return !!(cap&&cap.elements&&(S.vcElements||[]).some(vcElementIsValid));
+}
 function renderVcElements(){
   const list=document.getElementById("vcElementsList");
   if(!list)return;
@@ -5907,6 +5956,7 @@ function renderVcElements(){
   }).join("")||`<div style="font-size:11px;color:var(--textm);padding:8px 0">No Elements yet — add one to keep a character consistent.</div>`;
   const btn=document.getElementById("vcAddElementBtn");
   if(btn)btn.style.display=S.vcElements.length>=VC_MAX_ELEMENTS?"none":"inline-flex";
+  if(typeof renderVcTagChips==="function")renderVcTagChips();
 }
 // Flattened for upload: only VALID elements are sent, so a half-filled card
 // never reaches fal (which would reject it for the missing angle).
@@ -5955,21 +6005,21 @@ S.vcElementGroupMode=S.vcElementGroupMode||false; // O3: treat all reference ima
 // Reference Elements. Simple two-image interpolation (start_image_url ->
 // end_image_url), confirmed via a real hands-on review of Kling's own app
 // using this exact "Start/End frames" mechanism.
-function handleVcEndFrameUpload(event){
+async function handleVcEndFrameUpload(event){
   const file=event.target.files[0];
   if(!file)return;
   event.target.value="";
-  const reader=new FileReader();
-  reader.onload=e=>{
-    S.vcEndFrame={dataUrl:e.target.result,name:file.name};
+  if(!file.type.startsWith("image/")){toast("Images only","error");return;}
+  try{
+    const dataUrl=await downscaleImageFile(file);
+    S.vcEndFrame={dataUrl,name:file.name};
     renderVcEndFramePreview();
     // Also repaint the Frames compartment — on element models the old preview
     // node is inside a hidden container, so without this the upload succeeds
     // but the slot still reads "Add end frame".
     if(typeof renderVcFrames==="function")renderVcFrames();
     updateVcAttachmentBar();
-  };
-  reader.readAsDataURL(file);
+  }catch(err){ toast(err.message,"error"); }
 }
 
 function renderVcEndFramePreview(){
@@ -6581,7 +6631,7 @@ function updateVcCostHint(){
   const resEl=document.getElementById("vcRes");
   const resolution=resEl?resEl.value:"720p";
   const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
-  const usesElements=!!(cap.elements&&S.vcMultiImages.length>1);
+  const usesElements=vcHasRealElements(cap);
   const est=estimateVideoCost(model,seconds,resolution,!!(S.vcMultiVideos&&S.vcMultiVideos.length),usesElements);
   const hint=document.getElementById("vcCostHint");
   if(hint)hint.textContent=cap.provider==="veo-direct"?"Free tier (Google API) — rate-limited, not billed":(est?formatCostLine(est):"");
@@ -6918,7 +6968,21 @@ function handleVcMultiUpload(event,targetArr,previewId,max,isVideo,isAudio){
   const files=Array.from(event.target.files||[]);
   if(!files.length)return;
   if(targetArr.length+files.length>max){toast(`Max ${max} for this type`,"error");event.target.value="";return;}
-  files.forEach(file=>{
+  // Only images are downscaled here. Video and audio can't go through a
+  // canvas the way an image can — client-side re-encoding of either is a
+  // genuinely different, much bigger feature (real transcoding, not a
+  // resize), so those two keep the original raw upload rather than silently
+  // pretending to compress something they don't.
+  files.forEach(async file=>{
+    if(!isVideo&&!isAudio){
+      try{
+        const dataUrl=await downscaleImageFile(file);
+        targetArr.push({dataUrl,name:file.name});
+        renderVcMultiPreview(previewId,targetArr,isAudio);
+        refreshMotionBrushVisibility();
+      }catch(err){ toast(err.message,"error"); }
+      return;
+    }
     const reader=new FileReader();
     reader.onload=e=>{
       targetArr.push({dataUrl:e.target.result,name:file.name});
@@ -7100,6 +7164,39 @@ function vcTagList(){
 
 function getVcAvailableTags(){
   return vcTagList().all;
+}
+
+// Live @-tag chips under the input. A plain <textarea> cannot style a
+// substring of its own text — there is no way to make just "@Element1"
+// glow INSIDE the box without replacing it with a contenteditable div, which
+// on Android brings real IME/composition risk (the exact kind of thing that
+// caused the caret-jumping bug fixed earlier for free-text fields). This is
+// the reliable alternative: a live strip below the box showing exactly what
+// the app currently understands, updated on every keystroke.
+//
+// Deliberately reuses unresolvedVcElementTags' own resolution rule rather
+// than a second copy of it, so the chip glow and the actual pre-flight
+// validation can never disagree — a tag glowing green while still getting
+// rejected at send time would be worse than not having this feature at all.
+function renderVcTagChips(){
+  const wrap=document.getElementById("vcTagChips");
+  const input=document.getElementById("vcChatInput");
+  if(!wrap||!input)return;
+  const text=input.value||"";
+  const found=[...new Set((text.match(/@(Element\d+|StartFrame|EndFrame)/gi)||[]))];
+  if(!found.length){wrap.style.display="none";wrap.innerHTML="";return;}
+  wrap.style.display="flex";
+  const availableEls=(S.vcElements||[]).filter(e=>e&&e.frontal&&e.angles&&e.angles.length).length;
+  const hasStart=!!(S.vcMultiImages&&S.vcMultiImages[0]);
+  const hasEnd=!!S.vcEndFrame;
+  wrap.innerHTML=found.map(tag=>{
+    const lower=tag.toLowerCase();
+    let valid;
+    if(lower==="@startframe")valid=hasStart;
+    else if(lower==="@endframe")valid=hasEnd;
+    else{const n=parseInt(lower.replace(/\D/g,""),10);valid=isFinite(n)&&n>=1&&n<=availableEls;}
+    return `<span class="${valid?'kk-tag-valid':''}" style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:10.5px;font-weight:700;background:${valid?'var(--lav)':'rgba(200,150,20,0.12)'};color:${valid?'var(--violet)':'var(--gold)'};border:1px solid ${valid?'var(--vs)':'var(--gold)'}">${escapeHtml(tag)}${valid?'':' ⚠'}</span>`;
+  }).join('');
 }
 
 function checkVcTagAutocomplete(){
@@ -7583,7 +7680,7 @@ async function sendVcMultiShotPrompt(){
   const shotType=document.getElementById("vcShotType").value;
   const negPrompt=document.getElementById("vcNegPrompt")?.value.trim()||"";
   const directorStyle=getActiveDirectorPrompt();
-  const shouldNormalize=(cap.provider==="kling-o3-ref"&&(S.vcMultiImages.length||S.vcMultiVideos.length))||(cap.elements&&S.vcMultiImages.length>1);
+  const shouldNormalize=(cap.provider==="kling-o3-ref"&&(S.vcMultiImages.length||S.vcMultiVideos.length))||vcHasRealElements(cap);
   const shotsPayload=validShots.map(s=>{
     let p=directorStyle?`${s.prompt}, ${directorStyle}`:s.prompt;
     if(shouldNormalize)p=normalizeElementTags(p);
@@ -7616,8 +7713,20 @@ async function sendVcMultiShotPrompt(){
     // wastes the transfer and the wait — and on mobile, real data allowance.
     // Only applies to Kling v3, whose limits these are.
     if(/kling-video\/v3\//.test(model||"")){
-      const problems=await validateKlingV3Assets(collectKlingV3Images(),collectKlingV3Videos(),prompt,negPrompt);
-      const dangling=unresolvedVcElementTags(prompt);
+      // 'prompt' (singular) was never declared anywhere in THIS function —
+      // only negPrompt was. It silently resolved to the browser's native
+      // window.prompt function rather than throwing a ReferenceError.
+      // validateKlingV3Assets survived that (prompt.length just read the
+      // function's arity, a harmless number) — but unresolvedVcElementTags
+      // calls prompt.match(), which does not exist on a function object and
+      // would throw. Did not cause the reported failure, since Multi-Shot
+      // Storyboard was off when that happened, but would crash the instant
+      // this toggle is used with an element-capable model. Checks every
+      // shot's text instead of a single flat prompt, since a dangling
+      // @ElementN tag can appear in any one of them.
+      const allShotText=validShots.map(s=>s.prompt).join(" ");
+      const problems=await validateKlingV3Assets(collectKlingV3Images(),collectKlingV3Videos(),allShotText,negPrompt);
+      const dangling=unresolvedVcElementTags(allShotText);
       if(dangling.length){
         const have=(S.vcElements||[]).filter(e=>e&&e.frontal&&e.angles&&e.angles.length).length;
         problems.push(`Your prompt mentions ${dangling.join(", ")} but you have ${have} complete Element${have===1?"":"s"} — that reference would be ignored and the character wouldn't appear.`);
@@ -7648,7 +7757,13 @@ async function sendVcMultiShotPrompt(){
       // small message so it's easy to tap-and-hold to copy one and check it
       // directly (paste into a new tab — a working reference image should
       // just load).
-      pushVcChatMessage({role:"assistant",type:"debug",content:`🔎 Debug — URLs about to be sent as elements:\n${hostedImages.map((u,i)=>`${i+1}. ${u}`).join("\n")}`});
+      // Printed hostedImages here previously — the WRONG array. hostedImages
+      // is the start-frame bucket (capped to 1), completely unrelated to
+      // Elements. This is exactly why the debug log showed only "1." even
+      // when 2 real Elements were attached: it was never showing Elements at
+      // all. Now prints the actual built element payload.
+      const builtEls=hostedElements&&hostedElements.length?buildKlingV3ElementsExplicit(hostedElements,[]):[];
+      pushVcChatMessage({role:"assistant",type:"debug",content:`🔎 Debug — ${builtEls.length} element${builtEls.length!==1?'s':''} about to be sent:\n${builtEls.map((e,i)=>`${i+1}. frontal=${e.frontal_image_url?'✓':'✗'} angles=${(e.reference_image_urls||[]).length}${e.voice_id?' voice=✓':''}`).join("\n")}${hostedImages.length?`\nStart frame: ${hostedImages[0]}`:''}`});
     }
     if(cap.provider==="kling-o3-ref"){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length)throw new Error("Add at least 1 reference image or video — O3 Pro needs one to generate.");
@@ -7673,7 +7788,7 @@ async function sendVcMultiShotPrompt(){
       // buildKlingV3Elements below. Sending it here did nothing at all — the
       // user picked voices and silently got none.
       const i2v=IMAGE_TO_VIDEO_MAP[model];
-      if(S.vcMultiImages.length>1&&cap.elements){
+      if(vcHasRealElements(cap)){
         // CORRECTED: a previous version of this kept the request on the
         // text-to-video endpoint, reasoning that fal's docs listed `elements`
         // as a valid field there. That was an incomplete read — text-to-
@@ -7827,7 +7942,7 @@ async function sendVcChatPrompt(){
   let prompt=directorStyle?`${rawPrompt}, ${directorStyle}`:rawPrompt;
   const model=document.getElementById("vcModel").value;
   const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
-  if((cap.provider==="kling-o3-ref"&&(S.vcMultiImages.length||S.vcMultiVideos.length))||(cap.elements&&S.vcMultiImages.length>1))prompt=normalizeElementTags(prompt);
+  if((cap.provider==="kling-o3-ref"&&(S.vcMultiImages.length||S.vcMultiVideos.length))||vcHasRealElements(cap))prompt=normalizeElementTags(prompt);
   const ratio=document.getElementById("vcRatio").value;
   const duration=document.getElementById("vcDuration").value;
   const negPrompt=document.getElementById("vcNegPrompt")?.value.trim()||"";
@@ -7905,7 +8020,13 @@ async function sendVcChatPrompt(){
   // single image, which meant Elements were silently never sent — the user had
   // a full Elements UI that produced nothing in the request.
   if(cap.elements&&((hostedElements&&hostedElements.length)||hostedImages.length>1)){
-      pushVcChatMessage({role:"assistant",type:"debug",content:`🔎 Debug — URLs about to be sent as elements:\n${hostedImages.map((u,i)=>`${i+1}. ${u}`).join("\n")}`});
+      // Printed hostedImages here previously — the WRONG array. hostedImages
+      // is the start-frame bucket (capped to 1), completely unrelated to
+      // Elements. This is exactly why the debug log showed only "1." even
+      // when 2 real Elements were attached: it was never showing Elements at
+      // all. Now prints the actual built element payload.
+      const builtEls=hostedElements&&hostedElements.length?buildKlingV3ElementsExplicit(hostedElements,[]):[];
+      pushVcChatMessage({role:"assistant",type:"debug",content:`🔎 Debug — ${builtEls.length} element${builtEls.length!==1?'s':''} about to be sent:\n${builtEls.map((e,i)=>`${i+1}. frontal=${e.frontal_image_url?'✓':'✗'} angles=${(e.reference_image_urls||[]).length}${e.voice_id?' voice=✓':''}`).join("\n")}${hostedImages.length?`\nStart frame: ${hostedImages[0]}`:''}`});
     }
     if(cap.provider==="seedance-ref"){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length&&!S.vcMultiAudios.length){
@@ -7954,7 +8075,7 @@ async function sendVcChatPrompt(){
           if(i2v){endpoint=i2v.endpoint;body[i2v.field]=hostedImages[0];}
           body.dynamic_masks=[{mask_url:S.vcMotionBrush.dynamicMaskUrl,trajectories:S.vcMotionBrush.trajectories}];
           if(S.vcMotionBrush.staticMaskUrl)body.static_mask_url=S.vcMotionBrush.staticMaskUrl;
-        } else if(cap.elements&&S.vcMultiImages.length>1){
+        } else if(vcHasRealElements(cap)){
           // CORRECTED: a previous version kept this on the text-to-video
           // endpoint. That was wrong — text-to-video's own docs specifically
           // limit element binding there to 1 element and require
@@ -8007,7 +8128,7 @@ async function sendVcChatPrompt(){
     // table has one fixed price per model regardless of what resolution
     // was actually used, which is wrong for Seedance/Veo's token-based
     // formulas (480p and 4K genuinely cost different amounts).
-    const realCostEst=estimateVideoCost(costKey,parseInt(duration,10)||0,resolution,!!(S.vcMultiVideos&&S.vcMultiVideos.length),!!((VIDEO_MODEL_CAPABILITIES[costKey]||{}).elements&&S.vcMultiImages.length>1));
+    const realCostEst=estimateVideoCost(costKey,parseInt(duration,10)||0,resolution,!!(S.vcMultiVideos&&S.vcMultiVideos.length),vcHasRealElements(VIDEO_MODEL_CAPABILITIES[costKey]||{}));
     logCost(costKey,prompt.slice(0,60),1,realCostEst?realCostEst.cost:null);
     toast(`✨ Video generated via ${providerLabel}!`,"success");
   }catch(err){
