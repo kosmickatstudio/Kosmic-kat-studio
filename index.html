@@ -4755,10 +4755,15 @@ async function genViaVeoDirect(prompt,ratio,modelId,startImageDataUrl){
 // everything else built so far: character ACTIONS come from a reference
 // VIDEO, visual APPEARANCE comes from a reference IMAGE. character_orientation
 // controls which one the output pose actually follows: 'image' (default,
-// better for camera movements, max 10s) or 'video' (better for complex
-// motions, max 30s — and required if using the optional single-element
+// better for camera movements) or 'video' (better for complex motions).
+// Duration limits per orientation are NOT stated here any more: the UI
+// advertised max 10s / max 30s while the dropdown only ever offered 3-10s, so
+// the 30s claim could never be met. fal's motion-control schema has not been
+// supplied, so the real ceiling is unconfirmed — better to say nothing than to
+// promise a duration the control cannot select.
+// (formerly noted as required for the optional single-element
 // facial-consistency binding this endpoint also supports).
-async function genViaKlingMotionControl(prompt,ratio,duration,imageUrl,videoUrl,characterOrientation,cfgScale,negPrompt,elementUrl){
+async function genViaKlingMotionControl(prompt,ratio,duration,imageUrl,videoUrl,characterOrientation,cfgScale,negPrompt){
   const apiKey=gs("api_falai","");
   if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
   const model="fal-ai/kling-video/v3/pro/motion-control";
@@ -4771,12 +4776,13 @@ async function genViaKlingMotionControl(prompt,ratio,duration,imageUrl,videoUrl,
   };
   if(cfgScale!=null)body.cfg_scale=cfgScale;
   if(negPrompt)body.negative_prompt=negPrompt;
-  // Field name here (elements, plural array, 1 entry) inferred from the
-  // consistent pattern used everywhere else in Kling's v3 schema — fal's own
-  // description for this specific field says "element" (singular) without
-  // showing a raw JSON example, so this is the best-evidenced guess, not an
-  // independently confirmed exact key name for this one field.
-  if(elementUrl&&characterOrientation==="video")body.elements=[{frontal_image_url:elementUrl}];
+  // The elements branch that used to live here was UNREACHABLE: the only call
+  // site passes 8 arguments to this 9-parameter function, so elementUrl was
+  // always undefined and the line never ran. It also carried the same
+  // under-provisioned {frontal_image_url} shape that was the original v3
+  // blocker. Removed rather than left as a latent trap for whoever wires an
+  // Element picker into Motion Control later and finds it silently rejected.
+  // Motion Control has no Element UI at all, so nothing is lost.
   const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
   const submitData=await submitRes.json();
   if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
@@ -5121,8 +5127,8 @@ function renderMotionControl(el){
       <div class="f-group">
         <label class="f-label">Match Orientation To</label>
         <div class="vc-shottype-toggle">
-          <button type="button" class="vc-shottype-btn active" data-val="image" onclick="setMcOrientation('image')">Reference Image<br>better for camera moves (max 10s)</button>
-          <button type="button" class="vc-shottype-btn" data-val="video" onclick="setMcOrientation('video')">Reference Video<br>better for complex motion (max 30s)</button>
+          <button type="button" class="vc-shottype-btn active" data-val="image" onclick="setMcOrientation('image')">Reference Image<br>better for camera moves</button>
+          <button type="button" class="vc-shottype-btn" data-val="video" onclick="setMcOrientation('video')">Reference Video<br>better for complex motion</button>
         </div>
         <input type="hidden" id="mcOrientation" value="image">
       </div>
