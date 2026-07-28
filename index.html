@@ -4767,22 +4767,20 @@ async function genViaVeoDirect(prompt,ratio,modelId,startImageDataUrl){
 // promise a duration the control cannot select.
 // (formerly noted as required for the optional single-element
 // facial-consistency binding this endpoint also supports).
-async function genViaKlingMotionControl(prompt,ratio,duration,imageUrl,videoUrl,characterOrientation,cfgScale,negPrompt,tier){
+async function genViaKlingMotionControl(prompt,ratio,duration,imageUrl,videoUrl,characterOrientation,cfgScale,negPrompt,tier,element){
   const apiKey=gs("api_falai","");
   if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
-  // Endpoint corrected from v3 to v2.6. fal's motion-control schema is titled
-  // KlingVideoV26ProMotionControlInput and lives at .../v2.6/pro/... — the app
-  // was pointing at a v3 path that does not appear in fal's model list at all.
-  const model=(tier==="standard")
-    ?"fal-ai/kling-video/v2.6/standard/motion-control"
-    :"fal-ai/kling-video/v2.6/pro/motion-control";
-  // The schema's property list is EXACTLY: prompt, image_url, video_url,
-  // keep_original_sound, character_orientation — with image_url, video_url and
-  // character_orientation required. Everything the app used to add here
-  // (generate_audio, cfg_scale, negative_prompt, aspect_ratio, duration) is
-  // absent from this endpoint, so it was either ignored or grounds for
-  // rejection. Notably there is no duration field at all: output length is
-  // dictated by the reference video.
+  // CORRECTION: v3 motion-control DOES exist, for both tiers. A previous
+  // change moved this to v2.6 on the assumption that it didn't — that was
+  // wrong, and the app's original v3 endpoint was right. All four are real:
+  //   v2.6 standard/pro — no element support
+  //   v3   standard/pro — adds element binding for facial consistency
+  const model=tier||"fal-ai/kling-video/v3/pro/motion-control";
+  const isV3=/\/v3\//.test(model);
+  // Every motion-control schema — v2.6 and v3, both tiers — defines exactly:
+  // prompt, image_url, video_url, keep_original_sound, character_orientation,
+  // and (v3 only) elements. There is no duration, aspect_ratio, cfg_scale or
+  // negative_prompt on any of them.
   const body={
     prompt:prompt||null,
     image_url:imageUrl,
@@ -4790,6 +4788,19 @@ async function genViaKlingMotionControl(prompt,ratio,duration,imageUrl,videoUrl,
     character_orientation:characterOrientation||"image",
     keep_original_sound:gs("mc_keep_sound",true)!==false,
   };
+  // Element binding: v3 only, exactly ONE element, and the schema states it is
+  // "only supported when character_orientation is 'video'". Sending it under
+  // 'image' orientation would be rejected, so it is dropped with the reason
+  // rather than silently failing the whole request.
+  if(element&&element.frontal&&element.angles&&element.angles.length){
+    if(!isV3){
+      toast("Facial-consistency Element needs Kling v3 — ignored on v2.6","");
+    } else if((characterOrientation||"image")!=="video"){
+      toast("Facial-consistency Element requires 'Reference Video' orientation — ignored","");
+    } else {
+      body.elements=[{frontal_image_url:element.frontal,reference_image_urls:element.angles.slice(0,3)}];
+    }
+  }
   const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
   const submitData=await submitRes.json();
   if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
@@ -5167,9 +5178,11 @@ function renderMotionControl(el){
 
       <div class="f-group">
         <label class="f-label">Quality tier</label>
-        <select class="f-select" id="mcTier" onchange="updateMcCostHint()">
-          <option value="pro" selected>Pro — $0.112/s</option>
-          <option value="standard">Standard — $0.07/s</option>
+        <select class="f-select" id="mcTier" onchange="updateMcCostHint();updateMcElementUI()">
+          <option value="fal-ai/kling-video/v3/pro/motion-control" selected>Kling v3 Pro — supports face Element</option>
+          <option value="fal-ai/kling-video/v3/standard/motion-control">Kling v3 Standard — supports face Element</option>
+          <option value="fal-ai/kling-video/v2.6/pro/motion-control">Kling v2.6 Pro — $0.112/s</option>
+          <option value="fal-ai/kling-video/v2.6/standard/motion-control">Kling v2.6 Standard — $0.07/s</option>
         </select>
       </div>
 
@@ -5184,6 +5197,15 @@ function renderMotionControl(el){
         There's no duration setting here — Motion Control follows your reference video, so the output is as long as the video you upload. Cost is charged per second of that video.
       </div>
 
+      <div class="f-group" id="mcElementWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px">
+        <label class="f-label">${pIcon('sparkle',12)} Face Element <span style="font-weight:400;color:var(--texts)">(optional — keeps the character's face consistent)</span></label>
+        <div style="font-size:10px;color:var(--textm);margin:-2px 0 8px">One Element only, and it needs a main view plus at least one other angle. Reference it as <b>@Element1</b> in your prompt.</div>
+        <div id="mcElementSlots" style="display:flex;gap:7px;flex-wrap:wrap"></div>
+        <input type="file" accept="image/*" id="mcElFrontalFile" style="display:none" onchange="handleMcElementImage(event,'frontal')">
+        <input type="file" accept="image/*" multiple id="mcElAngleFile" style="display:none" onchange="handleMcElementImage(event,'angle')">
+        <div id="mcElementNote" style="font-size:10px;color:var(--gold);margin-top:6px;display:none"></div>
+      </div>
+
       <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="sendMotionControlGen()" ${!hasKey?'disabled':''}>🎯 Generate</button>
       <div id="mcCostHint" style="font-size:11px;color:var(--gold);margin-top:6px;text-align:center"></div>
 
@@ -5194,15 +5216,76 @@ function renderMotionControl(el){
   renderMcResults();
   document.getElementById("mcRatio")?.addEventListener("change",updateMcCostHint);
   document.getElementById("mcTier")?.addEventListener("change",updateMcCostHint);
+  updateMcElementUI();
   updateMcCostHint();
 }
 
+
+// ── MOTION CONTROL FACE ELEMENT ─────────────────────────────────────────
+// v3 only, exactly one Element, and only under 'video' orientation — all three
+// constraints come straight from the schema description, which is unusually
+// explicit: "Only 1 element is supported... Element binding is only supported
+// when character_orientation is 'video'."
+S.mcElement=S.mcElement||{frontal:null,angles:[]};
+let _mcElTarget=null;
+function updateMcElementUI(){
+  const wrap=document.getElementById("mcElementWrap");
+  if(!wrap)return;
+  const model=document.getElementById("mcTier")?.value||"";
+  const isV3=/\/v3\//.test(model);
+  wrap.style.display=isV3?"block":"none";
+  const note=document.getElementById("mcElementNote");
+  if(note){
+    const orient=document.getElementById("mcOrientation")?.value||"image";
+    const has=!!(S.mcElement.frontal&&S.mcElement.angles.length);
+    // Warn only when it would actually be dropped — i.e. an Element exists but
+    // the orientation forbids it. Nagging before anything is uploaded is noise.
+    if(isV3&&has&&orient!=="video"){
+      note.textContent='Face Element is only used with "Reference Video" orientation — switch above, or it will be ignored.';
+      note.style.display="block";
+    } else note.style.display="none";
+  }
+  renderMcElementSlots();
+}
+function renderMcElementSlots(){
+  const el=document.getElementById("mcElementSlots");
+  if(!el)return;
+  const box=(img,pick,clear,label)=>img
+    ?`<div style="position:relative;width:62px;height:62px"><img src="${img.dataUrl}" style="width:62px;height:62px;object-fit:cover;border-radius:9px;border:1px solid var(--glass-brd)"><button onclick="${clear}" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;border:none;background:var(--red);color:#fff;font-size:11px;line-height:1;cursor:pointer">✕</button></div>`
+    :`<div onclick="${pick}" style="width:62px;height:62px;border:1.5px dashed var(--border);border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--textm);font-size:9px;text-align:center;line-height:1.1"><div style="font-size:15px">+</div>${label}</div>`;
+  el.innerHTML=box(S.mcElement.frontal,"pickMcElementImage('frontal')","clearMcElementFrontal()","Main view")
+    +`<div style="width:1px;align-self:stretch;background:var(--border)"></div>`
+    +S.mcElement.angles.map((a,i)=>box(a,"",`removeMcElementAngle(${i})`,"")).join("")
+    +(S.mcElement.angles.length<3?box(null,"pickMcElementImage('angle')","",`Angle ${S.mcElement.angles.length+1}`):"");
+}
+function pickMcElementImage(slot){ _mcElTarget=slot; document.getElementById(slot==="frontal"?"mcElFrontalFile":"mcElAngleFile").click(); }
+function clearMcElementFrontal(){ S.mcElement.frontal=null; updateMcElementUI(); }
+function removeMcElementAngle(i){ S.mcElement.angles.splice(i,1); updateMcElementUI(); }
+function handleMcElementImage(event,slot){
+  const files=[...(event.target.files||[])];
+  event.target.value="";
+  if(!files.length)return;
+  const room=slot==="frontal"?1:Math.max(0,3-S.mcElement.angles.length);
+  files.slice(0,room).forEach(file=>{
+    if(!file.type.startsWith("image/")){toast("Images only","error");return;}
+    const r=new FileReader();
+    r.onload=e=>{
+      const item={dataUrl:e.target.result,name:file.name};
+      if(slot==="frontal")S.mcElement.frontal=item; else S.mcElement.angles.push(item);
+      updateMcElementUI();
+    };
+    r.readAsDataURL(file);
+  });
+}
 function updateMcCostHint(){
   // Motion Control has no duration parameter — the output matches the
   // reference video, so the estimate has to come from that video's real
   // length. Falls back to 5s only while no video has been measured yet.
   const seconds=(S.mcVideo&&S.mcVideo.duration)||5;
-  const mcModel=(document.getElementById("mcTier")?.value==="standard")?"fal-ai/kling-video/v2.6/standard/motion-control":"fal-ai/kling-video/v2.6/pro/motion-control";
+  // The picker's value IS the endpoint id now, so use it directly. The old
+  // ternary compared against "standard", a value that no longer exists, so it
+  // would have priced every selection as v2.6 Pro.
+  const mcModel=document.getElementById("mcTier")?.value||"fal-ai/kling-video/v3/pro/motion-control";
   const est=estimateVideoCost(mcModel,seconds,"720p",false);
   const hint=document.getElementById("mcCostHint");
   if(hint)hint.textContent=est?formatCostLine(est):"";
@@ -5274,6 +5357,7 @@ function removeMcVideo(){S.mcVideo=null;renderMcVideoPreview();}
 
 function setMcOrientation(val){
   document.getElementById("mcOrientation").value=val;
+  if(typeof updateMcElementUI==="function")updateMcElementUI();
   document.querySelectorAll(".vc-shottype-btn").forEach(b=>{if(b.dataset.val==="image"||b.dataset.val==="video")b.classList.toggle("active",b.dataset.val===val);});
 }
 
@@ -5301,7 +5385,7 @@ async function sendMotionControlGen(){
   const cfgScale=parseFloat(document.getElementById("mcCfgSlider")?.value)||0.5;
   const orientation=document.getElementById("mcOrientation")?.value||"image";
   const ratio=document.getElementById("mcRatio")?.value||"16:9";
-  const tier=document.getElementById("mcTier")?.value||"pro";
+  const tier=document.getElementById("mcTier")?.value||"fal-ai/kling-video/v3/pro/motion-control";
   toast("Uploading references…","");
   try{
     const [hostedImage,hostedVideo]=await Promise.all([
@@ -5309,11 +5393,19 @@ async function sendMotionControlGen(){
       S.mcVideo.dataUrl.startsWith("data:")?uploadToFalStorage(dataUrlToBlob(S.mcVideo.dataUrl),apiKey):S.mcVideo.dataUrl,
     ]);
     toast("Generating — this can take a few minutes…","");
-    const videoUrl=await genViaKlingMotionControl(prompt,ratio,null,hostedImage,hostedVideo,orientation,cfgScale,negPrompt,tier);
+    // Element images upload alongside the main pair, only when complete —
+    // an Element missing its angle would be rejected by fal.
+    let hostedElement=null;
+    if(S.mcElement&&S.mcElement.frontal&&S.mcElement.angles.length){
+      const flat=[S.mcElement.frontal,...S.mcElement.angles.slice(0,3)];
+      const hosted=await uploadRefsToFal(flat,apiKey);
+      if(hosted&&hosted[0])hostedElement={frontal:hosted[0],angles:hosted.slice(1).filter(Boolean)};
+    }
+    const videoUrl=await genViaKlingMotionControl(prompt,ratio,null,hostedImage,hostedVideo,orientation,cfgScale,negPrompt,tier,hostedElement);
     const savedAsset=createVideoAsset(videoUrl,prompt,"");
     S.mcResults.push({url:videoUrl,prompt,assetId:savedAsset.id,createdAt:new Date().toISOString()});
     saveSetting("mc_results",S.mcResults);
-    logCost((document.getElementById("mcTier")?.value==="standard")?"fal-ai/kling-video/v2.6/standard/motion-control":"fal-ai/kling-video/v2.6/pro/motion-control","Motion Control");
+    logCost(document.getElementById("mcTier")?.value||"fal-ai/kling-video/v3/pro/motion-control","Motion Control");
     renderMcResults();
     toast("✨ Generated","success");
   }catch(err){
@@ -6507,6 +6599,12 @@ const VIDEO_PRICING={
   // Seedance-vs-Kling comparison article ("Motion control: $0.168/second").
   "fal-ai/kling-video/v2.6/pro/motion-control":{perSec:0.112},
   "fal-ai/kling-video/v2.6/standard/motion-control":{perSec:0.07},
+  // v3 motion-control pricing pages were not supplied. Carrying the v2.6 rates
+  // as a stand-in and marking them approximate, rather than inventing figures:
+  // v3 is a newer tier and may well cost more, so these estimates should be
+  // read as a floor.
+  "fal-ai/kling-video/v3/pro/motion-control":{perSec:0.112,approxRate:true},
+  "fal-ai/kling-video/v3/standard/motion-control":{perSec:0.07,approxRate:true},
   // Confirmed directly on fal's own O3 Standard model page: $0.084/s audio
   // off, $0.112/s audio on.
   "fal-ai/kling-video/o3/standard/image-to-video":{perSec:0.112},
