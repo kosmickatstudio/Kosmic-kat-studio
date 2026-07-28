@@ -1644,7 +1644,8 @@ const COST_TABLE={
   // pricing for this FLUX-family LoRA endpoint; ~0.035 is the flat 1-megapixel
   // estimate used elsewhere in this table for similar FLUX Dev-tier models.
   "fal-ai/flux-lora":0.035,
-  "fal-ai/kling-video/v3/pro/motion-control":1.34,
+  "fal-ai/kling-video/v2.6/pro/motion-control":1.34,
+  "fal-ai/kling-video/v2.6/standard/motion-control":0.84,
 };
 
 function logCost(key,note,count,amountOverride){
@@ -3527,7 +3528,10 @@ function updateIgCostHint(){
   const count=countEl?parseInt(countEl.value,10)||1:1;
   const est=estimateImageCost(model,count);
   const hint=document.getElementById("igCostHint");
-  if(hint)hint.textContent=est?formatCostLine(est):"";
+  if(hint){
+    const measured=!!(S.mcVideo&&S.mcVideo.duration);
+    hint.textContent=est?(measured?`${formatCostLine(est)} — for your ${seconds.toFixed(1)}s reference video`:`${formatCostLine(est)} — estimate for a 5s video; upload one for the real figure`):"";
+  }
 }
 const IG_DEFAULT_RATIOS=["16:9","1:1","9:16","4:3","3:4"];
 function updateIgRatioOptions(cap){
@@ -4763,26 +4767,29 @@ async function genViaVeoDirect(prompt,ratio,modelId,startImageDataUrl){
 // promise a duration the control cannot select.
 // (formerly noted as required for the optional single-element
 // facial-consistency binding this endpoint also supports).
-async function genViaKlingMotionControl(prompt,ratio,duration,imageUrl,videoUrl,characterOrientation,cfgScale,negPrompt){
+async function genViaKlingMotionControl(prompt,ratio,duration,imageUrl,videoUrl,characterOrientation,cfgScale,negPrompt,tier){
   const apiKey=gs("api_falai","");
   if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
-  const model="fal-ai/kling-video/v3/pro/motion-control";
+  // Endpoint corrected from v3 to v2.6. fal's motion-control schema is titled
+  // KlingVideoV26ProMotionControlInput and lives at .../v2.6/pro/... — the app
+  // was pointing at a v3 path that does not appear in fal's model list at all.
+  const model=(tier==="standard")
+    ?"fal-ai/kling-video/v2.6/standard/motion-control"
+    :"fal-ai/kling-video/v2.6/pro/motion-control";
+  // The schema's property list is EXACTLY: prompt, image_url, video_url,
+  // keep_original_sound, character_orientation — with image_url, video_url and
+  // character_orientation required. Everything the app used to add here
+  // (generate_audio, cfg_scale, negative_prompt, aspect_ratio, duration) is
+  // absent from this endpoint, so it was either ignored or grounds for
+  // rejection. Notably there is no duration field at all: output length is
+  // dictated by the reference video.
   const body={
-    prompt,
+    prompt:prompt||null,
     image_url:imageUrl,
     video_url:videoUrl,
     character_orientation:characterOrientation||"image",
-    generate_audio:true,
+    keep_original_sound:gs("mc_keep_sound",true)!==false,
   };
-  if(cfgScale!=null)body.cfg_scale=cfgScale;
-  if(negPrompt)body.negative_prompt=negPrompt;
-  // The elements branch that used to live here was UNREACHABLE: the only call
-  // site passes 8 arguments to this 9-parameter function, so elementUrl was
-  // always undefined and the line never ran. It also carried the same
-  // under-provisioned {frontal_image_url} shape that was the original v3
-  // blocker. Removed rather than left as a latent trap for whoever wires an
-  // Element picker into Motion Control later and finds it silently rejected.
-  // Motion Control has no Element UI at all, so nothing is lost.
   const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
   const submitData=await submitRes.json();
   if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
@@ -5159,10 +5166,22 @@ function renderMotionControl(el){
       </div>
 
       <div class="f-group">
-        <label class="f-label">Duration</label>
-        <select class="f-select" id="mcDuration">
-          ${[3,4,5,6,7,8,9,10].map(n=>`<option value="${n}" ${n===5?'selected':''}>${n}s</option>`).join('')}
+        <label class="f-label">Quality tier</label>
+        <select class="f-select" id="mcTier" onchange="updateMcCostHint()">
+          <option value="pro" selected>Pro — $0.112/s</option>
+          <option value="standard">Standard — $0.07/s</option>
         </select>
+      </div>
+
+      <div class="f-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="mcKeepSound" checked onchange="saveSetting('mc_keep_sound',this.checked)">
+          <span class="f-label" style="margin:0">${pIcon('mic',12)} Keep original sound <span style="font-weight:400;color:var(--texts)">(from the reference video)</span></span>
+        </label>
+      </div>
+
+      <div style="font-size:10.5px;color:var(--textm);background:var(--glass);border:1px solid var(--glass-brd);border-radius:10px;padding:9px 11px;margin-bottom:8px">
+        There's no duration setting here — Motion Control follows your reference video, so the output is as long as the video you upload. Cost is charged per second of that video.
       </div>
 
       <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="sendMotionControlGen()" ${!hasKey?'disabled':''}>🎯 Generate</button>
@@ -5174,13 +5193,17 @@ function renderMotionControl(el){
   renderMcVideoPreview();
   renderMcResults();
   document.getElementById("mcRatio")?.addEventListener("change",updateMcCostHint);
-  document.getElementById("mcDuration")?.addEventListener("change",updateMcCostHint);
+  document.getElementById("mcTier")?.addEventListener("change",updateMcCostHint);
   updateMcCostHint();
 }
 
 function updateMcCostHint(){
-  const seconds=parseFloat(document.getElementById("mcDuration")?.value)||5;
-  const est=estimateVideoCost("fal-ai/kling-video/v3/pro/motion-control",seconds,"720p",false);
+  // Motion Control has no duration parameter — the output matches the
+  // reference video, so the estimate has to come from that video's real
+  // length. Falls back to 5s only while no video has been measured yet.
+  const seconds=(S.mcVideo&&S.mcVideo.duration)||5;
+  const mcModel=(document.getElementById("mcTier")?.value==="standard")?"fal-ai/kling-video/v2.6/standard/motion-control":"fal-ai/kling-video/v2.6/pro/motion-control";
+  const est=estimateVideoCost(mcModel,seconds,"720p",false);
   const hint=document.getElementById("mcCostHint");
   if(hint)hint.textContent=est?formatCostLine(est):"";
 }
@@ -5210,7 +5233,31 @@ function handleMcVideoUpload(event){
   if(!file)return;
   event.target.value="";
   const reader=new FileReader();
-  reader.onload=e=>{S.mcVideo={dataUrl:e.target.result,name:file.name};renderMcVideoPreview();};
+  reader.onload=async e=>{
+    S.mcVideo={dataUrl:e.target.result,name:file.name};
+    // Measure it: the output length — and therefore the whole cost — comes
+    // from this video, not from any setting, so the estimate is meaningless
+    // until we know how long it is.
+    const m=await measureVideo(e.target.result);
+    if(m){
+      S.mcVideo.duration=m.dur;
+      // fal's motion-control limits, which differ from the v3 image endpoints:
+      // 340x340 minimum (not 300), 3850 maximum, 3-30.05s, 100MB.
+      const problems=[];
+      if(m.w<340||m.h<340)problems.push(`it's ${m.w}×${m.h} — Motion Control needs at least 340×340`);
+      if(m.w>3850||m.h>3850)problems.push(`it's ${m.w}×${m.h} — the maximum is 3850×3850`);
+      if(isFinite(m.dur)&&(m.dur<3||m.dur>30.05))problems.push(`it's ${m.dur.toFixed(1)}s — Motion Control accepts 3s to 30s`);
+      const bytes=dataUrlBytes(e.target.result);
+      if(bytes>104857600)problems.push(`it's ${(bytes/1048576).toFixed(0)}MB — the limit is 100MB`);
+      // Orientation caps the usable length: 'image' tops out at 10s, 'video'
+      // at 30s. Warned rather than blocked, since the user can just switch.
+      const orient=document.getElementById("mcOrientation")?.value||"image";
+      if(orient==="image"&&isFinite(m.dur)&&m.dur>10)problems.push(`it's ${m.dur.toFixed(1)}s, but "Reference Image" orientation caps at 10s — switch to "Reference Video" for up to 30s`);
+      if(problems.length)toast("Reference video: "+problems.join("; "),"error");
+    }
+    renderMcVideoPreview();
+    updateMcCostHint();
+  };
   reader.readAsDataURL(file);
 }
 
@@ -5254,7 +5301,7 @@ async function sendMotionControlGen(){
   const cfgScale=parseFloat(document.getElementById("mcCfgSlider")?.value)||0.5;
   const orientation=document.getElementById("mcOrientation")?.value||"image";
   const ratio=document.getElementById("mcRatio")?.value||"16:9";
-  const duration=document.getElementById("mcDuration")?.value||"5";
+  const tier=document.getElementById("mcTier")?.value||"pro";
   toast("Uploading references…","");
   try{
     const [hostedImage,hostedVideo]=await Promise.all([
@@ -5262,11 +5309,11 @@ async function sendMotionControlGen(){
       S.mcVideo.dataUrl.startsWith("data:")?uploadToFalStorage(dataUrlToBlob(S.mcVideo.dataUrl),apiKey):S.mcVideo.dataUrl,
     ]);
     toast("Generating — this can take a few minutes…","");
-    const videoUrl=await genViaKlingMotionControl(prompt,ratio,duration,hostedImage,hostedVideo,orientation,cfgScale,negPrompt);
+    const videoUrl=await genViaKlingMotionControl(prompt,ratio,null,hostedImage,hostedVideo,orientation,cfgScale,negPrompt,tier);
     const savedAsset=createVideoAsset(videoUrl,prompt,"");
     S.mcResults.push({url:videoUrl,prompt,assetId:savedAsset.id,createdAt:new Date().toISOString()});
     saveSetting("mc_results",S.mcResults);
-    logCost("fal-ai/kling-video/v3/pro/motion-control","Motion Control");
+    logCost((document.getElementById("mcTier")?.value==="standard")?"fal-ai/kling-video/v2.6/standard/motion-control":"fal-ai/kling-video/v2.6/pro/motion-control","Motion Control");
     renderMcResults();
     toast("✨ Generated","success");
   }catch(err){
@@ -6458,7 +6505,8 @@ const VIDEO_PRICING={
   "fal-ai/kling-video/o3/pro/reference-to-video":{perSec:0.14},
   // Motion Control: confirmed $0.168/second directly from fal's own
   // Seedance-vs-Kling comparison article ("Motion control: $0.168/second").
-  "fal-ai/kling-video/v3/pro/motion-control":{perSec:0.168},
+  "fal-ai/kling-video/v2.6/pro/motion-control":{perSec:0.112},
+  "fal-ai/kling-video/v2.6/standard/motion-control":{perSec:0.07},
   // Confirmed directly on fal's own O3 Standard model page: $0.084/s audio
   // off, $0.112/s audio on.
   "fal-ai/kling-video/o3/standard/image-to-video":{perSec:0.112},
