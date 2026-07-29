@@ -108,6 +108,9 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(10,11,20,0.5);z-index:75;backdrop-filter:blur(3px)}
 .sidebar-section{padding:6px 0;border-bottom:1px solid var(--borderl)}
 .sidebar-label{font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--texts);padding:6px 14px 3px;white-space:nowrap;font-family:var(--font-display)}
+.sidebar-label-toggle{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding-right:14px}
+.sb-chevron{font-size:9px;transition:transform 0.15s;color:var(--textm)}
+.sb-chevron.open{transform:rotate(90deg)}
 .mod-btn{display:flex;align-items:center;gap:10px;padding:7px 14px;cursor:pointer;border:none;background:transparent;width:100%;text-align:left;transition:all 0.15s;border-left:3px solid transparent}
 .mod-btn:hover{background:var(--glow-ice);border-left-color:var(--ice)}
 .mod-btn.active{background:linear-gradient(90deg,var(--glow-gold),transparent);border-left-color:var(--gold)}
@@ -607,28 +610,77 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
       <button class="mod-btn" data-mod="characters" onclick="switchMod('characters',this)">
         <span class="mod-icon">🎭</span><span class="mod-label">Characters</span>
       </button>
-      <button class="mod-btn" data-mod="videocanvas" onclick="switchMod('videocanvas',this)">
-        <span class="mod-icon">▶</span><span class="mod-label">Video</span>
-        <span class="mod-badge pro">PRO</span>
-      </button>
       <button class="mod-btn" data-mod="motioncontrol" onclick="switchMod('motioncontrol',this)">
         <span class="mod-icon">🎯</span><span class="mod-label">Motion Control</span>
         <span class="mod-badge new">NEW</span>
       </button>
     </div>
     <div class="sidebar-section">
-      <div class="sidebar-label">Image Studio</div>
+      <div class="sidebar-label sidebar-label-toggle" onclick="toggleSidebarSection('videostudio')">
+        <span>Video Studio</span><span class="sb-chevron" id="chev-videostudio">▸</span>
+      </div>
+      <button class="mod-btn" data-mod="videocanvas" onclick="switchMod('videocanvas',this)">
+        <span class="mod-icon">▶</span><span class="mod-label">Video</span>
+        <span class="mod-badge pro">PRO</span>
+      </button>
+      <!-- Canvas and Kosmic Engine are genuine LINKS to modules that already
+           exist elsewhere in the app (Production House) — not new
+           placeholders, and shown under their own real names rather than
+           renamed, since they aren't new things being introduced here.
+           Canvas is Higgsfield's own Video-tab feature reused as-is; Kosmic
+           Engine already covers exactly what Higgsfield calls
+           "Cinema Studio 4K — cinematic video with an AI director." Building
+           either again as an empty placeholder would just duplicate a real,
+           already-working capability. -->
+      <button class="mod-btn" data-mod="nodecanvas" onclick="switchMod('nodecanvas',this)">
+        <span class="mod-icon">🕸</span><span class="mod-label">Canvas</span>
+      </button>
+      <button class="mod-btn" data-mod="kosmicengine" onclick="switchMod('kosmicengine',this)">
+        <span class="mod-icon">🎬</span><span class="mod-label">Kosmic Engine</span>
+      </button>
+      <div id="vidStudioSubRows" style="display:none"></div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label sidebar-label-toggle" onclick="toggleSidebarSection('audiostudio')">
+        <span>Audio Studio</span><span class="sb-chevron" id="chev-audiostudio">▸</span>
+      </div>
+      <button class="mod-btn" data-mod="audio" onclick="switchMod('audio',this)">
+        <span class="mod-icon">🎵</span><span class="mod-label">Audio Tools</span>
+        <span class="mod-badge-api">● ON</span>
+      </button>
+      <!-- All three rows below link to the SAME real Audio module rather
+           than being new placeholders — Voiceover, Change Voice, and
+           Translation already exist as working, priced features inside it
+           (text-to-speech, the real Voice Changer, and Dubbing
+           respectively). They just didn't have their own visible, named
+           entry point before. Wiring each to land directly on its specific
+           mode inside Audio is real follow-up work, not done here — for
+           now these consistently open the Audio module itself. -->
+      <div id="audStudioSubRows" style="display:none">
+        <button class="mod-btn" data-mod="audio" onclick="switchMod('audio',this)">
+          <span class="mod-icon">🗣</span><span class="mod-label">Voiceover</span>
+        </button>
+        <button class="mod-btn" data-mod="audio" onclick="switchMod('audio',this)">
+          <span class="mod-icon">🔀</span><span class="mod-label">Change Voice</span>
+        </button>
+        <button class="mod-btn" data-mod="audio" onclick="switchMod('audio',this)">
+          <span class="mod-icon">🌐</span><span class="mod-label">Translation</span>
+        </button>
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label sidebar-label-toggle" onclick="toggleSidebarSection('imagestudio')">
+        <span>Image Studio</span><span class="sb-chevron" id="chev-imagestudio">▸</span>
+      </div>
       <button class="mod-btn" data-mod="imagegen" onclick="switchMod('imagegen',this)">
         <span class="mod-icon">🖼</span><span class="mod-label">Image</span>
         <span class="mod-badge-api">● ON</span>
       </button>
-      <!-- The 14 sub-feature rows below are generated from IMG_SUBMODULES on
-           load, not hand-typed here — that config is already the single
-           source of truth for these names (it also drives the placeholder
-           screens), and typing the same 14 names a third time in raw markup
-           is exactly the kind of duplication that caused a real typo risk
-           last time. See renderImgStudioSidebarRows(). -->
-      <div id="imgStudioSubRows"></div>
+      <!-- The rows below are generated from IMG_SUBMODULES on load, not
+           hand-typed here — see renderImgStudioSidebarRows(). Collapsed by
+           default (see toggleSidebarSection) so the sidebar isn't 14 rows
+           long before you've ever asked to see them. -->
+      <div id="imgStudioSubRows" style="display:none"></div>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label">Production House</div>
@@ -657,10 +709,6 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label">Media & Assets</div>
-      <button class="mod-btn" data-mod="audio" onclick="switchMod('audio',this)">
-        <span class="mod-icon">🎵</span><span class="mod-label">Audio Tools</span>
-        <span class="mod-badge-api">● ON</span>
-      </button>
       <button class="mod-btn" data-mod="assets" onclick="switchMod('assets',this)">
         <span class="mod-icon">📦</span><span class="mod-label">Asset Library</span>
       </button>
@@ -1828,7 +1876,6 @@ function switchTab(el,name){
 // named and framed in Kosmic Kat's own voice rather than reusing their
 // product names verbatim.
 const IMG_SUBMODULES={
-  "Quick Create":{icon:"✨",blurb:"A faster, no-frills path to a single image — skip the chat, just describe it and go."},
   "Camera Craft":{icon:"🎥",blurb:"Direct the shot itself — angle, lens, depth of field — before the image even generates."},
   "Idea Board":{icon:"🧩",blurb:"A visual scratch space for loose ideas and references before they become a real prompt."},
   "Vibe Board":{icon:"🎨",blurb:"Drop in a few reference images and distill them into one focused look to generate from."},
@@ -1843,25 +1890,6 @@ const IMG_SUBMODULES={
   "Sketch to Scene":{icon:"✏️",blurb:"Turn a rough sketch or doodle into a rendered image."},
   "Wardrobe Studio":{icon:"👗",blurb:"Generate a themed set of outfit/style variations for one character."},
 };
-function showIgSubmodulePlaceholder(name){
-  const thread=document.getElementById("igChatThread");
-  const galleryView=document.getElementById("igGalleryView");
-  const placeholder=document.getElementById("igSubPlaceholder");
-  const inputBar=document.querySelector(".ig-chat-inputbar");
-  if(!placeholder)return;
-  if(thread)thread.style.display="none";
-  if(galleryView)galleryView.style.display="none";
-  if(inputBar)inputBar.style.display="none";
-  placeholder.style.display="flex";
-  const info=IMG_SUBMODULES[name]||{icon:"✨",blurb:""};
-  placeholder.innerHTML=`
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 30px;height:100%">
-      <div style="font-size:44px;margin-bottom:14px;opacity:0.7">${info.icon}</div>
-      <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:17px;margin-bottom:8px">${escapeHtml(name)}</div>
-      <div style="font-size:12.5px;color:var(--textm);line-height:1.6;max-width:280px">${escapeHtml(info.blurb)}</div>
-      <div style="margin-top:18px;font-size:10.5px;color:var(--texts);font-weight:700;letter-spacing:0.04em;text-transform:uppercase">Coming soon</div>
-    </div>`;
-}
 
 function handleTabSwitch(mod,name){
   if(mod==="projects"){
@@ -1878,7 +1906,6 @@ function handleTabSwitch(mod,name){
   if(mod==="imagegen"){
     if(name==="Gallery"){showIgGalleryView();return;}
     if(name==="Generate"){showIgChatView();return;}
-    if(IMG_SUBMODULES[name]){showIgSubmodulePlaceholder(name);return;}
   }
   if(mod==="videocanvas"){
     if(name==="Gallery"){showVcGalleryView();return;}
@@ -3136,7 +3163,6 @@ function renderImageGen(el){
         <button class="ig-icon-btn" onclick="startNewIgChat()" title="New Chat">➕</button>
       </div>
       <div id="igGalleryView" style="display:none"></div>
-      <div id="igSubPlaceholder" style="display:none"></div>
 
       <div class="ig-chat-thread" id="igChatThread"></div>
 
@@ -3255,8 +3281,6 @@ function showIgGalleryView(){
   const thread=document.getElementById("igChatThread");
   const galleryView=document.getElementById("igGalleryView");
   const inputBar=document.querySelector(".ig-chat-inputbar");
-  const placeholder=document.getElementById("igSubPlaceholder");
-  if(placeholder)placeholder.style.display="none";
   if(!galleryView)return;
   const images=[];
   S.igChatHistory.forEach(msg=>{
@@ -3287,8 +3311,6 @@ function showIgChatView(){
   const thread=document.getElementById("igChatThread");
   const galleryView=document.getElementById("igGalleryView");
   const inputBar=document.querySelector(".ig-chat-inputbar");
-  const placeholder=document.getElementById("igSubPlaceholder");
-  if(placeholder)placeholder.style.display="none";
   if(thread)thread.style.display="flex";
   if(galleryView)galleryView.style.display="none";
   if(inputBar)inputBar.style.display="flex";
@@ -12261,11 +12283,80 @@ async function init(){
 document.addEventListener("DOMContentLoaded",()=>{
   document.querySelectorAll(".active-opt").forEach(b=>{b.classList.add("btn-primary");b.classList.remove("btn-outline");});
   renderImgStudioSidebarRows();
+  renderVidStudioSidebarRows();
+  restoreSidebarSectionStates();
 });
 
 // Builds the 14 Image Studio sidebar rows from IMG_SUBMODULES — the same
 // config that already drives the placeholder screens — rather than a third
 // hand-typed copy of the same 14 names in raw markup.
+// Reusable across every "Studio" sidebar section (Image, and shortly Video
+// and Audio) — one toggle function keyed by a section name, rather than a
+// separate copy per section. The lookup table exists because container IDs
+// don't follow a predictable string transform from the section key (e.g.
+// "imagestudio" -> "imgStudioSubRows", not "imagestudioSubRows"), so this is
+// explicit rather than assumed.
+const SIDEBAR_SECTION_CONTAINERS={imagestudio:"imgStudioSubRows",videostudio:"vidStudioSubRows",audiostudio:"audStudioSubRows"};
+function toggleSidebarSection(key){
+  const containerId=SIDEBAR_SECTION_CONTAINERS[key];
+  const container=document.getElementById(containerId);
+  const chevron=document.getElementById("chev-"+key);
+  if(!container)return;
+  const nowOpen=container.style.display==="none";
+  container.style.display=nowOpen?"block":"none";
+  if(chevron){chevron.textContent=nowOpen?"▾":"▸";chevron.classList.toggle("open",nowOpen);}
+  saveSetting("sb_collapsed_"+key,!nowOpen);
+}
+// Restores whichever open/closed state the user left each section in —
+// defaults to collapsed (gs default true) so the sidebar isn't several
+// screens long the first time anyone sees it.
+function restoreSidebarSectionStates(){
+  Object.keys(SIDEBAR_SECTION_CONTAINERS).forEach(key=>{
+    const collapsed=gs("sb_collapsed_"+key,true)!==false;
+    const container=document.getElementById(SIDEBAR_SECTION_CONTAINERS[key]);
+    const chevron=document.getElementById("chev-"+key);
+    if(container)container.style.display=collapsed?"none":"block";
+    if(chevron){chevron.textContent=collapsed?"▸":"▾";chevron.classList.toggle("open",!collapsed);}
+  });
+}
+
+// ── VIDEO STUDIO — 12 NEW SUB-MODULE PLACEHOLDERS ───────────────────────
+// Same empty-scaffolding approach as Image. Two of Higgsfield's 16 video
+// features were folded rather than copied: "Create Video" isn't listed
+// separately, matching the same logic applied to Image's "Create
+// Image"/Quick Create — the parent Video entry already covers it. "Draw to
+// Video" and "Sketch to Video" are the same idea (a sketch becoming a
+// video) described twice because Higgsfield ties one to a specific model;
+// as FEATURES they're one thing, so they're merged into a single row here.
+// Canvas and Kosmic Engine are handled separately as real links, not
+// entries in this config — see the sidebar markup comment.
+const VID_SUBMODULES={
+  "Topic Reel":{icon:"📽️",blurb:"Turn a written topic or script idea into an explainer-style video."},
+  "Media Mix":{icon:"🧵",blurb:"Combine clips, images, and text into one mixed-media sequence."},
+  "Scene Editor":{icon:"🎞️",blurb:"Edit individual scenes, shots, and elements of a video already made."},
+  "Link to Ad":{icon:"🔗",blurb:"Turn a product page URL into a short video ad."},
+  "Trend Studio":{icon:"📈",blurb:"Turn a loose idea into a short-form video shaped for what's trending."},
+  "Lipsync Studio":{icon:"👄",blurb:"A dedicated home for lip-sync — currently reachable only from inside Video's chat flow, not its own destination yet."},
+  "Sketch to Motion":{icon:"🖊️",blurb:"Turn a rough sketch or storyboard drawing into a moving scene."},
+  "UGC Studio":{icon:"🎙️",blurb:"Build creator-style UGC video around a talking avatar."},
+  "Video Boost":{icon:"📶",blurb:"Push resolution and clarity up on a video you already have."},
+  "Scene Replace":{icon:"🔁",blurb:"Swap out an element within an existing video scene."},
+  "Motion Graphics":{icon:"🌀",blurb:"Build clean, professional motion-graphic elements rather than a live-action shot."},
+  "Cast Swap":{icon:"👥",blurb:"Swap a full character into an existing video, not just a face."},
+};
+function renderVidStudioSidebarRows(){
+  const wrap=document.getElementById("vidStudioSubRows");
+  if(!wrap||typeof VID_SUBMODULES==="undefined")return;
+  wrap.innerHTML=Object.keys(VID_SUBMODULES).map(name=>
+    `<button class="mod-btn" data-mod="videocanvas" onclick="openVidSubFromSidebar('${name.replace(/'/g,"\\'")}',this)">
+      <span class="mod-icon">${VID_SUBMODULES[name].icon}</span><span class="mod-label">${escapeHtml(name)}</span>
+    </button>`
+  ).join('');
+}
+function openVidSubFromSidebar(name,el){
+  openFeaturePlaceholder(name,VID_SUBMODULES[name],"videocanvas","Video",el);
+}
+
 function renderImgStudioSidebarRows(){
   const wrap=document.getElementById("imgStudioSubRows");
   if(!wrap||typeof IMG_SUBMODULES==="undefined")return;
@@ -12279,13 +12370,33 @@ function renderImgStudioSidebarRows(){
 // enter the imagegen module, jump straight to that specific placeholder
 // (not the default Generate view), and mark the correct tab active in the
 // top tab bar to match what's actually showing.
+// Generic sub-feature placeholder, shared by Image/Video/Audio Studio rows.
+// Deliberately does NOT enter the underlying module (imagegen/videocanvas/
+// audio) at all — it replaces #moduleContent directly with a small,
+// self-contained screen. Video Canvas specifically has a conditional
+// render (different markup with vs without an active project) built up
+// across a lot of this session's work; threading a placeholder div through
+// that safely would be real, avoidable risk. Bypassing the module entirely
+// is both simpler and safer, so Image now uses this too instead of the
+// div-injection approach from the previous commit.
+function openFeaturePlaceholder(name,info,parentMod,parentLabel,el){
+  document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
+  if(el)el.classList.add("active");
+  const tabsEl=document.getElementById("moduleTabs");
+  if(tabsEl){tabsEl.style.display="none";tabsEl.innerHTML="";}
+  const contentEl=document.getElementById("moduleContent");
+  if(!contentEl)return;
+  contentEl.innerHTML=`
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:70px 30px;min-height:55vh">
+      <div style="font-size:44px;margin-bottom:14px;opacity:0.7">${info.icon}</div>
+      <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:17px;margin-bottom:8px">${escapeHtml(name)}</div>
+      <div style="font-size:12.5px;color:var(--textm);line-height:1.6;max-width:280px">${escapeHtml(info.blurb)}</div>
+      <div style="margin-top:18px;font-size:10.5px;color:var(--texts);font-weight:700;letter-spacing:0.04em;text-transform:uppercase">Coming soon</div>
+      <button class="btn btn-outline btn-sm" style="margin-top:20px" onclick="switchMod('${parentMod}',document.querySelector('[data-mod=${parentMod}]'))">← Back to ${escapeHtml(parentLabel)}</button>
+    </div>`;
+}
 function openImgSubFromSidebar(name,el){
-  switchMod('imagegen',el);
-  handleTabSwitch('imagegen',name);
-  // Neither Generate nor Gallery is actually active while a sidebar
-  // placeholder is showing — clear both rather than leave one looking
-  // selected for a screen it doesn't represent.
-  document.querySelectorAll('#moduleTabs .inner-tab').forEach(t=>t.classList.remove('active'));
+  openFeaturePlaceholder(name,IMG_SUBMODULES[name],"imagegen","Image",el);
 }
 
 // Live gradient fill for all range sliders (delegated so it survives innerHTML re-renders)
