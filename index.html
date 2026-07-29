@@ -1762,7 +1762,7 @@ const MOD_TABS = {
   productionstudio:["Overview"],
   projects:["Overview","Shots","Characters","Notes"],
   characters:["All","Create","Import"],
-  imagegen:["Generate","Gallery"],
+  imagegen:["Generate","Gallery","Quick Create","Camera Craft","Idea Board","Vibe Board","Identity Lock","Persona Studio","Aesthetic Reel","Light Studio","Touch-Up","Detail Boost","Face Shift","Cast Swap","Sketch to Scene","Wardrobe Studio"],
   videocanvas:["Generate","Gallery"],
   motioncontrol:["Generate"],
   directors:["All Directors","Active"],
@@ -1810,6 +1810,49 @@ function switchTab(el,name){
   handleTabSwitch(S.mod,name);
 }
 
+// ── IMAGE MODULE — 14 NEW SUB-MODULE PLACEHOLDERS ───────────────────────
+// Deliberately empty for now — no generation logic, no API calls. Just the
+// navigation shell (tab entry + landing screen) so the structure exists to
+// build into later. Names are original, not Higgsfield's — same underlying
+// idea in a few cases (character consistency, lighting, upscaling) but
+// named and framed in Kosmic Kat's own voice rather than reusing their
+// product names verbatim.
+const IMG_SUBMODULES={
+  "Quick Create":{icon:"✨",blurb:"A faster, no-frills path to a single image — skip the chat, just describe it and go."},
+  "Camera Craft":{icon:"🎥",blurb:"Direct the shot itself — angle, lens, depth of field — before the image even generates."},
+  "Idea Board":{icon:"🧩",blurb:"A visual scratch space for loose ideas and references before they become a real prompt."},
+  "Vibe Board":{icon:"🎨",blurb:"Drop in a few reference images and distill them into one focused look to generate from."},
+  "Identity Lock":{icon:"🔒",blurb:"Train a character once so their face and build hold steady across every future image — built on the same LoRA training already in Characters."},
+  "Persona Studio":{icon:"🪐",blurb:"Build and manage a recurring invented persona for ongoing content, not a one-off character."},
+  "Aesthetic Reel":{icon:"📸",blurb:"A running feed of generations in one visual style, for scrolling through a look rather than a single image."},
+  "Light Studio":{icon:"💡",blurb:"Adjust an existing image's lighting — direction, color, brightness — without re-generating the whole scene."},
+  "Touch-Up":{icon:"🩹",blurb:"Mask a specific area of an image and describe just the change you want there."},
+  "Detail Boost":{icon:"🔍",blurb:"Push resolution and fine detail up on an image you already have."},
+  "Face Shift":{icon:"🎭",blurb:"Swap a face onto an existing image while keeping everything else the same."},
+  "Cast Swap":{icon:"👥",blurb:"Swap a full character — not just the face — into an existing image."},
+  "Sketch to Scene":{icon:"✏️",blurb:"Turn a rough sketch or doodle into a rendered image."},
+  "Wardrobe Studio":{icon:"👗",blurb:"Generate a themed set of outfit/style variations for one character."},
+};
+function showIgSubmodulePlaceholder(name){
+  const thread=document.getElementById("igChatThread");
+  const galleryView=document.getElementById("igGalleryView");
+  const placeholder=document.getElementById("igSubPlaceholder");
+  const inputBar=document.querySelector(".ig-chat-inputbar");
+  if(!placeholder)return;
+  if(thread)thread.style.display="none";
+  if(galleryView)galleryView.style.display="none";
+  if(inputBar)inputBar.style.display="none";
+  placeholder.style.display="flex";
+  const info=IMG_SUBMODULES[name]||{icon:"✨",blurb:""};
+  placeholder.innerHTML=`
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 30px;height:100%">
+      <div style="font-size:44px;margin-bottom:14px;opacity:0.7">${info.icon}</div>
+      <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:17px;margin-bottom:8px">${escapeHtml(name)}</div>
+      <div style="font-size:12.5px;color:var(--textm);line-height:1.6;max-width:280px">${escapeHtml(info.blurb)}</div>
+      <div style="margin-top:18px;font-size:10.5px;color:var(--texts);font-weight:700;letter-spacing:0.04em;text-transform:uppercase">Coming soon</div>
+    </div>`;
+}
+
 function handleTabSwitch(mod,name){
   if(mod==="projects"){
     if(name==="Assets"){switchMod('assets',document.querySelector('[data-mod=assets]'));return;}
@@ -1824,7 +1867,8 @@ function handleTabSwitch(mod,name){
   }
   if(mod==="imagegen"){
     if(name==="Gallery"){showIgGalleryView();return;}
-    if(name==="Generate"){showIgChatView();}
+    if(name==="Generate"){showIgChatView();return;}
+    if(IMG_SUBMODULES[name]){showIgSubmodulePlaceholder(name);return;}
   }
   if(mod==="videocanvas"){
     if(name==="Gallery"){showVcGalleryView();return;}
@@ -3082,6 +3126,7 @@ function renderImageGen(el){
         <button class="ig-icon-btn" onclick="startNewIgChat()" title="New Chat">➕</button>
       </div>
       <div id="igGalleryView" style="display:none"></div>
+      <div id="igSubPlaceholder" style="display:none"></div>
 
       <div class="ig-chat-thread" id="igChatThread"></div>
 
@@ -3200,6 +3245,8 @@ function showIgGalleryView(){
   const thread=document.getElementById("igChatThread");
   const galleryView=document.getElementById("igGalleryView");
   const inputBar=document.querySelector(".ig-chat-inputbar");
+  const placeholder=document.getElementById("igSubPlaceholder");
+  if(placeholder)placeholder.style.display="none";
   if(!galleryView)return;
   const images=[];
   S.igChatHistory.forEach(msg=>{
@@ -3230,6 +3277,8 @@ function showIgChatView(){
   const thread=document.getElementById("igChatThread");
   const galleryView=document.getElementById("igGalleryView");
   const inputBar=document.querySelector(".ig-chat-inputbar");
+  const placeholder=document.getElementById("igSubPlaceholder");
+  if(placeholder)placeholder.style.display="none";
   if(thread)thread.style.display="flex";
   if(galleryView)galleryView.style.display="none";
   if(inputBar)inputBar.style.display="flex";
