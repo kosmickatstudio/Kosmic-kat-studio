@@ -4974,7 +4974,7 @@ function openGenerationInfoModal(meta){
         <button onclick="closeGenerationInfoModal()" style="width:30px;height:30px;border-radius:50%;border:1px solid var(--glass-brd);background:var(--glass);color:var(--textm);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center">✕</button>
       </div>
       ${meta.mediaUrl?`<div style="border-radius:16px;overflow:hidden;margin-bottom:16px;box-shadow:0 8px 28px rgba(61,31,122,0.18);border:1px solid var(--glass-brd)">
-        ${isVideo?`<video src="${meta.mediaUrl}" controls style="width:100%;max-height:46vh;display:block;background:#000"></video>`:`<img src="${meta.mediaUrl}" style="width:100%;max-height:46vh;object-fit:contain;display:block;background:var(--pearl2)">`}
+        ${isVideo?`<video src="${meta.mediaUrl}" controls style="width:100%;max-height:46vh;display:block;background:#000" onerror="retryVideoLoad(this)"></video>`:`<img src="${meta.mediaUrl}" style="width:100%;max-height:46vh;object-fit:contain;display:block;background:var(--pearl2)">`}
       </div>`:''}
       <div style="font-size:10px;font-weight:800;color:var(--textm);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px">Prompt</div>
       <div style="font-size:12.5px;color:var(--text);line-height:1.5;background:var(--glass);border:1px solid var(--glass-brd);border-radius:12px;padding:10px 12px;margin-bottom:16px;white-space:pre-wrap">${(meta.prompt||"—")}</div>
@@ -12199,6 +12199,57 @@ function updateRangeFill(el){
 document.addEventListener("input",e=>{
   if(e.target&&e.target.type==="range")updateRangeFill(e.target);
 });
+
+// Reported: older generations preview fine, but the most recent one doesn't.
+// The most likely honest explanation — not fully provable from here, but
+// consistent with how fal's queue reports completion — is a timing gap: the
+// API can report a result as ready a few seconds before the file is actually
+// fetchable from fal's CDN edge everywhere. An older video has had plenty of
+// time to fully propagate by the time it's viewed again; a video opened
+// seconds after it finishes has not. Retries with a short, increasing delay
+// rather than failing immediately, and gives up cleanly after 3 attempts
+// rather than retrying forever.
+function retryVideoLoad(video,attempt=1){
+  if(attempt>3){video.poster="";return;}
+  setTimeout(()=>{
+    const src=video.src;
+    video.src="";
+    video.src=src;
+  },attempt*1500);
+  video.onerror=()=>retryVideoLoad(video,attempt+1);
+}
+
+// generated video, site-wide, in one place. There are 11 separate <video>
+// render sites across Gallery, Video Canvas, Generation Details, and Motion
+// Control results — patching each markup site individually is exactly the
+// kind of thing that drifts out of sync later (a 12th site added down the
+// road would silently be missed). Delegated on document instead, so it
+// covers every current video element and any added later, with nothing to
+// keep in sync.
+//
+// Honest limit, stated plainly rather than oversold: this blocks the casual
+// long-press/right-click context menu, which is what was actually reported.
+// It cannot stop someone who opens dev tools, inspects network requests, or
+// screen-records their own device — no client-side technique can prevent a
+// determined person from saving something that plays in their own browser.
+// This raises the bar for casual copying; it is not real DRM.
+document.addEventListener("contextmenu",e=>{
+  if(e.target&&e.target.tagName==="VIDEO")e.preventDefault();
+});
+// Also strip the download affordance from the VISIBLE control bar (where a
+// browser shows one) and disable the separate Picture-in-Picture pop-out,
+// for any video that appears anywhere in the app from now on.
+new MutationObserver(muts=>{
+  muts.forEach(m=>m.addedNodes.forEach(node=>{
+    if(node.nodeType!==1)return;
+    const vids=node.tagName==="VIDEO"?[node]:(node.querySelectorAll?[...node.querySelectorAll("video")]:[]);
+    vids.forEach(v=>{
+      v.setAttribute("controlsList","nodownload noremoteplayback");
+      v.disablePictureInPicture=true;
+    });
+  }));
+}).observe(document.body,{childList:true,subtree:true});
+
 // A MutationObserver watching the whole document body used to live here to
 // set each slider's initial fill on render — removed because it scanned the
 // entire newly-added subtree on every single DOM mutation anywhere in the
