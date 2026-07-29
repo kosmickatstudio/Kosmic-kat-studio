@@ -6158,7 +6158,22 @@ async function saveCharacterPreset(){
     saveSetting("character_presets",S.characterPresets);
     toast(`💾 "${name}" saved — ${elements.length} Element${elements.length!==1?'s':''}`,"success");
   }catch(err){
+    // A toast alone was apparently not enough to know whether this had
+    // actually failed — the exact ambiguity reported ("might have worked,
+    // can't confirm"). This also drops a permanent record in the Video
+    // Canvas chat with the REAL error text, so if this fails again there is
+    // something to screenshot and report instead of a vanished toast.
+    // Genuinely uncertain root cause worth naming here: this app has a
+    // guest mode with no real Firebase sign-in (S.user={provider:"guest"}).
+    // If Firebase Storage's security rules require an authenticated user —
+    // a very common default — every guest-mode upload would fail with a
+    // permission error, for a completely different reason than the
+    // storage/retry-limit-exceeded timeout fixed previously. That can only
+    // be confirmed from the actual error text below, not guessed from here.
     toast("Couldn't save preset: "+err.message,"error");
+    if(typeof pushVcChatMessage==="function"){
+      pushVcChatMessage({role:"assistant",type:"error",content:`Preset save failed: ${err.message}\n\nNothing was saved — this is why Load Preset would show empty afterward.`});
+    }
   }
 }
 
@@ -8110,21 +8125,21 @@ async function sendVcChatPrompt(){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length&&!S.vcMultiAudios.length){
         throw new Error("Add at least one reference image, video, or audio file — this model needs one to generate.");
       }
-      pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"});
+      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"});
       videoUrl=await genViaSeedanceReference(prompt,model,ratio,duration,hostedImages,hostedVideos,hostedAudios);
       providerLabel="Seedance 2.0 Reference-to-Video";costKey=model;
     } else if(cap.provider==="veo-ref"){
       if(!S.vcMultiImages.length)throw new Error("Add at least 1 reference image (up to 3) — this model needs one to generate.");
-      pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with reference images…"});
+      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Generating with reference images…"});
       videoUrl=await genViaVeoReference(prompt,ratio,duration,hostedImages);
       providerLabel="Veo 3.1 Reference-to-Video";costKey=model;
     } else if(cap.provider==="kling-o3-ref"){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length)throw new Error("Add at least 1 reference image or video — this model needs one to generate.");
-      pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"});
+      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"});
       videoUrl=await genViaKlingO3Reference(prompt,ratio,duration,hostedImages,hostedVideos,undefined,undefined,S.vcElementGroupMode,document.getElementById("vcCfgScaleSlider")&&cap.cfgScale?parseFloat(document.getElementById("vcCfgScaleSlider").value):null);
       providerLabel="Kling O3 Pro Reference-to-Video";costKey=model;
     } else {
-      pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating…"});
+      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Generating…"});
       const apiKey=apiKeyEarly;
       let body={prompt,aspect_ratio:ratio};
       let endpoint=model; // may get swapped below to the real image-to-video endpoint for this tier
