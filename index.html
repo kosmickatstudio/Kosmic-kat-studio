@@ -5623,7 +5623,10 @@ function renderVideoCanvas(el){
 
         <div class="ig-chat-inputbar">
           <div class="ig-input-shell">
-            <textarea class="ig-input-textarea-v2" id="vcChatInput" rows="1" placeholder="${hasKey?'Describe the video you want…':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleVcChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,240)+'px';checkVcTagAutocomplete();renderVcTagChips()" onblur="setTimeout(hideVcTagAutocomplete,150)"></textarea>
+            <div style="position:relative">
+              <div id="vcChatHighlight" style="position:absolute;inset:0;padding:2px 4px;font-size:13px;font-family:inherit;line-height:normal;white-space:pre-wrap;word-wrap:break-word;overflow:hidden;pointer-events:none;color:var(--text)"></div>
+              <textarea class="ig-input-textarea-v2" id="vcChatInput" rows="1" placeholder="${hasKey?'Describe the video you want…':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleVcChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,240)+'px';checkVcTagAutocomplete();renderVcTagChips();renderVcChatHighlight()" onscroll="syncVcChatHighlightScroll()" onblur="setTimeout(hideVcTagAutocomplete,150)" style="position:relative;background:transparent;color:transparent;caret-color:var(--text)"></textarea>
+            </div>
             <div id="vcTagAutocomplete" style="display:none;position:absolute;bottom:100%;left:0;right:0;margin-bottom:6px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shv);max-height:160px;overflow-y:auto;z-index:10"></div>
             <div class="ig-input-toolbar">
               <button class="ig-tool-btn" onclick="toggleVcSettings()" title="Settings">⚙</button>
@@ -5732,6 +5735,7 @@ function renderVcFrames(){
     }
   }
   if(typeof renderVcTagChips==="function")renderVcTagChips();
+  if(typeof renderVcChatHighlight==="function")renderVcChatHighlight();
 }
 // ── EXPLICIT KLING ELEMENTS ─────────────────────────────────────────────
 // Replaces the flat "up to 4 reference images, auto-paired" model, which was
@@ -5759,7 +5763,7 @@ function saveVcElements(){
 }
 function addVcElement(){
   if(S.vcElements.length>=VC_MAX_ELEMENTS){toast(`Up to ${VC_MAX_ELEMENTS} Elements`,"error");return;}
-  S.vcElements.push({name:"",tag:"Characters",desc:"",frontal:null,angles:[],video:null,voiceId:null});
+  S.vcElements.push({name:"",tag:"Characters",desc:"",frontal:null,angles:[],video:null,voiceId:null,collapsed:false});
   saveVcElements();renderVcElements();
 }
 function removeVcElement(i){ S.vcElements.splice(i,1); saveVcElements(); renderVcElements(); }
@@ -5825,8 +5829,10 @@ function setVcElementField(i,field,value){
   S.vcElements[i][field]=value;
   saveVcElements();
   // No re-render on text input — rebuilding innerHTML per keystroke destroys
-  // the field and drops the caret mid-word.
-  if(field==="tag")renderVcElements();
+  // the field and drops the caret mid-word. "tag" and "collapsed" both need
+  // one, since each switches which layout is actually on screen (tag via its
+  // own custom picker, collapsed between the full form and the summary row).
+  if(field==="tag"||field==="collapsed")renderVcElements();
 }
 function pickVcElementVideo(i){ _vcElementTarget={i,slot:"video"}; document.getElementById("vcElementVideoFile").click(); }
 function handleVcElementVideo(event){
@@ -5920,10 +5926,30 @@ function renderVcElements(){
       </div>`;
   list.innerHTML=S.vcElements.map((el,i)=>{
     const ok=vcElementIsValid(el);
+    // Collapse is presentational only — a new `collapsed` flag that nothing
+    // in the upload/validation/request-building path ever reads (those only
+    // touch frontal/angles/name/tag/desc/video/voiceId). Collapsing or
+    // expanding a card cannot change what gets sent to fal; it only changes
+    // what's currently drawn on screen. Legacy elements (loaded from an
+    // older preset, or a session saved before this existed) simply have no
+    // `collapsed` field at all, which is falsy the same way false is — they
+    // correctly default to expanded with no migration needed.
+    if(ok&&el.collapsed){
+      return `<div style="display:flex;align-items:center;gap:9px;border:1px solid var(--glass-brd);border-radius:12px;padding:8px 10px;margin-bottom:8px;background:var(--glass)">
+        <img src="${el.frontal.dataUrl}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(el.name||`@Element${i+1}`)}</div>
+          <div style="font-size:9.5px;color:var(--textm)">@Element${i+1} · ${el.tag||"Characters"} · ${el.angles.length} angle${el.angles.length!==1?'s':''}${el.video?' · video':''}${el.voiceId?' · voice':''}</div>
+        </div>
+        <button class="btn btn-ghost btn-xs" onclick="setVcElementField(${i},'collapsed',false)">${pIcon('pencil',12)} Edit</button>
+        <button class="btn btn-ghost btn-xs" onclick="removeVcElement(${i})">✕</button>
+      </div>`;
+    }
     return `<div style="border:1px solid ${ok?'var(--glass-brd)':'var(--gold)'};border-radius:12px;padding:10px;margin-bottom:8px;background:var(--glass)">
       <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
         <span class="badge ${ok?'badge-violet':'badge-gray'}">@Element${i+1}</span>
         <span style="flex:1;font-size:10px;color:${ok?'var(--textm)':'var(--gold)'}">${ok?`Reference as @Element${i+1} in your prompt`:"Needs a main view + at least 1 other angle"}</span>
+        ${ok?`<button class="btn btn-primary btn-xs" onclick="setVcElementField(${i},'collapsed',true)">${pIcon('check',12)} Create</button>`:''}
         <button class="btn btn-ghost btn-xs" onclick="removeVcElement(${i})">Remove</button>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:7px">
@@ -5957,6 +5983,7 @@ function renderVcElements(){
   const btn=document.getElementById("vcAddElementBtn");
   if(btn)btn.style.display=S.vcElements.length>=VC_MAX_ELEMENTS?"none":"inline-flex";
   if(typeof renderVcTagChips==="function")renderVcTagChips();
+  if(typeof renderVcChatHighlight==="function")renderVcChatHighlight();
 }
 // Flattened for upload: only VALID elements are sent, so a half-filled card
 // never reaches fal (which would reject it for the missing angle).
@@ -6119,6 +6146,14 @@ async function saveCharacterPreset(){
       // to upload, just carry it through as-is.
       voiceId:el.voiceId||null,
     })));
+    // Guarded here rather than trusting the boot-time init elsewhere in the
+    // file to have already run. That init is a single, distant site — if
+    // Video Canvas is reachable before it completes, S.characterPresets is
+    // undefined and .push() throws, caught by the catch below and shown as a
+    // generic error toast. The preset was never actually saved, and nothing
+    // said so clearly — this is almost certainly why saves looked like they
+    // sometimes worked and Load Preset then showed nothing.
+    S.characterPresets=S.characterPresets||gs("character_presets",[])||[];
     S.characterPresets.push({id:"preset_"+Date.now(),name,elements,createdAt:new Date().toISOString()});
     saveSetting("character_presets",S.characterPresets);
     toast(`💾 "${name}" saved — ${elements.length} Element${elements.length!==1?'s':''}`,"success");
@@ -6128,6 +6163,7 @@ async function saveCharacterPreset(){
 }
 
 function openLoadCharacterPresetModal(){
+  S.characterPresets=S.characterPresets||gs("character_presets",[])||[];
   document.getElementById("vcPresetLoadSheet")?.remove();
   document.getElementById("vcPresetLoadBackdrop")?.remove();
   const backdrop=document.createElement("div");
@@ -7178,6 +7214,48 @@ function getVcAvailableTags(){
 // than a second copy of it, so the chip glow and the actual pre-flight
 // validation can never disagree — a tag glowing green while still getting
 // rejected at send time would be worse than not having this feature at all.
+// Live in-place tag glow inside the actual prompt text — not just the chip
+// strip below it. A plain <textarea> cannot style one of its own
+// substrings, so this uses the same technique X's compose box uses for
+// @mentions: a real, fully-functional <textarea> with its own text made
+// transparent (caret-color kept visible), layered exactly over a read-only
+// mirror div that renders the identical text with matched tags wrapped in
+// glowing spans. Typing itself is completely unaffected — it still happens
+// in a genuine textarea, so IME composition and mobile keyboard behavior
+// carry zero risk from this.
+//
+// Deliberately reuses the exact same tag-resolution rule as
+// unresolvedVcElementTags/renderVcTagChips rather than a third copy of it,
+// so the in-place glow, the chip strip, and the actual pre-flight
+// validation can never disagree about which tags are real.
+function renderVcChatHighlight(){
+  const mirror=document.getElementById("vcChatHighlight");
+  const input=document.getElementById("vcChatInput");
+  if(!mirror||!input)return;
+  const text=input.value||"";
+  const availableEls=(S.vcElements||[]).filter(e=>e&&e.frontal&&e.angles&&e.angles.length).length;
+  const hasStart=!!(S.vcMultiImages&&S.vcMultiImages[0]);
+  const hasEnd=!!S.vcEndFrame;
+  const html=escapeHtml(text).replace(/@(Element\d+|StartFrame|EndFrame)/gi,(m,name)=>{
+    const lower=name.toLowerCase();
+    let valid;
+    if(lower==="startframe")valid=hasStart;
+    else if(lower==="endframe")valid=hasEnd;
+    else{const n=parseInt(lower.replace(/\D/g,""),10);valid=isFinite(n)&&n>=1&&n<=availableEls;}
+    return `<span style="background:${valid?'var(--lav)':'rgba(200,150,20,0.18)'};color:${valid?'var(--violet)':'var(--gold)'};border-radius:4px;padding:0 2px;font-weight:700">${m}</span>`;
+  });
+  // Trailing newline protection: if the raw text ends with \n, pre-wrap can
+  // collapse that final empty line's height, drifting the mirror one line
+  // short of the real textarea and misaligning everything below it.
+  mirror.innerHTML=text.endsWith("\n")?html+"&nbsp;":html;
+  mirror.scrollTop=input.scrollTop;
+}
+function syncVcChatHighlightScroll(){
+  const mirror=document.getElementById("vcChatHighlight");
+  const input=document.getElementById("vcChatInput");
+  if(mirror&&input)mirror.scrollTop=input.scrollTop;
+}
+
 function renderVcTagChips(){
   const wrap=document.getElementById("vcTagChips");
   const input=document.getElementById("vcChatInput");
