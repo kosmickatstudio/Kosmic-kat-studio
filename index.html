@@ -570,7 +570,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 <!-- HEADER -->
 <header>
   <button class="hamburger" id="hamburger" onclick="toggleSidebar()" style="flex-shrink:0">☰</button>
-  <a class="h-logo" href="#" ondblclick="location.reload();return false">
+  <a class="h-logo" ondblclick="location.reload();return false">
     <div class="h-logo-img-wrap"><img id="logo-img" src="" alt="KK"></div>
     <div>
       <div class="h-logo-text">KosmicKat</div>
@@ -607,10 +607,6 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
       <button class="mod-btn" data-mod="characters" onclick="switchMod('characters',this)">
         <span class="mod-icon">🎭</span><span class="mod-label">Characters</span>
       </button>
-      <button class="mod-btn" data-mod="imagegen" onclick="switchMod('imagegen',this)">
-        <span class="mod-icon">🖼</span><span class="mod-label">Image</span>
-        <span class="mod-badge-api">● ON</span>
-      </button>
       <button class="mod-btn" data-mod="videocanvas" onclick="switchMod('videocanvas',this)">
         <span class="mod-icon">▶</span><span class="mod-label">Video</span>
         <span class="mod-badge pro">PRO</span>
@@ -619,6 +615,20 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
         <span class="mod-icon">🎯</span><span class="mod-label">Motion Control</span>
         <span class="mod-badge new">NEW</span>
       </button>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Image Studio</div>
+      <button class="mod-btn" data-mod="imagegen" onclick="switchMod('imagegen',this)">
+        <span class="mod-icon">🖼</span><span class="mod-label">Image</span>
+        <span class="mod-badge-api">● ON</span>
+      </button>
+      <!-- The 14 sub-feature rows below are generated from IMG_SUBMODULES on
+           load, not hand-typed here — that config is already the single
+           source of truth for these names (it also drives the placeholder
+           screens), and typing the same 14 names a third time in raw markup
+           is exactly the kind of duplication that caused a real typo risk
+           last time. See renderImgStudioSidebarRows(). -->
+      <div id="imgStudioSubRows"></div>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label">Production House</div>
@@ -1762,7 +1772,7 @@ const MOD_TABS = {
   productionstudio:["Overview"],
   projects:["Overview","Shots","Characters","Notes"],
   characters:["All","Create","Import"],
-  imagegen:["Generate","Gallery","Quick Create","Camera Craft","Idea Board","Vibe Board","Identity Lock","Persona Studio","Aesthetic Reel","Light Studio","Touch-Up","Detail Boost","Face Shift","Cast Swap","Sketch to Scene","Wardrobe Studio"],
+  imagegen:["Generate","Gallery"],
   videocanvas:["Generate","Gallery"],
   motioncontrol:["Generate"],
   directors:["All Directors","Active"],
@@ -12250,7 +12260,33 @@ async function init(){
 // Style active opt buttons
 document.addEventListener("DOMContentLoaded",()=>{
   document.querySelectorAll(".active-opt").forEach(b=>{b.classList.add("btn-primary");b.classList.remove("btn-outline");});
+  renderImgStudioSidebarRows();
 });
+
+// Builds the 14 Image Studio sidebar rows from IMG_SUBMODULES — the same
+// config that already drives the placeholder screens — rather than a third
+// hand-typed copy of the same 14 names in raw markup.
+function renderImgStudioSidebarRows(){
+  const wrap=document.getElementById("imgStudioSubRows");
+  if(!wrap||typeof IMG_SUBMODULES==="undefined")return;
+  wrap.innerHTML=Object.keys(IMG_SUBMODULES).map(name=>
+    `<button class="mod-btn" data-mod="imagegen" onclick="openImgSubFromSidebar('${name.replace(/'/g,"\\'")}',this)">
+      <span class="mod-icon">${IMG_SUBMODULES[name].icon}</span><span class="mod-label">${escapeHtml(name)}</span>
+    </button>`
+  ).join('');
+}
+// Clicking one of the 14 needs three things switchMod alone doesn't do:
+// enter the imagegen module, jump straight to that specific placeholder
+// (not the default Generate view), and mark the correct tab active in the
+// top tab bar to match what's actually showing.
+function openImgSubFromSidebar(name,el){
+  switchMod('imagegen',el);
+  handleTabSwitch('imagegen',name);
+  // Neither Generate nor Gallery is actually active while a sidebar
+  // placeholder is showing — clear both rather than leave one looking
+  // selected for a screen it doesn't represent.
+  document.querySelectorAll('#moduleTabs .inner-tab').forEach(t=>t.classList.remove('active'));
+}
 
 // Live gradient fill for all range sliders (delegated so it survives innerHTML re-renders)
 function updateRangeFill(el){
