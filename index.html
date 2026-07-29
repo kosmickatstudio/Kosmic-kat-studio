@@ -777,38 +777,12 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
     </div>
   </div>
 
-  <!-- Defaults -->
-  <div class="sp-section">
-    <div class="sp-section-title">Defaults</div>
-    <div class="sp-section-body">
-      <div class="f-group">
-        <label class="f-label">Resolution</label>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-outline btn-sm res-btn active-opt" data-val="1080p" onclick="pickOpt('res',this)">1080p</button>
-          <button class="btn btn-outline btn-sm res-btn" data-val="4K" onclick="pickOpt('res',this)">4K</button>
-          <button class="btn btn-outline btn-sm res-btn" data-val="2K" onclick="pickOpt('res',this)">2K</button>
-          <button class="btn btn-outline btn-sm res-btn" data-val="720p" onclick="pickOpt('res',this)">720p</button>
-        </div>
-      </div>
-      <div class="f-group">
-        <label class="f-label">Duration</label>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-outline btn-sm dur-btn active-opt" data-val="10s" onclick="pickOpt('dur',this)">10s</button>
-          <button class="btn btn-outline btn-sm dur-btn" data-val="5s" onclick="pickOpt('dur',this)">5s</button>
-          <button class="btn btn-outline btn-sm dur-btn" data-val="8s" onclick="pickOpt('dur',this)">8s</button>
-          <button class="btn btn-outline btn-sm dur-btn" data-val="15s" onclick="pickOpt('dur',this)">15s</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- Display -->
   <div class="sp-section">
     <div class="sp-section-title">Display</div>
     <div class="sp-section-body">
       <div class="toggle-wrap"><label class="toggle-label">Watermark on exports</label><label class="toggle"><input type="checkbox" id="togWatermark" onchange="saveSetting('watermark',this.checked)"><span class="toggle-slider"></span></label></div>
-      <div class="toggle-wrap"><label class="toggle-label">Notifications</label><label class="toggle"><input type="checkbox" id="togNotifs" onchange="onNotifsToggle(this)"><span class="toggle-slider"></span></label></div>
-      <div class="toggle-wrap"><label class="toggle-label">PixVerse Affiliate</label><label class="toggle"><input type="checkbox" id="togPixverse" onchange="saveSetting('pixverse',this.checked)"><span class="toggle-slider"></span></label></div>
+      <div class="toggle-wrap"><label class="toggle-label">Notifications <span style="font-weight:400;color:var(--textm);font-size:10px">(alerts you when a long generation finishes)</span></label><label class="toggle"><input type="checkbox" id="togNotifs" onchange="onNotifsToggle(this)"><span class="toggle-slider"></span></label></div>
       <div class="f-group" style="margin-top:8px"><label class="f-label">PixVerse Affiliate Link <span style="font-weight:400;color:var(--texts)">(your impact.com link — powers the quick-insert banner in Display Area)</span></label><input class="f-input" id="pixverseLink" placeholder="https://pixverse.pxf.io/..." onchange="saveSetting('pixverse_link',this.value)"></div>
     </div>
   </div>
@@ -8537,12 +8511,30 @@ async function generateShotVideo(shotId){
 }
 
 
-function createVideoAsset(url,prompt,projectId,meta){
+function createVideoAsset(url,prompt,projectId,meta,skipNotify){
   meta=meta||{};
   const asset={id:"asset_"+Date.now(),type:"video",url,prompt,projectId:projectId||null,created:new Date().toISOString(),
     model:meta.model||null,providerLabel:meta.providerLabel||null,aspectRatio:meta.aspectRatio||null,resolution:meta.resolution||null,duration:meta.duration||null};
   S.assets.push(asset);
   save("assets");
+  // Every standalone video generation across the whole app funnels through
+  // this one function — the single correct place to fulfil the
+  // "you'll be alerted when long generations finish" promise the toggle
+  // makes, rather than hunting down and hooking each of its 9 separate
+  // callers individually. notifyIfEnabled already skips firing while the
+  // tab is visible, so this is safe to call unconditionally on completion
+  // without spamming someone actively watching it happen.
+  //
+  // skipNotify is here for future callers that might want their own more
+  // specific message instead of this generic one — checked directly, not
+  // assumed: as of this change notifyIfEnabled has exactly two other call
+  // sites, both in Kosmic Engine's scene-completion path, and Kosmic
+  // Engine's own asset tracking only ever calls createImageAsset (for
+  // character sheets), never this function, so there is no double-fire
+  // between them today. No caller currently passes skipNotify=true.
+  if(!skipNotify&&typeof notifyIfEnabled==="function"){
+    notifyIfEnabled("Your video is ready",prompt?prompt.slice(0,90):"A video generation finished.");
+  }
   // Videos can be multi-MB — re-hosting in the background (not awaited)
   // keeps every video generation's UI update instant instead of waiting on
   // a full download+reupload round-trip. Swaps the URL once ready.
@@ -11516,11 +11508,9 @@ function openSettings(){
 function syncSettingsPanel(){
   const wm=document.getElementById("togWatermark");
   const nf=document.getElementById("togNotifs");
-  const pv=document.getElementById("togPixverse");
   const pvLink=document.getElementById("pixverseLink");
   if(wm)wm.checked=gs("watermark",false)===true||gs("watermark",false)==="true";
   if(nf)nf.checked=gs("notifs",false)===true||gs("notifs",false)==="true";
-  if(pv)pv.checked=gs("pixverse",false)===true||gs("pixverse",false)==="true";
   if(pvLink)pvLink.value=gs("pixverse_link","");
   const theme=gs("theme","auto");
   document.querySelectorAll(".theme-btn").forEach(b=>{
@@ -11763,13 +11753,6 @@ function updateSidebarApiStatus(){
   const hasAudio=gs("api_elevenlabs")||gs("api_suno");
   const audioBtn=document.querySelector("[data-mod=audio]");
   if(audioBtn){const badge=audioBtn.querySelector(".mod-badge-api");if(badge)badge.style.display=hasAudio?"inline-flex":"none";}
-}
-
-function pickOpt(type,el){
-  const cls=type==="res"?"res-btn":"dur-btn";
-  document.querySelectorAll("."+cls).forEach(b=>b.classList.remove("active-opt","btn-primary"));
-  el.classList.add("active-opt","btn-primary");
-  saveSetting("default_"+type,el.dataset.val);
 }
 
 // ── AUTH ──

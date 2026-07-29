@@ -844,6 +844,15 @@ const KosmicEngine=(function(){
           t.status="done";
           t.error=null;
           if(out&&out.summary)push("agent",out.summary,out.approval?{approval:out.approval,taskId:t.id}:{taskId:t.id});
+          // Notifications exist specifically for this: an autonomous production
+          // can run for minutes unattended, and a finished SCENE is the moment
+          // that actually matters enough to alert someone who has tabbed away
+          // — gated on approval.video rather than firing for every task, since
+          // character-sheet/script/storyboard approvals happen too fast and
+          // too often to be worth a notification each time.
+          if(out&&out.approval&&out.approval.video&&typeof notifyIfEnabled==="function"){
+            notifyIfEnabled("Kosmic Engine — scene ready",t.label||"A scene finished and is waiting for your review.");
+          }
         }catch(err){
           t.status="error";
           t.error=err.message;
@@ -872,6 +881,9 @@ const KosmicEngine=(function(){
           S.directorChat.awaitingApprovalTaskId=t.id;
           save();
           if(out&&out.summary)push("agent",out.summary,{approval:out.approval,taskId:t.id});
+          if(out&&out.approval&&out.approval.video&&typeof notifyIfEnabled==="function"){
+            notifyIfEnabled("Kosmic Engine — scene ready",t.label||"A scene finished and is waiting for your review.");
+          }
           // Routed through the exact approve() the user's button calls, so
           // auto-approval and manual approval cannot drift apart in what they
           // actually do (memory writes, stage advancement, re-dispatch).
