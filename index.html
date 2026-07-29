@@ -657,13 +657,13 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
            mode inside Audio is real follow-up work, not done here — for
            now these consistently open the Audio module itself. -->
       <div id="audStudioSubRows" style="display:none">
-        <button class="mod-btn" data-mod="audio" onclick="switchMod('audio',this)">
+        <button class="mod-btn" data-mod="audio" onclick="openAudioSubFromSidebar('audioGenerateAnchor',this)">
           <span class="mod-icon">🗣</span><span class="mod-label">Voiceover</span>
         </button>
-        <button class="mod-btn" data-mod="audio" onclick="switchMod('audio',this)">
+        <button class="mod-btn" data-mod="audio" onclick="openAudioSubFromSidebar('audioVoiceChangerAnchor',this)">
           <span class="mod-icon">🔀</span><span class="mod-label">Change Voice</span>
         </button>
-        <button class="mod-btn" data-mod="audio" onclick="switchMod('audio',this)">
+        <button class="mod-btn" data-mod="audio" onclick="openAudioSubFromSidebar('audioDubbingAnchor',this)">
           <span class="mod-icon">🌐</span><span class="mod-label">Translation</span>
         </button>
       </div>
@@ -12397,6 +12397,27 @@ function openFeaturePlaceholder(name,info,parentMod,parentLabel,el){
 }
 function openImgSubFromSidebar(name,el){
   openFeaturePlaceholder(name,IMG_SUBMODULES[name],"imagegen","Image",el);
+}
+// Audio isn't tab-based like Image/Video's Generate|Gallery split — renderAudio
+// builds ONE long page with every tool (Voiceover, Voice Cloning, Voice
+// Design, Dialogue, Voice Changer, Dubbing, Isolator, Video-to-Music,
+// Library) stacked as anchored panels. So "land on a specific mode" means
+// scrolling to the right anchor after the module renders, not switching a
+// view — confirmed by reading renderAudio directly rather than guessing at
+// a mode-select mechanism that doesn't exist. switchMod completes its DOM
+// rebuild synchronously, so the anchor already exists by the time this
+// scrolls to it — no timeout needed.
+function openAudioSubFromSidebar(anchorId,el){
+  switchMod('audio',el);
+  const panel=document.getElementById(anchorId);
+  if(!panel)return;
+  panel.scrollIntoView({behavior:"smooth",block:"start"});
+  // Brief highlight so landing mid-page reads as "here's what you asked
+  // for" rather than an unexplained jump — matches how the app already
+  // signals attention elsewhere (var(--gold) accents), not a new pattern.
+  panel.style.transition="box-shadow 0.3s";
+  panel.style.boxShadow="0 0 0 2px var(--gold)";
+  setTimeout(()=>{panel.style.boxShadow="";},1600);
 }
 
 // Live gradient fill for all range sliders (delegated so it survives innerHTML re-renders)
