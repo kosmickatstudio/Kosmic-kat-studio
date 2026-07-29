@@ -12088,6 +12088,36 @@ function appendAiMsg(role,text){
 }
 
 function escapeHtml(t){return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+// Safely embeds an arbitrary object as a double-quoted HTML attribute value.
+// The three card-rendering sites that open Generation Details (home.js's
+// recent images, home.js's recent videos, gallery.js's asset grid) were each
+// hand-building the onclick as a raw string, splicing fields like mediaUrl,
+// model, and providerLabel directly into single-quoted JS literals with NO
+// escaping — prompt was the only field escaped, because it is the one
+// obviously free-text field. That leaves five fields — including the video
+// URL itself — one stray apostrophe or double quote away from silently
+// truncating the whole handler into invalid, non-firing JS.
+// JSON.stringify handles arbitrary content (quotes, apostrophes, unicode,
+// newlines) correctly by construction; the only remaining risk is the
+// double quotes JSON produces colliding with the double-quoted HTML
+// attribute wrapping it, which this escapes. & must be escaped first, or
+// escaping " into &quot; afterward would double-escape its own ampersand.
+function jsonAttr(obj){
+  return JSON.stringify(obj).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+// Generic handler for any card using data-meta — reads it back, parses it,
+// and opens the details modal. One shared function instead of three
+// hand-built onclick strings means this can only be wrong in one place.
+function openGenerationInfoModalFromCard(el){
+  try{
+    const meta=JSON.parse(el.dataset.meta||"{}");
+    openGenerationInfoModal(meta);
+  }catch(err){
+    console.warn("Couldn't open generation details:",err);
+    toast("Couldn't open that item's details","error");
+  }
+}
+
 
 function clearAiChat(){S.aiHistory=[];const out=document.getElementById("aiOutput");out.innerHTML='<div style="color:var(--texts);font-size:11px">Chat cleared.</div>';}
 
