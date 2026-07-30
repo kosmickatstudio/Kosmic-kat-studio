@@ -1571,6 +1571,8 @@ const COST_TABLE={
   // not modeled here, this is the 1K baseline like the rest of this table.
   "fal-ai/nano-banana-2":0.08,
   "fal-ai/nano-banana-pro":0.15,
+  // Confirmed on fal.ai's own model page (bria/fibo-edit/relight): $0.04/image.
+  "bria/fibo-edit/relight":0.04,
   // Found missing while compiling a full pricing comparison — these two had
   // a pre-generation cost HINT in IMAGE_PRICING but no entry here, meaning
   // every real generation with either was silently logging the $0.02
@@ -12426,12 +12428,13 @@ function openFeaturePlaceholder(name,info,parentMod,parentLabel,el){
 function openImgSubFromSidebar(name,el){
   document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
   if(el)el.classList.add("active");
-  // Vibe Board, Persona Studio, and Aesthetic Reel (built as a Photo Dump —
-  // see below) are real, working features — everything else in Image
-  // Studio is still the empty scaffold from earlier.
+  // Vibe Board, Persona Studio, Aesthetic Reel (a Photo Dump), and Light
+  // Studio (a Relight tool) are real, working features (see below) —
+  // everything else in Image Studio is still the empty scaffold from earlier.
   if(name==="Vibe Board"){openVibeBoardScreen();return;}
   if(name==="Persona Studio"){openPersonaStudioScreen();return;}
   if(name==="Aesthetic Reel"){openPhotoDumpScreen();return;}
+  if(name==="Light Studio"){openLightStudioScreen();return;}
   openFeaturePlaceholder(name,IMG_SUBMODULES[name],"imagegen","Image",el);
 }
 // ── VIBE BOARD ───────────────────────────────────────────────────────────
@@ -13047,6 +13050,36 @@ const PHOTODUMP_PACKS={
     "wearing a red beret and trench coat, walking a rainy city street holding a film camera",
     "wearing an elegant traditional qipao dress, warm portrait against a plain backdrop",
     "wind-blown hair, moody dark eye makeup, close-up emotional portrait"
+  ],
+  // The four packs below were in the same recording but missed on the
+  // first pass (only the packs visible in the opening frame got built).
+  // "Cool Girl Dump" is a name confirmed directly from Higgsfield's own
+  // Soul Photodump writeup ("tailored compositions, settings, and styling
+  // for female characters") — the rest are transcribed the same best-
+  // effort way as everything else in this file.
+  "Surreal Self":[
+    "sitting on a park bench at dusk with warm string-light bokeh trails streaking through the frame, dreamlike double-exposure blur",
+    "walking through a train station with heavy motion blur trailing behind, ghostly afterimage effect, cool blue tones",
+    "standing inside a car illuminated by pulsing neon-green light rings, surreal glowing atmosphere",
+    "skiing down a snowy slope in a red jacket, frozen mid-motion with a soft light-trail streak effect"
+  ],
+  "Alter Ego":[
+    "two identical versions of the same person sitting together in a sunlit countryside field, mirrored pose, dreamlike doubling effect",
+    "two identical versions of the same person in matching leather jackets walking together on a city street",
+    "two identical versions of the same person sitting closely together in a dim moody room, cinematic lighting",
+    "two identical versions of the same person standing back-to-back in a foggy forest clearing, surreal twin effect"
+  ],
+  "Cool Girl Dump":[
+    "wearing a red scarf, looking off-camera on a rocky coastline, wind-blown hair, cinematic overcast light",
+    "sitting barefoot by a jungle waterfall in a black slip dress, serene candid mood",
+    "leaning against a parked motorcycle in a cropped jacket and jeans, moody night garage lighting",
+    "leaning on a rooftop ledge at dusk with a city skyline behind, relaxed confident pose"
+  ],
+  "Male Archive":[
+    "sitting alone in empty stadium bleachers, minimal muted-tone outfit, overcast light, editorial mood",
+    "walking across a snowy mountain ridge with a helicopter passing in the background, cinematic wide shot",
+    "close-up moody portrait, hand near chin, soft studio lighting, high-fashion editorial tone",
+    "wearing a black leather jacket, hands in pockets, confident stance against a plain backdrop, editorial fashion shot"
   ]
 };
 
@@ -13134,6 +13167,138 @@ async function runPhotodump(packName){
     }
   }
   toast(`✅ "${packName}" photo dump complete`,"success");
+}
+
+// ── LIGHT STUDIO (a Relight tool) ────────────────────────────────────────
+// Modeled on Higgsfield Relight (confirmed via their own blog post and
+// independent coverage): "leverages advanced generative AI and depth-
+// mapping technology to manipulate light sources in a 3D space" — direction
+// presets, a fine direction pad, softness, intensity, and color temperature.
+//
+// Built here against a real, verified fal.ai endpoint rather than an
+// imagined one, since this app's whole generation backbone is fal: Bria's
+// `bria/fibo-edit/relight` (confirmed schema at fal.ai/models/bria/
+// fibo-edit/relight/api) takes an image + light_direction + light_type and
+// returns a relit image. Its direction/type enums are Bria's own, not
+// Higgsfield's 6-way preset grid — using the real callable values here
+// rather than a UI that promises directions the actual model doesn't
+// support. Confirmed price: $0.04/image.
+//
+// Reuses genViaFluxLora's plain fetch-to-fal.run pattern (this model
+// returns fast enough not to need the queue+poll dance used elsewhere),
+// downscaleImageFile for uploads (fal explicitly supports base64 data-URI
+// image inputs, so no Firebase upload step is needed just to call this),
+// and createImageAsset/logCost so results land in the same Gallery and
+// cost log as every other generation in the app.
+const LIGHT_DIRECTIONS=["front","side","bottom","top-down"];
+const LIGHT_TYPES=["midday","blue hour light","low-angle sunlight","sunrise light","spotlight on subject","overcast light","soft overcast daylight lighting","cloud-filtered lighting","fog-diffused lighting","moonlight lighting","starlight nighttime","soft bokeh lighting","harsh studio lighting"];
+
+async function genViaRelight(imageUrl,direction,lightType){
+  const apiKey=gs("api_falai","");
+  if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+  const response=await fetch("https://fal.run/bria/fibo-edit/relight",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+    body:JSON.stringify({image_url:imageUrl,light_direction:direction,light_type:lightType})
+  });
+  const data=await response.json();
+  if(!response.ok||data.error){
+    const msg=(data.detail&&(Array.isArray(data.detail)?data.detail[0]?.msg:data.detail))||data.error||response.statusText||"Unknown error";
+    throw new Error(msg);
+  }
+  const url=data.image&&data.image.url;
+  if(!url)throw new Error("No image returned from fal.ai");
+  return {url,providerLabel:"fal.ai (Bria Relight)",costKey:"bria/fibo-edit/relight"};
+}
+
+function defaultLightStudioState(){
+  return {sourceUrl:null,direction:"front",lightType:"soft overcast daylight lighting",resultUrl:null,busy:false};
+}
+
+function openLightStudioScreen(){
+  document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
+  const tabsEl=document.getElementById("moduleTabs");
+  if(tabsEl){tabsEl.style.display="none";tabsEl.innerHTML="";}
+  const el=document.getElementById("moduleContent");
+  if(!el)return;
+  S._lightStudio=S._lightStudio||defaultLightStudioState();
+  el.innerHTML=`
+    <button class="btn btn-outline btn-sm" style="margin-bottom:14px" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))">← Back to Image</button>
+    <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:17px;margin-bottom:4px">${pIcon("bulb",16)} Light Studio</div>
+    <div style="font-size:11.5px;color:var(--textm);margin-bottom:16px">Change an existing image's light direction and mood without re-generating the whole scene.</div>
+    <div id="lightStudioBody"></div>`;
+  renderLightStudioBody();
+}
+
+function renderLightStudioBody(){
+  const wrap=document.getElementById("lightStudioBody");
+  if(!wrap)return;
+  const st=S._lightStudio;
+  if(!st.sourceUrl){
+    const recentImages=(S.assets||[]).filter(a=>a.type==="image").slice(-8).reverse();
+    wrap.innerHTML=`
+      <label class="f-label">1. Choose a source image</label>
+      <input type="file" accept="image/*" id="lightStudioUpload" style="display:none" onchange="handleLightStudioUpload(event)">
+      <button class="btn btn-outline btn-full" style="margin-bottom:12px" onclick="document.getElementById('lightStudioUpload').click()">📁 Upload from device</button>
+      ${recentImages.length?`
+        <div style="font-size:11px;color:var(--textm);margin-bottom:6px">…or pick from your recent Gallery images</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          ${recentImages.map(a=>`<img src="${a.url}" onclick="selectLightStudioSource(${JSON.stringify(a.url)})" style="width:72px;height:72px;object-fit:cover;border-radius:8px;cursor:pointer;border:2px solid transparent" onmouseover="this.style.borderColor='var(--violet)'" onmouseout="this.style.borderColor='transparent'">`).join('')}
+        </div>`:''}`;
+    return;
+  }
+  wrap.innerHTML=`
+    <div style="text-align:center;margin-bottom:14px">
+      <img src="${st.resultUrl||st.sourceUrl}" style="max-width:100%;max-height:280px;border-radius:12px">
+      ${st.resultUrl?`<div style="font-size:10.5px;color:var(--textm);margin-top:4px">Relit result — Save to Gallery already done automatically</div>`:''}
+    </div>
+    <button class="btn btn-ghost btn-xs" style="margin-bottom:12px" onclick="S._lightStudio=defaultLightStudioState();renderLightStudioBody()">✕ Choose a different source image</button>
+    <label class="f-label">2. Light direction</label>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+      ${LIGHT_DIRECTIONS.map(d=>`<button type="button" class="btn ${st.direction===d?'btn-primary':'btn-outline'} btn-xs" onclick="S._lightStudio.direction=${JSON.stringify(d)};renderLightStudioBody()">${d}</button>`).join('')}
+    </div>
+    <label class="f-label">3. Light type / mood</label>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+      ${LIGHT_TYPES.map(t=>`<button type="button" class="btn ${st.lightType===t?'btn-primary':'btn-outline'} btn-xs" onclick="S._lightStudio.lightType=${JSON.stringify(t)};renderLightStudioBody()">${t}</button>`).join('')}
+    </div>
+    <button class="btn btn-primary btn-full" ${st.busy?'disabled':''} onclick="runLightStudioRelight()">${st.busy?'Relighting…':'💡 Relight ($0.04)'}</button>`;
+}
+
+async function handleLightStudioUpload(event){
+  const file=event.target.files&&event.target.files[0];
+  event.target.value="";
+  if(!file)return;
+  try{
+    const dataUrl=await downscaleImageFile(file,1024,0.85);
+    selectLightStudioSource(dataUrl);
+  }catch(err){
+    toast("Couldn't read that image: "+err.message,"error");
+  }
+}
+
+function selectLightStudioSource(url){
+  S._lightStudio=defaultLightStudioState();
+  S._lightStudio.sourceUrl=url;
+  renderLightStudioBody();
+}
+
+async function runLightStudioRelight(){
+  const st=S._lightStudio;
+  st.busy=true;
+  renderLightStudioBody();
+  try{
+    const result=await genViaRelight(st.sourceUrl,st.direction,st.lightType);
+    st.resultUrl=result.url;
+    st.busy=false;
+    const asset=await createImageAsset(result.url,`Relight: ${st.direction}, ${st.lightType}`,null,{model:result.costKey,providerLabel:result.providerLabel});
+    logCost(result.costKey,`Relight (${st.direction}/${st.lightType})`);
+    toast("💡 Relit and saved to Gallery","success");
+    renderLightStudioBody();
+  }catch(err){
+    st.busy=false;
+    renderLightStudioBody();
+    toast("❌ Relight failed: "+err.message,"error");
+  }
 }
 
 // Audio isn't tab-based like Image/Video's Generate|Gallery split — renderAudio
