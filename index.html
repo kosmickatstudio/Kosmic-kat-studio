@@ -1572,6 +1572,9 @@ const COST_TABLE={
   "fal-ai/nano-banana-2":0.08,
   "fal-ai/nano-banana-pro":0.15,
   // Confirmed on fal.ai's own model page (bria/fibo-edit/relight): $0.04/image.
+  // Confirmed on fal.ai's own model page (fal-ai/flux-pro/v1/fill):
+  // $0.05/megapixel, billed rounded up to the nearest whole MP.
+  "fal-ai/flux-pro/v1/fill":0.05,
   "bria/fibo-edit/relight":0.04,
   // Found missing while compiling a full pricing comparison — these two had
   // a pre-generation cost HINT in IMAGE_PRICING but no entry here, meaning
@@ -12428,13 +12431,15 @@ function openFeaturePlaceholder(name,info,parentMod,parentLabel,el){
 function openImgSubFromSidebar(name,el){
   document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
   if(el)el.classList.add("active");
-  // Vibe Board, Persona Studio, Aesthetic Reel (a Photo Dump), and Light
-  // Studio (a Relight tool) are real, working features (see below) —
-  // everything else in Image Studio is still the empty scaffold from earlier.
+  // Vibe Board, Persona Studio, Aesthetic Reel (a Photo Dump), Light
+  // Studio (a Relight tool), and Touch-Up (a masked Inpaint tool) are
+  // real, working features (see below) — everything else in Image Studio
+  // is still the empty scaffold from earlier.
   if(name==="Vibe Board"){openVibeBoardScreen();return;}
   if(name==="Persona Studio"){openPersonaStudioScreen();return;}
   if(name==="Aesthetic Reel"){openPhotoDumpScreen();return;}
   if(name==="Light Studio"){openLightStudioScreen();return;}
+  if(name==="Touch-Up"){openTouchUpScreen();return;}
   openFeaturePlaceholder(name,IMG_SUBMODULES[name],"imagegen","Image",el);
 }
 // ── VIBE BOARD ───────────────────────────────────────────────────────────
@@ -13298,6 +13303,201 @@ async function runLightStudioRelight(){
     st.busy=false;
     renderLightStudioBody();
     toast("❌ Relight failed: "+err.message,"error");
+  }
+}
+
+// ── TOUCH-UP (a real, masked Inpaint tool) ───────────────────────────────
+// Modeled on Higgsfield's Inpaint / Nano Banana Pro Inpaint (confirmed via
+// their own posts): upload an image, brush a mask over the exact region to
+// change, type what you want there — everything outside the mask stays
+// untouched.
+//
+// Built here against fal-ai/flux-pro/v1/fill (confirmed schema: image_url
+// + mask_url + prompt, mask must match image dimensions, $0.05/megapixel,
+// rounded up) — deliberately NOT the Nano Banana Pro edit endpoint already
+// used elsewhere in this app, because that one is mask-FREE natural-
+// language editing. Touch-Up's whole premise is masking a region, so it
+// needs an endpoint that actually accepts a mask.
+//
+// The brush is a plain <canvas> laid over the image, using pointer events
+// (one code path for touch and mouse — this app is built mobile-first).
+// Painted in semi-transparent magenta for visible feedback; at generate
+// time, that overlay's alpha channel is thresholded into the pure black/
+// white PNG fal expects (white = edit this, black = leave alone) — no
+// separate masking library needed.
+const TOUCHUP_BRUSH_SIZES=[16,32,56,90];
+
+function defaultTouchUpState(){
+  return {sourceUrl:null,imgW:0,imgH:0,brushSize:32,prompt:"",resultUrl:null,busy:false,hasMask:false};
+}
+
+async function genViaFluxFill(imageUrl,maskUrl,prompt){
+  const apiKey=gs("api_falai","");
+  if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+  const response=await fetch("https://fal.run/fal-ai/flux-pro/v1/fill",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+    body:JSON.stringify({prompt,image_url:imageUrl,mask_url:maskUrl})
+  });
+  const data=await response.json();
+  if(!response.ok||data.error){
+    const msg=(data.detail&&(Array.isArray(data.detail)?data.detail[0]?.msg:data.detail))||data.error||response.statusText||"Unknown error";
+    throw new Error(msg);
+  }
+  const url=data.images&&data.images[0]&&data.images[0].url;
+  if(!url)throw new Error("No image returned from fal.ai");
+  return {url,providerLabel:"fal.ai (Flux Fill)",costKey:"fal-ai/flux-pro/v1/fill"};
+}
+
+function openTouchUpScreen(){
+  document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
+  const tabsEl=document.getElementById("moduleTabs");
+  if(tabsEl){tabsEl.style.display="none";tabsEl.innerHTML="";}
+  const el=document.getElementById("moduleContent");
+  if(!el)return;
+  S._touchUp=S._touchUp||defaultTouchUpState();
+  el.innerHTML=`
+    <button class="btn btn-outline btn-sm" style="margin-bottom:14px" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))">← Back to Image</button>
+    <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:17px;margin-bottom:4px">${pIcon("pencil",16)} Touch-Up</div>
+    <div style="font-size:11.5px;color:var(--textm);margin-bottom:16px">Brush over the exact spot you want to change, describe the change — everything outside the brush stays untouched.</div>
+    <div id="touchUpBody"></div>`;
+  renderTouchUpBody();
+}
+
+function renderTouchUpBody(){
+  const wrap=document.getElementById("touchUpBody");
+  if(!wrap)return;
+  const st=S._touchUp;
+  if(!st.sourceUrl){
+    const recentImages=(S.assets||[]).filter(a=>a.type==="image").slice(-8).reverse();
+    wrap.innerHTML=`
+      <label class="f-label">1. Choose an image to touch up</label>
+      <input type="file" accept="image/*" id="touchUpUpload" style="display:none" onchange="handleTouchUpUpload(event)">
+      <button class="btn btn-outline btn-full" style="margin-bottom:12px" onclick="document.getElementById('touchUpUpload').click()">📁 Upload from device</button>
+      ${recentImages.length?`
+        <div style="font-size:11px;color:var(--textm);margin-bottom:6px">…or pick from your recent Gallery images</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          ${recentImages.map(a=>`<img src="${a.url}" onclick="selectTouchUpSource(${JSON.stringify(a.url)})" style="width:72px;height:72px;object-fit:cover;border-radius:8px;cursor:pointer;border:2px solid transparent" onmouseover="this.style.borderColor='var(--violet)'" onmouseout="this.style.borderColor='transparent'">`).join('')}
+        </div>`:''}`;
+    return;
+  }
+  wrap.innerHTML=`
+    <button class="btn btn-ghost btn-xs" style="margin-bottom:10px" onclick="S._touchUp=defaultTouchUpState();renderTouchUpBody()">✕ Choose a different image</button>
+    <div style="position:relative;display:inline-block;max-width:100%;margin-bottom:10px">
+      <img id="touchUpImg" src="${st.resultUrl||st.sourceUrl}" style="max-width:100%;display:block;border-radius:10px" onload="setupTouchUpCanvas()">
+      ${st.resultUrl?'':'<canvas id="touchUpMaskCanvas" style="position:absolute;top:0;left:0;touch-action:none;cursor:crosshair;border-radius:10px"></canvas>'}
+    </div>
+    ${st.resultUrl?`<div style="font-size:10.5px;color:var(--textm);margin-bottom:10px">Result — saved to Gallery automatically.</div>
+      <button class="btn btn-outline btn-full" onclick="S._touchUp.resultUrl=null;S._touchUp.hasMask=false;S._touchUp.prompt='';renderTouchUpBody()">🪄 Touch up again on this image</button>`:`
+    <label class="f-label">2. Brush size</label>
+    <div id="touchUpBrushRow" style="display:flex;gap:6px;margin-bottom:12px">
+      ${TOUCHUP_BRUSH_SIZES.map(s=>`<button type="button" data-brush class="btn ${st.brushSize===s?'btn-primary':'btn-outline'} btn-xs" onclick="setTouchUpBrush(${s},this)">${s<32?'S':s<56?'M':s<90?'L':'XL'}</button>`).join('')}
+      <button type="button" class="btn btn-ghost btn-xs" onclick="clearTouchUpMask()">🧹 Clear mask</button>
+    </div>
+    <label class="f-label">3. Describe the change</label>
+    <textarea class="f-input" rows="2" placeholder="e.g. change the jacket to matte black leather" oninput="S._touchUp.prompt=this.value" style="margin-bottom:14px">${escapeHtml(st.prompt)}</textarea>
+    <button class="btn btn-primary btn-full" ${st.busy?'disabled':''} onclick="runTouchUp()">${st.busy?'Touching up…':'🪄 Touch Up'}</button>`}`;
+  if(!st.resultUrl)setTimeout(setupTouchUpCanvas,0);
+}
+
+async function handleTouchUpUpload(event){
+  const file=event.target.files&&event.target.files[0];
+  event.target.value="";
+  if(!file)return;
+  try{
+    const dataUrl=await downscaleImageFile(file,1024,0.9);
+    selectTouchUpSource(dataUrl);
+  }catch(err){
+    toast("Couldn't read that image: "+err.message,"error");
+  }
+}
+
+function selectTouchUpSource(url){
+  S._touchUp=defaultTouchUpState();
+  S._touchUp.sourceUrl=url;
+  renderTouchUpBody();
+}
+
+function setTouchUpBrush(size,btn){
+  S._touchUp.brushSize=size;
+  document.querySelectorAll('#touchUpBrushRow button[data-brush]').forEach(b=>{b.classList.remove("btn-primary");b.classList.add("btn-outline");});
+  btn.classList.remove("btn-outline");btn.classList.add("btn-primary");
+}
+
+function clearTouchUpMask(){
+  const canvas=document.getElementById("touchUpMaskCanvas");
+  if(!canvas)return;
+  canvas.getContext("2d").clearRect(0,0,canvas.width,canvas.height);
+  S._touchUp.hasMask=false;
+}
+
+// Sizes the mask canvas to the image's real pixel dimensions (scaled down
+// visually via CSS) so the exported mask always matches image_url exactly
+// — fal requires this. Listeners are bound once per canvas element; since
+// a fresh canvas is created on every renderTouchUpBody() call, there's
+// never a stale-listener risk to guard against.
+function setupTouchUpCanvas(){
+  const img=document.getElementById("touchUpImg");
+  const canvas=document.getElementById("touchUpMaskCanvas");
+  if(!img||!canvas||!img.naturalWidth||canvas._wired)return;
+  canvas.width=img.naturalWidth;
+  canvas.height=img.naturalHeight;
+  canvas.style.width=img.clientWidth+"px";
+  canvas.style.height=img.clientHeight+"px";
+  S._touchUp.imgW=img.naturalWidth;
+  S._touchUp.imgH=img.naturalHeight;
+  canvas._wired=true;
+  const ctx=canvas.getContext("2d");
+  let drawing=false;
+  function posFromEvent(e){
+    const rect=canvas.getBoundingClientRect();
+    return {x:(e.clientX-rect.left)*(canvas.width/rect.width),y:(e.clientY-rect.top)*(canvas.height/rect.height)};
+  }
+  function paintAt(x,y){
+    ctx.fillStyle="rgba(217,70,239,0.55)";
+    ctx.beginPath();
+    ctx.arc(x,y,S._touchUp.brushSize,0,Math.PI*2);
+    ctx.fill();
+    S._touchUp.hasMask=true;
+  }
+  canvas.addEventListener("pointerdown",e=>{drawing=true;const p=posFromEvent(e);paintAt(p.x,p.y);});
+  canvas.addEventListener("pointermove",e=>{if(!drawing)return;const p=posFromEvent(e);paintAt(p.x,p.y);});
+  window.addEventListener("pointerup",()=>{drawing=false;});
+}
+
+async function runTouchUp(){
+  const st=S._touchUp;
+  if(!st.hasMask){toast("Brush over the area you want to change first","error");return;}
+  if(!st.prompt||!st.prompt.trim()){toast("Describe the change first","error");return;}
+  const overlay=document.getElementById("touchUpMaskCanvas");
+  // Rebuild as the pure black/white PNG fal expects: white where the
+  // visible magenta overlay has any opacity, black everywhere else.
+  const maskCanvas=document.createElement("canvas");
+  maskCanvas.width=overlay.width;maskCanvas.height=overlay.height;
+  const mctx=maskCanvas.getContext("2d");
+  mctx.fillStyle="#000";mctx.fillRect(0,0,maskCanvas.width,maskCanvas.height);
+  mctx.drawImage(overlay,0,0);
+  const maskData=mctx.getImageData(0,0,maskCanvas.width,maskCanvas.height);
+  for(let i=0;i<maskData.data.length;i+=4){
+    const v=maskData.data[i+3]>20?255:0;
+    maskData.data[i]=v;maskData.data[i+1]=v;maskData.data[i+2]=v;maskData.data[i+3]=255;
+  }
+  mctx.putImageData(maskData,0,0);
+  const maskUrl=maskCanvas.toDataURL("image/png");
+  st.busy=true;renderTouchUpBody();
+  try{
+    const result=await genViaFluxFill(st.sourceUrl,maskUrl,st.prompt.trim());
+    st.resultUrl=result.url;
+    st.busy=false;
+    const megapixels=Math.max(1,Math.ceil((st.imgW*st.imgH)/1000000));
+    await createImageAsset(result.url,`Touch-Up: ${st.prompt.trim()}`,null,{model:result.costKey,providerLabel:result.providerLabel});
+    logCost(result.costKey,`Touch-Up (${st.prompt.trim().slice(0,40)})`,1,0.05*megapixels);
+    toast("🪄 Touched up and saved to Gallery","success");
+    renderTouchUpBody();
+  }catch(err){
+    st.busy=false;
+    renderTouchUpBody();
+    toast("❌ Touch-up failed: "+err.message,"error");
   }
 }
 
