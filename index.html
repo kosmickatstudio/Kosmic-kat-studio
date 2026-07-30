@@ -1574,6 +1574,13 @@ const COST_TABLE={
   // Confirmed on fal.ai's own model page (bria/fibo-edit/relight): $0.04/image.
   // Confirmed on fal.ai's own model page (fal-ai/flux-pro/v1/fill):
   // $0.05/megapixel, billed rounded up to the nearest whole MP.
+  // fal-ai/flux-kontext-lora/inpaint doesn't show its own price in search
+  // results — inferred from its sibling kontext-lora endpoints (text-to-
+  // image and image-to-image both confirmed $0.035/MP), not independently
+  // confirmed for this exact sub-path. Flagged, not asserted as certain.
+  // Confirmed on fal.ai's own model page (easel-ai/advanced-face-swap): $0.05/generation.
+  "easel-ai/advanced-face-swap":0.05,
+  "fal-ai/flux-kontext-lora/inpaint":0.035,
   "fal-ai/flux-pro/v1/fill":0.05,
   "bria/fibo-edit/relight":0.04,
   // Found missing while compiling a full pricing comparison — these two had
@@ -12432,14 +12439,17 @@ function openImgSubFromSidebar(name,el){
   document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
   if(el)el.classList.add("active");
   // Vibe Board, Persona Studio, Aesthetic Reel (a Photo Dump), Light
-  // Studio (a Relight tool), and Touch-Up (a masked Inpaint tool) are
-  // real, working features (see below) — everything else in Image Studio
-  // is still the empty scaffold from earlier.
+  // Studio (a Relight tool), Touch-Up (a masked Inpaint tool), Face Shift
+  // (a face swap), and Cast Swap (a character swap) are real, working
+  // features (see below) — everything else in Image Studio is still the
+  // empty scaffold from earlier.
   if(name==="Vibe Board"){openVibeBoardScreen();return;}
   if(name==="Persona Studio"){openPersonaStudioScreen();return;}
   if(name==="Aesthetic Reel"){openPhotoDumpScreen();return;}
   if(name==="Light Studio"){openLightStudioScreen();return;}
   if(name==="Touch-Up"){openTouchUpScreen();return;}
+  if(name==="Face Shift"){openFaceShiftScreen();return;}
+  if(name==="Cast Swap"){openCastSwapScreen();return;}
   openFeaturePlaceholder(name,IMG_SUBMODULES[name],"imagegen","Image",el);
 }
 // ── VIBE BOARD ───────────────────────────────────────────────────────────
@@ -13328,7 +13338,31 @@ async function runLightStudioRelight(){
 const TOUCHUP_BRUSH_SIZES=[16,32,56,90];
 
 function defaultTouchUpState(){
-  return {sourceUrl:null,imgW:0,imgH:0,brushSize:32,prompt:"",resultUrl:null,busy:false,hasMask:false};
+  return {sourceUrl:null,imgW:0,imgH:0,brushSize:32,prompt:"",referenceUrl:null,resultUrl:null,busy:false,hasMask:false};
+}
+
+// Reference-image-guided variant — used automatically when the person
+// attaches a "+ Add reference image" instead of, or alongside, a text
+// prompt (matches Higgsfield's Banana Placement pattern: brush + reference
+// image, works with or without a prompt). fal-ai/flux-kontext-lora/inpaint
+// requires reference_image_url, so this is a genuinely different call from
+// the plain text-prompt path, not just an extra parameter on the same one.
+async function genViaFluxKontextInpaint(imageUrl,maskUrl,referenceUrl,prompt){
+  const apiKey=gs("api_falai","");
+  if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+  const response=await fetch("https://fal.run/fal-ai/flux-kontext-lora/inpaint",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+    body:JSON.stringify({image_url:imageUrl,mask_url:maskUrl,reference_image_url:referenceUrl,prompt:prompt||"place the reference naturally into the masked area, matching lighting and perspective"})
+  });
+  const data=await response.json();
+  if(!response.ok||data.error){
+    const msg=(data.detail&&(Array.isArray(data.detail)?data.detail[0]?.msg:data.detail))||data.error||response.statusText||"Unknown error";
+    throw new Error(msg);
+  }
+  const url=data.images&&data.images[0]&&data.images[0].url;
+  if(!url)throw new Error("No image returned from fal.ai");
+  return {url,providerLabel:"fal.ai (Flux Kontext Inpaint)",costKey:"fal-ai/flux-kontext-lora/inpaint"};
 }
 
 async function genViaFluxFill(imageUrl,maskUrl,prompt){
@@ -13388,14 +13422,23 @@ function renderTouchUpBody(){
       ${st.resultUrl?'':'<canvas id="touchUpMaskCanvas" style="position:absolute;top:0;left:0;touch-action:none;cursor:crosshair;border-radius:10px"></canvas>'}
     </div>
     ${st.resultUrl?`<div style="font-size:10.5px;color:var(--textm);margin-bottom:10px">Result — saved to Gallery automatically.</div>
-      <button class="btn btn-outline btn-full" onclick="S._touchUp.resultUrl=null;S._touchUp.hasMask=false;S._touchUp.prompt='';renderTouchUpBody()">🪄 Touch up again on this image</button>`:`
+      <a href="${st.resultUrl}" download="touchup-result.png" target="_blank" class="btn btn-outline btn-full" style="margin-bottom:8px;display:block;text-align:center;text-decoration:none">⬇ Download</a>
+      <button class="btn btn-outline btn-full" onclick="S._touchUp.resultUrl=null;S._touchUp.hasMask=false;S._touchUp.prompt='';S._touchUp.referenceUrl=null;renderTouchUpBody()">🪄 Touch up again on this image</button>`:`
     <label class="f-label">2. Brush size</label>
     <div id="touchUpBrushRow" style="display:flex;gap:6px;margin-bottom:12px">
       ${TOUCHUP_BRUSH_SIZES.map(s=>`<button type="button" data-brush class="btn ${st.brushSize===s?'btn-primary':'btn-outline'} btn-xs" onclick="setTouchUpBrush(${s},this)">${s<32?'S':s<56?'M':s<90?'L':'XL'}</button>`).join('')}
       <button type="button" class="btn btn-ghost btn-xs" onclick="clearTouchUpMask()">🧹 Clear mask</button>
     </div>
-    <label class="f-label">3. Describe the change</label>
-    <textarea class="f-input" rows="2" placeholder="e.g. change the jacket to matte black leather" oninput="S._touchUp.prompt=this.value" style="margin-bottom:14px">${escapeHtml(st.prompt)}</textarea>
+    <label class="f-label">3. Describe the change ${st.referenceUrl?'<span style="font-weight:400;color:var(--textm)">(optional with a reference image)</span>':''}</label>
+    <textarea class="f-input" rows="2" placeholder="e.g. change the jacket to matte black leather" oninput="S._touchUp.prompt=this.value" style="margin-bottom:10px">${escapeHtml(st.prompt)}</textarea>
+    <label class="f-label">4. Or add a reference image <span style="font-weight:400;color:var(--textm)">(place a specific product/object into the masked area — optional)</span></label>
+    <input type="file" accept="image/*" id="touchUpRefUpload" style="display:none" onchange="handleTouchUpRefUpload(event)">
+    ${st.referenceUrl?`
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <img src="${st.referenceUrl}" style="width:48px;height:48px;object-fit:cover;border-radius:8px">
+        <button type="button" class="btn btn-ghost btn-xs" onclick="S._touchUp.referenceUrl=null;renderTouchUpBody()">✕ Remove reference</button>
+      </div>`:`
+      <button class="btn btn-outline btn-full" style="margin-bottom:14px" onclick="document.getElementById('touchUpRefUpload').click()">+ Add reference image</button>`}
     <button class="btn btn-primary btn-full" ${st.busy?'disabled':''} onclick="runTouchUp()">${st.busy?'Touching up…':'🪄 Touch Up'}</button>`}`;
   if(!st.resultUrl)setTimeout(setupTouchUpCanvas,0);
 }
@@ -13416,6 +13459,18 @@ function selectTouchUpSource(url){
   S._touchUp=defaultTouchUpState();
   S._touchUp.sourceUrl=url;
   renderTouchUpBody();
+}
+
+async function handleTouchUpRefUpload(event){
+  const file=event.target.files&&event.target.files[0];
+  event.target.value="";
+  if(!file)return;
+  try{
+    S._touchUp.referenceUrl=await downscaleImageFile(file,1024,0.9);
+    renderTouchUpBody();
+  }catch(err){
+    toast("Couldn't read that reference image: "+err.message,"error");
+  }
 }
 
 function setTouchUpBrush(size,btn){
@@ -13468,7 +13523,7 @@ function setupTouchUpCanvas(){
 async function runTouchUp(){
   const st=S._touchUp;
   if(!st.hasMask){toast("Brush over the area you want to change first","error");return;}
-  if(!st.prompt||!st.prompt.trim()){toast("Describe the change first","error");return;}
+  if(!st.referenceUrl&&(!st.prompt||!st.prompt.trim())){toast("Describe the change, or add a reference image","error");return;}
   const overlay=document.getElementById("touchUpMaskCanvas");
   // Rebuild as the pure black/white PNG fal expects: white where the
   // visible magenta overlay has any opacity, black everywhere else.
@@ -13486,12 +13541,18 @@ async function runTouchUp(){
   const maskUrl=maskCanvas.toDataURL("image/png");
   st.busy=true;renderTouchUpBody();
   try{
-    const result=await genViaFluxFill(st.sourceUrl,maskUrl,st.prompt.trim());
+    // Reference image present → the reference-guided endpoint (needs one);
+    // otherwise the plain text-prompt fill endpoint used since the first
+    // version of this feature.
+    const result=st.referenceUrl
+      ?await genViaFluxKontextInpaint(st.sourceUrl,maskUrl,st.referenceUrl,st.prompt.trim())
+      :await genViaFluxFill(st.sourceUrl,maskUrl,st.prompt.trim());
     st.resultUrl=result.url;
     st.busy=false;
     const megapixels=Math.max(1,Math.ceil((st.imgW*st.imgH)/1000000));
-    await createImageAsset(result.url,`Touch-Up: ${st.prompt.trim()}`,null,{model:result.costKey,providerLabel:result.providerLabel});
-    logCost(result.costKey,`Touch-Up (${st.prompt.trim().slice(0,40)})`,1,0.05*megapixels);
+    const label=st.prompt.trim()||"reference image placement";
+    await createImageAsset(result.url,`Touch-Up: ${label}`,null,{model:result.costKey,providerLabel:result.providerLabel});
+    logCost(result.costKey,`Touch-Up (${label.slice(0,40)})`,1,(COST_TABLE[result.costKey]||0.05)*megapixels);
     toast("🪄 Touched up and saved to Gallery","success");
     renderTouchUpBody();
   }catch(err){
@@ -13499,6 +13560,203 @@ async function runTouchUp(){
     renderTouchUpBody();
     toast("❌ Touch-up failed: "+err.message,"error");
   }
+}
+
+// ── FACE SHIFT (a real face-swap tool) ───────────────────────────────────
+// Modeled on the "face shift" pattern described in the reference video and
+// confirmed against a real fal.ai model: easel-ai/advanced-face-swap
+// (confirmed schema + $0.05/generation from fal's own llms.txt). Takes a
+// face to swap FROM, a required gender hint, an optional target image to
+// swap it ONTO, and a workflow_type choosing whose hair to keep — used
+// here exactly as documented rather than guessed.
+function defaultFaceShiftState(){
+  return {faceUrl:null,gender:"female",targetUrl:null,workflowType:"user_hair",resultUrl:null,busy:false};
+}
+
+async function genViaFaceSwap(faceUrl,gender,targetUrl,workflowType){
+  const apiKey=gs("api_falai","");
+  if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
+  const body={face_image_0:faceUrl,gender_0:gender,workflow_type:workflowType};
+  if(targetUrl)body.target_image=targetUrl;
+  const response=await fetch("https://fal.run/easel-ai/advanced-face-swap",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+    body:JSON.stringify(body)
+  });
+  const data=await response.json();
+  if(!response.ok||data.error){
+    const msg=(data.detail&&(Array.isArray(data.detail)?data.detail[0]?.msg:data.detail))||data.error||response.statusText||"Unknown error";
+    throw new Error(msg);
+  }
+  const url=data.image&&data.image.url;
+  if(!url)throw new Error("No image returned from fal.ai");
+  return {url,providerLabel:"fal.ai (Advanced Face Swap)",costKey:"easel-ai/advanced-face-swap"};
+}
+
+function openFaceShiftScreen(){
+  document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
+  const tabsEl=document.getElementById("moduleTabs");
+  if(tabsEl){tabsEl.style.display="none";tabsEl.innerHTML="";}
+  const el=document.getElementById("moduleContent");
+  if(!el)return;
+  S._faceShift=S._faceShift||defaultFaceShiftState();
+  el.innerHTML=`
+    <button class="btn btn-outline btn-sm" style="margin-bottom:14px" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))">← Back to Image</button>
+    <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:17px;margin-bottom:4px">${pIcon("swap",16)} Face Shift</div>
+    <div style="font-size:11.5px;color:var(--textm);margin-bottom:16px">Swap a face onto an existing image while keeping everything else the same.</div>
+    <div id="faceShiftBody"></div>`;
+  renderFaceShiftBody();
+}
+
+function faceShiftImagePicker(label,stateKey,onSelect){
+  const url=S._faceShift[stateKey];
+  const recentImages=(S.assets||[]).filter(a=>a.type==="image").slice(-6).reverse();
+  return `<label class="f-label">${label}</label>
+    ${url?`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <img src="${url}" style="width:64px;height:64px;object-fit:cover;border-radius:8px">
+      <button type="button" class="btn btn-ghost btn-xs" onclick="S._faceShift.${stateKey}=null;renderFaceShiftBody()">✕ Remove</button>
+    </div>`:`
+    <input type="file" accept="image/*" id="faceShiftUpload_${stateKey}" style="display:none" onchange="handleFaceShiftUpload(event,'${stateKey}')">
+    <button class="btn btn-outline btn-full" style="margin-bottom:8px" onclick="document.getElementById('faceShiftUpload_${stateKey}').click()">📁 Upload from device</button>
+    ${recentImages.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+      ${recentImages.map(a=>`<img src="${a.url}" onclick="S._faceShift.${stateKey}=${JSON.stringify(a.url)};renderFaceShiftBody()" style="width:48px;height:48px;object-fit:cover;border-radius:6px;cursor:pointer">`).join('')}
+    </div>`:'<div style="margin-bottom:14px"></div>'}`}`;
+}
+
+function renderFaceShiftBody(){
+  const wrap=document.getElementById("faceShiftBody");
+  if(!wrap)return;
+  const st=S._faceShift;
+  wrap.innerHTML=`
+    ${faceShiftImagePicker("1. Face to use (swap FROM)","faceUrl")}
+    <label class="f-label">2. Gender of that face</label>
+    <div style="display:flex;gap:6px;margin-bottom:14px">
+      ${["female","male","non-binary"].map(g=>`<button type="button" class="btn ${st.gender===g?'btn-primary':'btn-outline'} btn-xs" onclick="S._faceShift.gender='${g}';renderFaceShiftBody()">${g}</button>`).join('')}
+    </div>
+    ${faceShiftImagePicker("3. Image to swap the face onto","targetUrl")}
+    <label class="f-label">4. Keep whose hair?</label>
+    <div style="display:flex;gap:6px;margin-bottom:16px">
+      <button type="button" class="btn ${st.workflowType==='user_hair'?'btn-primary':'btn-outline'} btn-xs" onclick="S._faceShift.workflowType='user_hair';renderFaceShiftBody()">The new face's hair</button>
+      <button type="button" class="btn ${st.workflowType==='target_hair'?'btn-primary':'btn-outline'} btn-xs" onclick="S._faceShift.workflowType='target_hair';renderFaceShiftBody()">The target image's hair</button>
+    </div>
+    ${st.resultUrl?`<div style="text-align:center;margin-bottom:10px"><img src="${st.resultUrl}" style="max-width:100%;max-height:280px;border-radius:12px"></div>
+      <a href="${st.resultUrl}" download="face-shift-result.png" target="_blank" class="btn btn-outline btn-full" style="margin-bottom:8px;display:block;text-align:center;text-decoration:none">⬇ Download</a>`:''}
+    <button class="btn btn-primary btn-full" ${st.busy?'disabled':''} onclick="runFaceShift()">${st.busy?'Swapping…':'🔀 Face Shift ($0.05)'}</button>`;
+}
+
+async function handleFaceShiftUpload(event,stateKey){
+  const file=event.target.files&&event.target.files[0];
+  event.target.value="";
+  if(!file)return;
+  try{
+    S._faceShift[stateKey]=await downscaleImageFile(file,1024,0.9);
+    renderFaceShiftBody();
+  }catch(err){
+    toast("Couldn't read that image: "+err.message,"error");
+  }
+}
+
+async function runFaceShift(){
+  const st=S._faceShift;
+  if(!st.faceUrl){toast("Add the face you want to use first","error");return;}
+  st.busy=true;renderFaceShiftBody();
+  try{
+    const result=await genViaFaceSwap(st.faceUrl,st.gender,st.targetUrl,st.workflowType);
+    st.resultUrl=result.url;
+    st.busy=false;
+    await createImageAsset(result.url,"Face Shift",null,{model:result.costKey,providerLabel:result.providerLabel});
+    logCost(result.costKey,"Face Shift");
+    toast("🔀 Face shifted and saved to Gallery","success");
+    renderFaceShiftBody();
+  }catch(err){
+    st.busy=false;
+    renderFaceShiftBody();
+    toast("❌ Face Shift failed: "+err.message,"error");
+  }
+}
+
+// ── CAST SWAP (a real character-swap tool) ───────────────────────────────
+// "Swap a full character — not just the face — into an existing image."
+// Deliberately NOT a new fal integration: this app already has a real
+// multi-reference edit pipeline in Image Gen chat (fal-ai/nano-banana-pro,
+// up to 2 reference images, natural-language instructions, no masks —
+// confirmed in IMAGE_MODEL_CAPABILITIES already wired to sendIgChatPrompt).
+// Cast Swap just prepares that exact pipeline with the right two images
+// and an auto-composed instruction, then hands off to it — same reuse
+// principle as Aesthetic Reel reusing sendIgChatPrompt for Photo Dump.
+function defaultCastSwapState(){
+  return {targetUrl:null,characterUrl:null};
+}
+
+function openCastSwapScreen(){
+  document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
+  const tabsEl=document.getElementById("moduleTabs");
+  if(tabsEl){tabsEl.style.display="none";tabsEl.innerHTML="";}
+  const el=document.getElementById("moduleContent");
+  if(!el)return;
+  S._castSwap=S._castSwap||defaultCastSwapState();
+  el.innerHTML=`
+    <button class="btn btn-outline btn-sm" style="margin-bottom:14px" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))">← Back to Image</button>
+    <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:17px;margin-bottom:4px">${pIcon("swap",16)} Cast Swap</div>
+    <div style="font-size:11.5px;color:var(--textm);margin-bottom:16px">Swap a full character — not just the face — into an existing image.</div>
+    <div id="castSwapBody"></div>`;
+  renderCastSwapBody();
+}
+
+function castSwapImagePicker(label,stateKey){
+  const url=S._castSwap[stateKey];
+  const recentImages=(S.assets||[]).filter(a=>a.type==="image").slice(-6).reverse();
+  return `<label class="f-label">${label}</label>
+    ${url?`<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <img src="${url}" style="width:64px;height:64px;object-fit:cover;border-radius:8px">
+      <button type="button" class="btn btn-ghost btn-xs" onclick="S._castSwap.${stateKey}=null;renderCastSwapBody()">✕ Remove</button>
+    </div>`:`
+    <input type="file" accept="image/*" id="castSwapUpload_${stateKey}" style="display:none" onchange="handleCastSwapUpload(event,'${stateKey}')">
+    <button class="btn btn-outline btn-full" style="margin-bottom:8px" onclick="document.getElementById('castSwapUpload_${stateKey}').click()">📁 Upload from device</button>
+    ${recentImages.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+      ${recentImages.map(a=>`<img src="${a.url}" onclick="S._castSwap.${stateKey}=${JSON.stringify(a.url)};renderCastSwapBody()" style="width:48px;height:48px;object-fit:cover;border-radius:6px;cursor:pointer">`).join('')}
+    </div>`:'<div style="margin-bottom:14px"></div>'}`}`;
+}
+
+function renderCastSwapBody(){
+  const wrap=document.getElementById("castSwapBody");
+  if(!wrap)return;
+  const st=S._castSwap;
+  wrap.innerHTML=`
+    ${castSwapImagePicker("1. Scene to swap the character into",'targetUrl')}
+    ${castSwapImagePicker("2. New character (reference image)",'characterUrl')}
+    <button class="btn btn-primary btn-full" ${(!st.targetUrl||!st.characterUrl)?'disabled':''} onclick="runCastSwap()">🎭 Swap Character</button>
+    <div style="font-size:10.5px;color:var(--textm);margin-top:8px">Hands off to Image Gen's real multi-reference editing (Nano Banana Pro) — you'll land in the chat with both images and an instruction already queued up.</div>`;
+}
+
+async function handleCastSwapUpload(event,stateKey){
+  const file=event.target.files&&event.target.files[0];
+  event.target.value="";
+  if(!file)return;
+  try{
+    S._castSwap[stateKey]=await downscaleImageFile(file,1024,0.9);
+    renderCastSwapBody();
+  }catch(err){
+    toast("Couldn't read that image: "+err.message,"error");
+  }
+}
+
+async function runCastSwap(){
+  const st=S._castSwap;
+  if(!st.targetUrl||!st.characterUrl)return;
+  S.igMultiRefImages=[st.targetUrl,st.characterUrl];
+  switchMod("imagegen",document.querySelector("[data-mod=imagegen]"));
+  if(typeof showIgChatView==="function")showIgChatView();
+  const modelSel=document.getElementById("igModel");
+  if(modelSel){modelSel.value="fal-ai/nano-banana-pro";updateIgModelUI();}
+  if(typeof renderIgMultiRefPreview==="function")renderIgMultiRefPreview();
+  if(typeof updateIgAttachmentBar==="function")updateIgAttachmentBar();
+  const inputEl=document.getElementById("igChatInput");
+  if(inputEl){
+    inputEl.value="Replace the person in the first image with the person from the second reference image — keep the same pose, framing, outfit style, and scene exactly, swap only who's in it.";
+    inputEl.dispatchEvent(new Event("input"));
+  }
+  toast("🎭 Ready — review the prompt and hit Send when you're happy with it","success");
 }
 
 // Audio isn't tab-based like Image/Video's Generate|Gallery split — renderAudio
