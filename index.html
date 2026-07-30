@@ -599,19 +599,19 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
   <nav class="sidebar" id="sidebar">
     <div class="sidebar-section">
       <button class="mod-btn active" data-mod="home" onclick="switchMod('home',this)">
-        <span class="mod-icon">🏠</span><span class="mod-label">Home</span>
+        <span class="mod-icon" data-picon="house"></span><span class="mod-label">Home</span>
       </button>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label">Core Studio</div>
       <button class="mod-btn" data-mod="projects" onclick="switchMod('projects',this)">
-        <span class="mod-icon">🗂</span><span class="mod-label">Projects</span>
+        <span class="mod-icon" data-picon="folder"></span><span class="mod-label">Projects</span>
       </button>
       <button class="mod-btn" data-mod="characters" onclick="switchMod('characters',this)">
-        <span class="mod-icon">🎭</span><span class="mod-label">Characters</span>
+        <span class="mod-icon" data-picon="mask"></span><span class="mod-label">Characters</span>
       </button>
       <button class="mod-btn" data-mod="motioncontrol" onclick="switchMod('motioncontrol',this)">
-        <span class="mod-icon">🎯</span><span class="mod-label">Motion Control</span>
+        <span class="mod-icon" data-picon="target"></span><span class="mod-label">Motion Control</span>
         <span class="mod-badge new">NEW</span>
       </button>
     </div>
@@ -620,7 +620,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
         <span>Video Studio</span><span class="sb-chevron" id="chev-videostudio">▸</span>
       </div>
       <button class="mod-btn" data-mod="videocanvas" onclick="switchMod('videocanvas',this)">
-        <span class="mod-icon">▶</span><span class="mod-label">Video</span>
+        <span class="mod-icon" data-picon="play"></span><span class="mod-label">Video</span>
         <span class="mod-badge pro">PRO</span>
       </button>
       <!-- Canvas and Kosmic Engine are genuine LINKS to modules that already
@@ -633,10 +633,10 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
            either again as an empty placeholder would just duplicate a real,
            already-working capability. -->
       <button class="mod-btn" data-mod="nodecanvas" onclick="switchMod('nodecanvas',this)">
-        <span class="mod-icon">🕸</span><span class="mod-label">Canvas</span>
+        <span class="mod-icon" data-picon="web"></span><span class="mod-label">Canvas</span>
       </button>
       <button class="mod-btn" data-mod="kosmicengine" onclick="switchMod('kosmicengine',this)">
-        <span class="mod-icon">🎬</span><span class="mod-label">Kosmic Engine</span>
+        <span class="mod-icon" data-picon="film"></span><span class="mod-label">Kosmic Engine</span>
       </button>
       <div id="vidStudioSubRows" style="display:none"></div>
     </div>
@@ -645,7 +645,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
         <span>Audio Studio</span><span class="sb-chevron" id="chev-audiostudio">▸</span>
       </div>
       <button class="mod-btn" data-mod="audio" onclick="switchMod('audio',this)">
-        <span class="mod-icon">🎵</span><span class="mod-label">Audio Tools</span>
+        <span class="mod-icon" data-picon="mic"></span><span class="mod-label">Audio Tools</span>
         <span class="mod-badge-api">● ON</span>
       </button>
       <!-- All three rows below link to the SAME real Audio module rather
@@ -658,13 +658,13 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
            now these consistently open the Audio module itself. -->
       <div id="audStudioSubRows" style="display:none">
         <button class="mod-btn" data-mod="audio" onclick="openAudioSubFromSidebar('audioGenerateAnchor',this)">
-          <span class="mod-icon">🗣</span><span class="mod-label">Voiceover</span>
+          <span class="mod-icon" data-picon="mic"></span><span class="mod-label">Voiceover</span>
         </button>
         <button class="mod-btn" data-mod="audio" onclick="openAudioSubFromSidebar('audioVoiceChangerAnchor',this)">
-          <span class="mod-icon">🔀</span><span class="mod-label">Change Voice</span>
+          <span class="mod-icon" data-picon="swap"></span><span class="mod-label">Change Voice</span>
         </button>
         <button class="mod-btn" data-mod="audio" onclick="openAudioSubFromSidebar('audioDubbingAnchor',this)">
-          <span class="mod-icon">🌐</span><span class="mod-label">Translation</span>
+          <span class="mod-icon" data-picon="globe"></span><span class="mod-label">Translation</span>
         </button>
       </div>
     </div>
@@ -673,7 +673,7 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
         <span>Image Studio</span><span class="sb-chevron" id="chev-imagestudio">▸</span>
       </div>
       <button class="mod-btn" data-mod="imagegen" onclick="switchMod('imagegen',this)">
-        <span class="mod-icon">🖼</span><span class="mod-label">Image</span>
+        <span class="mod-icon" data-picon="image"></span><span class="mod-label">Image</span>
         <span class="mod-badge-api">● ON</span>
       </button>
       <!-- The rows below are generated from IMG_SUBMODULES on load, not
@@ -685,57 +685,57 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
     <div class="sidebar-section">
       <div class="sidebar-label">Production House</div>
       <button class="mod-btn" data-mod="productionstudio" onclick="switchMod('productionstudio',this)">
-        <span class="mod-icon">🎞</span><span class="mod-label">Production Pipeline</span>
+        <span class="mod-icon" data-picon="doc"></span><span class="mod-label">Production Pipeline</span>
       </button>
       <button class="mod-btn" data-mod="kosmicengine" onclick="switchMod('kosmicengine',this)">
-        <span class="mod-icon">🎬</span><span class="mod-label">Kosmic Engine</span>
+        <span class="mod-icon" data-picon="film"></span><span class="mod-label">Kosmic Engine</span>
         <span class="mod-badge new">NEW</span>
       </button>
       <button class="mod-btn" data-mod="flow" onclick="switchMod('flow',this)">
-        <span class="mod-icon">🌊</span><span class="mod-label">Flow</span>
+        <span class="mod-icon" data-picon="wave"></span><span class="mod-label">Flow</span>
         <span class="mod-badge new">NEW</span>
       </button>
       <button class="mod-btn" data-mod="nodecanvas" onclick="switchMod('nodecanvas',this)">
-        <span class="mod-icon">🕸</span><span class="mod-label">Canvas</span>
+        <span class="mod-icon" data-picon="web"></span><span class="mod-label">Canvas</span>
         <span class="mod-badge new">NEW</span>
       </button>
       <button class="mod-btn" data-mod="directors" onclick="switchMod('directors',this)">
-        <span class="mod-icon">🎥</span><span class="mod-label">Directorial Studio</span>
+        <span class="mod-icon" data-picon="camera"></span><span class="mod-label">Directorial Studio</span>
       </button>
       <button class="mod-btn" data-mod="adstudio" onclick="switchMod('adstudio',this)">
-        <span class="mod-icon">📢</span><span class="mod-label">Ads/UGC Studio</span>
+        <span class="mod-icon" data-picon="rocket"></span><span class="mod-label">Ads/UGC Studio</span>
         <span class="mod-badge new">NEW</span>
       </button>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label">Media & Assets</div>
       <button class="mod-btn" data-mod="assets" onclick="switchMod('assets',this)">
-        <span class="mod-icon">📦</span><span class="mod-label">Asset Library</span>
+        <span class="mod-icon" data-picon="box"></span><span class="mod-label">Asset Library</span>
       </button>
       <button class="mod-btn" data-mod="gallery" onclick="switchMod('gallery',this)">
-        <span class="mod-icon">🎞</span><span class="mod-label">Gallery</span>
+        <span class="mod-icon" data-picon="image"></span><span class="mod-label">Gallery</span>
       </button>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label">Post Production</div>
       <button class="mod-btn" data-mod="editor" onclick="switchMod('editor',this)">
-        <span class="mod-icon">✂️</span><span class="mod-label">Video Editor</span>
+        <span class="mod-icon" data-picon="scissors"></span><span class="mod-label">Video Editor</span>
         <span class="mod-badge pro">PRO</span>
       </button>
       <button class="mod-btn" data-mod="upscaler" onclick="switchMod('upscaler',this)">
-        <span class="mod-icon">⬆️</span><span class="mod-label">Upscaler</span>
+        <span class="mod-icon" data-picon="arrowup"></span><span class="mod-label">Upscaler</span>
       </button>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label">Studio Management</div>
       <button class="mod-btn" data-mod="costs" onclick="switchMod('costs',this)">
-        <span class="mod-icon">💰</span><span class="mod-label">Cost Tracker</span>
+        <span class="mod-icon" data-picon="coin"></span><span class="mod-label">Cost Tracker</span>
       </button>
       <button class="mod-btn" data-mod="team" onclick="switchMod('team',this)">
-        <span class="mod-icon">👥</span><span class="mod-label">Team</span>
+        <span class="mod-icon" data-picon="people"></span><span class="mod-label">Team</span>
       </button>
       <button class="mod-btn" data-mod="settings" onclick="openSettings()">
-        <span class="mod-icon">⚙️</span><span class="mod-label">Settings</span>
+        <span class="mod-icon" data-picon="gear"></span><span class="mod-label">Settings</span>
       </button>
     </div>
     <div class="sidebar-section">
@@ -1876,19 +1876,19 @@ function switchTab(el,name){
 // named and framed in Kosmic Kat's own voice rather than reusing their
 // product names verbatim.
 const IMG_SUBMODULES={
-  "Camera Craft":{icon:"🎥",blurb:"Direct the shot itself — angle, lens, depth of field — before the image even generates."},
-  "Idea Board":{icon:"🧩",blurb:"A visual scratch space for loose ideas and references before they become a real prompt."},
-  "Vibe Board":{icon:"🎨",blurb:"Drop in a few reference images and distill them into one focused look to generate from."},
-  "Identity Lock":{icon:"🔒",blurb:"Train a character once so their face and build hold steady across every future image — built on the same LoRA training already in Characters."},
-  "Persona Studio":{icon:"🪐",blurb:"Build and manage a recurring invented persona for ongoing content, not a one-off character."},
-  "Aesthetic Reel":{icon:"📸",blurb:"A running feed of generations in one visual style, for scrolling through a look rather than a single image."},
-  "Light Studio":{icon:"💡",blurb:"Adjust an existing image's lighting — direction, color, brightness — without re-generating the whole scene."},
-  "Touch-Up":{icon:"🩹",blurb:"Mask a specific area of an image and describe just the change you want there."},
-  "Detail Boost":{icon:"🔍",blurb:"Push resolution and fine detail up on an image you already have."},
-  "Face Shift":{icon:"🎭",blurb:"Swap a face onto an existing image while keeping everything else the same."},
-  "Cast Swap":{icon:"👥",blurb:"Swap a full character — not just the face — into an existing image."},
-  "Sketch to Scene":{icon:"✏️",blurb:"Turn a rough sketch or doodle into a rendered image."},
-  "Wardrobe Studio":{icon:"👗",blurb:"Generate a themed set of outfit/style variations for one character."},
+  "Camera Craft":{icon:"camera",blurb:"Direct the shot itself — angle, lens, depth of field — before the image even generates."},
+  "Idea Board":{icon:"dots",blurb:"A visual scratch space for loose ideas and references before they become a real prompt."},
+  "Vibe Board":{icon:"brush",blurb:"Drop in a few reference images and distill them into one focused look to generate from."},
+  "Identity Lock":{icon:"lock",blurb:"Train a character once so their face and build hold steady across every future image — built on the same LoRA training already in Characters."},
+  "Persona Studio":{icon:"orbit",blurb:"Build and manage a recurring invented persona for ongoing content, not a one-off character."},
+  "Aesthetic Reel":{icon:"camera",blurb:"A running feed of generations in one visual style, for scrolling through a look rather than a single image."},
+  "Light Studio":{icon:"bulb",blurb:"Adjust an existing image's lighting — direction, color, brightness — without re-generating the whole scene."},
+  "Touch-Up":{icon:"pencil",blurb:"Mask a specific area of an image and describe just the change you want there."},
+  "Detail Boost":{icon:"search",blurb:"Push resolution and fine detail up on an image you already have."},
+  "Face Shift":{icon:"swap",blurb:"Swap a face onto an existing image while keeping everything else the same."},
+  "Cast Swap":{icon:"swap",blurb:"Swap a full character — not just the face — into an existing image."},
+  "Sketch to Scene":{icon:"pencil",blurb:"Turn a rough sketch or doodle into a rendered image."},
+  "Wardrobe Studio":{icon:"hanger",blurb:"Generate a themed set of outfit/style variations for one character."},
 };
 
 function handleTabSwitch(mod,name){
@@ -2176,6 +2176,23 @@ const PI_PATHS={
   search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8"/>',
   save:'<path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M8 4v5h7V4M8 14h8v6H8Z"/>',
   brush:'<path d="M4 20c2-3 2-6 6-6 3 0 3 3 0 5-2 1.4-4 1.4-6 1Z"/><path d="M10 14 19 5a2 2 0 0 1 3 3l-9 9"/>',
+  house:'<path d="M4 11l8-7 8 7"/><path d="M6 10v9a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9"/><path d="M10 20v-5h4v5"/>',
+  play:'<path d="M8 5v14l11-7Z"/>',
+  target:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.2"/><circle cx="12" cy="12" r="0.9"/>',
+  web:'<circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7.6 7.3L11.2 16M16.4 7.3L12.8 16M8 6h8"/>',
+  box:'<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="M4.3 7.6L12 12l7.7-4.4M12 12.2V21"/>',
+  bulb:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.4 10.9c.5.4.8 1 .8 1.6h5.2c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3Z"/>',
+  hanger:'<path d="M12 4a1.4 1.4 0 1 1 1.4 1.4"/><path d="M12 6.8v1.7"/><path d="M3.5 20.5l7.6-6a1.4 1.4 0 0 1 1.8 0l7.6 6"/><path d="M2.5 20.5h19"/>',
+  link:'<path d="M9.5 14.5l5-5"/><path d="M11 6.5l1-1a3.2 3.2 0 0 1 4.5 4.5l-1 1"/><path d="M13 17.5l-1 1a3.2 3.2 0 0 1-4.5-4.5l1-1"/>',
+  signal:'<path d="M4 20v-4M10 20v-8M16 20v-12M22 20v-16"/>',
+  globe:'<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/>',
+  dots:'<circle cx="7" cy="7" r="2"/><circle cx="17" cy="7" r="2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>',
+  wave:'<path d="M2 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/>',
+  scissors:'<circle cx="6" cy="6" r="2.3"/><circle cx="6" cy="18" r="2.3"/><path d="M7.8 7.6L20 19M7.8 16.4L20 5"/>',
+  arrowup:'<path d="M12 20V5"/><path d="M6 10l6-6 6 6"/>',
+  coin:'<circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M9.5 9.7c0-1 1-1.7 2.5-1.7s2.5.6 2.5 1.6c0 2.2-5 1-5 3.2 0 1 1 1.6 2.5 1.6s2.5-.7 2.5-1.7"/>',
+  people:'<circle cx="8.5" cy="8" r="3"/><circle cx="16" cy="9.5" r="2.3"/><path d="M2.5 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><path d="M14.5 14.3c2.6.3 4.5 2.3 4.5 5.2"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7.5"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>',
 };
 function pIcon(name,size){
   size=size||15;
@@ -12282,10 +12299,21 @@ async function init(){
 // Style active opt buttons
 document.addEventListener("DOMContentLoaded",()=>{
   document.querySelectorAll(".active-opt").forEach(b=>{b.classList.add("btn-primary");b.classList.remove("btn-outline");});
+  hydrateStaticModIcons();
   renderImgStudioSidebarRows();
   renderVidStudioSidebarRows();
   restoreSidebarSectionStates();
 });
+// The sidebar is static HTML, not JS-rendered — a template-literal call like
+// ${pIcon(...)} written directly into it would just display as literal text,
+// since there is no JS context there to evaluate it. Each icon span instead
+// carries a data-picon attribute naming its icon, and this fills in the real
+// SVG once on load.
+function hydrateStaticModIcons(){
+  document.querySelectorAll("[data-picon]").forEach(el=>{
+    el.innerHTML=pIcon(el.dataset.picon,15);
+  });
+}
 
 // Builds the 14 Image Studio sidebar rows from IMG_SUBMODULES — the same
 // config that already drives the placeholder screens — rather than a third
@@ -12331,25 +12359,25 @@ function restoreSidebarSectionStates(){
 // Canvas and Kosmic Engine are handled separately as real links, not
 // entries in this config — see the sidebar markup comment.
 const VID_SUBMODULES={
-  "Topic Reel":{icon:"📽️",blurb:"Turn a written topic or script idea into an explainer-style video."},
-  "Media Mix":{icon:"🧵",blurb:"Combine clips, images, and text into one mixed-media sequence."},
-  "Scene Editor":{icon:"🎞️",blurb:"Edit individual scenes, shots, and elements of a video already made."},
-  "Link to Ad":{icon:"🔗",blurb:"Turn a product page URL into a short video ad."},
-  "Trend Studio":{icon:"📈",blurb:"Turn a loose idea into a short-form video shaped for what's trending."},
-  "Lipsync Studio":{icon:"👄",blurb:"A dedicated home for lip-sync — currently reachable only from inside Video's chat flow, not its own destination yet."},
-  "Sketch to Motion":{icon:"🖊️",blurb:"Turn a rough sketch or storyboard drawing into a moving scene."},
-  "UGC Studio":{icon:"🎙️",blurb:"Build creator-style UGC video around a talking avatar."},
-  "Video Boost":{icon:"📶",blurb:"Push resolution and clarity up on a video you already have."},
-  "Scene Replace":{icon:"🔁",blurb:"Swap out an element within an existing video scene."},
-  "Motion Graphics":{icon:"🌀",blurb:"Build clean, professional motion-graphic elements rather than a live-action shot."},
-  "Cast Swap":{icon:"👥",blurb:"Swap a full character into an existing video, not just a face."},
+  "Topic Reel":{icon:"film",blurb:"Turn a written topic or script idea into an explainer-style video."},
+  "Media Mix":{icon:"dna",blurb:"Combine clips, images, and text into one mixed-media sequence."},
+  "Scene Editor":{icon:"pencil",blurb:"Edit individual scenes, shots, and elements of a video already made."},
+  "Link to Ad":{icon:"link",blurb:"Turn a product page URL into a short video ad."},
+  "Trend Studio":{icon:"rocket",blurb:"Turn a loose idea into a short-form video shaped for what's trending."},
+  "Lipsync Studio":{icon:"mic",blurb:"A dedicated home for lip-sync — currently reachable only from inside Video's chat flow, not its own destination yet."},
+  "Sketch to Motion":{icon:"pencil",blurb:"Turn a rough sketch or storyboard drawing into a moving scene."},
+  "UGC Studio":{icon:"mic",blurb:"Build creator-style UGC video around a talking avatar."},
+  "Video Boost":{icon:"signal",blurb:"Push resolution and clarity up on a video you already have."},
+  "Scene Replace":{icon:"restore",blurb:"Swap out an element within an existing video scene."},
+  "Motion Graphics":{icon:"orbit",blurb:"Build clean, professional motion-graphic elements rather than a live-action shot."},
+  "Cast Swap":{icon:"swap",blurb:"Swap a full character into an existing video, not just a face."},
 };
 function renderVidStudioSidebarRows(){
   const wrap=document.getElementById("vidStudioSubRows");
   if(!wrap||typeof VID_SUBMODULES==="undefined")return;
   wrap.innerHTML=Object.keys(VID_SUBMODULES).map(name=>
     `<button class="mod-btn" data-mod="videocanvas" onclick="openVidSubFromSidebar('${name.replace(/'/g,"\\'")}',this)">
-      <span class="mod-icon">${VID_SUBMODULES[name].icon}</span><span class="mod-label">${escapeHtml(name)}</span>
+      <span class="mod-icon">${pIcon(VID_SUBMODULES[name].icon,15)}</span><span class="mod-label">${escapeHtml(name)}</span>
     </button>`
   ).join('');
 }
@@ -12362,7 +12390,7 @@ function renderImgStudioSidebarRows(){
   if(!wrap||typeof IMG_SUBMODULES==="undefined")return;
   wrap.innerHTML=Object.keys(IMG_SUBMODULES).map(name=>
     `<button class="mod-btn" data-mod="imagegen" onclick="openImgSubFromSidebar('${name.replace(/'/g,"\\'")}',this)">
-      <span class="mod-icon">${IMG_SUBMODULES[name].icon}</span><span class="mod-label">${escapeHtml(name)}</span>
+      <span class="mod-icon">${pIcon(IMG_SUBMODULES[name].icon,15)}</span><span class="mod-label">${escapeHtml(name)}</span>
     </button>`
   ).join('');
 }
@@ -12388,7 +12416,7 @@ function openFeaturePlaceholder(name,info,parentMod,parentLabel,el){
   if(!contentEl)return;
   contentEl.innerHTML=`
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:70px 30px;min-height:55vh">
-      <div style="font-size:44px;margin-bottom:14px;opacity:0.7">${info.icon}</div>
+      <div style="color:var(--violet);opacity:0.6;margin-bottom:14px">${pIcon(info.icon,40)}</div>
       <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:17px;margin-bottom:8px">${escapeHtml(name)}</div>
       <div style="font-size:12.5px;color:var(--textm);line-height:1.6;max-width:280px">${escapeHtml(info.blurb)}</div>
       <div style="margin-top:18px;font-size:10.5px;color:var(--texts);font-weight:700;letter-spacing:0.04em;text-transform:uppercase">Coming soon</div>
