@@ -12654,6 +12654,22 @@ const PERSONA_TAXONOMY={
     horns:["None","Big Horns","Antlers","Small Horns"],
     faceSkinMaterial:["Human skin","Scales","Fur","Amphibian skin","Fish skin","Metallic"],
     surfacePattern:["Solid","Stripes","Spots","Chess pattern","Veins visible","Giraffe pattern","Cowhide pattern"]
+  },
+  // Read from a scrolling screen-recording rather than static screenshots
+  // (harder to transcribe precisely at that angle than Face's straight-on
+  // shots) — best-effort transcription. Flagged for a quick correction
+  // pass rather than silently shipped as certain.
+  body:{
+    bodyType:["Slim","Athletic","Muscular","Heavy","Bodybuilder"],
+    leftArm:["Human","Insectoid","Clawed","Tentacle","Mechanical"],
+    rightArm:["Human","Insectoid","Clawed","Tentacle","Mechanical"],
+    leftLeg:["Human","Digitigrade","Insectoid","Tentacle","Mechanical"],
+    rightLeg:["Human","Digitigrade","Insectoid","Tentacle","Mechanical"]
+  },
+  style:{
+    hairHeadGrowth:["None","Short Hair","Long Hair","Mane","Feathers","Fur Tuft"],
+    accessoriesMarkings:["None","Piercings","Tattoos","Jewelry","Face Paint","Scarification"],
+    renderingStyle:["Realistic","Cinematic","Painterly","3D Render","Cartoon","Hyperrealistic"]
   }
 };
 
@@ -12711,6 +12727,8 @@ function defaultPersonaDraft(){
     id:null,name:"",characterType:"Human",gender:"",ethnicity:"",skinColor:"",eyeColor:"",
     skinConditions:[],age:"",
     face:{eyesType:[],eyesDetails:[],mouthTeeth:"",ears:"",horns:"",faceSkinMaterial:"",surfacePattern:""},
+    body:{bodyType:"",leftArm:"",rightArm:"",leftLeg:"",rightLeg:""},
+    style:{hairHeadGrowth:"",accessoriesMarkings:"",renderingStyle:""},
     bodyNotes:"",styleNotes:"",
     bio:"",niche:"",lock:"",linkedCharacterId:null,contentLog:[]
   };
@@ -12721,7 +12739,11 @@ function renderPersonaBuilderForm(editId=null){
   S._personaDraft=existing?JSON.parse(JSON.stringify(existing)):defaultPersonaDraft();
   // Migrate drafts that predate a field (e.g. old saves without bodyNotes)
   const base=defaultPersonaDraft();
-  S._personaDraft=Object.assign({},base,S._personaDraft,{face:Object.assign({},base.face,S._personaDraft.face||{})});
+  S._personaDraft=Object.assign({},base,S._personaDraft,{
+    face:Object.assign({},base.face,S._personaDraft.face||{}),
+    body:Object.assign({},base.body,S._personaDraft.body||{}),
+    style:Object.assign({},base.style,S._personaDraft.style||{})
+  });
   S._personaEditId=editId;
   S._personaActiveTab="face";
   const el=document.getElementById("moduleContent");
@@ -12731,7 +12753,8 @@ function renderPersonaBuilderForm(editId=null){
     <button class="btn btn-outline btn-sm" style="margin-bottom:14px" onclick="openPersonaStudioScreen()">← Cancel</button>
     <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:16px;margin-bottom:12px">${editId?"Edit Persona":"New Persona"}</div>
     <label class="f-label">Persona name</label>
-    <input class="f-input" id="personaName" placeholder="e.g. Kiro the Crocodile" value="${escapeHtml(d.name)}" oninput="S._personaDraft.name=this.value" style="margin-bottom:14px">
+    <input class="f-input" id="personaName" placeholder="e.g. Kiro the Crocodile" value="${escapeHtml(d.name)}" oninput="S._personaDraft.name=this.value" style="margin-bottom:10px">
+    <button type="button" class="btn btn-outline btn-full" style="margin-bottom:14px" onclick="surprisePersonaDraft()">🔀 Surprise Me — randomize every option</button>
     <div id="personaBuilderBody"></div>
     <label class="f-label" style="margin-top:16px">Bio &amp; personality</label>
     <textarea class="f-input" id="personaBio" rows="3" placeholder="Voice, tone, backstory, quirks — what makes this persona feel like a recurring character rather than a one-off image" oninput="S._personaDraft.bio=this.value" style="margin-bottom:10px">${escapeHtml(d.bio)}</textarea>
@@ -12789,11 +12812,21 @@ function renderPersonaAdvancedPanel(){
       ${personaOptionRow("Face Skin Material","face.faceSkinMaterial",PERSONA_TAXONOMY.face.faceSkinMaterial,d.face.faceSkinMaterial,false)}
       ${personaOptionRow("Surface Pattern","face.surfacePattern",PERSONA_TAXONOMY.face.surfacePattern,d.face.surfacePattern,false)}`;
   } else if(S._personaActiveTab==="body"){
-    wrap.innerHTML=`<div style="font-size:11px;color:var(--textm);margin-bottom:8px">Body Type / Arms / Legs option lists aren't confirmed yet — describe the body in free text for now; structured options can replace this later.</div>
-      <textarea class="f-input" rows="3" placeholder="e.g. athletic build, clawed hands, digitigrade legs" oninput="S._personaDraft.bodyNotes=this.value">${escapeHtml(d.bodyNotes)}</textarea>`;
+    wrap.innerHTML=`
+      ${personaOptionRow("Body Type","body.bodyType",PERSONA_TAXONOMY.body.bodyType,d.body.bodyType,false)}
+      ${personaOptionRow("Left Arm","body.leftArm",PERSONA_TAXONOMY.body.leftArm,d.body.leftArm,false)}
+      ${personaOptionRow("Right Arm","body.rightArm",PERSONA_TAXONOMY.body.rightArm,d.body.rightArm,false)}
+      ${personaOptionRow("Left Leg","body.leftLeg",PERSONA_TAXONOMY.body.leftLeg,d.body.leftLeg,false)}
+      ${personaOptionRow("Right Leg","body.rightLeg",PERSONA_TAXONOMY.body.rightLeg,d.body.rightLeg,false)}
+      <label class="f-label">Anything else about the body</label>
+      <textarea class="f-input" rows="2" placeholder="Optional — anything the option grid above doesn't cover" oninput="S._personaDraft.bodyNotes=this.value" style="margin-bottom:6px">${escapeHtml(d.bodyNotes)}</textarea>`;
   } else {
-    wrap.innerHTML=`<div style="font-size:11px;color:var(--textm);margin-bottom:8px">Hair/Head Growth, Accessories &amp; Markings, and Rendering Style option lists aren't confirmed yet — describe in free text for now.</div>
-      <textarea class="f-input" rows="3" placeholder="e.g. slicked-back mane, gold nose ring, painterly rendering style" oninput="S._personaDraft.styleNotes=this.value">${escapeHtml(d.styleNotes)}</textarea>`;
+    wrap.innerHTML=`
+      ${personaOptionRow("Hair / Head Growth","style.hairHeadGrowth",PERSONA_TAXONOMY.style.hairHeadGrowth,d.style.hairHeadGrowth,false)}
+      ${personaOptionRow("Accessories &amp; Markings","style.accessoriesMarkings",PERSONA_TAXONOMY.style.accessoriesMarkings,d.style.accessoriesMarkings,false)}
+      ${personaOptionRow("Rendering Style","style.renderingStyle",PERSONA_TAXONOMY.style.renderingStyle,d.style.renderingStyle,false)}
+      <label class="f-label">Anything else about the style</label>
+      <textarea class="f-input" rows="2" placeholder="Optional — anything the option grid above doesn't cover" oninput="S._personaDraft.styleNotes=this.value" style="margin-bottom:6px">${escapeHtml(d.styleNotes)}</textarea>`;
   }
 }
 
@@ -12824,7 +12857,7 @@ function togglePersonaOption(path,value,multi){
   } else {
     obj[key]=obj[key]===value?"":value;
   }
-  if(path.startsWith("face."))renderPersonaAdvancedPanel();
+  if(path.startsWith("face.")||path.startsWith("body.")||path.startsWith("style."))renderPersonaAdvancedPanel();
   else renderPersonaBuilderBody();
 }
 
@@ -12846,6 +12879,14 @@ function autoComposePersonaLock(){
   if(d.face.horns&&d.face.horns!=="None")parts.push(d.face.horns.toLowerCase());
   if(d.face.faceSkinMaterial&&d.face.faceSkinMaterial!=="Human skin")parts.push(d.face.faceSkinMaterial.toLowerCase());
   if(d.face.surfacePattern&&d.face.surfacePattern!=="Solid")parts.push(`${d.face.surfacePattern.toLowerCase()} surface pattern`);
+  if(d.body.bodyType)parts.push(`${d.body.bodyType.toLowerCase()} build`);
+  if(d.body.leftArm&&d.body.leftArm!=="Human")parts.push(`${d.body.leftArm.toLowerCase()} left arm`);
+  if(d.body.rightArm&&d.body.rightArm!=="Human"&&d.body.rightArm!==d.body.leftArm)parts.push(`${d.body.rightArm.toLowerCase()} right arm`);
+  if(d.body.leftLeg&&d.body.leftLeg!=="Human")parts.push(`${d.body.leftLeg.toLowerCase()} left leg`);
+  if(d.body.rightLeg&&d.body.rightLeg!=="Human"&&d.body.rightLeg!==d.body.leftLeg)parts.push(`${d.body.rightLeg.toLowerCase()} right leg`);
+  if(d.style.hairHeadGrowth&&d.style.hairHeadGrowth!=="None")parts.push(d.style.hairHeadGrowth.toLowerCase());
+  if(d.style.accessoriesMarkings&&d.style.accessoriesMarkings!=="None")parts.push(d.style.accessoriesMarkings.toLowerCase());
+  if(d.style.renderingStyle)parts.push(`${d.style.renderingStyle.toLowerCase()} rendering style`);
   if(d.bodyNotes)parts.push(d.bodyNotes);
   if(d.styleNotes)parts.push(d.styleNotes);
   parts.push("maintain exact facial features, proportions, colors and markings across every shot — no design drift");
@@ -12853,6 +12894,43 @@ function autoComposePersonaLock(){
   const lockEl=document.getElementById("personaLock");
   if(lockEl)lockEl.value=S._personaDraft.lock;
   toast("🪄 Identity Lock generated — edit freely before saving","success");
+}
+
+// ── SURPRISE ME ──────────────────────────────────────────────────────────
+// Higgsfield's dice/shuffle icon sits right next to Generate Influencer —
+// one tap randomizes every builder field at once, for people who want a
+// starting point rather than tapping through 15+ categories by hand.
+// Multi-select fields get a random SUBSET (0-2 items), not a random single
+// pick, so results don't look artificially maxed-out every time.
+function surprisePersonaDraft(){
+  const d=S._personaDraft;
+  const pick=arr=>arr[Math.floor(Math.random()*arr.length)];
+  const pickSome=(arr,max)=>[...arr].sort(()=>Math.random()-0.5).slice(0,Math.floor(Math.random()*(max+1)));
+  d.characterType=pick(PERSONA_TAXONOMY.characterType);
+  d.gender=pick(PERSONA_TAXONOMY.gender);
+  d.ethnicity=pick(PERSONA_TAXONOMY.ethnicity);
+  d.skinColor=pick(PERSONA_TAXONOMY.skinColor);
+  d.eyeColor=pick(PERSONA_TAXONOMY.eyeColor);
+  d.skinConditions=pickSome(PERSONA_TAXONOMY.skinConditions,2);
+  d.age=pick(PERSONA_TAXONOMY.age);
+  d.face.eyesType=pickSome(PERSONA_TAXONOMY.face.eyesType,1);
+  d.face.eyesDetails=pickSome(PERSONA_TAXONOMY.face.eyesDetails,1);
+  d.face.mouthTeeth=pick(PERSONA_TAXONOMY.face.mouthTeeth);
+  d.face.ears=pick(PERSONA_TAXONOMY.face.ears);
+  d.face.horns=pick(PERSONA_TAXONOMY.face.horns);
+  d.face.faceSkinMaterial=pick(PERSONA_TAXONOMY.face.faceSkinMaterial);
+  d.face.surfacePattern=pick(PERSONA_TAXONOMY.face.surfacePattern);
+  d.body.bodyType=pick(PERSONA_TAXONOMY.body.bodyType);
+  d.body.leftArm=pick(PERSONA_TAXONOMY.body.leftArm);
+  d.body.rightArm=pick(PERSONA_TAXONOMY.body.rightArm);
+  d.body.leftLeg=pick(PERSONA_TAXONOMY.body.leftLeg);
+  d.body.rightLeg=pick(PERSONA_TAXONOMY.body.rightLeg);
+  d.style.hairHeadGrowth=pick(PERSONA_TAXONOMY.style.hairHeadGrowth);
+  d.style.accessoriesMarkings=pick(PERSONA_TAXONOMY.style.accessoriesMarkings);
+  d.style.renderingStyle=pick(PERSONA_TAXONOMY.style.renderingStyle);
+  renderPersonaBuilderBody();
+  autoComposePersonaLock();
+  toast("🔀 Surprised! Tweak anything before saving","success");
 }
 
 function savePersona(){
