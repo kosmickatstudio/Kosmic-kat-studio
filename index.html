@@ -1896,7 +1896,7 @@ const IMG_SUBMODULES={
   "Aesthetic Reel":{icon:"image",blurb:"Pick a locked persona or character and a themed pack — one tap generates a whole curated multi-shot set, like a viral photo-dump carousel."},
   "Light Studio":{icon:"bulb",blurb:"Adjust an existing image's lighting — direction, color, brightness — without re-generating the whole scene."},
   "Touch-Up":{icon:"pencil",blurb:"Mask a specific area of an image and describe just the change you want there."},
-  "Detail Boost":{icon:"search",blurb:"Push resolution and fine detail up on an image you already have."},
+  "Image Upscale":{icon:"search",blurb:"The real Upscaler, already built — Single and Batch modes, same fal.ai key as Image/Video Gen."},
   "Face Shift":{icon:"swap",blurb:"Swap a face onto an existing image while keeping everything else the same."},
   "Cast Swap":{icon:"swap",blurb:"Swap a full character — not just the face — into an existing image."},
   "Sketch to Scene":{icon:"pencil",blurb:"Turn a rough sketch or doodle into a rendered image."},
@@ -12440,9 +12440,12 @@ function openImgSubFromSidebar(name,el){
   if(el)el.classList.add("active");
   // Vibe Board, Persona Studio, Aesthetic Reel (a Photo Dump), Light
   // Studio (a Relight tool), Touch-Up (a masked Inpaint tool), Face Shift
-  // (a face swap), and Cast Swap (a character swap) are real, working
-  // features (see below) — everything else in Image Studio is still the
-  // empty scaffold from earlier.
+  // (a face swap), Cast Swap (a character swap), and Image Upscale (a
+  // link to the already-real, already-built top-level Upscaler module —
+  // this app already had one; this sidebar row was a redundant unbuilt
+  // placeholder for the exact same thing) are real, working features
+  // (see below) — everything else in Image Studio is still the empty
+  // scaffold from earlier.
   if(name==="Vibe Board"){openVibeBoardScreen();return;}
   if(name==="Persona Studio"){openPersonaStudioScreen();return;}
   if(name==="Aesthetic Reel"){openPhotoDumpScreen();return;}
@@ -12450,6 +12453,7 @@ function openImgSubFromSidebar(name,el){
   if(name==="Touch-Up"){openTouchUpScreen();return;}
   if(name==="Face Shift"){openFaceShiftScreen();return;}
   if(name==="Cast Swap"){openCastSwapScreen();return;}
+  if(name==="Image Upscale"){switchMod("upscaler",document.querySelector("[data-mod=upscaler]"));return;}
   openFeaturePlaceholder(name,IMG_SUBMODULES[name],"imagegen","Image",el);
 }
 // ── VIBE BOARD ───────────────────────────────────────────────────────────
