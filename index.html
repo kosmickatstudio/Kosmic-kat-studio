@@ -12426,9 +12426,10 @@ function openFeaturePlaceholder(name,info,parentMod,parentLabel,el){
 function openImgSubFromSidebar(name,el){
   document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
   if(el)el.classList.add("active");
-  // Vibe Board is a real, working feature (see below) — everything else in
-  // Image Studio is still the empty scaffold from earlier.
+  // Vibe Board and Persona Studio are real, working features (see below) —
+  // everything else in Image Studio is still the empty scaffold from earlier.
   if(name==="Vibe Board"){openVibeBoardScreen();return;}
+  if(name==="Persona Studio"){openPersonaStudioScreen();return;}
   openFeaturePlaceholder(name,IMG_SUBMODULES[name],"imagegen","Image",el);
 }
 // ── VIBE BOARD ───────────────────────────────────────────────────────────
@@ -12617,6 +12618,319 @@ function useVibeBoard(id){
     else toast(`"${board.name}" loaded — ${board.images.length} reference image${board.images.length!==1?'s':''}`,"success");
   },50);
 }
+// ── PERSONA STUDIO ───────────────────────────────────────────────────────
+// A menu-driven, no-prompting character/persona builder — modeled on
+// Higgsfield's AI Influencer Studio flow (species-first, tap-not-type
+// attribute picking), but built on top of THIS app's own existing systems
+// rather than a parallel one:
+// - The species/attribute taxonomy below is genuinely new — the existing
+//   Character Bible (characters.js) had no species concept or structured
+//   attribute picker, only free-text fields + photo upload.
+// - Identity Lock composition and "save as Character" deliberately REUSE
+//   Characters' existing lock/refImages/voice/relationships system rather
+//   than duplicating it — a persona becomes a real Character once linked,
+//   just one built by tapping options instead of typing prose.
+// - Bio/personality + a lightweight content log are the genuinely new
+//   "ongoing influencer" layer a one-off Character doesn't need.
+//
+// Taxonomy reflects what's confirmed so far. Body Type/Arms/Legs and
+// Hair/Accessories/Rendering Style option lists aren't confirmed yet —
+// those two tabs fall back to free text until real option lists arrive;
+// everything else (Character Type, Gender, Ethnicity, Skin Color, Eye
+// Color, Skin Conditions, Age, and all of Face) is fully wired.
+const PERSONA_TAXONOMY={
+  characterType:["Human","Ant","Bee","Octopus","Crocodile","Iguana","Lizard","Alien","Beetle","Mantis"],
+  gender:["Female","Male","Trans man","Trans woman","Non-binary"],
+  ethnicity:["African","Asian","European","Indian","Middle Eastern","Mixed"],
+  skinColor:["Black","Dark Brown","White","Purple","Tan","Yellow","Green","Blue","Red","Silver","Custom"],
+  eyeColor:["Black","Purple","Green","White","Brown","Solid Black","Blind White","Deep Brown","Blue"],
+  skinConditions:["Vitiligo","Pigmentation","Freckles","Birthmarks","Scars","Burns","Albinism","Cracked / dry skin","Wrinkled skin"],
+  age:["Adult","Mature","Senior"],
+  face:{
+    eyesType:["Human","Reptile","Mechanical"],
+    eyesDetails:["Different eye colors","Blind eye","Scarred eye","Glowing eye"],
+    mouthTeeth:["Small mouth","Large mouth","No teeth","Different teeth","Sharp teeth","Forked tongue"],
+    ears:["Human","Elf","No Ears","Wing Ears"],
+    horns:["None","Big Horns","Antlers","Small Horns"],
+    faceSkinMaterial:["Human skin","Scales","Fur","Amphibian skin","Fish skin","Metallic"],
+    surfacePattern:["Solid","Stripes","Spots","Chess pattern","Veins visible","Giraffe pattern","Cowhide pattern"]
+  }
+};
+
+S.personas=S.personas||gs("personas",[])||[];
+
+function openPersonaStudioScreen(){
+  S.personas=S.personas||gs("personas",[])||[];
+  document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
+  const tabsEl=document.getElementById("moduleTabs");
+  if(tabsEl){tabsEl.style.display="none";tabsEl.innerHTML="";}
+  const el=document.getElementById("moduleContent");
+  if(!el)return;
+  el.innerHTML=`
+    <button class="btn btn-outline btn-sm" style="margin-bottom:14px" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))">← Back to Image</button>
+    <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:17px;margin-bottom:4px">${pIcon("orbit",16)} Persona Studio</div>
+    <div style="font-size:11.5px;color:var(--textm);margin-bottom:16px">Build a recurring invented persona — species, look, and personality — for ongoing content rather than a one-off character.</div>
+    <button class="btn btn-primary btn-full" style="margin-bottom:16px" onclick="renderPersonaBuilderForm()">+ New Persona</button>
+    <div id="personaList"></div>`;
+  renderPersonaList();
+}
+
+function renderPersonaList(){
+  const wrap=document.getElementById("personaList");
+  if(!wrap)return;
+  const personas=S.personas||[];
+  if(!personas.length){
+    wrap.innerHTML=`<div style="text-align:center;padding:40px 20px;color:var(--textm);font-size:12px">No personas yet — build one from scratch below. No prompting needed, just tap through the options.</div>`;
+    return;
+  }
+  wrap.innerHTML=personas.map(p=>`
+    <div style="background:var(--lav);border-radius:12px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:700;color:var(--violet);font-size:13.5px">${escapeHtml(p.name||"Unnamed persona")}</div>
+          <div style="font-size:10.5px;color:var(--textm)">${escapeHtml(p.characterType||"Human")} · ${escapeHtml(p.gender||"—")} · ${(p.contentLog||[]).length} posts logged${p.linkedCharacterId?' · linked':''}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-xs" onclick="renderPersonaBuilderForm('${p.id}')">Edit</button>
+          <button class="btn btn-ghost btn-xs" onclick="deletePersona('${p.id}')">✕</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+async function deletePersona(id){
+  if(!(await showConfirmDialog("Delete this persona? This cannot be undone.",{danger:true,okLabel:"Delete"})))return;
+  S.personas=(S.personas||[]).filter(p=>p.id!==id);
+  saveSetting("personas",S.personas);
+  renderPersonaList();
+  toast("Persona deleted","");
+}
+
+function defaultPersonaDraft(){
+  return{
+    id:null,name:"",characterType:"Human",gender:"",ethnicity:"",skinColor:"",eyeColor:"",
+    skinConditions:[],age:"",
+    face:{eyesType:[],eyesDetails:[],mouthTeeth:"",ears:"",horns:"",faceSkinMaterial:"",surfacePattern:""},
+    bodyNotes:"",styleNotes:"",
+    bio:"",niche:"",lock:"",linkedCharacterId:null,contentLog:[]
+  };
+}
+
+function renderPersonaBuilderForm(editId=null){
+  const existing=editId?(S.personas||[]).find(p=>p.id===editId):null;
+  S._personaDraft=existing?JSON.parse(JSON.stringify(existing)):defaultPersonaDraft();
+  // Migrate drafts that predate a field (e.g. old saves without bodyNotes)
+  const base=defaultPersonaDraft();
+  S._personaDraft=Object.assign({},base,S._personaDraft,{face:Object.assign({},base.face,S._personaDraft.face||{})});
+  S._personaEditId=editId;
+  S._personaActiveTab="face";
+  const el=document.getElementById("moduleContent");
+  if(!el)return;
+  const d=S._personaDraft;
+  el.innerHTML=`
+    <button class="btn btn-outline btn-sm" style="margin-bottom:14px" onclick="openPersonaStudioScreen()">← Cancel</button>
+    <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:16px;margin-bottom:12px">${editId?"Edit Persona":"New Persona"}</div>
+    <label class="f-label">Persona name</label>
+    <input class="f-input" id="personaName" placeholder="e.g. Kiro the Crocodile" value="${escapeHtml(d.name)}" oninput="S._personaDraft.name=this.value" style="margin-bottom:14px">
+    <div id="personaBuilderBody"></div>
+    <label class="f-label" style="margin-top:16px">Bio &amp; personality</label>
+    <textarea class="f-input" id="personaBio" rows="3" placeholder="Voice, tone, backstory, quirks — what makes this persona feel like a recurring character rather than a one-off image" oninput="S._personaDraft.bio=this.value" style="margin-bottom:10px">${escapeHtml(d.bio)}</textarea>
+    <label class="f-label">Content niche</label>
+    <input class="f-input" id="personaNiche" placeholder="e.g. comedy skits, product reviews, lifestyle vlogs" value="${escapeHtml(d.niche)}" oninput="S._personaDraft.niche=this.value" style="margin-bottom:16px">
+    <button class="btn btn-outline btn-full" style="margin-bottom:8px" onclick="autoComposePersonaLock()">🪄 Auto-generate Identity Lock from selections</button>
+    <textarea class="f-input" id="personaLock" rows="2" placeholder="Identity Lock — auto-generated, editable" oninput="S._personaDraft.lock=this.value" style="margin-bottom:16px">${escapeHtml(d.lock)}</textarea>
+    ${editId?`
+      <button class="btn btn-outline btn-full" style="margin-bottom:14px" onclick="savePersonaAsCharacter('${editId}')">${d.linkedCharacterId?'✓ Linked to Character Bible':'Link to Character Bible (voice, ref images, projects)'}</button>
+      <div style="font-weight:600;font-size:12.5px;margin-bottom:6px">Content Log</div>
+      <div id="personaContentLog"></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <input class="f-input" id="personaLogTitle" placeholder="Post title" style="flex:2">
+        <input class="f-input" id="personaLogPlatform" placeholder="Platform" style="flex:1">
+      </div>
+      <button class="btn btn-outline btn-full" style="margin:6px 0 16px" onclick="submitPersonaLogEntry()">+ Log post</button>
+    `:`<div style="font-size:11px;color:var(--textm);margin-bottom:16px">Save this persona once to unlock the Content Log and Character Bible link.</div>`}
+    <button class="btn btn-primary btn-full" onclick="savePersona()">Save Persona</button>
+  `;
+  renderPersonaBuilderBody();
+  if(editId)renderPersonaContentLogUI();
+}
+
+function renderPersonaBuilderBody(){
+  const wrap=document.getElementById("personaBuilderBody");
+  if(!wrap)return;
+  const d=S._personaDraft;
+  wrap.innerHTML=`
+    ${personaOptionRow("Character Type","characterType",PERSONA_TAXONOMY.characterType,d.characterType,false)}
+    ${personaOptionRow("Gender","gender",PERSONA_TAXONOMY.gender,d.gender,false)}
+    ${personaOptionRow("Ethnicity / Origin Base","ethnicity",PERSONA_TAXONOMY.ethnicity,d.ethnicity,false)}
+    ${personaOptionRow("Skin Color","skinColor",PERSONA_TAXONOMY.skinColor,d.skinColor,false)}
+    ${personaOptionRow("Eye Color","eyeColor",PERSONA_TAXONOMY.eyeColor,d.eyeColor,false)}
+    ${personaOptionRow("Skin Conditions","skinConditions",PERSONA_TAXONOMY.skinConditions,d.skinConditions,true)}
+    ${personaOptionRow("Age","age",PERSONA_TAXONOMY.age,d.age,false)}
+    <div style="margin:16px 0 10px;font-weight:700;color:var(--violet);font-size:12.5px">Advanced settings</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      ${["face","body","style"].map(t=>`<button type="button" class="btn ${S._personaActiveTab===t?'btn-primary':'btn-outline'} btn-sm" style="flex:1" onclick="S._personaActiveTab='${t}';renderPersonaBuilderBody()">${t.charAt(0).toUpperCase()+t.slice(1)}</button>`).join('')}
+    </div>
+    <div id="personaAdvancedPanel"></div>`;
+  renderPersonaAdvancedPanel();
+}
+
+function renderPersonaAdvancedPanel(){
+  const wrap=document.getElementById("personaAdvancedPanel");
+  if(!wrap)return;
+  const d=S._personaDraft;
+  if(S._personaActiveTab==="face"){
+    wrap.innerHTML=`
+      ${personaOptionRow("Eyes - Type","face.eyesType",PERSONA_TAXONOMY.face.eyesType,d.face.eyesType,true)}
+      ${personaOptionRow("Eyes - Details","face.eyesDetails",PERSONA_TAXONOMY.face.eyesDetails,d.face.eyesDetails,true)}
+      ${personaOptionRow("Mouth &amp; Teeth","face.mouthTeeth",PERSONA_TAXONOMY.face.mouthTeeth,d.face.mouthTeeth,false)}
+      ${personaOptionRow("Ears","face.ears",PERSONA_TAXONOMY.face.ears,d.face.ears,false)}
+      ${personaOptionRow("Horns","face.horns",PERSONA_TAXONOMY.face.horns,d.face.horns,false)}
+      ${personaOptionRow("Face Skin Material","face.faceSkinMaterial",PERSONA_TAXONOMY.face.faceSkinMaterial,d.face.faceSkinMaterial,false)}
+      ${personaOptionRow("Surface Pattern","face.surfacePattern",PERSONA_TAXONOMY.face.surfacePattern,d.face.surfacePattern,false)}`;
+  } else if(S._personaActiveTab==="body"){
+    wrap.innerHTML=`<div style="font-size:11px;color:var(--textm);margin-bottom:8px">Body Type / Arms / Legs option lists aren't confirmed yet — describe the body in free text for now; structured options can replace this later.</div>
+      <textarea class="f-input" rows="3" placeholder="e.g. athletic build, clawed hands, digitigrade legs" oninput="S._personaDraft.bodyNotes=this.value">${escapeHtml(d.bodyNotes)}</textarea>`;
+  } else {
+    wrap.innerHTML=`<div style="font-size:11px;color:var(--textm);margin-bottom:8px">Hair/Head Growth, Accessories &amp; Markings, and Rendering Style option lists aren't confirmed yet — describe in free text for now.</div>
+      <textarea class="f-input" rows="3" placeholder="e.g. slicked-back mane, gold nose ring, painterly rendering style" oninput="S._personaDraft.styleNotes=this.value">${escapeHtml(d.styleNotes)}</textarea>`;
+  }
+}
+
+// Renders one expandable option-picker row. `path` may be dotted (e.g.
+// "face.ears") to reach nested fields on the draft object.
+function personaOptionRow(label,path,options,current,multi){
+  const count=multi?(current||[]).length:(current?1:0);
+  return `<div style="margin-bottom:14px">
+    <div style="font-weight:600;font-size:12.5px;color:var(--text);margin-bottom:6px">${escapeHtml(label)}${count?` · ${count}`:''}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      ${options.map(opt=>{
+        const active=multi?(current||[]).includes(opt):current===opt;
+        return `<button type="button" class="btn ${active?'btn-primary':'btn-outline'} btn-xs" onclick="togglePersonaOption('${path}',${JSON.stringify(opt)},${multi})">${escapeHtml(opt)}</button>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function togglePersonaOption(path,value,multi){
+  const parts=path.split(".");
+  let obj=S._personaDraft;
+  for(let i=0;i<parts.length-1;i++)obj=obj[parts[i]];
+  const key=parts[parts.length-1];
+  if(multi){
+    obj[key]=obj[key]||[];
+    if(obj[key].includes(value))obj[key]=obj[key].filter(v=>v!==value);
+    else obj[key].push(value);
+  } else {
+    obj[key]=obj[key]===value?"":value;
+  }
+  if(path.startsWith("face."))renderPersonaAdvancedPanel();
+  else renderPersonaBuilderBody();
+}
+
+function autoComposePersonaLock(){
+  const d=S._personaDraft;
+  const parts=[];
+  if(d.name)parts.push(d.name);
+  parts.push(`a ${d.characterType||"Human"} persona`);
+  if(d.gender)parts.push(d.gender.toLowerCase());
+  if(d.ethnicity)parts.push(`${d.ethnicity} origin`);
+  if(d.skinColor)parts.push(`${d.skinColor.toLowerCase()} skin`);
+  if(d.eyeColor)parts.push(`${d.eyeColor.toLowerCase()} eyes`);
+  if(d.skinConditions&&d.skinConditions.length)parts.push(d.skinConditions.join(", ").toLowerCase());
+  if(d.age)parts.push(`${d.age.toLowerCase()} age range`);
+  if(d.face.eyesType&&d.face.eyesType.length)parts.push(`${d.face.eyesType.join("/").toLowerCase()} eyes`);
+  if(d.face.eyesDetails&&d.face.eyesDetails.length)parts.push(d.face.eyesDetails.join(", ").toLowerCase());
+  if(d.face.mouthTeeth)parts.push(d.face.mouthTeeth.toLowerCase());
+  if(d.face.ears&&d.face.ears!=="Human")parts.push(`${d.face.ears.toLowerCase()} ears`);
+  if(d.face.horns&&d.face.horns!=="None")parts.push(d.face.horns.toLowerCase());
+  if(d.face.faceSkinMaterial&&d.face.faceSkinMaterial!=="Human skin")parts.push(d.face.faceSkinMaterial.toLowerCase());
+  if(d.face.surfacePattern&&d.face.surfacePattern!=="Solid")parts.push(`${d.face.surfacePattern.toLowerCase()} surface pattern`);
+  if(d.bodyNotes)parts.push(d.bodyNotes);
+  if(d.styleNotes)parts.push(d.styleNotes);
+  parts.push("maintain exact facial features, proportions, colors and markings across every shot — no design drift");
+  S._personaDraft.lock=parts.join(", ");
+  const lockEl=document.getElementById("personaLock");
+  if(lockEl)lockEl.value=S._personaDraft.lock;
+  toast("🪄 Identity Lock generated — edit freely before saving","success");
+}
+
+function savePersona(){
+  const d=S._personaDraft;
+  if(!d.name||!d.name.trim()){toast("Give this persona a name","error");return;}
+  S.personas=S.personas||gs("personas",[])||[];
+  if(S._personaEditId){
+    const existing=S.personas.find(p=>p.id===S._personaEditId);
+    if(existing)Object.assign(existing,d,{id:S._personaEditId});
+  } else {
+    d.id="persona_"+Date.now();
+    d.createdAt=new Date().toISOString();
+    d.contentLog=d.contentLog||[];
+    S.personas.push(d);
+  }
+  saveSetting("personas",S.personas);
+  toast(`🎭 ${d.name} saved`,"success");
+  openPersonaStudioScreen();
+}
+
+// Links a persona to the existing Character Bible so it gets everything
+// that system already does well — voice, ref images, relationships,
+// project assignment — rather than duplicating any of that here.
+function savePersonaAsCharacter(personaId){
+  const p=(S.personas||[]).find(x=>x.id===personaId);
+  if(!p)return;
+  if(p.linkedCharacterId){toast("Already linked to Character Bible","");return;}
+  if(!p.lock){
+    S._personaDraft=p;
+    autoComposePersonaLock();
+  }
+  const c={
+    id:"char_"+Date.now(),
+    name:p.name,role:"Protagonist",projectId:null,
+    desc:p.bio||"",lock:p.lock||"",voice:"",height:"",faction:p.niche||"",features:"",threat:"",
+    refImages:[],refImg:"",relationships:[],
+    created:new Date().toISOString()
+  };
+  S.characters.push(c);
+  save("characters");
+  p.linkedCharacterId=c.id;
+  saveSetting("personas",S.personas);
+  toast(`${p.name} linked to Character Bible`,"success");
+  renderPersonaBuilderForm(personaId);
+}
+
+// ── PERSONA CONTENT LOG ──────────────────────────────────────────────────
+function submitPersonaLogEntry(){
+  const titleEl=document.getElementById("personaLogTitle");
+  const platEl=document.getElementById("personaLogPlatform");
+  const title=titleEl?titleEl.value.trim():"";
+  if(!title){toast("Give the post a title first","error");return;}
+  const p=(S.personas||[]).find(x=>x.id===S._personaEditId);
+  if(!p)return;
+  p.contentLog=p.contentLog||[];
+  p.contentLog.push({id:"log_"+Date.now(),title,platform:(platEl?platEl.value.trim():""),date:new Date().toISOString()});
+  saveSetting("personas",S.personas);
+  titleEl.value="";platEl.value="";
+  renderPersonaContentLogUI();
+}
+function removePersonaContentLogEntry(personaId,entryId){
+  const p=(S.personas||[]).find(x=>x.id===personaId);
+  if(!p)return;
+  p.contentLog=(p.contentLog||[]).filter(e=>e.id!==entryId);
+  saveSetting("personas",S.personas);
+  renderPersonaContentLogUI();
+}
+function renderPersonaContentLogUI(){
+  const wrap=document.getElementById("personaContentLog");
+  if(!wrap)return;
+  const p=(S.personas||[]).find(x=>x.id===S._personaEditId);
+  const log=(p&&p.contentLog)||[];
+  wrap.innerHTML=log.length?log.map(e=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;background:var(--lav);border-radius:8px;padding:6px 10px;margin-bottom:4px">
+      <span>${escapeHtml(e.title)}${e.platform?` · ${escapeHtml(e.platform)}`:''}</span>
+      <button onclick="removePersonaContentLogEntry('${S._personaEditId}','${e.id}')" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:12px">✕</button>
+    </div>`).join(''):`<div style="font-size:11px;color:var(--textm)">No posts logged yet.</div>`;
+}
+
 // Audio isn't tab-based like Image/Video's Generate|Gallery split — renderAudio
 // builds ONE long page with every tool (Voiceover, Voice Cloning, Voice
 // Design, Dialogue, Voice Changer, Dubbing, Isolator, Video-to-Music,
