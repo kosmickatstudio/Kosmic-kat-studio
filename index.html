@@ -12424,7 +12424,198 @@ function openFeaturePlaceholder(name,info,parentMod,parentLabel,el){
     </div>`;
 }
 function openImgSubFromSidebar(name,el){
+  document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
+  if(el)el.classList.add("active");
+  // Vibe Board is a real, working feature (see below) — everything else in
+  // Image Studio is still the empty scaffold from earlier.
+  if(name==="Vibe Board"){openVibeBoardScreen();return;}
   openFeaturePlaceholder(name,IMG_SUBMODULES[name],"imagegen","Image",el);
+}
+// ── VIBE BOARD ───────────────────────────────────────────────────────────
+// What this actually is, worked out from studying Higgsfield's real
+// Moodboard flow rather than guessed from the name: not a photo collage to
+// admire, but a NAMED, REUSABLE set of style-reference images — upload a
+// handful of photos sharing one look, save it under a name, and load that
+// whole set into a real generation with one tap instead of re-uploading the
+// same reference photos every time you want that aesthetic. Higgsfield
+// itself recommends 20-80 images and validates count/resolution with a
+// progress ring; scaled down here to something realistic for one creator's
+// actual workflow (a handful of tightly-curated images, not eighty), and
+// simplified to plain counters rather than a fancy ring, since the
+// information is identical either way.
+//
+// Built on real existing capability, not a new AI feature: Image Gen
+// already supports multi-reference conditioning via S.igMultiRefImages,
+// with a per-model cap (2 on Nano Banana Pro, up to 14 on Nano Banana 2).
+// "Use this board" just populates that same array and reuses Image Gen's
+// own existing preview/attachment refresh — the new work here is entirely
+// the save/name/reuse layer around it, the same shape as Character Presets.
+S.vibeBoards=S.vibeBoards||[];
+function openVibeBoardScreen(){
+  S.vibeBoards=S.vibeBoards||gs("vibe_boards",[])||[];
+  const tabsEl=document.getElementById("moduleTabs");
+  if(tabsEl){tabsEl.style.display="none";tabsEl.innerHTML="";}
+  const el=document.getElementById("moduleContent");
+  if(!el)return;
+  el.innerHTML=`
+    <div style="padding:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <button class="btn btn-outline btn-sm" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))">← Back to Image</button>
+      </div>
+      <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:17px;margin-bottom:4px">${pIcon("brush",16)} Vibe Board</div>
+      <div style="font-size:11.5px;color:var(--textm);margin-bottom:16px;line-height:1.5">Save a set of reference images under a name, then load the whole set into any generation with one tap — instead of re-uploading the same style photos every time you want that look.</div>
+      <button class="btn btn-primary btn-full" style="margin-bottom:16px" onclick="renderVibeBoardCreateForm()">+ New Vibe Board</button>
+      <div id="vibeBoardList"></div>
+    </div>`;
+  renderVibeBoardList();
+}
+function renderVibeBoardList(){
+  const wrap=document.getElementById("vibeBoardList");
+  if(!wrap)return;
+  const boards=S.vibeBoards||[];
+  if(!boards.length){
+    wrap.innerHTML=`<div style="text-align:center;padding:40px 20px;color:var(--textm);font-size:12px">No Vibe Boards yet — build one from a handful of images that share a look you want to reuse.</div>`;
+    return;
+  }
+  wrap.innerHTML=boards.map(b=>`
+    <div style="border:1px solid var(--glass-brd);border-radius:14px;padding:12px;margin-bottom:10px;background:var(--glass)">
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        ${b.images.slice(0,4).map(u=>`<img src="${u}" style="width:52px;height:52px;border-radius:8px;object-fit:cover;flex-shrink:0">`).join('')}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(b.name)}</div>
+          <div style="font-size:10px;color:var(--textm)">${b.images.length} image${b.images.length!==1?'s':''}</div>
+        </div>
+        <button class="btn btn-primary btn-xs" onclick="useVibeBoard('${b.id}')">Use</button>
+        <button class="btn btn-ghost btn-xs" onclick="deleteVibeBoard('${b.id}')">✕</button>
+      </div>
+    </div>`).join('');
+}
+function renderVibeBoardCreateForm(){
+  const el=document.getElementById("moduleContent");
+  if(!el)return;
+  S._vibeBoardDraft={name:"",images:[]};
+  el.innerHTML=`
+    <div style="padding:16px">
+      <button class="btn btn-outline btn-sm" style="margin-bottom:14px" onclick="openVibeBoardScreen()">← Cancel</button>
+      <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:16px;margin-bottom:12px">New Vibe Board</div>
+      <div class="f-group">
+        <label class="f-label">Name</label>
+        <input class="f-input" id="vibeBoardName" placeholder="e.g. Warm Golden Hour" oninput="S._vibeBoardDraft.name=this.value">
+      </div>
+      <div style="font-size:10.5px;color:var(--textm);margin:8px 0 10px;line-height:1.5">
+        <b style="color:var(--green)">Recommended:</b> 6-15 images, one consistent look.<br>
+        <b style="color:var(--gold)">Avoid:</b> mixing unrelated styles — a board works best as one clear aesthetic.
+      </div>
+      <input type="file" accept="image/*" multiple id="vibeBoardFile" style="display:none" onchange="handleVibeBoardUpload(event)">
+      <button class="btn btn-outline btn-full" style="margin-bottom:10px" onclick="document.getElementById('vibeBoardFile').click()">+ Upload images</button>
+      <button class="btn btn-outline btn-full" style="margin-bottom:14px" onclick="openVibeBoardGalleryPicker()">Pick from your Gallery</button>
+      <div id="vibeBoardImages" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>
+      <button class="btn btn-primary btn-full" onclick="saveNewVibeBoard()">Save Vibe Board</button>
+    </div>`;
+  renderVibeBoardDraftImages();
+}
+function renderVibeBoardDraftImages(){
+  const wrap=document.getElementById("vibeBoardImages");
+  if(!wrap)return;
+  const imgs=S._vibeBoardDraft?.images||[];
+  wrap.innerHTML=`<div style="width:100%;font-size:10.5px;color:var(--textm);margin-bottom:2px">${imgs.length} image${imgs.length!==1?'s':''} added</div>`+
+    imgs.map((u,i)=>`<div style="position:relative"><img src="${u}" style="width:60px;height:60px;border-radius:8px;object-fit:cover"><button onclick="removeVibeBoardImage(${i})" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;cursor:pointer;line-height:1">✕</button></div>`).join('');
+}
+async function handleVibeBoardUpload(event){
+  const files=[...(event.target.files||[])];
+  event.target.value="";
+  for(const file of files){
+    if(!file.type.startsWith("image/"))continue;
+    try{
+      const dataUrl=await downscaleImageFile(file);
+      S._vibeBoardDraft.images.push(dataUrl);
+      renderVibeBoardDraftImages();
+    }catch(err){ toast(err.message,"error"); }
+  }
+}
+function removeVibeBoardImage(i){
+  S._vibeBoardDraft.images.splice(i,1);
+  renderVibeBoardDraftImages();
+}
+// Lets a board be built from images already generated, not only fresh
+// uploads — matching Higgsfield's own "Image Generations" tab in the same
+// flow, and genuinely useful since a user's best examples of a look they
+// want to reuse are often already sitting in their own Gallery.
+function openVibeBoardGalleryPicker(){
+  const imgAssets=(S.assets||[]).filter(a=>a.type==="image").slice(-40).reverse();
+  const prev=document.getElementById("vibeBoardGalleryModal"); if(prev)prev.remove();
+  const overlay=document.createElement("div");
+  overlay.id="vibeBoardGalleryModal";
+  overlay.className="ig-settings-backdrop show";
+  overlay.onclick=e=>{if(e.target===overlay)overlay.remove();};
+  overlay.innerHTML=`<div class="ig-settings-sheet open" style="max-height:70vh;overflow-y:auto">
+    <div class="ig-sheet-handle"></div>
+    <div style="padding:6px 20px 20px">
+      <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);margin-bottom:12px">Pick from Gallery</div>
+      ${!imgAssets.length?`<div style="font-size:12px;color:var(--textm);text-align:center;padding:20px 0">No images in your Gallery yet.</div>`:
+      `<div style="display:flex;flex-wrap:wrap;gap:8px">${imgAssets.map(a=>`<img src="${a.url}" onclick="addVibeBoardImageFromGallery('${a.url}')" style="width:64px;height:64px;border-radius:8px;object-fit:cover;cursor:pointer;border:2px solid transparent" onmouseover="this.style.borderColor='var(--violet)'" onmouseout="this.style.borderColor='transparent'">`).join('')}</div>`}
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function addVibeBoardImageFromGallery(url){
+  if(!S._vibeBoardDraft.images.includes(url))S._vibeBoardDraft.images.push(url);
+  renderVibeBoardDraftImages();
+  toast("Added","success");
+}
+async function saveNewVibeBoard(){
+  const name=(S._vibeBoardDraft?.name||"").trim();
+  const images=S._vibeBoardDraft?.images||[];
+  if(!name){toast("Give this Vibe Board a name","error");return;}
+  if(images.length<2){toast("Add at least 2 images","error");return;}
+  toast("Saving…","");
+  try{
+    // Reuses the exact same upload/persistence discipline established for
+    // Character Presets: raw data URLs pass through untouched, base64 gets
+    // uploaded once to Firebase Storage; and the same defensive guard
+    // against S.vibeBoards being read before the app's boot-time init has
+    // finished, which was the confirmed cause of an earlier, very similar
+    // bug with character presets silently failing to save.
+    const hosted=await Promise.all(images.map(async u=>{
+      if(!u.startsWith("data:"))return u;
+      const blob=dataUrlToBlob(u);
+      const path=`vibe-boards/${Date.now()}_${Math.random().toString(36).slice(2,6)}.jpg`;
+      const ref=fbStorage.ref(path);
+      await ref.put(blob);
+      return ref.getDownloadURL();
+    }));
+    S.vibeBoards=S.vibeBoards||gs("vibe_boards",[])||[];
+    S.vibeBoards.push({id:"vibe_"+Date.now(),name,images:hosted,createdAt:new Date().toISOString()});
+    saveSetting("vibe_boards",S.vibeBoards);
+    toast(`"${name}" saved`,"success");
+    openVibeBoardScreen();
+  }catch(err){
+    toast("Couldn't save: "+err.message,"error");
+  }
+}
+function deleteVibeBoard(id){
+  S.vibeBoards=(S.vibeBoards||[]).filter(b=>b.id!==id);
+  saveSetting("vibe_boards",S.vibeBoards);
+  renderVibeBoardList();
+}
+// The actual payoff: loads a saved board straight into Image Gen's real
+// multi-reference system and opens the module ready to generate with it.
+function useVibeBoard(id){
+  const board=(S.vibeBoards||[]).find(b=>b.id===id);
+  if(!board)return;
+  switchMod("imagegen",document.querySelector('[data-mod="imagegen"]'));
+  setTimeout(()=>{
+    const model=document.getElementById("igModel")?.value;
+    const cap=(typeof IMAGE_MODEL_CAPABILITIES!=="undefined"&&IMAGE_MODEL_CAPABILITIES[model])||{};
+    const maxRef=cap.maxRef||4;
+    S.igMultiRefImages=board.images.slice(0,maxRef);
+    if(typeof renderIgMultiRefPreview==="function")renderIgMultiRefPreview();
+    if(typeof updateIgAttachmentBar==="function")updateIgAttachmentBar();
+    if(board.images.length>maxRef)toast(`"${board.name}" has ${board.images.length} images — this model only takes ${maxRef}, so the first ${maxRef} were loaded`,"");
+    else toast(`"${board.name}" loaded — ${board.images.length} reference image${board.images.length!==1?'s':''}`,"success");
+  },50);
 }
 // Audio isn't tab-based like Image/Video's Generate|Gallery split — renderAudio
 // builds ONE long page with every tool (Voiceover, Voice Cloning, Voice
