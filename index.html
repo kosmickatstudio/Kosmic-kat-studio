@@ -1881,7 +1881,7 @@ const IMG_SUBMODULES={
   "Vibe Board":{icon:"brush",blurb:"Drop in a few reference images and distill them into one focused look to generate from."},
   "Identity Lock":{icon:"lock",blurb:"Train a character once so their face and build hold steady across every future image — built on the same LoRA training already in Characters."},
   "Persona Studio":{icon:"orbit",blurb:"Build and manage a recurring invented persona for ongoing content, not a one-off character."},
-  "Aesthetic Reel":{icon:"camera",blurb:"A running feed of generations in one visual style, for scrolling through a look rather than a single image."},
+  "Aesthetic Reel":{icon:"image",blurb:"Pick a locked persona or character and a themed pack — one tap generates a whole curated multi-shot set, like a viral photo-dump carousel."},
   "Light Studio":{icon:"bulb",blurb:"Adjust an existing image's lighting — direction, color, brightness — without re-generating the whole scene."},
   "Touch-Up":{icon:"pencil",blurb:"Mask a specific area of an image and describe just the change you want there."},
   "Detail Boost":{icon:"search",blurb:"Push resolution and fine detail up on an image you already have."},
@@ -12426,10 +12426,12 @@ function openFeaturePlaceholder(name,info,parentMod,parentLabel,el){
 function openImgSubFromSidebar(name,el){
   document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
   if(el)el.classList.add("active");
-  // Vibe Board and Persona Studio are real, working features (see below) —
-  // everything else in Image Studio is still the empty scaffold from earlier.
+  // Vibe Board, Persona Studio, and Aesthetic Reel (built as a Photo Dump —
+  // see below) are real, working features — everything else in Image
+  // Studio is still the empty scaffold from earlier.
   if(name==="Vibe Board"){openVibeBoardScreen();return;}
   if(name==="Persona Studio"){openPersonaStudioScreen();return;}
+  if(name==="Aesthetic Reel"){openPhotoDumpScreen();return;}
   openFeaturePlaceholder(name,IMG_SUBMODULES[name],"imagegen","Image",el);
 }
 // ── VIBE BOARD ───────────────────────────────────────────────────────────
@@ -13007,6 +13009,131 @@ function renderPersonaContentLogUI(){
       <span>${escapeHtml(e.title)}${e.platform?` · ${escapeHtml(e.platform)}`:''}</span>
       <button onclick="removePersonaContentLogEntry('${S._personaEditId}','${e.id}')" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:12px">✕</button>
     </div>`).join(''):`<div style="font-size:11px;color:var(--textm)">No posts logged yet.</div>`;
+}
+
+// ── PHOTO DUMP (built as the real "Aesthetic Reel") ─────────────────────
+// Modeled on Higgsfield's Soul Photodump (confirmed via their own writeup:
+// built on Soul ID, generates a full curated set of themed photos — settings,
+// outfits, moods — of one consistent identity, in named packs like "Cool
+// Girl Dump"). Same mechanic here, built on THIS app's existing systems:
+// - "Consistent identity" is already solved — Persona Studio and Character
+//   Bible both produce an Identity Lock string. Photo Dump doesn't
+//   reinvent that; it just requires one to exist before offering a pack.
+// - Generation reuses the existing Image Gen chat pipeline
+//   (sendIgChatPrompt) exactly as a person would type it — each scene in
+//   a pack becomes one chat message built from lock + scene description,
+//   sent through the same code path, same models, same cost logging.
+//
+// Packs are seeded from what was directly observed (Sleepy Head, Zen, and
+// an unlabeled fashion/portrait pack named "Main Character" here) at a
+// smaller shot count than Higgsfield's real ~15-shot dumps — deliberately
+// data-driven so more packs or longer packs can be added later without
+// touching any generation logic.
+const PHOTODUMP_PACKS={
+  "Sleepy Head":[
+    "fast asleep on a bed atop a sunlit desert sand dune, warm golden-hour light, cozy blanket, peaceful mood",
+    "asleep leaning against a train window seat, soft cool light, gentle motion blur outside, travel mood",
+    "asleep on a bed during a nighttime thunderstorm, dramatic lightning flashing through the window",
+    "asleep on a mattress on the floor of an empty sunlit room, soft diffused daylight, minimal space"
+  ],
+  "Zen":[
+    "sitting cross-legged in meditation on a rooftop overlooking a misty city skyline and river at dawn",
+    "meditating on a beach as lightning strikes over the ocean in the distance, dramatic sky",
+    "meditating on the hood of a car in heavy night rain, neon city lights reflecting on wet ground",
+    "meditating in an open grass field beside ancient standing stones, overcast moody sky"
+  ],
+  "Main Character":[
+    "wearing a bridal veil, sitting pensively alone at an outdoor café table, soft wistful mood",
+    "wearing a red beret and trench coat, walking a rainy city street holding a film camera",
+    "wearing an elegant traditional qipao dress, warm portrait against a plain backdrop",
+    "wind-blown hair, moody dark eye makeup, close-up emotional portrait"
+  ]
+};
+
+function openPhotoDumpScreen(){
+  document.querySelectorAll(".mod-btn").forEach(b=>b.classList.remove("active"));
+  const tabsEl=document.getElementById("moduleTabs");
+  if(tabsEl){tabsEl.style.display="none";tabsEl.innerHTML="";}
+  const el=document.getElementById("moduleContent");
+  if(!el)return;
+  S._photodumpSourceId=S._photodumpSourceId||null;
+  el.innerHTML=`
+    <button class="btn btn-outline btn-sm" style="margin-bottom:14px" onclick="switchMod('imagegen',document.querySelector('[data-mod=imagegen]'))">← Back to Image</button>
+    <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:17px;margin-bottom:4px">${pIcon("image",16)} Aesthetic Reel</div>
+    <div style="font-size:11.5px;color:var(--textm);margin-bottom:16px">Pick a persona or character with a locked identity, pick a themed pack — one tap generates the whole curated set, like a viral photo-dump carousel.</div>
+    <div id="photodumpSourcePicker"></div>
+    <div id="photodumpPackPicker"></div>`;
+  renderPhotodumpSourcePicker();
+}
+
+// Either a saved Persona or a Character Bible entry can be the identity
+// source — both produce the same kind of Identity Lock string, and Photo
+// Dump doesn't care which system it came from.
+function getPhotodumpSources(){
+  const personas=(S.personas||[]).filter(p=>p.lock).map(p=>({id:"persona_"+p.id,label:p.name,lock:p.lock,personaId:p.id}));
+  const chars=(S.characters||[]).filter(c=>c.lock).map(c=>({id:"char_"+c.id,label:c.name,lock:c.lock,personaId:null}));
+  return [...personas,...chars];
+}
+
+function renderPhotodumpSourcePicker(){
+  const wrap=document.getElementById("photodumpSourcePicker");
+  if(!wrap)return;
+  const sources=getPhotodumpSources();
+  if(!sources.length){
+    wrap.innerHTML=`<div style="text-align:center;padding:30px 20px;color:var(--textm);font-size:12px">No personas or characters with an Identity Lock yet. Build one in Persona Studio or Character Bible first — Photo Dump needs a locked identity to stay consistent across shots.</div>`;
+    return;
+  }
+  wrap.innerHTML=`<label class="f-label">1. Choose a persona or character</label>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+      ${sources.map(s=>`<button type="button" class="btn ${S._photodumpSourceId===s.id?'btn-primary':'btn-outline'} btn-sm" onclick="S._photodumpSourceId='${s.id}';renderPhotodumpSourcePicker()">${escapeHtml(s.label)}</button>`).join('')}
+    </div>
+    <div id="photodumpPackPicker"></div>`;
+  renderPhotodumpPackPicker();
+}
+
+function renderPhotodumpPackPicker(){
+  const wrap=document.getElementById("photodumpPackPicker");
+  if(!wrap)return;
+  if(!S._photodumpSourceId){wrap.innerHTML="";return;}
+  wrap.innerHTML=`<label class="f-label">2. Choose a pack</label>` +
+    Object.keys(PHOTODUMP_PACKS).map(name=>`
+    <div style="background:var(--lav);border-radius:12px;padding:12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:700;color:var(--violet);font-size:13.5px">${escapeHtml(name)}</div>
+        <div style="font-size:10.5px;color:var(--textm)">${PHOTODUMP_PACKS[name].length} shots</div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="runPhotodump(${JSON.stringify(name)})">Generate</button>
+    </div>`).join('');
+}
+
+// Sends each scene in the pack through the app's real Image Gen chat
+// pipeline, one at a time (awaited in sequence, matching how a person
+// would generate a set by hand) rather than firing all requests at once.
+async function runPhotodump(packName){
+  const sources=getPhotodumpSources();
+  const src=sources.find(s=>s.id===S._photodumpSourceId);
+  const pack=PHOTODUMP_PACKS[packName];
+  if(!src||!pack)return;
+  switchMod("imagegen",document.querySelector("[data-mod=imagegen]"));
+  if(typeof showIgChatView==="function")showIgChatView();
+  toast(`🎬 Generating "${packName}" — ${pack.length} shots for ${src.label}`,"success");
+  for(let i=0;i<pack.length;i++){
+    const inputEl=document.getElementById("igChatInput");
+    if(!inputEl){toast("Couldn't reach Image Gen chat — try again from the Image tab","error");break;}
+    inputEl.value=`${src.lock}, ${pack[i]}`;
+    inputEl.dispatchEvent(new Event("input"));
+    toast(`Shot ${i+1} of ${pack.length}…`,"");
+    await sendIgChatPrompt();
+  }
+  if(src.personaId){
+    const p=(S.personas||[]).find(x=>x.id===src.personaId);
+    if(p){
+      p.contentLog=p.contentLog||[];
+      p.contentLog.push({id:"log_"+Date.now(),title:`${packName} photo dump`,platform:"Aesthetic Reel",date:new Date().toISOString()});
+      saveSetting("personas",S.personas);
+    }
+  }
+  toast(`✅ "${packName}" photo dump complete`,"success");
 }
 
 // Audio isn't tab-based like Image/Video's Generate|Gallery split — renderAudio
