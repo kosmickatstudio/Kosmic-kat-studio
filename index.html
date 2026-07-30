@@ -1903,6 +1903,27 @@ const IMG_SUBMODULES={
   "Wardrobe Studio":{icon:"hanger",blurb:"Generate a themed set of outfit/style variations for one character."},
 };
 
+// Grouped by TASK rather than build order or alphabetical. A flat list of
+// 13 items is exactly the failure mode Baymard's 2025 nav benchmark flags
+// most often — people start feeling overwhelmed past ~10 ungrouped
+// options, worse on mobile. Three groups, mirroring how Higgsfield itself
+// splits Create vs Edit vs Sets rather than one long tool list, each kept
+// under Baymard's "manageable chunk" size:
+// - Create & Direct: build something new, ordered as a rough pipeline —
+//   loose ideas → a distilled look → a locked identity → a recurring
+//   persona built on it → shot direction → sketch-to-render.
+// - Edit & Fix: change something that already exists. Touch-Up first
+//   (fixes any spot, broadest use) down to the more specific swaps.
+// - Sets & Style: multi-shot/batch output rather than a single image.
+// This is presentation order only — IMG_SUBMODULES above stays
+// untouched as the actual data (icon/blurb), so nothing that reads from
+// it by key needs to change.
+const IMG_SUBMODULE_GROUPS=[
+  {label:"Create & Direct",keys:["Idea Board","Vibe Board","Identity Lock","Persona Studio","Camera Craft","Sketch to Scene"]},
+  {label:"Edit & Fix",keys:["Touch-Up","Light Studio","Image Upscale","Face Shift","Cast Swap"]},
+  {label:"Sets & Style",keys:["Aesthetic Reel","Wardrobe Studio"]},
+];
+
 function handleTabSwitch(mod,name){
   if(mod==="projects"){
     if(name==="Assets"){switchMod('assets',document.querySelector('[data-mod=assets]'));return;}
@@ -12400,10 +12421,12 @@ function openVidSubFromSidebar(name,el){
 function renderImgStudioSidebarRows(){
   const wrap=document.getElementById("imgStudioSubRows");
   if(!wrap||typeof IMG_SUBMODULES==="undefined")return;
-  wrap.innerHTML=Object.keys(IMG_SUBMODULES).map(name=>
-    `<button class="mod-btn" data-mod="imagegen" onclick="openImgSubFromSidebar('${name.replace(/'/g,"\\'")}',this)">
-      <span class="mod-icon">${pIcon(IMG_SUBMODULES[name].icon,15)}</span><span class="mod-label">${escapeHtml(name)}</span>
-    </button>`
+  wrap.innerHTML=IMG_SUBMODULE_GROUPS.map(group=>`
+    <div style="padding:10px 14px 4px;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--textm);opacity:0.75">${escapeHtml(group.label)}</div>
+    ${group.keys.map(name=>IMG_SUBMODULES[name]?`
+      <button class="mod-btn" data-mod="imagegen" onclick="openImgSubFromSidebar('${name.replace(/'/g,"\\'")}',this)">
+        <span class="mod-icon">${pIcon(IMG_SUBMODULES[name].icon,15)}</span><span class="mod-label">${escapeHtml(name)}</span>
+      </button>`:'').join('')}`
   ).join('');
 }
 // Clicking one of the 14 needs three things switchMod alone doesn't do:
