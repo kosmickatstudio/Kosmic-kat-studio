@@ -1114,6 +1114,7 @@ const API_SERVICES = [
   {key:"aicredits", label:"AICredits", ph:"sk-…", mod:"aicredits"},
   {key:"falai", label:"fal.ai", ph:"…", mod:"imagegen"},
   {key:"replicate", label:"Replicate", ph:"r8_…", mod:"imagegen"},
+  {key:"bfl", label:"Black Forest Labs (FLUX direct)", ph:"…", mod:"imagegen"},
   {key:"elevenlabs", label:"ElevenLabs", ph:"…", mod:"audio"},
   {key:"suno", label:"Suno AI", ph:"…", mod:"audio"},
   {key:"kling", label:"Kling", ph:"…", mod:"videocanvas"},
@@ -11877,7 +11878,7 @@ function toggleSpSection(titleEl){
 
 function updateSidebarApiStatus(){
   // image gen module
-  const hasImg=gs("api_falai")||gs("api_replicate");
+  const hasImg=gs("api_falai")||gs("api_replicate")||gs("api_bfl");
   const imgBtn=document.querySelector("[data-mod=imagegen]");
   if(imgBtn){const badge=imgBtn.querySelector(".mod-badge-api");if(badge)badge.style.display=hasImg?"inline-flex":"none";}
   // audio
