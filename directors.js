@@ -131,18 +131,103 @@ function setEpisodeDirector(projectId,email){
   toast(`🎬 ${email} set as Episode Director for ${p.name}`,"success");
 }
 
-function renderDirectors(el){
+// ── STYLE CONSOLE — mini-box + bottom-sheet pattern, mirrors Image Gen /
+// Video Canvas's own settings-sheet UX (ig-settings-sheet/ig-settings-backdrop
+// CSS is shared/generic, reused here rather than duplicated). Style Signature,
+// Style Intelligence, and AI Creative Feedback each collapse to a compact
+// tappable trigger box; tapping opens the one shared sheet with that
+// section's full content, same "trigger box → sheet" feel as igStyleTrigger/
+// igRatioTrigger in Image Gen's settings. dirSheetSection tracks which
+// section (if any) is currently open, purely so select/clear actions below
+// can reopen the sheet after their full-page re-render instead of leaving
+// the user dumped back at a closed sheet mid-browse. ──
+let dirSheetSection=null;
+
+function dirTriggerInner(icon,text){
+  return `<div style="width:26px;height:26px;border-radius:8px;background:var(--lav);color:var(--violet);display:flex;align-items:center;justify-content:center;flex-shrink:0">${pIcon(icon,14)}</div><div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${text}</div>`;
+}
+
+function dirSheetBody(section){
   const activeId=gs("active_director","");
   const activeStyleRef=gs("active_style_ref","");
   const cats=[...new Set(STYLE_LIBRARY.map(s=>s.cat))];
+  if(section==="styleref"){
+    return `
+      <div class="ig-sheet-header"><div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">${pIcon('doc',15)} Style Intelligence</div><button class="ig-icon-btn" onclick="closeDirSheet()" title="Close">✕</button></div>
+      <div style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Layer a real director/animator/composer reference on top of your active Assistant Director.</div>
+        <input class="f-input" id="styleLibSearch" placeholder="Search by name…" oninput="filterStyleLibrary()" style="margin-bottom:10px">
+        ${activeStyleRef?`<div style="margin-bottom:10px"><span class="badge badge-green">${pIcon('check',9)} Layered: ${STYLE_LIBRARY.find(s=>s.name===activeStyleRef)?.name}</span> <button class="btn btn-ghost btn-xs" onclick="clearStyleRef()">✕ Remove</button></div>`:''}
+        <div id="styleLibList">${cats.map(cat=>`
+          <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.4px;margin:10px 0 6px">${cat}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${STYLE_LIBRARY.filter(s=>s.cat===cat).map(s=>`<button class="btn ${activeStyleRef===s.name?'btn-primary':'btn-outline'} btn-xs style-lib-item" data-name="${s.name.toLowerCase()}" onclick="selectStyleRef('${s.name.replace(/'/g,"\\'")}')" title="${s.style.replace(/"/g,'&quot;')}">${s.name}</button>`).join('')}
+          </div>`).join('')}</div>
+      </div>`;
+  }
+  if(section==="signature"){
+    const dirObj=activeId?getAllDirectors().find(d=>d.id===activeId):null;
+    const styleObj=activeStyleRef?STYLE_LIBRARY.find(s=>s.name===activeStyleRef):null;
+    return `
+      <div class="ig-sheet-header"><div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">${pIcon('image',15)} Style Signature</div><button class="ig-icon-btn" onclick="closeDirSheet()" title="Close">✕</button></div>
+      <div style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--textm);margin-bottom:8px">This is the exact style text being woven into every prompt right now.</div>
+        <div style="font-size:12px;color:var(--text);line-height:1.6;font-family:monospace;background:rgba(61,31,122,0.05);border-radius:8px;padding:10px">${getActiveDirectorPrompt()||'—'}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          ${dirObj?`<span class="badge badge-violet">${dirObj.name} <span style="cursor:pointer;margin-left:4px" onclick="event.stopPropagation();clearDirector()">✕</span></span>`:''}
+          ${styleObj?`<span class="badge badge-green">${styleObj.name} <span style="cursor:pointer;margin-left:4px" onclick="event.stopPropagation();clearStyleRef()">✕</span></span>`:''}
+          ${!dirObj&&!styleObj?`<span style="font-size:11px;color:var(--textm)">Nothing layered yet — pick an Assistant Director above, or a Style Reference.</span>`:''}
+        </div>
+      </div>`;
+  }
+  if(section==="feedback"){
+    return `
+      <div class="ig-sheet-header"><div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">${pIcon('search',15)} AI Creative Feedback</div><button class="ig-icon-btn" onclick="closeDirSheet()" title="Close">✕</button></div>
+      <div style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Paste a hook or opening shot and your configured AI Brain (set on Home, or in Settings) reads it like a sharp editor would — hook strength, pacing risk, what's generic, one concrete fix. No API anywhere can give a validated "virality score", so this deliberately doesn't pretend to.</div>
+        <div class="f-group">
+          <label class="f-label">Paste your hook / opening line / shot description</label>
+          <textarea class="f-textarea" id="feedbackInput" placeholder="e.g. Opens on a galaxy cat leaping through nebula clouds, camera whip-pans to reveal a cyberpunk city below…" style="min-height:70px"></textarea>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="analyzeShotFeedback()">${pIcon('search',14)} Get Feedback</button>
+        <div id="feedbackResult" style="margin-top:12px"></div>
+      </div>`;
+  }
+  return '';
+}
+
+function openDirSheet(section){
+  dirSheetSection=section;
+  const body=document.getElementById("dirSheetBody");
+  const panel=document.getElementById("dirSheetPanel");
+  const backdrop=document.getElementById("dirSheetBackdrop");
+  if(!body||!panel)return;
+  body.innerHTML=dirSheetBody(section);
+  panel.classList.add("open");
+  if(backdrop)backdrop.classList.add("show");
+}
+
+function closeDirSheet(){
+  dirSheetSection=null;
+  const panel=document.getElementById("dirSheetPanel");
+  const backdrop=document.getElementById("dirSheetBackdrop");
+  if(panel)panel.classList.remove("open");
+  if(backdrop)backdrop.classList.remove("show");
+}
+
+function renderDirectors(el){
+  const activeId=gs("active_director","");
+  const activeStyleRef=gs("active_style_ref","");
   const allDirectors=getAllDirectors();
   const hierarchyProjectId=S.hierarchyProjectId||(S.projects[0]&&S.projects[0].id)||"";
   const activeStyleObj=activeStyleRef?STYLE_LIBRARY.find(s=>s.name===activeStyleRef):null;
+  const activeDirObj=activeId?allDirectors.find(d=>d.id===activeId):null;
+  const hasLayer=!!(activeDirObj||activeStyleObj);
   el.innerHTML=`
     ${renderHierarchyPanel(hierarchyProjectId,activeId,allDirectors)}
     <div style="margin-bottom:14px">
       <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--violet)">${pIcon('film',18)} Directorial Studio</div>
-      <div style="font-size:11px;color:var(--textm);margin-top:2px">${activeId?`Active: ${allDirectors.find(d=>d.id===activeId)?.name||''} — style is auto-injected into AI Director chat and Image/Video prompts`:'Select a director to shape the visual style of every generation'}</div>
+      <div style="font-size:11px;color:var(--textm);margin-top:2px">${activeId?`Active: ${activeDirObj?.name||''} — style is auto-injected into AI Director chat and Image/Video prompts`:'Select a director to shape the visual style of every generation'}</div>
     </div>
     <div class="grid2">${allDirectors.map(d=>{
       const bg=DIRECTOR_BANNERS[d.cls]||"linear-gradient(135deg,#3D1F7A,#6240B0)";
@@ -158,36 +243,28 @@ function renderDirectors(el){
           ${activeId===d.id?`<div style="margin-top:6px"><span class="badge badge-green">${pIcon('check',9)} Active</span></div>`:''}
         </div>
       </div>`;}).join('')}</div>
-    ${(activeId||activeStyleRef)?`<div class="panel" style="margin-top:14px">
-      <div class="panel-title">${pIcon('image',15)} Style Signature</div>
-      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">This is the exact style text being woven into every prompt right now.</div>
-      <div style="font-size:12px;color:var(--text);line-height:1.6;font-family:monospace;background:rgba(61,31,122,0.05);border-radius:8px;padding:10px">${getActiveDirectorPrompt()||'—'}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-        ${activeId?`<span class="badge badge-violet">${allDirectors.find(d=>d.id===activeId)?.name||''} <span style="cursor:pointer;margin-left:4px" onclick="event.stopPropagation();clearDirector()">✕</span></span>`:''}
-        ${activeStyleObj?`<span class="badge badge-green">${activeStyleObj.name} <span style="cursor:pointer;margin-left:4px" onclick="event.stopPropagation();clearStyleRef()">✕</span></span>`:''}
-      </div>
-    </div>`:''}
 
     <div class="panel" style="margin-top:14px">
-      <div class="panel-title">${pIcon('doc',15)} Style Intelligence <span style="font-weight:400;color:var(--texts);font-size:11px">— layer a real director/animator/composer reference on top</span></div>
-      <input class="f-input" id="styleLibSearch" placeholder="Search by name…" oninput="filterStyleLibrary()" style="margin-bottom:10px">
-      ${activeStyleRef?`<div style="margin-bottom:10px"><span class="badge badge-green">${pIcon('check',9)} Layered: ${STYLE_LIBRARY.find(s=>s.name===activeStyleRef)?.name}</span> <button class="btn btn-ghost btn-xs" onclick="clearStyleRef()">✕ Remove</button></div>`:''}
-      <div id="styleLibList">${cats.map(cat=>`
-        <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.4px;margin:10px 0 6px">${cat}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">
-          ${STYLE_LIBRARY.filter(s=>s.cat===cat).map(s=>`<button class="btn ${activeStyleRef===s.name?'btn-primary':'btn-outline'} btn-xs style-lib-item" data-name="${s.name.toLowerCase()}" onclick="selectStyleRef('${s.name.replace(/'/g,"\\'")}')" title="${s.style.replace(/"/g,'&quot;')}">${s.name}</button>`).join('')}
-        </div>`).join('')}</div>
+      <div class="panel-title">${pIcon('sparkle',15)} Style Console <span style="font-weight:400;color:var(--texts);font-size:11px">— tap a box to open</span></div>
+      <div class="f-row">
+        <div class="f-group">
+          <label class="f-label">Style Reference</label>
+          <div id="dirStyleRefTrigger" onclick="openDirSheet('styleref')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)">${dirTriggerInner('doc',activeStyleObj?activeStyleObj.name:'None selected')}</div>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Style Signature</label>
+          <div id="dirSignatureTrigger" onclick="openDirSheet('signature')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)">${dirTriggerInner('image',hasLayer?'Layered — tap to view':'Not layered yet')}</div>
+        </div>
+      </div>
+      <div class="f-group" style="margin-top:2px">
+        <div id="dirFeedbackTrigger" onclick="openDirSheet('feedback')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:10px 12px;cursor:pointer;background:var(--surface)">${dirTriggerInner('search','AI Creative Feedback — get an honest read on your hook')}</div>
+      </div>
     </div>
 
-    <div class="panel" style="margin-top:14px">
-      <div class="panel-title">${pIcon('search',15)} AI Creative Feedback <span style="font-weight:400;color:var(--texts);font-size:11px">— your AI Brain's honest read, not a virality predictor</span></div>
-      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Paste a hook or opening shot and your configured AI Brain (set below on Home, or in Settings) reads it like a sharp editor would — hook strength, pacing risk, what's generic, one concrete fix. No API anywhere can give a validated "virality score", so this deliberately doesn't pretend to.</div>
-      <div class="f-group">
-        <label class="f-label">Paste your hook / opening line / shot description</label>
-        <textarea class="f-textarea" id="feedbackInput" placeholder="e.g. Opens on a galaxy cat leaping through nebula clouds, camera whip-pans to reveal a cyberpunk city below…" style="min-height:70px"></textarea>
-      </div>
-      <button class="btn btn-primary btn-full" onclick="analyzeShotFeedback()">${pIcon('search',14)} Get Feedback</button>
-      <div id="feedbackResult" style="margin-top:12px"></div>
+    <div class="ig-settings-backdrop" id="dirSheetBackdrop" onclick="closeDirSheet()"></div>
+    <div class="ig-settings-sheet" id="dirSheetPanel">
+      <div class="ig-sheet-handle" ontouchstart="sheetSwipeStart(event)" ontouchmove="sheetSwipeMove(event,'dirSheetPanel')" ontouchend="sheetSwipeEnd(event,'dirSheetPanel','closeDirSheet')"></div>
+      <div id="dirSheetBody"></div>
     </div>
   `;
 }
@@ -222,12 +299,16 @@ function selectStyleRef(name){
   const current=gs("active_style_ref","");
   saveSetting("active_style_ref",current===name?"":name);
   toast(current===name?"Style reference removed":`📚 ${name} layered onto generation prompts`,"success");
+  const reopen=dirSheetSection;
   renderDirectors(document.getElementById("moduleContent"));
+  if(reopen)openDirSheet(reopen);
 }
 
 function clearStyleRef(){
   saveSetting("active_style_ref","");
+  const reopen=dirSheetSection;
   renderDirectors(document.getElementById("moduleContent"));
+  if(reopen)openDirSheet(reopen);
 }
 
 function selectDirector(id,el){
@@ -236,13 +317,17 @@ function selectDirector(id,el){
   saveSetting("active_director",id);
   const d=getAllDirectors().find(x=>x.id===id);
   toast(`${d?d.name:'Director'} selected — style now injected into AI Director & generation prompts`,"success");
+  const reopen=dirSheetSection;
   renderDirectors(document.getElementById("moduleContent"));
+  if(reopen)openDirSheet(reopen);
 }
 
 function clearDirector(){
   saveSetting("active_director","");
   toast("Director cleared","");
+  const reopen=dirSheetSection;
   renderDirectors(document.getElementById("moduleContent"));
+  if(reopen)openDirSheet(reopen);
 }
 
 function getActiveDirectorPrompt(){
