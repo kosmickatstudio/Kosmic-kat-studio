@@ -3648,19 +3648,20 @@ const MODEL_LOGOS={
   // official first-party source, not a third-party redistribution), using
   // the icon-only "K" mark meant for exactly this kind of small badge use.
   kimi:{img:"https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-color.svg",bg:"#1a1a1a22"},
-  // Grok's icon-only mark, verified on Wikimedia Commons (CC BY-SA 4.0).
-  grok:{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Grok_logo_without_text.svg",bg:"#00000022"},
-  // ByteDance is the parent company behind both Seedream and Seedance —
-  // neither sub-product has its own distinct Commons-hosted icon yet, so
-  // the parent mark represents both, same principle as Veo reusing Google's
-  // Gemini mark below.
-  bytedance:{img:"https://commons.wikimedia.org/wiki/Special:FilePath/ByteDance_logo_English.svg",bg:"#16182322"},
-  stabilityai:{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Stability_Ai_%E2%80%94_wordmark.png",bg:"#0a0a0a22"},
+  // Grok deliberately stays a monogram, not a logo image. xAI itself no
+  // longer exists as a standalone brand — it fully merged into SpaceX and
+  // rebranded to "SpaceXAI" on July 6, 2026 (API/model names unaffected,
+  // visual identity was not). On top of that, Grok's own app icon has been
+  // redesigned at least 3 times since 2023, and the Wikimedia Commons files
+  // available are from ambiguous/undated eras — none could be confirmed as
+  // the current mark. A plain monogram beats guessing wrong here.
+  grok:{mono:"Gr",bg:"#00000022"},
+  // Black Forest Labs' own official brand page (bfl.ai/brand) provides this
+  // icon-only "Symbol" mark explicitly for small-scale use where the full
+  // wordmark logo would be unreadable — exactly this badge's use case.
+  // First-party source, not a third-party redistribution.
+  blackforestlabs:{img:"https://bfl.ai/brand/symbol-black.svg",bg:"#00000015"},
   aicredits:{mono:"AC",bg:"#8B5CF6"},
-  "bytedance/seedance-2.0/fast/text-to-video":{mono:"SD",bg:"#0C8CE9"},
-  "bytedance/seedance-2.0/text-to-video":{mono:"SD",bg:"#0C8CE9"},
-  "bytedance/seedance-2.0/fast/reference-to-video":{mono:"SD",bg:"#0C8CE9"},
-  "bytedance/seedance-2.0/reference-to-video":{mono:"SD",bg:"#0C8CE9"},
   "fal-ai/kling-video/v2.1/master/text-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/kling-video/v2.6/pro/text-to-video":{mono:"K",bg:"#1B5EFF"},
   "fal-ai/kling-video/v3/standard/text-to-video":{mono:"K",bg:"#1B5EFF"},
@@ -3681,16 +3682,22 @@ function modelBadgeHtml(key,size){
 }
 // Verified-logo routing first, honest monogram fallback where no genuine
 // official mark could be confirmed on Wikimedia Commons or the provider's
-// own site (Black Forest Labs/FLUX, Ideogram, Recraft, Bria, Kling) — a
-// plain gradient monogram doesn't claim to BE anyone's trademark, so it's
-// the safer default over guessing at an unverified logo source.
+// own site. Seedream and Seedance get DISTINCT monograms rather than
+// sharing one badge — they're sibling products from the same ByteDance Seed
+// lab, but the same icon on two different models in a picker just reads as
+// "these are identical," which isn't true and isn't the point of a badge.
+// Ideogram, Recraft, Bria, Kling, and Stable Diffusion stay monograms too —
+// checked, no confirmed official icon-only mark exists for any of them
+// outside third-party icon-scraper sites with no clear rights chain back to
+// the trademark owner, which isn't a safer bet than a plain monogram.
 function guessImageModelBadge(key){
   if(!key)return null;
-  if(key.includes("flux"))return{mono:"FX",bg:"#1A1A2E"};
+  if(key.includes("flux"))return MODEL_LOGOS.blackforestlabs;
   if(key.includes("ideogram"))return{mono:"ID",bg:"#6D28D9"};
   if(key.includes("recraft"))return{mono:"RC",bg:"#F97316"};
-  if(key.includes("stable-diffusion"))return MODEL_LOGOS.stabilityai;
-  if(key.includes("seedream")||key.includes("seedance")||key.includes("bytedance"))return MODEL_LOGOS.bytedance;
+  if(key.includes("stable-diffusion"))return{mono:"SD",bg:"#8B5CF6"};
+  if(key.includes("seedream"))return{mono:"Sd",bg:"#FE2C55"};
+  if(key.includes("seedance"))return{mono:"Se",bg:"#161823"};
   if(key.includes("kling"))return{mono:"K",bg:"#1B5EFF"};
   if(key.includes("bria"))return{mono:"Fb",bg:"#3D1F7A"};
   if(key.includes("veo"))return MODEL_LOGOS.gemini;
