@@ -38,24 +38,32 @@
 // Move/End, afChatHistory in STATE_KEY_MAP — all defined there).
 // ══════════════════════════════════════════════════════════════════════
 
+// Each agent's badge now renders the provider's real official logo via the
+// shared modelBadgeHtml()/MODEL_LOGOS registry (defined in index.html,
+// already used for the Image/Video model pickers) — not a hand-drawn
+// monogram. logoKey below is the exact MODEL_LOGOS key for that provider's
+// verified mark (Claude/OpenAI/Gemini/Kimi/Grok are all Wikimedia Commons
+// or the provider's own official brand-assets page — see MODEL_LOGOS'
+// comments in index.html for sourcing/licensing per mark). See the
+// Settings > API Keys trademark notice for the legal-use disclaimer.
 const AGENTS={
-  claude:{id:"claude",name:"Claude",mono:"Cl",grad:"linear-gradient(135deg,#e8926a,#b4573a)",
+  claude:{id:"claude",name:"Claude",logoKey:"claude",
     hasTextKey:()=>!!gs("api_anthropic",""),hasImageKey:()=>!!gs("api_falai",""),
     imageLabel:"Seedream 5 Pro (via fal.ai)",imageKeyHint:"a fal.ai",
     category:"Balanced all-rounder — reasoning & writing"},
-  gpt:{id:"gpt",name:"GPT",mono:"AI",grad:"linear-gradient(135deg,#10a37f,#054a3a)",
+  gpt:{id:"gpt",name:"GPT",logoKey:"openai",
     hasTextKey:()=>!!gs("api_openai",""),hasImageKey:()=>!!gs("api_openai",""),
     imageLabel:"GPT Image 2",imageKeyHint:"an OpenAI",
     category:"Structured tasks, code, broad knowledge"},
-  gemini:{id:"gemini",name:"Gemini",mono:"Ge",grad:"linear-gradient(135deg,#4285F4,#34a853)",
+  gemini:{id:"gemini",name:"Gemini",logoKey:"gemini",
     hasTextKey:()=>!!gs("api_gemini",""),hasImageKey:()=>!!gs("api_gemini",""),
     imageLabel:"Nano Banana Pro",imageKeyHint:"a Gemini",
     category:"Math, logic, multimodal reasoning"},
-  kimi:{id:"kimi",name:"Kimi",mono:"Ki",grad:"linear-gradient(135deg,#ff6a3d,#7a1f1f)",
+  kimi:{id:"kimi",name:"Kimi",logoKey:"kimi",
     hasTextKey:()=>!!gs("api_falai",""),hasImageKey:()=>!!gs("api_falai",""),
     imageLabel:"FLUX.2 Max (via fal.ai)",imageKeyHint:"a fal.ai",
     category:"Huge context — long docs, deep research"},
-  grok:{id:"grok",name:"Grok",mono:"Gr",grad:"linear-gradient(135deg,#1a1a1a,#4a4a4a)",
+  grok:{id:"grok",name:"Grok",logoKey:"grok",
     hasTextKey:()=>!!gs("api_xai",""),hasImageKey:()=>!!gs("api_xai",""),
     imageLabel:"Grok Imagine",imageKeyHint:"an xAI",
     category:"Current events, blunt/direct takes"},
@@ -247,10 +255,11 @@ function afAgentPickerRow(id,name,desc){
   const isSel=selected===id;
   const agent=AGENTS[id];
   const hasKey=id==="auto"?true:(agent&&agent.hasTextKey());
-  const swatch=id==="auto"?"linear-gradient(135deg,var(--violet),var(--ice))":agent.grad;
-  const mono=id==="auto"?"✦":agent.mono;
+  const badge=id==="auto"
+    ?`<div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--violet),var(--ice));color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">✦</div>`
+    :modelBadgeHtml(agent.logoKey,28);
   return `<div onclick="selectAfAgent('${id}')" style="display:flex;align-items:center;gap:10px;border:1.5px solid ${isSel?'var(--violet)':'var(--border)'};border-radius:12px;padding:9px 12px;cursor:pointer;background:${isSel?'rgba(61,31,122,0.06)':'var(--surface)'}">
-    <div style="width:28px;height:28px;border-radius:8px;background:${swatch};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0">${mono}</div>
+    ${badge}
     <div style="flex:1;min-width:0">
       <div style="font-size:12.5px;font-weight:700;color:var(--text)">${name}${!hasKey?' <span class="badge badge-gray" style="font-size:8px">no key</span>':''}</div>
       <div style="font-size:10.5px;color:var(--textm)">${desc}</div>
@@ -356,13 +365,12 @@ function afEscape(s){
 
 function afRenderAgentCard(msg){
   const agent=AGENTS[msg.agentId];
-  const grad=agent?agent.grad:"linear-gradient(135deg,var(--violet),var(--ice))";
-  const mono=agent?agent.mono:"?";
+  const badge=agent?modelBadgeHtml(agent.logoKey,22):`<div style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--ice));flex-shrink:0"></div>`;
   if(msg.type==="loading"){
     return `<div class="ig-bubble-assistant" style="margin:0"><span class="ig-dot"></span><span class="ig-dot"></span><span class="ig-dot"></span>&nbsp;${msg.agentName} is thinking…</div>`;
   }
   const header=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-      <div style="width:22px;height:22px;border-radius:7px;background:${grad};color:#fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;flex-shrink:0">${mono}</div>
+      ${badge}
       <span style="font-size:11px;font-weight:700;color:var(--violet)">${msg.agentName}${msg.auto?' <span style="font-weight:400;color:var(--textm)">· auto-picked</span>':''}</span>
     </div>`;
   let body="";
