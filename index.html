@@ -846,6 +846,9 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
     <div class="sp-section-body">
       <button class="btn btn-outline btn-sm btn-full" style="margin-bottom:10px" onclick="toggleKeyVisibility()">👁 Show / Hide Keys</button>
       <div id="apiKeyFields"></div>
+      <div style="font-size:10.5px;color:var(--texts);margin-top:12px;padding-top:10px;border-top:1px solid var(--border);line-height:1.5">
+        Provider names and logos shown throughout this app — Anthropic/Claude, OpenAI/GPT, Google/Gemini, Groq, DeepSeek, Moonshot AI/Kimi, xAI/Grok, Black Forest Labs/FLUX, ByteDance/Seedream/Seedance, Stability AI, Kling, and others — are trademarks ™️ of their respective owners. They're shown here only to identify which provider a feature calls through your own API key; this doesn't imply endorsement, sponsorship, or affiliation with Kosmic Kat Studio or MOTIVAI PRIVATE LIMITED. Logos are sourced from each provider's own official brand assets or Wikimedia Commons where a freely-licensed mark exists; where no verified official mark was available, a plain monogram is shown instead rather than an unverified substitute.
+      </div>
     </div>
   </div>
 
@@ -2988,8 +2991,7 @@ function modelTriggerLabelHTML(selectId,kind){
   let found=null;
   for(const g of MODEL_PICKER_SOURCES[kind]||[])for(const i of g.items)if(i.value===value)found=i;
   if(!found)return `<span style="font-size:13px;color:var(--textm)">Choose a model…</span>`;
-  const meta=modelVisualMeta(found.value);
-  return `<div style="width:30px;height:30px;border-radius:8px;background:${meta.grad};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0">${meta.mono}</div>
+  return `${modelBadgeHtml(found.value,30)}
     <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text)">${found.name}</div>${found.sub?`<div style="font-size:10px;color:var(--textm)">${found.sub}</div>`:''}</div>`;
 }
 function renderModelTrigger(selectId,kind){
@@ -3017,10 +3019,9 @@ function openModelPicker(selectId,kind,allowed){
         ${groups.map(g=>`
           <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.4px;margin:14px 4px 6px">${g.label}</div>
           ${g.items.map(i=>{
-            const meta=modelVisualMeta(i.value);
             const selected=i.value===current;
             return `<div onclick="selectModelOption('${selectId}','${i.value}','${kind}')" style="display:flex;align-items:center;gap:11px;padding:10px 10px;border-radius:12px;cursor:pointer;margin-bottom:5px;border:1.5px solid ${selected?'var(--vs)':'transparent'};background:${selected?'var(--lav)':'transparent'}">
-              <div style="width:38px;height:38px;border-radius:10px;background:${meta.grad};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,0.15)">${meta.mono}</div>
+              ${modelBadgeHtml(i.value,38)}
               <div style="flex:1;min-width:0">
                 <div style="font-size:13.5px;font-weight:700;color:var(--text)">${i.name}</div>
                 ${i.sub?`<div style="font-size:11px;color:var(--textm);margin-top:1px">${i.sub}</div>`:''}
@@ -3642,6 +3643,19 @@ const MODEL_LOGOS={
   gemini:{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
   groq:{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Groq_logo.svg",bg:"#F5503622"},
   deepseek:{img:"https://commons.wikimedia.org/wiki/Special:FilePath/DeepSeek-icon.svg",bg:"#4D6BFE22"},
+  // Kimi's mark comes straight from Moonshot AI's own public brand-guidelines
+  // site (moonshotai.github.io/Branding-Guide — their own GitHub Pages, an
+  // official first-party source, not a third-party redistribution), using
+  // the icon-only "K" mark meant for exactly this kind of small badge use.
+  kimi:{img:"https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-color.svg",bg:"#1a1a1a22"},
+  // Grok's icon-only mark, verified on Wikimedia Commons (CC BY-SA 4.0).
+  grok:{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Grok_logo_without_text.svg",bg:"#00000022"},
+  // ByteDance is the parent company behind both Seedream and Seedance —
+  // neither sub-product has its own distinct Commons-hosted icon yet, so
+  // the parent mark represents both, same principle as Veo reusing Google's
+  // Gemini mark below.
+  bytedance:{img:"https://commons.wikimedia.org/wiki/Special:FilePath/ByteDance_logo_English.svg",bg:"#16182322"},
+  stabilityai:{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Stability_Ai_%E2%80%94_wordmark.png",bg:"#0a0a0a22"},
   aicredits:{mono:"AC",bg:"#8B5CF6"},
   "bytedance/seedance-2.0/fast/text-to-video":{mono:"SD",bg:"#0C8CE9"},
   "bytedance/seedance-2.0/text-to-video":{mono:"SD",bg:"#0C8CE9"},
@@ -3657,18 +3671,29 @@ const MODEL_LOGOS={
   "fal-ai/veo3.1":{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
   "fal-ai/veo3.1/reference-to-video":{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
 };
-function modelBadgeHtml(key){
+function modelBadgeHtml(key,size){
+  size=size||30;
   const m=MODEL_LOGOS[key]||guessImageModelBadge(key);
   if(!m)return '';
-  if(m.img)return `<div class="model-badge" style="background:${m.bg}"><img src="${m.img}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`;
-  return `<div class="model-badge mono" style="background:${m.bg}">${m.mono}</div>`;
+  const dim=`width:${size}px;height:${size}px`;
+  if(m.img)return `<div class="model-badge" style="${dim};background:${m.bg}"><img src="${m.img}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`;
+  return `<div class="model-badge mono" style="${dim};background:${m.bg};font-size:${Math.round(size*0.34)}px">${m.mono}</div>`;
 }
+// Verified-logo routing first, honest monogram fallback where no genuine
+// official mark could be confirmed on Wikimedia Commons or the provider's
+// own site (Black Forest Labs/FLUX, Ideogram, Recraft, Bria, Kling) — a
+// plain gradient monogram doesn't claim to BE anyone's trademark, so it's
+// the safer default over guessing at an unverified logo source.
 function guessImageModelBadge(key){
   if(!key)return null;
   if(key.includes("flux"))return{mono:"FX",bg:"#1A1A2E"};
   if(key.includes("ideogram"))return{mono:"ID",bg:"#6D28D9"};
   if(key.includes("recraft"))return{mono:"RC",bg:"#F97316"};
-  if(key.includes("stable-diffusion"))return{mono:"SD",bg:"#8B5CF6"};
+  if(key.includes("stable-diffusion"))return MODEL_LOGOS.stabilityai;
+  if(key.includes("seedream")||key.includes("seedance")||key.includes("bytedance"))return MODEL_LOGOS.bytedance;
+  if(key.includes("kling"))return{mono:"K",bg:"#1B5EFF"};
+  if(key.includes("bria"))return{mono:"Fb",bg:"#3D1F7A"};
+  if(key.includes("veo"))return MODEL_LOGOS.gemini;
   if(key.includes("gemini")||key.includes("nano-banana"))return MODEL_LOGOS.gemini;
   if(key.includes("gpt")||key.includes("openai"))return MODEL_LOGOS.openai;
   return{mono:"AI",bg:"#6B7280"};
