@@ -117,7 +117,22 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .mod-btn.active .mod-label{color:var(--violet);font-weight:700}
 .mod-btn.locked{opacity:0.5;cursor:not-allowed}
 .mod-btn.api-active .mod-badge-api{display:inline-flex}
-.mod-icon{font-size:15px;flex-shrink:0;width:20px;text-align:center}
+.mod-icon{font-size:17px;flex-shrink:0;width:24px;text-align:center}
+/* Dark mode: thin near-white line icons were getting lost against the
+   blurred glass sidebar (--glass is a translucent dark surface, and
+   backdrop-filter blur softens edge contrast further). Rather than
+   recolor every single icon's internal strokes, a stacked multicolour
+   drop-shadow halo — pulling from the same three accent colors used
+   everywhere else in the UI (violet/ice/gold) — makes every icon pop
+   regardless of its own path shape, and reads as "glowing" rather than
+   just "brighter". Left untouched in light mode, where contrast was
+   already fine. */
+html[data-theme="dark"] .mod-icon svg{
+  filter:drop-shadow(0 0 2px var(--violet)) drop-shadow(0 0 3px var(--ice)) drop-shadow(0 0 4px var(--gold));
+}
+html[data-theme="dark"] .mod-btn.active .mod-icon svg{
+  filter:drop-shadow(0 0 3px var(--gold)) drop-shadow(0 0 4px var(--violet)) drop-shadow(0 0 5px var(--ice));
+}
 .mod-label{font-size:12px;color:var(--textm);font-weight:500;white-space:nowrap;overflow:hidden;flex:1}
 .mod-badge{font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;flex-shrink:0}
 .mod-badge.new{background:rgba(16,185,129,0.15);color:var(--green)}
@@ -610,12 +625,13 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
            distinct "character", not just another line icon. Each stroke
            pulls its color from the same theme variables the rest of the
            app uses (--violet/--gold/--ice/--ember/--vs), so it re-colors
-           correctly under dark mode without any extra work. Sized a
-           little larger (24px vs the standard 20px icon column) per
-           request. -->
+           correctly under dark mode without any extra work. It also picks
+           up the dark-mode glow filter for free, since the shared
+           `.mod-icon svg` rule matches any svg in here regardless of
+           this span's own markup. -->
       <button class="mod-btn" data-mod="agentfeline" onclick="switchMod('agentfeline',this)">
-        <span class="mod-icon" style="width:26px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:block">
+        <span class="mod-icon" style="width:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:block">
             <path d="M5 9 L7 2.5 L9.5 8.5" stroke="var(--violet)"/>
             <path d="M19 9 L17 2.5 L14.5 8.5" stroke="var(--gold)"/>
             <path d="M5 9 C3.7 14.5 6 20.5 12 20.5 C18 20.5 20.3 14.5 19 9" stroke="var(--ice)"/>
@@ -12415,7 +12431,7 @@ document.addEventListener("DOMContentLoaded",()=>{
 // SVG once on load.
 function hydrateStaticModIcons(){
   document.querySelectorAll("[data-picon]").forEach(el=>{
-    el.innerHTML=pIcon(el.dataset.picon,15);
+    el.innerHTML=pIcon(el.dataset.picon,18);
   });
 }
 
