@@ -671,6 +671,10 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
         <span class="mod-icon" data-picon="scissors"></span><span class="mod-label">Edit Video</span>
         <span class="mod-badge new">NEW</span>
       </button>
+      <button class="mod-btn" data-mod="topicreel" onclick="switchMod('topicreel',this)">
+        <span class="mod-icon" data-picon="film"></span><span class="mod-label">Topic Reel</span>
+        <span class="mod-badge new">NEW</span>
+      </button>
       <!-- Canvas and Kosmic Engine are genuine LINKS to modules that already
            exist elsewhere in the app (Production House) — not new
            placeholders, and shown under their own real names rather than
@@ -2039,6 +2043,7 @@ function renderModule(mod){
     gallery:renderGallery,
     motioncontrol:renderMotionControl,
     editvideo:renderEditVideo,
+    topicreel:renderTopicReel,
     editor:renderEditor,
     upscaler:renderUpscaler,
     costs:renderCosts,
@@ -12427,6 +12432,7 @@ async function init(){
   S.igChatSessions=S.igChatSessions||gs("ig_chat_sessions",[])||[];
   S.mcResults=S.mcResults||gs("mc_results",[])||[];
   S.evResults=S.evResults||gs("ev_results",[])||[];
+  S.trHistory=S.trHistory||gs("tr_history",[])||[];
   S.characterPresets=S.characterPresets||gs("character_presets",[])||[];
   S.vcChatHistory=S.vcChatHistory||gs("vc_chat_history",[])||[];
   S.klingVoices=S.klingVoices||gs("kling_voices",[])||[];
@@ -12549,7 +12555,6 @@ function restoreSidebarSectionStates(){
 // Canvas and Kosmic Engine are handled separately as real links, not
 // entries in this config — see the sidebar markup comment.
 const VID_SUBMODULES={
-  "Topic Reel":{icon:"film",blurb:"Turn a written topic or script idea into an explainer-style video."},
   "Media Mix":{icon:"dna",blurb:"Combine clips, images, and text into one mixed-media sequence."},
   "Scene Editor":{icon:"pencil",blurb:"Edit individual scenes, shots, and elements of a video already made."},
   "Link to Ad":{icon:"link",blurb:"Turn a product page URL into a short video ad."},
@@ -14070,6 +14075,7 @@ window.addEventListener("resize",()=>{initStars();});
 <script src="nodecanvas.js"></script>
 <script src="motion.js"></script>
 <script src="editvideo.js"></script>
+<script src="topicreel.js"></script>
 <script src="assets.js"></script>
 <script src="gallery.js"></script>
 <script src="characters.js"></script>
