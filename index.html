@@ -667,6 +667,10 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
         <span class="mod-icon" data-picon="play"></span><span class="mod-label">Video</span>
         <span class="mod-badge pro">PRO</span>
       </button>
+      <button class="mod-btn" data-mod="editvideo" onclick="switchMod('editvideo',this)">
+        <span class="mod-icon" data-picon="scissors"></span><span class="mod-label">Edit Video</span>
+        <span class="mod-badge new">NEW</span>
+      </button>
       <!-- Canvas and Kosmic Engine are genuine LINKS to modules that already
            exist elsewhere in the app (Production House) — not new
            placeholders, and shown under their own real names rather than
@@ -2034,6 +2038,7 @@ function renderModule(mod){
     assets:renderAssets,
     gallery:renderGallery,
     motioncontrol:renderMotionControl,
+    editvideo:renderEditVideo,
     editor:renderEditor,
     upscaler:renderUpscaler,
     costs:renderCosts,
@@ -5322,6 +5327,53 @@ const VIDEO_MODEL_CAPABILITIES={
 // dropdown. A real, separate Kling 3.0 Pro endpoint: character actions come
 // from a reference video, visual appearance comes from a reference image.
 // ══════════════════════════════════════════════════════
+// ── MOTION LIBRARY — preset reference-motion clips the user can start from
+// instead of uploading their own reference video, same idea as the
+// reference platform's "Motion Library" tab. Left EMPTY on purpose: this
+// app has no CDN of its own to host sample motion clips, and inventing
+// placeholder video URLs here would ship broken thumbnails/dead links —
+// worse than shipping nothing. To add a preset, push an entry shaped like:
+//   {label:"Walk & Turn",thumbnailUrl:"https://your-cdn/…jpg",videoUrl:"https://your-cdn/…mp4",duration:6}
+// videoUrl must point to a real, publicly reachable .mp4 (same constraints
+// as an uploaded reference video: 340–3850px, 3–30s, ≤100MB). Once
+// populated, "Start from Library" below works exactly like uploading —
+// selectMcLibraryPreset() sets S.mcVideo and re-measures it the same way.
+const MOTION_LIBRARY_PRESETS=[];
+
+function selectMcLibraryPreset(idx){
+  const preset=MOTION_LIBRARY_PRESETS[idx];
+  if(!preset)return;
+  S.mcVideo={dataUrl:preset.videoUrl,name:preset.label,duration:preset.duration||null};
+  if(!preset.duration){
+    // Hosted URL, not a data: URL — measureVideo still works against a
+    // remote src, same as any <video> element would.
+    measureVideo(preset.videoUrl).then(m=>{if(m){S.mcVideo.duration=m.dur;updateMcCostHint();}});
+  }
+  renderMcVideoPreview();
+  updateMcCostHint();
+  toast(`"${preset.label}" set as reference motion`,"success");
+}
+
+function renderMcLibraryGrid(){
+  const wrap=document.getElementById("mcLibraryGrid");
+  if(!wrap)return;
+  if(!MOTION_LIBRARY_PRESETS.length){
+    wrap.innerHTML=`<div style="font-size:11px;color:var(--textm);padding:10px 0">No presets added yet — see the comment above MOTION_LIBRARY_PRESETS in index.html for the exact shape to add real hosted motion clips here.</div>`;
+    return;
+  }
+  wrap.innerHTML=MOTION_LIBRARY_PRESETS.map((p,i)=>`<div class="card" style="padding:6px;cursor:pointer;width:100px" onclick="selectMcLibraryPreset(${i})">
+    <img src="${p.thumbnailUrl}" style="width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:6px">
+    <div style="font-size:9px;color:var(--textm);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.label}</div>
+  </div>`).join('');
+}
+
+function setMcVideoSource(mode){
+  document.getElementById("mcUploadPane").style.display=mode==="upload"?"block":"none";
+  document.getElementById("mcLibraryPane").style.display=mode==="library"?"block":"none";
+  document.querySelectorAll(".mc-videosrc-btn").forEach(b=>b.classList.toggle("active",b.dataset.val===mode));
+  if(mode==="library")renderMcLibraryGrid();
+}
+
 function renderMotionControl(el){
   const hasKey=gs("api_falai");
   el.innerHTML=`
@@ -5341,9 +5393,18 @@ function renderMotionControl(el){
 
       <div class="f-group">
         <label class="f-label">Reference Video <span style="font-weight:400;color:var(--texts)">(the motion to follow)</span></label>
-        <input type="file" accept="video/*" id="mcVideoFile" style="display:none" onchange="handleMcVideoUpload(event)">
-        <div id="mcVideoPreview" style="margin-bottom:8px"></div>
-        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('mcVideoFile').click()">📤 ${S.mcVideo?'Change':'Add'} Video</button>
+        <div class="vc-shottype-toggle">
+          <button type="button" class="vc-shottype-btn mc-videosrc-btn active" data-val="upload" onclick="setMcVideoSource('upload')">📤 Upload</button>
+          <button type="button" class="vc-shottype-btn mc-videosrc-btn" data-val="library" onclick="setMcVideoSource('library')">🎞 Motion Library</button>
+        </div>
+        <div id="mcUploadPane">
+          <input type="file" accept="video/*" id="mcVideoFile" style="display:none" onchange="handleMcVideoUpload(event)">
+          <div id="mcVideoPreview" style="margin-bottom:8px"></div>
+          <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('mcVideoFile').click()">📤 ${S.mcVideo?'Change':'Add'} Video</button>
+        </div>
+        <div id="mcLibraryPane" style="display:none">
+          <div id="mcLibraryGrid" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+        </div>
       </div>
 
       <div class="f-group">
@@ -6980,6 +7041,14 @@ const VIDEO_PRICING={
   "fal-ai/kling-video/v3/4k/image-to-video":{perSec:0.42,perSecNoAudio:0.42,audioIncluded:true},"fal-ai/kling-video/v3/4k/text-to-video":{perSec:0.42,perSecNoAudio:0.42,audioIncluded:true},
   "fal-ai/veo3.1":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
   "fal-ai/veo3.1/reference-to-video":{perSec:0.20,perSec4k:0.40,audioSurcharge:2},
+  // Edit Video (editvideo.js) — both confirmed directly on fal's own model
+  // pages at $0.168/second. O3 Standard Edit is a real endpoint too but its
+  // rate wasn't directly confirmed anywhere searched, so it's carried at
+  // this same rate as a floor and flagged approxRate, same honest pattern
+  // used above for v3 motion-control.
+  "fal-ai/kling-video/o1/video-to-video/edit":{perSec:0.168},
+  "fal-ai/kling-video/o3/pro/video-to-video/edit":{perSec:0.168},
+  "fal-ai/kling-video/o3/standard/video-to-video/edit":{perSec:0.168,approxRate:true},
 };
 function estimateVideoCost(model,seconds,resolution,hasVideoRefs,usesElements){
   const p=VIDEO_PRICING[model];
@@ -12357,6 +12426,7 @@ async function init(){
   // data ever gets a chance to load. Moved here, after the real load.
   S.igChatSessions=S.igChatSessions||gs("ig_chat_sessions",[])||[];
   S.mcResults=S.mcResults||gs("mc_results",[])||[];
+  S.evResults=S.evResults||gs("ev_results",[])||[];
   S.characterPresets=S.characterPresets||gs("character_presets",[])||[];
   S.vcChatHistory=S.vcChatHistory||gs("vc_chat_history",[])||[];
   S.klingVoices=S.klingVoices||gs("kling_voices",[])||[];
@@ -13999,6 +14069,7 @@ window.addEventListener("resize",()=>{initStars();});
 <script src="flow.js"></script>
 <script src="nodecanvas.js"></script>
 <script src="motion.js"></script>
+<script src="editvideo.js"></script>
 <script src="assets.js"></script>
 <script src="gallery.js"></script>
 <script src="characters.js"></script>
