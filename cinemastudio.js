@@ -1,26 +1,37 @@
 // ══════════════════════════════════════════════════════════════════════
-// CINEMA STUDIO — a past session assumed Kosmic Engine already covered
-// Higgsfield's "Cinema Studio 4K" (see the comment still sitting above
-// the sidebar's Kosmic Engine button in index.html) and deliberately
-// skipped building this as a placeholder. Frame-by-frame review of a real
-// walkthrough shows that assumption was wrong: this is a distinct,
-// lighter-weight tool — a single-scene "Director's Panel" (Genre / Camera
-// Movement / Speed Ramp + one prompt box) with its own session structure
-// (Home / My Generations / My Elements / My Favorites / Projects) — not
-// the heavy multi-episode production wizard Kosmic Engine is. This file
-// is that tool, built for real rather than assumed-covered.
+// CINEMA STUDIO — Higgsfield's Cinema Studio 4K (under Video) and
+// Cinematic Camera (under Image) are the same tool shown under two
+// names, confirmed directly. Lives in its own "Cinema Studio" sidebar
+// section, entirely separate from Kosmic Engine and Video/Image Studio —
+// a distinct tool, not a variant or replacement of anything else.
+// NAMING NOTE: the person asked for this section to be called
+// "Directorial Studio" — but that name is already taken by an existing,
+// different, already-working feature (directors.js — the Director
+// style/personality library, wired into a real sidebar button). Named
+// this section "Cinema Studio" instead rather than silently overwrite
+// or collide with that; flagged back to the person to decide (rename the
+// old one, or pick a different name for this one).
+//
+// LAYOUT, confirmed against a real walkthrough frame-by-frame: a left
+// nav (Home / My Generations / My Elements / My Favorites / Community /
+// Academy) with a persistent Projects panel (New Project / Load Project)
+// sitting below that nav rather than being one of its tabs, and a main
+// area built around one composer — the scene prompt with its own tool
+// row (model / aspect / duration / generate) attached directly beneath
+// it — with the Director's Panel (Genre / Camera Movement / Speed Ramp)
+// as its own row above the composer.
 //
 // SCOPE OF THIS PASS (more functional detail to follow once the fuller
-// walkthrough video arrives, per the person's own message): the actual
-// generation surface — Director's Panel, prompt with @-character mentions,
-// model/aspect/duration, New Project / My Generations / My Favorites, and
-// My Elements (linked to the app's real Character library rather than a
-// second duplicate system — Higgsfield's "Elements" and this app's
-// "Characters" are the same concept: a saved subject with reference
-// images, reusable by name across generations). Community and Academy
-// (Higgsfield's course/creator-showcase pages) are marketing content, not
-// a generation feature, and are left out — consistent with this app's
-// existing practice of not replicating menu items that aren't real tools.
+// walkthrough video arrives, per the person's own message): the real
+// generation surface — Director's Panel, prompt with @-character
+// mentions, model/aspect/duration, Projects, My Generations, My
+// Favorites, and My Elements (linked to the app's real Character library
+// rather than a second duplicate system — Higgsfield's "Elements" and
+// this app's "Characters" are the same concept: a saved subject with
+// reference images, reusable by name across generations). Community and
+// Academy are shown as real nav entries (per direct instruction) but
+// with an honest placeholder rather than invented courses/creators —
+// that content genuinely lives on Higgsfield's own platform.
 //
 // "Cinema Studio 3.5" as a named model is Higgsfield's own in-house model
 // brand, not something reachable via fal.ai — invented endpoints aren't
@@ -64,26 +75,38 @@ const SPEED_RAMPS=[
 function renderCinemaStudio(el){
   const tabsEl=document.getElementById("moduleTabs");
   if(tabsEl){tabsEl.style.display="none";tabsEl.innerHTML="";}
-  const activeProject=S.csProjects.find(p=>p.id===S.csActiveProjectId);
   el.innerHTML=`
     <div style="display:flex;gap:0;min-height:60vh">
-      <div style="width:120px;flex-shrink:0;border-right:1px solid var(--glass-brd);padding:10px 6px">
-        ${[["home","🏠 Home"],["generations","🎞 Generations"],["favorites","⭐ Favorites"],["elements","🎭 Elements"],["projects","📁 Projects"]].map(([id,label])=>
-          `<button class="btn btn-sm" style="width:100%;text-align:left;margin-bottom:4px;background:${S.csView===id?'var(--violet)':'transparent'};color:${S.csView===id?'#fff':'var(--text)'};border:none" onclick="setCsView('${id}')">${label}</button>`
+      <div style="width:128px;flex-shrink:0;border-right:1px solid var(--glass-brd);padding:10px 6px;display:flex;flex-direction:column">
+        <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet);padding:4px 6px 8px">🎬 Cinema Studio</div>
+        ${[["home","🏠 Home"],["generations","🎞 My Generations"],["elements","🎭 My Elements"],["favorites","⭐ My Favorites"],["community","👥 Community"],["academy","🎓 Academy"]].map(([id,label])=>
+          `<button class="btn btn-sm" style="width:100%;text-align:left;margin-bottom:3px;background:${S.csView===id?'var(--violet)':'transparent'};color:${S.csView===id?'#fff':'var(--text)'};border:none;font-size:11px" onclick="setCsView('${id}')">${label}</button>`
         ).join('')}
+        <!-- PROJECTS — a persistent panel below the nav, not a tab of its
+             own, matching where it actually sits in the reference layout:
+             visible no matter which of the 6 views above is active. -->
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--glass-brd)">
+          <div style="font-size:9.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--textm);padding:0 6px 6px">Projects</div>
+          <button class="btn btn-outline btn-sm" style="width:100%;margin-bottom:6px;font-size:11px" onclick="newCsProject()">+ New Project</button>
+          <select class="f-select" id="csProjectLoader" style="font-size:11px;padding:6px" onchange="loadCsProject(this.value)">
+            <option value="">Load Project…</option>
+            ${S.csProjects.slice().reverse().map(p=>`<option value="${p.id}" ${p.id===S.csActiveProjectId?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}
+          </select>
+        </div>
       </div>
       <div style="flex:1;padding:16px;max-width:560px">
-        <div style="margin-bottom:14px">
-          <div style="font-family:'Cinzel',serif;font-size:19px;font-weight:700;color:var(--violet)">🎬 Cinema Studio</div>
-          <div style="font-size:12px;color:var(--textm);margin-top:4px">${activeProject?`Project: <b>${escapeHtml(activeProject.name)}</b>`:'No active project — generations save unfiled unless you start one.'}</div>
-        </div>
         <div id="csViewBody"></div>
       </div>
     </div>`;
   renderCsViewBody();
 }
 
-function setCsView(id){S.csView=id;renderCsViewBody();}
+function setCsView(id){S.csView=id;renderCinemaStudio(document.getElementById("moduleContent"));}
+function loadCsProject(id){
+  S.csActiveProjectId=id||null;
+  saveSetting("cs_active_project",S.csActiveProjectId);
+  renderCinemaStudio(document.getElementById("moduleContent"));
+}
 
 function renderCsViewBody(){
   const wrap=document.getElementById("csViewBody");
@@ -92,58 +115,58 @@ function renderCsViewBody(){
   if(S.csView==="generations")return renderCsGenerations(wrap);
   if(S.csView==="favorites")return renderCsFavorites(wrap);
   if(S.csView==="elements")return renderCsElements(wrap);
-  if(S.csView==="projects")return renderCsProjects(wrap);
+  if(S.csView==="community")return renderCsCommunity(wrap);
+  if(S.csView==="academy")return renderCsAcademy(wrap);
 }
 
-// ── HOME — the Director's Panel ──
+// Community/Academy are Higgsfield's creator-showcase and course pages —
+// real content that lives on their platform, not a generation tool this
+// app can build. Shown honestly as what they are rather than skipped
+// silently, since the person specifically pointed at them being part of
+// the real nav — but not faked with invented courses/creators.
+function renderCsCommunity(wrap){
+  wrap.innerHTML=`<div style="font-size:12px;color:var(--textm);padding:20px 0;text-align:center">Community is Higgsfield's own creator-showcase feed — not something to fake here. This space is reserved for whatever the equivalent should actually be for Kosmic Kat (e.g. your own Facebook Page activity) once that's decided.</div>`;
+}
+function renderCsAcademy(wrap){
+  wrap.innerHTML=`<div style="font-size:12px;color:var(--textm);padding:20px 0;text-align:center">Academy is Higgsfield's own course library — not something to fake here. Reserved for real tutorial content if you ever want one built.</div>`;
+}
+
+// ── HOME — Director's Panel row, then a single composer: the prompt
+// input with its tool row attached directly beneath it (model, aspect,
+// duration, generate), matching the actual reference layout rather than
+// a stack of separate labeled form fields. ──
 function renderCsHome(wrap){
   const hasKey=gs("api_falai");
   wrap.innerHTML=`
-    ${!hasKey?`<div style="background:rgba(230,126,34,0.12);border:1px solid rgba(230,126,34,0.3);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--textm);margin-bottom:14px">⚠️ Add a fal.ai API key in Settings to generate.</div>`:''}
+    ${!hasKey?`<div style="background:rgba(230,126,34,0.12);border:1px solid rgba(230,126,34,0.3);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--textm);margin-bottom:12px">⚠️ Add a fal.ai API key in Settings to generate.</div>`:''}
+
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      <span style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.04em">🎬 Director's Panel</span>
+    </div>
     <div style="display:flex;gap:8px;margin-bottom:14px">
-      <div class="f-group" style="flex:1;margin-bottom:0">
-        <label class="f-label">Genre</label>
-        <select class="f-select" id="csGenre">${CINEMA_GENRES.map(g=>`<option value="${g.label}">${g.label}</option>`).join('')}</select>
-      </div>
-      <div class="f-group" style="flex:1;margin-bottom:0">
-        <label class="f-label">Camera Movement</label>
-        <select class="f-select" id="csCameraMove">${CAMERA_MOVES.map(c=>`<option value="${c.value}">${c.label}</option>`).join('')}</select>
-      </div>
-      <div class="f-group" style="flex:1;margin-bottom:0">
-        <label class="f-label">Speed Ramp</label>
-        <select class="f-select" id="csSpeedRamp">${SPEED_RAMPS.map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}</select>
-      </div>
+      <select class="f-select" id="csGenre" style="flex:1;font-size:11px">${CINEMA_GENRES.map(g=>`<option value="${g.label}">Genre: ${g.label}</option>`).join('')}</select>
+      <select class="f-select" id="csCameraMove" style="flex:1;font-size:11px">${CAMERA_MOVES.map(c=>`<option value="${c.value}">Camera: ${c.label}</option>`).join('')}</select>
+      <select class="f-select" id="csSpeedRamp" style="flex:1;font-size:11px">${SPEED_RAMPS.map(s=>`<option value="${s.value}">Speed: ${s.label}</option>`).join('')}</select>
     </div>
 
-    <div class="f-group" style="position:relative">
-      <label class="f-label">Describe your scene <span style="font-weight:400;color:var(--texts)">— type @ to add a character</span></label>
-      <textarea class="f-textarea" id="csPrompt" oninput="handleCsPromptInput(event)" placeholder="e.g. @Sedi walks through a rain-soaked alley at night, neon signs reflecting in the puddles"></textarea>
-      <div id="csMentionDropdown" style="display:none;position:absolute;left:0;right:0;background:var(--pearl2);border:1.5px solid var(--glass-brd);border-radius:10px;padding:4px;z-index:10;max-height:160px;overflow-y:auto"></div>
-    </div>
-
-    <div class="f-group">
-      <label class="f-label">Model</label>
-      <select class="f-select" id="csModel">${modelOptionsHTML("video",SE_MODEL_ALLOWED,gs("default_video_model","bytedance/seedance-2.0/fast/text-to-video"))}</select>
-    </div>
-
-    <div style="display:flex;gap:10px">
-      <div class="f-group" style="flex:1">
-        <label class="f-label">Aspect Ratio</label>
-        <select class="f-select" id="csRatio">
-          <option value="16:9">16:9</option>
-          <option value="9:16">9:16</option>
-          <option value="1:1">1:1</option>
+    <!-- COMPOSER — input with its own tool row attached directly beneath,
+         one integrated unit rather than a form. -->
+    <div class="panel" style="padding:10px;position:relative">
+      <textarea class="f-textarea" id="csPrompt" oninput="handleCsPromptInput(event)" style="border:none;background:transparent;padding:2px 2px 8px;min-height:70px" placeholder="Describe your scene — use @ to add a character"></textarea>
+      <div id="csMentionDropdown" style="display:none;position:absolute;left:10px;right:10px;top:60px;background:var(--pearl2);border:1.5px solid var(--glass-brd);border-radius:10px;padding:4px;z-index:10;max-height:160px;overflow-y:auto"></div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;border-top:1px solid var(--glass-brd);padding-top:8px">
+        <select id="csModel" style="font-size:10.5px;padding:4px 6px;border-radius:8px;border:1px solid var(--glass-brd);background:var(--pearl2);max-width:130px">${modelOptionsHTML("video",SE_MODEL_ALLOWED,gs("default_video_model","bytedance/seedance-2.0/fast/text-to-video"))}</select>
+        <select id="csRatio" style="font-size:10.5px;padding:4px 6px;border-radius:8px;border:1px solid var(--glass-brd);background:var(--pearl2)">
+          <option value="16:9">📐 16:9</option>
+          <option value="9:16">📐 9:16</option>
+          <option value="1:1">📐 1:1</option>
         </select>
-      </div>
-      <div class="f-group" style="flex:1">
-        <label class="f-label">Duration</label>
-        <select class="f-select" id="csDuration">${TR_SEEDANCE_DURATIONS.map(d=>`<option value="${d}" ${d===6?'selected':''}>${d}s</option>`).join('')}</select>
+        <select id="csDuration" style="font-size:10.5px;padding:4px 6px;border-radius:8px;border:1px solid var(--glass-brd);background:var(--pearl2)">${TR_SEEDANCE_DURATIONS.map(d=>`<option value="${d}" ${d===6?'selected':''}>⏱ ${d}s</option>`).join('')}</select>
+        <button id="csGenBtn" onclick="sendCinemaStudioGen()" ${!hasKey?'disabled':''} style="margin-left:auto;width:36px;height:36px;border-radius:50%;background:var(--violet);color:#fff;border:none;font-size:15px;cursor:pointer;flex-shrink:0">➤</button>
       </div>
     </div>
 
-    <button class="btn btn-primary" style="width:100%;margin-top:6px" id="csGenBtn" onclick="sendCinemaStudioGen()" ${!hasKey?'disabled':''}>🎬 Generate</button>
-
-    <div id="csLastResult" style="margin-top:18px"></div>`;
+    <div id="csLastResult" style="margin-top:16px"></div>`;
 }
 
 // ── @ MENTION AUTOCOMPLETE — matches against this app's real Character
@@ -208,7 +231,7 @@ async function sendCinemaStudioGen(){
   const ratio=document.getElementById("csRatio")?.value||"16:9";
   const duration=document.getElementById("csDuration")?.value||"6";
   const btn=document.getElementById("csGenBtn");
-  btn.disabled=true;btn.textContent="⏳ Generating…";
+  btn.disabled=true;btn.textContent="⏳";
   try{
     const {cleanPrompt,imageUrls}=await resolveCsCharacterMentions(rawPrompt,apiKey);
     const parts=[genre.frag,cleanPrompt,cameraMove,speedRamp].filter(Boolean);
@@ -230,7 +253,7 @@ async function sendCinemaStudioGen(){
   }catch(err){
     toast("❌ "+err.message,"error");
   }
-  btn.disabled=false;btn.textContent="🎬 Generate";
+  btn.disabled=false;btn.textContent="➤";
 }
 
 // ── MY GENERATIONS — every video asset created through Cinema Studio,
@@ -277,21 +300,6 @@ function renderCsElements(wrap){
     </div>`;
 }
 
-// ── PROJECTS ──
-function renderCsProjects(wrap){
-  wrap.innerHTML=`
-    <button class="btn btn-primary btn-sm" style="margin-bottom:12px" onclick="newCsProject()">+ New Project</button>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      ${S.csProjects.slice().reverse().map(p=>`<div class="panel" style="padding:10px;display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <div style="font-size:13px;font-weight:700">${escapeHtml(p.name)}${p.id===S.csActiveProjectId?' <span style="color:var(--violet);font-size:10px">(active)</span>':''}</div>
-          <div style="font-size:10px;color:var(--textm)">${(p.generations||[]).length} generation${(p.generations||[]).length===1?'':'s'}</div>
-        </div>
-        <button class="btn btn-outline btn-sm" onclick="selectCsProject('${p.id}')">${p.id===S.csActiveProjectId?'Deselect':'Select'}</button>
-      </div>`).join('')||'<div style="font-size:11px;color:var(--textm)">No projects yet.</div>'}
-    </div>`;
-}
-
 async function newCsProject(){
   const name=await showPromptDialog("Name this project","");
   if(!name)return;
@@ -301,10 +309,5 @@ async function newCsProject(){
   saveSetting("cs_projects",S.csProjects);
   saveSetting("cs_active_project",S.csActiveProjectId);
   toast(`🎬 "${name}" created and set active`,"success");
-  renderCinemaStudio(document.getElementById("moduleContent"));
-}
-function selectCsProject(id){
-  S.csActiveProjectId=S.csActiveProjectId===id?null:id;
-  saveSetting("cs_active_project",S.csActiveProjectId);
   renderCinemaStudio(document.getElementById("moduleContent"));
 }
