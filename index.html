@@ -654,10 +654,29 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
       <button class="mod-btn" data-mod="characters" onclick="switchMod('characters',this)">
         <span class="mod-icon" data-picon="mask"></span><span class="mod-label">Characters</span>
       </button>
-      <button class="mod-btn" data-mod="motioncontrol" onclick="switchMod('motioncontrol',this)">
-        <span class="mod-icon" data-picon="target"></span><span class="mod-label">Motion Control</span>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label sidebar-label-toggle" onclick="toggleSidebarSection('imagestudio')">
+        <span>Image Studio</span><span class="sb-chevron" id="chev-imagestudio">▸</span>
+      </div>
+      <button class="mod-btn" data-mod="imagegen" onclick="switchMod('imagegen',this)">
+        <span class="mod-icon" data-picon="image"></span><span class="mod-label">Image</span>
+        <span class="mod-badge-api">● ON</span>
+      </button>
+      <!-- Camera Crafts 4K = Higgsfield's "Cinematic Camera", renamed per
+           direct instruction. Same real module as Video Studio's Kat
+           Films 4K below (cinemastudio.js) — Higgsfield shows this one
+           tool under two names/tabs; this app now does too, with its own
+           names on each side. -->
+      <button class="mod-btn" data-mod="cinemastudio" onclick="switchMod('cinemastudio',this)">
+        <span class="mod-icon" data-picon="camera"></span><span class="mod-label">Camera Crafts 4K</span>
         <span class="mod-badge new">NEW</span>
       </button>
+      <!-- The rows below are generated from IMG_SUBMODULES on load, not
+           hand-typed here — see renderImgStudioSidebarRows(). Collapsed by
+           default (see toggleSidebarSection) so the sidebar isn't 14 rows
+           long before you've ever asked to see them. -->
+      <div id="imgStudioSubRows" style="display:none"></div>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label sidebar-label-toggle" onclick="toggleSidebarSection('videostudio')">
@@ -675,39 +694,21 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
         <span class="mod-icon" data-picon="film"></span><span class="mod-label">Topic Reel</span>
         <span class="mod-badge new">NEW</span>
       </button>
-      <!-- Canvas and Kosmic Engine are genuine LINKS to modules that already
-           exist elsewhere in the app (Production House) — not new
-           placeholders, shown under their own real names since they aren't
-           new things being introduced here. -->
-      <button class="mod-btn" data-mod="nodecanvas" onclick="switchMod('nodecanvas',this)">
-        <span class="mod-icon" data-picon="web"></span><span class="mod-label">Canvas</span>
+      <button class="mod-btn" data-mod="motioncontrol" onclick="switchMod('motioncontrol',this)">
+        <span class="mod-icon" data-picon="target"></span><span class="mod-label">Motion Control</span>
+        <span class="mod-badge new">NEW</span>
       </button>
-      <button class="mod-btn" data-mod="kosmicengine" onclick="switchMod('kosmicengine',this)">
-        <span class="mod-icon" data-picon="film"></span><span class="mod-label">Kosmic Engine</span>
+      <!-- Kat Films 4K = Higgsfield's "Cinema Studio 4K", renamed per
+           direct instruction. Same real module as Image Studio's Camera
+           Crafts 4K above (cinemastudio.js). Canvas and Kosmic Engine are
+           deliberately NOT listed here — they already have their own real
+           buttons under Production House below; having them here too was
+           a genuine duplicate, now removed. -->
+      <button class="mod-btn" data-mod="cinemastudio" onclick="switchMod('cinemastudio',this)">
+        <span class="mod-icon" data-picon="film"></span><span class="mod-label">Kat Films 4K</span>
+        <span class="mod-badge new">NEW</span>
       </button>
       <div id="vidStudioSubRows" style="display:none"></div>
-    </div>
-    <div class="sidebar-section">
-      <!-- CINEMA STUDIO — Higgsfield's Cinema Studio 4K (Video tab) and
-           Cinematic Camera (Image tab) are the SAME underlying tool shown
-           under two names, confirmed directly. Deliberately its own
-           top-level section, not nested inside Video/Image Studio, and
-           NOT the same thing as "Directorial Studio" below (that's the
-           existing Director style/personality library, directors.js —
-           an unrelated, already-working feature; naming collision
-           avoided on purpose). Also not related to Kosmic Engine in any
-           way — two separate, unrelated tools that happen to both make
-           video. Both buttons below open the same real module,
-           cinemastudio.js. -->
-      <div class="sidebar-label">Cinema Studio</div>
-      <button class="mod-btn" data-mod="cinemastudio" onclick="switchMod('cinemastudio',this)">
-        <span class="mod-icon" data-picon="film"></span><span class="mod-label">Cinema Studio 4K</span>
-        <span class="mod-badge new">NEW</span>
-      </button>
-      <button class="mod-btn" data-mod="cinemastudio" onclick="switchMod('cinemastudio',this)">
-        <span class="mod-icon" data-picon="camera"></span><span class="mod-label">Cinematic Camera</span>
-        <span class="mod-badge new">NEW</span>
-      </button>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label sidebar-label-toggle" onclick="toggleSidebarSection('audiostudio')">
@@ -736,20 +737,6 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
           <span class="mod-icon" data-picon="globe"></span><span class="mod-label">Translation</span>
         </button>
       </div>
-    </div>
-    <div class="sidebar-section">
-      <div class="sidebar-label sidebar-label-toggle" onclick="toggleSidebarSection('imagestudio')">
-        <span>Image Studio</span><span class="sb-chevron" id="chev-imagestudio">▸</span>
-      </div>
-      <button class="mod-btn" data-mod="imagegen" onclick="switchMod('imagegen',this)">
-        <span class="mod-icon" data-picon="image"></span><span class="mod-label">Image</span>
-        <span class="mod-badge-api">● ON</span>
-      </button>
-      <!-- The rows below are generated from IMG_SUBMODULES on load, not
-           hand-typed here — see renderImgStudioSidebarRows(). Collapsed by
-           default (see toggleSidebarSection) so the sidebar isn't 14 rows
-           long before you've ever asked to see them. -->
-      <div id="imgStudioSubRows" style="display:none"></div>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label">Production House</div>
