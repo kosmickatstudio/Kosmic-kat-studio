@@ -3674,27 +3674,27 @@ const MODEL_LOGOS={
   // official first-party source, not a third-party redistribution), using
   // the icon-only "K" mark meant for exactly this kind of small badge use.
   kimi:{img:"https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-color.svg",bg:"#1a1a1a22"},
-  // Grok deliberately stays a monogram, not a logo image. xAI itself no
-  // longer exists as a standalone brand — it fully merged into SpaceX and
-  // rebranded to "SpaceXAI" on July 6, 2026 (API/model names unaffected,
-  // visual identity was not). On top of that, Grok's own app icon has been
-  // redesigned at least 3 times since 2023, and the Wikimedia Commons files
-  // available are from ambiguous/undated eras — none could be confirmed as
-  // the current mark. A plain monogram beats guessing wrong here.
-  grok:{mono:"Gr",bg:"#00000022"},
   // Black Forest Labs' own official brand page (bfl.ai/brand) provides this
   // icon-only "Symbol" mark explicitly for small-scale use where the full
   // wordmark logo would be unreadable — exactly this badge's use case.
   // First-party source, not a third-party redistribution.
   blackforestlabs:{img:"https://bfl.ai/brand/symbol-black.svg",bg:"#00000015"},
   aicredits:{mono:"AC",bg:"#8B5CF6"},
-  "fal-ai/kling-video/v2.1/master/text-to-video":{mono:"K",bg:"#1B5EFF"},
-  "fal-ai/kling-video/v2.6/pro/text-to-video":{mono:"K",bg:"#1B5EFF"},
-  "fal-ai/kling-video/v3/standard/text-to-video":{mono:"K",bg:"#1B5EFF"},
-  "fal-ai/kling-video/v3/pro/text-to-video":{mono:"K",bg:"#1B5EFF"},
-  "fal-ai/kling-video/o3/pro/reference-to-video":{mono:"K",bg:"#1B5EFF"},
-  "fal-ai/kling-video/o3/standard/image-to-video":{mono:"K",bg:"#1B5EFF"},
-  "fal-ai/kling-video/v3/4k/image-to-video":{mono:"K",bg:"#1B5EFF"},"fal-ai/kling-video/v3/4k/text-to-video":{mono:"K",bg:"#1B5EFF"},
+  // The six marks below were supplied directly by Kosmic (not independently
+  // sourced/verified the way the Wikimedia/first-party ones above were —
+  // that verification is on the source this time). Background removed and
+  // re-hosted locally under logos/ rather than hotlinked, since they didn't
+  // come with a stable external URL. Grok replaces the earlier monogram
+  // fallback now that a current mark is confirmed. Seedance and Seedream
+  // intentionally share one mark here — this is the actual shared
+  // Seed-family product logo, not the ByteDance parent wordmark used
+  // (and reverted away from) earlier.
+  grok:{img:"logos/grok.png",bg:"#0a0a0a"},
+  kling:{img:"logos/kling.png",bg:"#1B5EFF14"},
+  ideogram:{img:"logos/ideogram.png",bg:"#0a0a0a"},
+  recraft:{img:"logos/recraft.png",bg:"#0a0a0a"},
+  stablediffusion:{img:"logos/stable-diffusion.png",bg:"#7C3AED14"},
+  seedfamily:{img:"logos/seedance-seedream.png",bg:"#0C8CE914"},
   "fal-ai/veo3.1":{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
   "fal-ai/veo3.1/reference-to-video":{img:"https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_icon_2025.svg",bg:"#4285F422"},
 };
@@ -3707,24 +3707,16 @@ function modelBadgeHtml(key,size){
   return `<div class="model-badge mono" style="${dim};background:${m.bg};font-size:${Math.round(size*0.34)}px">${m.mono}</div>`;
 }
 // Verified-logo routing first, honest monogram fallback where no genuine
-// official mark could be confirmed on Wikimedia Commons or the provider's
-// own site. Seedream and Seedance get DISTINCT monograms rather than
-// sharing one badge — they're sibling products from the same ByteDance Seed
-// lab, but the same icon on two different models in a picker just reads as
-// "these are identical," which isn't true and isn't the point of a badge.
-// Ideogram, Recraft, Bria, Kling, and Stable Diffusion stay monograms too —
-// checked, no confirmed official icon-only mark exists for any of them
-// outside third-party icon-scraper sites with no clear rights chain back to
-// the trademark owner, which isn't a safer bet than a plain monogram.
+// official mark could be confirmed. Bria is the one holdout still on a
+// plain monogram — no confirmed official icon-only mark found for it yet.
 function guessImageModelBadge(key){
   if(!key)return null;
   if(key.includes("flux"))return MODEL_LOGOS.blackforestlabs;
-  if(key.includes("ideogram"))return{mono:"ID",bg:"#6D28D9"};
-  if(key.includes("recraft"))return{mono:"RC",bg:"#F97316"};
-  if(key.includes("stable-diffusion"))return{mono:"SD",bg:"#8B5CF6"};
-  if(key.includes("seedream"))return{mono:"Sd",bg:"#FE2C55"};
-  if(key.includes("seedance"))return{mono:"Se",bg:"#161823"};
-  if(key.includes("kling"))return{mono:"K",bg:"#1B5EFF"};
+  if(key.includes("ideogram"))return MODEL_LOGOS.ideogram;
+  if(key.includes("recraft"))return MODEL_LOGOS.recraft;
+  if(key.includes("stable-diffusion"))return MODEL_LOGOS.stablediffusion;
+  if(key.includes("seedream")||key.includes("seedance"))return MODEL_LOGOS.seedfamily;
+  if(key.includes("kling"))return MODEL_LOGOS.kling;
   if(key.includes("bria"))return{mono:"Fb",bg:"#3D1F7A"};
   if(key.includes("veo"))return MODEL_LOGOS.gemini;
   if(key.includes("gemini")||key.includes("nano-banana"))return MODEL_LOGOS.gemini;
