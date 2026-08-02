@@ -1,16 +1,11 @@
 // ══════════════════════════════════════════════════════════════════════
-// CINEMA STUDIO — Higgsfield's Cinema Studio 4K (under Video) and
-// Cinematic Camera (under Image) are the same tool shown under two
-// names, confirmed directly. Lives in its own "Cinema Studio" sidebar
-// section, entirely separate from Kosmic Engine and Video/Image Studio —
-// a distinct tool, not a variant or replacement of anything else.
-// NAMING NOTE: the person asked for this section to be called
-// "Directorial Studio" — but that name is already taken by an existing,
-// different, already-working feature (directors.js — the Director
-// style/personality library, wired into a real sidebar button). Named
-// this section "Cinema Studio" instead rather than silently overwrite
-// or collide with that; flagged back to the person to decide (rename the
-// old one, or pick a different name for this one).
+// KAT FILMS 4K / CAMERA CRAFTS 4K — Higgsfield's Cinema Studio 4K (under
+// Video) and Cinematic Camera (under Image) are the same tool shown
+// under two names, confirmed directly. This app does the same: one real
+// module (this file) reached from two renamed sidebar entries — "Kat
+// Films 4K" inside Video Studio, "Camera Crafts 4K" inside Image Studio.
+// No separate "Cinema Studio" section — removed per direct instruction.
+// Not related to Kosmic Engine in any way.
 //
 // LAYOUT, confirmed against a real walkthrough frame-by-frame: a left
 // nav (Home / My Generations / My Elements / My Favorites / Community /
@@ -78,7 +73,7 @@ function renderCinemaStudio(el){
   el.innerHTML=`
     <div style="display:flex;gap:0;min-height:60vh">
       <div style="width:128px;flex-shrink:0;border-right:1px solid var(--glass-brd);padding:10px 6px;display:flex;flex-direction:column">
-        <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet);padding:4px 6px 8px">🎬 Cinema Studio</div>
+        <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet);padding:4px 6px 8px">🎬 Kat Films 4K</div>
         ${[["home","🏠 Home"],["generations","🎞 My Generations"],["elements","🎭 My Elements"],["favorites","⭐ My Favorites"],["community","👥 Community"],["academy","🎓 Academy"]].map(([id,label])=>
           `<button class="btn btn-sm" style="width:100%;text-align:left;margin-bottom:3px;background:${S.csView===id?'var(--violet)':'transparent'};color:${S.csView===id?'#fff':'var(--text)'};border:none;font-size:11px" onclick="setCsView('${id}')">${label}</button>`
         ).join('')}
@@ -238,12 +233,12 @@ async function sendCinemaStudioGen(){
     const finalPrompt=parts.join(", ");
     const videoUrl=await genViaSeedanceReference(finalPrompt,model,ratio,duration,imageUrls,[],[]);
     const projectId=S.csActiveProjectId||"";
-    const savedAsset=createVideoAsset(videoUrl,finalPrompt,projectId,{model,providerLabel:"Cinema Studio"});
+    const savedAsset=createVideoAsset(videoUrl,finalPrompt,projectId,{model,providerLabel:"Kat Films 4K"});
     if(projectId){
       const p=S.csProjects.find(pr=>pr.id===projectId);
       if(p){p.generations=p.generations||[];p.generations.push(savedAsset.id);saveSetting("cs_projects",S.csProjects);}
     }
-    logCost(model,"Cinema Studio");
+    logCost(model,"Kat Films 4K");
     document.getElementById("csLastResult").innerHTML=`<video src="${videoUrl}" controls style="width:100%;border-radius:12px;display:block"></video>
       <div style="display:flex;gap:8px;margin-top:8px">
         <button class="btn btn-outline btn-sm" onclick="toggleCsFavorite('${savedAsset.id}');toast('${S.csFavorites.includes(savedAsset.id)?'Removed from':'Added to'} Favorites','success')">⭐ Favorite</button>
@@ -256,11 +251,11 @@ async function sendCinemaStudioGen(){
   btn.disabled=false;btn.textContent="➤";
 }
 
-// ── MY GENERATIONS — every video asset created through Cinema Studio,
+// ── MY GENERATIONS — every video asset created through this tool,
 // newest first, regardless of project (project-filtered list lives under
 // Projects → open project). ──
 function renderCsGenerations(wrap){
-  const gens=(S.assets||[]).filter(a=>a.type==="video"&&a.providerLabel==="Cinema Studio").slice().reverse();
+  const gens=(S.assets||[]).filter(a=>a.type==="video"&&a.providerLabel==="Kat Films 4K").slice().reverse();
   if(!gens.length){wrap.innerHTML=`<div style="font-size:12px;color:var(--textm);padding:20px 0;text-align:center">No generations yet — make one from Home.</div>`;return;}
   wrap.innerHTML=`<div style="display:flex;flex-direction:column;gap:12px">${gens.map(a=>`<div class="panel" style="padding:8px">
     <video src="${a.url}" controls style="width:100%;border-radius:8px;display:block;margin-bottom:6px"></video>
@@ -290,7 +285,7 @@ function renderCsFavorites(wrap){
 function renderCsElements(wrap){
   const chars=S.characters||[];
   wrap.innerHTML=`
-    <div style="font-size:12px;color:var(--textm);margin-bottom:12px">Elements here are this app's Characters — build one there, then type @ their name in Cinema Studio's prompt to bring them into a scene.</div>
+    <div style="font-size:12px;color:var(--textm);margin-bottom:12px">Elements here are this app's Characters — build one there, then type @ their name in the prompt here to bring them into a scene.</div>
     <button class="btn btn-outline btn-sm" style="margin-bottom:12px" onclick="switchMod('characters',document.querySelector('[data-mod=characters]'))">🎭 Open Character Library</button>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
       ${chars.map(c=>`<div class="card" style="padding:6px;text-align:center">
