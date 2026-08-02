@@ -35,10 +35,16 @@
 //     instruction — a reserved slot, not a placeholder pretending to be
 //     a feature. Selecting it shows an honest "nothing here yet" state
 //     and disables Generate.
-//   - "Kat Films 1" ≈ Cinema Studio 2.5, fully built — that version was
-//     completely explored in the reference video, so this is a genuine
-//     1:1 feature match: Genre, the full confirmed 14-option Camera
-//     Movement list, Speed Ramp, Duration (with Custom).
+//   - "Kat Films 1" ≈ Cinema Studio 2.5, fully built. That version's exact
+//     tagline was confirmed via careful OCR sweep (image-viewing was down
+//     this session — see note below) as "Camera selection, style presets,
+//     and AI director" — all three now genuinely wired in: the 14-option
+//     Camera Movement list, Style Preset (reuses this app's real
+//     STYLE_PRESETS/openVisualPicker, the same system Image Gen uses —
+//     not a second invented style list), and AI Director (reuses this
+//     app's real getActiveDirectorPrompt()/Directorial Studio, not a new
+//     director concept). Genre, Speed Ramp, Duration with Custom round
+//     out the rest of the confirmed 2.5 feature set.
 //   - "Kat Films 1.5" ≈ Cinema Studio 3, built with what was confirmed
 //     ("Enhanced camera and speed ramp control" per the reference) —
 //     same field set as tier 1 for now since the specific enhancement
@@ -64,13 +70,27 @@
 // reference image composition, already used elsewhere in this app) so a
 // mentioned character's actual reference photo is genuinely used.
 //
+// SESSION NOTE: direct image/frame viewing was non-functional for this
+// entire session (confirmed by testing on multiple fresh extractions and
+// even a previously-working uploaded screenshot — an infrastructure
+// issue, not a file problem). Analysis for this pass came from a
+// thorough OCR sweep instead: ~36 full-1920x1080 frames across the whole
+// 60s video, contrast/sharpness-enhanced and 2x upscaled before running
+// tesseract in sparse-text mode. That's a lower-confidence method than
+// actually looking at the UI — treat facts below as OCR-confirmed, not
+// visually verified, and worth a real visual pass once viewing works
+// again.
+//
 // LOAD ORDER: after index.html's main inline script — needs S, gs, save,
 // saveSetting, toast, escapeHtml, pIcon, SE_MODEL_ALLOWED,
 // modelOptionsHTML, renderSimpleTrigger, openSimplePicker,
-// selectSimpleOption, sheetSwipeStart/Move/End, genViaSeedanceReference,
-// genViaFal, genViaFluxEdit, uploadRefsToFal, createVideoAsset,
-// createImageAsset, logCost, showPromptDialog, downloadWithName,
-// sanitizeFilenamePart, openCollectionPicker, VC_RESULT_ICONS.
+// selectSimpleOption, openVisualPicker, renderVisualTrigger,
+// STYLE_PRESETS, getAllDirectors, sheetSwipeStart/Move/End,
+// genViaSeedanceReference, genViaFal, genViaFluxEdit, uploadRefsToFal,
+// createVideoAsset, createImageAsset, logCost, showPromptDialog,
+// downloadWithName, sanitizeFilenamePart, openCollectionPicker,
+// VC_RESULT_ICONS. Also needs getActiveDirectorPrompt from directors.js,
+// which must be loaded too.
 // ══════════════════════════════════════════════════════════════════════
 
 S.csProjects=S.csProjects||gs("cs_projects",[])||[];
@@ -84,7 +104,7 @@ S.csMentionOpen=false;
 
 const KAT_FILMS_TIERS=[
   {id:"signature1",label:"Kat Films — Signature 1",sub:"Empty — reserved for a future tier",empty:true},
-  {id:"katfilms1",label:"Kat Films 1",sub:"≈ Cinema Studio 2.5 — fully built",
+  {id:"katfilms1",label:"Kat Films 1",sub:"≈ Cinema Studio 2.5 — Camera selection, Style Presets, AI Director (fully built)",
     videoModel:"bytedance/seedance-2.0/fast/text-to-video",imageModel:"fal-ai/flux/dev"},
   {id:"katfilms1_5",label:"Kat Films 1.5",sub:"≈ Cinema Studio 3 — enhanced camera & speed ramp control",
     videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",partial:true},
@@ -250,7 +270,7 @@ function renderCsHome(wrap){
         <button class="ig-icon-btn" onclick="openCsTierPicker()" title="Change Tier">${isVideo?'🎬':'📷'}</button>
         <div style="flex:1;text-align:center">
           <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">${isVideo?'Kat Films 4K':'Camera Crafts 4K'}</div>
-          <div style="font-size:10px;color:var(--textm);margin-top:1px">${hasKey?'<span style="color:var(--green);font-weight:700">●</span> Ready':'<span style="color:var(--red);font-weight:700">●</span> No key configured'} · ${escapeHtml(tier.label)}${tier.partial?' <span style="color:var(--gold)">(partial build)</span>':''}</div>
+          <div style="font-size:10px;color:var(--textm);margin-top:1px">${hasKey?'<span style="color:var(--green);font-weight:700">●</span> Ready':'<span style="color:var(--red);font-weight:700">●</span> No key configured'} · ${escapeHtml(tier.label)}${tier.partial?' <span style="color:var(--gold)">(partial build)</span>':''}${gs("active_director","")?' · '+pIcon('film',10)+' '+escapeHtml((getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name||''):''}</div>
         </div>
         <button class="ig-icon-btn" onclick="toast('Chat history stays right here — scroll up','')" title="Info">ℹ</button>
       </div>
@@ -305,6 +325,11 @@ function renderCsSettingsBody(){
       <select class="f-select" id="csGenre" style="display:none" onchange="renderSimpleTrigger('csGenre');updateCsCostHint()">${CINEMA_GENRES.map(g=>`<option value="${g.label}">${g.label}</option>`).join('')}</select>
       <div id="csGenreTrigger" onclick="openSimplePicker('csGenre','Choose Genre')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
     </div>
+    <div class="f-group">
+      <label class="f-label">Style Preset <span style="font-weight:400;color:var(--texts)">— part of Cinema Studio 2.5's real feature set (camera selection + style presets + AI director)</span></label>
+      <select class="f-select" id="csStyle" style="display:none" onchange="renderVisualTrigger('csStyle','style')">${STYLE_PRESETS.map(s=>`<option value="${s.value.replace(/"/g,'&quot;')}">${s.label}</option>`).join('')}</select>
+      <div id="csStyleTrigger" onclick="openVisualPicker('csStyle','Choose Style','style')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+    </div>
     ${isVideo?`
     <div class="f-group">
       <label class="f-label">Camera Movement</label>
@@ -316,6 +341,13 @@ function renderCsSettingsBody(){
       <select class="f-select" id="csSpeedRamp" style="display:none" onchange="renderSimpleTrigger('csSpeedRamp')">${SPEED_RAMPS.map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}</select>
       <div id="csSpeedRampTrigger" onclick="openSimplePicker('csSpeedRamp','Speed Ramp')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
     </div>` : ''}
+    <div class="f-group">
+      <label class="f-label">AI Director <span style="font-weight:400;color:var(--texts)">— the 3rd pillar of Cinema Studio 2.5's feature set</span></label>
+      <div style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;background:var(--surface)">
+        <span style="flex:1;font-size:13px;font-weight:600;color:var(--text)">${gs("active_director","")?escapeHtml((getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name||"Unknown"):"No director active"}</span>
+        <button class="btn btn-outline btn-xs" onclick="switchMod('directors',document.querySelector('[data-mod=directors]'))">Change</button>
+      </div>
+    </div>
     <div class="f-row">
       <div class="f-group">
         <label class="f-label">Aspect Ratio</label>
@@ -337,6 +369,7 @@ function renderCsSettingsBody(){
     <div style="font-size:10px;color:var(--textm);margin-top:4px">Powered by: <b>${escapeHtml(isVideo?tier.videoModel:tier.imageModel)}</b></div>`;
   renderSimpleTrigger("csTierSelect");
   renderSimpleTrigger("csGenre");
+  renderVisualTrigger("csStyle","style");
   if(isVideo){renderSimpleTrigger("csCameraMove");renderSimpleTrigger("csSpeedRamp");renderSimpleTrigger("csDuration");}
   renderSimpleTrigger("csRatio");
   const durSel=document.getElementById("csDuration");
@@ -553,7 +586,9 @@ async function sendCinemaStudioGen(){
 
   try{
     const {cleanPrompt,imageUrls}=await resolveCsCharacterMentions(rawPrompt,apiKey);
-    const parts=[genre.frag,cleanPrompt,cameraMove,speedRamp].filter(Boolean);
+    const style=document.getElementById("csStyle")?.value||"";
+    const directorPrompt=getActiveDirectorPrompt();
+    const parts=[genre.frag,cleanPrompt,cameraMove,speedRamp,style,directorPrompt].filter(Boolean);
     const finalPrompt=parts.join(", ");
     const projectId=S.csActiveProjectId||"";
     const providerLabel=isVideo?"Kat Films 4K":"Camera Crafts 4K";
