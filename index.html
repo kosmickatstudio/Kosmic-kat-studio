@@ -675,16 +675,10 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
         <span class="mod-icon" data-picon="film"></span><span class="mod-label">Topic Reel</span>
         <span class="mod-badge new">NEW</span>
       </button>
-      <!-- UPDATE: Cinema Studio was previously assumed to be covered by
-           Kosmic Engine (see below) — frame-by-frame review of a real
-           walkthrough showed that's wrong; it's a distinct, lighter-weight
-           single-scene tool with its own session structure. Now built for
-           real as its own module, cinemastudio.js. Kosmic Engine and
-           Canvas remain genuine separate links to real capability. -->
-      <button class="mod-btn" data-mod="cinemastudio" onclick="switchMod('cinemastudio',this)">
-        <span class="mod-icon" data-picon="film"></span><span class="mod-label">Cinema Studio</span>
-        <span class="mod-badge new">NEW</span>
-      </button>
+      <!-- Canvas and Kosmic Engine are genuine LINKS to modules that already
+           exist elsewhere in the app (Production House) — not new
+           placeholders, shown under their own real names since they aren't
+           new things being introduced here. -->
       <button class="mod-btn" data-mod="nodecanvas" onclick="switchMod('nodecanvas',this)">
         <span class="mod-icon" data-picon="web"></span><span class="mod-label">Canvas</span>
       </button>
@@ -692,6 +686,28 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
         <span class="mod-icon" data-picon="film"></span><span class="mod-label">Kosmic Engine</span>
       </button>
       <div id="vidStudioSubRows" style="display:none"></div>
+    </div>
+    <div class="sidebar-section">
+      <!-- CINEMA STUDIO — Higgsfield's Cinema Studio 4K (Video tab) and
+           Cinematic Camera (Image tab) are the SAME underlying tool shown
+           under two names, confirmed directly. Deliberately its own
+           top-level section, not nested inside Video/Image Studio, and
+           NOT the same thing as "Directorial Studio" below (that's the
+           existing Director style/personality library, directors.js —
+           an unrelated, already-working feature; naming collision
+           avoided on purpose). Also not related to Kosmic Engine in any
+           way — two separate, unrelated tools that happen to both make
+           video. Both buttons below open the same real module,
+           cinemastudio.js. -->
+      <div class="sidebar-label">Cinema Studio</div>
+      <button class="mod-btn" data-mod="cinemastudio" onclick="switchMod('cinemastudio',this)">
+        <span class="mod-icon" data-picon="film"></span><span class="mod-label">Cinema Studio 4K</span>
+        <span class="mod-badge new">NEW</span>
+      </button>
+      <button class="mod-btn" data-mod="cinemastudio" onclick="switchMod('cinemastudio',this)">
+        <span class="mod-icon" data-picon="camera"></span><span class="mod-label">Cinematic Camera</span>
+        <span class="mod-badge new">NEW</span>
+      </button>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label sidebar-label-toggle" onclick="toggleSidebarSection('audiostudio')">
@@ -728,15 +744,6 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
       <button class="mod-btn" data-mod="imagegen" onclick="switchMod('imagegen',this)">
         <span class="mod-icon" data-picon="image"></span><span class="mod-label">Image</span>
         <span class="mod-badge-api">● ON</span>
-      </button>
-      <!-- Camera Craft (Higgsfield's "Cinematic Camera") isn't a separate
-           placeholder here — it's the SAME underlying tool as Video
-           Studio's Cinema Studio, just entered from the Image side, per
-           direct confirmation. Links to the same real module rather than
-           a second "Coming Soon" for one feature. -->
-      <button class="mod-btn" data-mod="cinemastudio" onclick="switchMod('cinemastudio',this)">
-        <span class="mod-icon" data-picon="camera"></span><span class="mod-label">Camera Craft</span>
-        <span class="mod-badge new">NEW</span>
       </button>
       <!-- The rows below are generated from IMG_SUBMODULES on load, not
            hand-typed here — see renderImgStudioSidebarRows(). Collapsed by
