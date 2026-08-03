@@ -479,7 +479,7 @@ const KosmicEngine=(function(){
       // Rejection feedback is appended rather than replacing anything: the
       // user is correcting a specific fault, not restating the whole brief.
       const csFix=p.charSheetFeedback?`. IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.charSheetFeedback}`:"";
-      const prompt=`${c.desc}, full character reference turnaround sheet, single composite image arranged in a grid showing: front full-body view, back full-body view, 3/4 angle full-body view, and a close-up face portrait — consistent character design across all views, clean plain background, professional character design sheet, only this one character, no other people${csFix}${rulesSuffix(p)}`;
+      const prompt=`${c.desc}, full character reference turnaround sheet, single composite image arranged in a grid showing: front full-body view, back full-body view, 3/4 angle full-body view, and a close-up face portrait — consistent character design across all views, clean plain background, professional character design sheet, only this one character, no other people${csFix}${styleSuffix(p)}${rulesSuffix(p)}`;
       // Pass the uploaded reference to the generator itself on models that
       // accept one, for actual visual likeness rather than likeness by
       // description alone. Falls through to the plain path when the selected
@@ -503,7 +503,7 @@ const KosmicEngine=(function(){
       const sides=characters.filter(c=>c.tier==="SIDE");
       const lineup=sides.map(c=>`${c.name} (${c.desc})`).join("; ");
       const sideFix=p.charSheetFeedback?` IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.charSheetFeedback}`:"";
-      const prompt=`Character lineup reference sheet, ${sides.length} distinct background/side characters standing side by side for comparison, each clearly separated: ${lineup}. Clean plain background, consistent lighting, simple standing poses, professional character design reference — each character visually distinct from the others.${sideFix}${rulesSuffix(p)}`;
+      const prompt=`Character lineup reference sheet, ${sides.length} distinct background/side characters standing side by side for comparison, each clearly separated: ${lineup}. Clean plain background, consistent lighting, simple standing poses, professional character design reference — each character visually distinct from the others.${sideFix}${styleSuffix(p)}${rulesSuffix(p)}`;
       // A side-character LINEUP is inherently wide, so it keeps 16:9 unless the
       // production is vertical, where a wide plate would letterbox badly.
       const sideRatio=(p.aspectRatio==="9:16")?"9:16":"16:9";
@@ -523,7 +523,7 @@ const KosmicEngine=(function(){
       p.characterSheetStatus="ready";
       save2Productions();
       const sheets=p.characterSheets||[];
-      const mc=sheets.find(s=>s.tier==="MC");
+      const mc=sheets.find(s=>s.tier==="MC"||s.tier==="LEAD");
       const qa=mc?await runQACheckDetailed(mc.sheetUrl,mc.desc):{ran:false,passed:false,note:null,reason:"no sheet to check"};
       task.qa=qa; const qaNote=qa.note;
       return{summary:`🎭 Character Sheet${sheets.length!==1?'s':''} ready — ${sheets.map(s=>s.tier==='SIDE'?'Side characters':s.name).join(', ')}:`,approval:{images:sheets.map(s=>s.sheetUrl),qaNote}};
@@ -579,7 +579,7 @@ const KosmicEngine=(function(){
       const p=S.productions.find(x=>x.id===S.directorChat.productionId);
       const loc=p.locationBible[task.locIndex];
       const locFix=p.locationFeedback?`. IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.locationFeedback}`:"";
-      const prompt=`${loc.desc}, wide establishing shot, cinematic environment reference, no people, detailed background art${locFix}${rulesSuffix(p)}`;
+      const prompt=`${loc.desc}, wide establishing shot, cinematic environment reference, no people, detailed background art${locFix}${styleSuffix(p)}${rulesSuffix(p)}`;
       let result;
       // Follows the production's chosen aspect ratio instead of a hardcoded
       // 16:9 — a vertical production needs vertical establishing plates too.
@@ -1218,6 +1218,14 @@ const KosmicEngine=(function(){
     const r=projectRules(p&&p.projectId);
     return r?`. Project rules that must be followed: ${r}`:"";
   }
+  // The Promptwriter's STYLE: line (see parsePromptwriterOutput) — the one
+  // piece of visual direction that used to reach episode/scene prompts via
+  // masterPrompt text but never reached character sheets or location plates,
+  // since those are built from character.desc / location.desc alone. Same
+  // append-only pattern as rulesSuffix so both can stack on one prompt.
+  function styleSuffix(p){
+    return (p&&p.visualStyle)?`. Overall visual style: ${p.visualStyle}`:"";
+  }
   async function editProjectRules(){
     const pid=S.kosmicEngineProjectId;
     const proj=(S.projects||[]).find(x=>x.id===pid);
@@ -1307,19 +1315,33 @@ const KosmicEngine=(function(){
   // The READ half. Returns a description to fold into the brief, or "" if
   // vision genuinely couldn't run — never a fabricated description, since a
   // made-up one would silently steer the entire production.
+  // Returns {charDesc, style} — split because they flow to different places:
+  // charDesc joins the character's own description text (draft.reviewedCharacterDesc
+  // territory), while style feeds into the brief text as its own labeled line so
+  // the Promptwriter's STYLE: field (see parsePromptwriterOutput) can pick it up
+  // through the same path a written-out style instruction would use. Previously
+  // this only ever asked about the subject's physical traits and explicitly told
+  // the model not to mention it was a photo — which threw away exactly the
+  // rendering-style signal (photorealistic vs illustrated vs anime, lighting,
+  // color palette) a reference image is often uploaded specifically to convey.
   async function describeRefs(refs,brainModel){
-    if(!refs||!refs.length)return "";
+    if(!refs||!refs.length)return {charDesc:"",style:""};
     try{
-      const desc=await callAiVision(
+      const raw=await callAiVision(
         refs.map(dataUrl=>({dataUrl})),
-        "Describe the subject of this reference image for use in a film production. Cover: apparent age range and build, hair, face, clothing, and any distinguishing visual features. Be concrete and specific — this will be used to keep the character consistent across generated shots. Do not mention that it is a photograph. 60 words maximum.",
-        "You are a character designer writing a reference description from a supplied image. Describe only what is visibly present.",
+        "Look at this reference image for a film production and describe TWO separate things.\n\nFirst, the subject: apparent age range and build, hair, face, clothing, and any distinguishing visual features. Be concrete and specific — this keeps the character consistent across generated shots.\n\nSecond, the rendering style of the image itself: is it photorealistic, illustrated, anime, painterly, 3D-rendered, claymation, etc? Describe lighting mood and color palette too if notable. This gets applied to everything generated for this production, so describe it as a standalone style direction, not tied to this specific subject.\n\nFormat EXACTLY like this, nothing else:\nSUBJECT: <60 words max>\nSTYLE: <30 words max>",
+        "You are a character designer and cinematographer writing reference notes from a supplied image. Describe only what is visibly present.",
         brainModel
       );
-      return (desc||"").trim();
+      const subjectMatch=(raw||"").match(/SUBJECT:\s*([\s\S]*?)(?=\n?STYLE:|$)/i);
+      const styleMatch=(raw||"").match(/STYLE:\s*([\s\S]*)/i);
+      return {
+        charDesc:subjectMatch?subjectMatch[1].trim():(raw||"").trim(), // untagged replies still work, just without a style split
+        style:styleMatch?styleMatch[1].trim():""
+      };
     }catch(err){
       console.warn("Reference image analysis failed (non-blocking):",err.message);
-      return "";
+      return {charDesc:"",style:""};
     }
   }
 
@@ -1945,11 +1967,17 @@ const KosmicEngine=(function(){
       // built, so the description is part of the brief the promptwriter sees
       // rather than something bolted on afterwards.
       const refs=pendingRefs().slice(0,MAX_REFS);
-      let refDesc="";
+      let refDesc="",refStyle="";
       if(refs.length){
         push("agent",`Looking at your reference image${refs.length>1?"s":""}…`);
-        refDesc=await describeRefs(refs,gs("ai_model","claude"));
-        if(refDesc)push("agent",`<b>Here's what I see:</b><br>${esc(refDesc)}<br><br>I'll keep the character consistent with this.`);
+        const seen=await describeRefs(refs,gs("ai_model","claude"));
+        refDesc=seen.charDesc;refStyle=seen.style;
+        if(refDesc||refStyle){
+          const parts=[];
+          if(refDesc)parts.push(`<b>Subject:</b> ${esc(refDesc)}`);
+          if(refStyle)parts.push(`<b>Style:</b> ${esc(refStyle)}`);
+          push("agent",`<b>Here's what I see:</b><br>${parts.join('<br>')}<br><br>I'll keep the character and visual style consistent with this.`);
+        }
         else push("agent","I couldn't read that image (your AI Brain may not support vision) — I'll work from your text, and still pass the image to the character sheet if the image model accepts references.");
       }
       const rules=projectRules();
@@ -1958,6 +1986,7 @@ const KosmicEngine=(function(){
       // they actually typed.
       const briefText=[text,
         refDesc?`Visual reference for the main character: ${refDesc}`:"",
+        refStyle?`Visual style of the reference image — use this as the production's overall rendering style unless the brief above explicitly asks for something else: ${refStyle}`:"",
         rules?`Standing rules for this project that must be followed throughout: ${rules}`:""
       ].filter(Boolean).join("\n\n");
       const remembered=await SemanticMemory.recallCharacter(text);
