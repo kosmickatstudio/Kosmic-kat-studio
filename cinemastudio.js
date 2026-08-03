@@ -145,7 +145,25 @@ const KAT_FILMS_TIERS=[
     videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,partial:true},
   {id:"katfilms2",label:"Kat Films 2",sub:"≈ Cinema Studio 3.5 — adds Style Settings (Color Palette/Lighting/Camera Moveset Style); research ongoing",
     videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,styleSettingsPanel:true,partial:true},
+  // Soul Studio — image-ONLY per direct instruction, NOT a 5th tier in the
+  // shared Kat Films progression above. Covers Higgsfield's separate Soul
+  // model family (Soul 2.0 / Soul Cinema, plus AI Cast / Cinematic
+  // Locations / Cinematic Cameras / Soul HEX — all confirmed via OCR of a
+  // dedicated Soul Cinema walkthrough, a genuinely different product line
+  // from the Cinema Studio 2.5/3/3.5 progression the tiers above cover).
+  // No Soul video model was found in that recording, hence imageOnly.
+  // Reserved/empty for now (same honest pattern as Signature 1): Soul
+  // Cast, the character-builder piece of Soul Cinema, already shipped
+  // separately inside Persona Studio; Cinematic Locations/Cameras and
+  // Soul HEX are the remaining pieces, not built here yet.
+  {id:"soulstudio",label:"Soul Studio",sub:"Higgsfield Soul 2.0/Soul Cinema — image-only. Soul Cast already built in Persona Studio; Cinematic Locations/Cameras + Soul HEX not yet built.",
+    empty:true,imageOnly:true},
 ];
+// Tiers visible in the picker for the CURRENT mode — Soul Studio only
+// ever shows up in Camera Crafts (image), never in Kat Films (video).
+function csTiersForMode(mode){
+  return KAT_FILMS_TIERS.filter(t=>!(t.imageOnly&&mode!=="image")&&!(t.videoOnly&&mode!=="video"));
+}
 function getCsTier(){return KAT_FILMS_TIERS.find(t=>t.id===S.csTier)||KAT_FILMS_TIERS[1];}
 
 const CINEMA_GENRES=[
@@ -258,8 +276,19 @@ const CS35_CAMERA_MOVESET_STYLES=[
 // its own mode so opening "Camera Crafts 4K" actually starts in Image
 // mode and "Kat Films 4K" starts in Video mode, before the in-composer
 // toggle can take over.
+// Shared by openCinemaStudio (fresh sidebar entry) and setCsMode
+// (in-composer toggle) so a tier restricted to the other mode (e.g.
+// image-only Soul Studio) can never stay selected once we're not in its
+// mode, however we got here.
+function ensureCsTierValidForMode(mode){
+  if(!csTiersForMode(mode).some(t=>t.id===S.csTier)){
+    S.csTier=csTiersForMode(mode)[0]?.id||S.csTier;
+    saveSetting("cs_tier",S.csTier);
+  }
+}
 function openCinemaStudio(mode,el){
   S.csMode=mode;
+  ensureCsTierValidForMode(mode);
   switchMod("cinemastudio",el);
 }
 
@@ -437,7 +466,7 @@ function renderCsSettingsBody(){
     ${tier.partial?`<div style="background:rgba(230,126,34,0.12);border:1px solid rgba(230,126,34,0.3);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--textm);margin-bottom:12px">⚠️ ${escapeHtml(tier.label)} is a partial build — flagged, not hidden. Full parity coming once more source material is confirmed.</div>`:''}
     <div class="f-group">
       <label class="f-label">${isVideo?"Kat Films":"Camera Crafts"} Tier</label>
-      <select class="f-select" id="csTierSelect" style="display:none" onchange="renderSimpleTrigger('csTierSelect')">${KAT_FILMS_TIERS.map(t=>`<option value="${t.id}" ${t.id===S.csTier?'selected':''}>${escapeHtml(t.label)} — ${escapeHtml(t.sub)}</option>`).join('')}</select>
+      <select class="f-select" id="csTierSelect" style="display:none" onchange="renderSimpleTrigger('csTierSelect')">${csTiersForMode(S.csMode).map(t=>`<option value="${t.id}" ${t.id===S.csTier?'selected':''}>${escapeHtml(t.label)} — ${escapeHtml(t.sub)}</option>`).join('')}</select>
       <div id="csTierSelectTrigger" onclick="openCsTierPicker()" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
     </div>
     <div class="f-group">
@@ -544,7 +573,7 @@ function openCsTierPicker(){
         <button onclick="closeModelPicker()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
       </div>
       <div style="padding:10px 14px 24px">
-        ${KAT_FILMS_TIERS.map(t=>{
+        ${csTiersForMode(S.csMode).map(t=>{
           const selected=t.id===S.csTier;
           return `<div onclick="selectCsTier('${t.id}')" style="display:flex;align-items:center;gap:11px;padding:12px 12px;border-radius:12px;cursor:pointer;margin-bottom:6px;border:1.5px solid ${selected?'var(--vs)':'transparent'};background:${selected?'var(--lav)':'transparent'}">
             <div style="flex:1;min-width:0">
@@ -573,6 +602,7 @@ function selectCsTier(tierId){
 function setCsMode(mode){
   if(S.csMode===mode)return;
   S.csMode=mode;
+  ensureCsTierValidForMode(mode);
   const titleEl=document.getElementById("csTitle");
   if(titleEl)titleEl.textContent=mode==="video"?"🎬 Kat Films 4K":"📷 Camera Crafts 4K";
   const tierBtn=document.querySelector('[title="Change Tier"]');
