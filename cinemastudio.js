@@ -136,6 +136,13 @@ S.csMentionOpen=false;
 // someone already typed.
 S.csRefImages=S.csRefImages||[];
 S.csRefImageCounter=S.csRefImageCounter||0;
+// Soul HEX — a single dedicated color-reference image, deliberately kept
+// separate from the generic @mention/ad-hoc ref system above. Soul HEX's
+// real purpose (confirmed via OCR: "Upload a reference image and let
+// Soul HEX bring its colors into your own style") is singular and
+// specific — match a palette — not a multi-image subject composition, so
+// it gets its own slot rather than being folded into csRefImages.
+S.csSoulHexRef=S.csSoulHexRef||null;
 
 const KAT_FILMS_TIERS=[
   // Signature 1 / 1 / 1.5 / 2 are the Cinema Studio 2.5→3→3.5 progression
@@ -156,15 +163,20 @@ const KAT_FILMS_TIERS=[
   // OCR of a dedicated Soul Cinema walkthrough, the actual reason that
   // recording was sent). Genuinely image-only (no Soul video model found)
   // AND genuinely the answer to what Camera Crafts 4K itself should be,
-  // not a re-skin of Kat Films' video tiers. Reserved/empty for now, same
-  // honest pattern as Signature 1: Soul Cast (the character-builder
-  // piece) already shipped inside Persona Studio; Cinematic Locations/
-  // Cameras and Soul HEX are the remaining pieces, not built here yet —
-  // until one of those lands, Camera Crafts 4K has no working generate
-  // tier, and that's the honest state rather than quietly borrowing Kat
-  // Films' imageModel to fake one.
-  {id:"soulstudio",label:"Soul Studio",sub:"Higgsfield Soul 2.0/Soul Cinema — image-only. Soul Cast already built in Persona Studio; Cinematic Locations/Cameras + Soul HEX not yet built.",
-    empty:true,imageOnly:true},
+  // not a re-skin of Kat Films' video tiers.
+  // Soul HEX is the first real piece built here (built one solid piece
+  // at a time, same as Soul Cast before it): color-palette matching from
+  // a reference image. No invented "Soul" fal model — imageModel falls
+  // back to the same fal-ai/flux/dev every other tier's fallback uses;
+  // when a Soul HEX reference is attached, generation routes through
+  // genViaFluxEdit instead (real multi-reference composition, already
+  // used elsewhere in this file for Character @mentions) with an
+  // explicit color-matching instruction folded into the prompt.
+  // Cinematic Locations and Cinematic Cameras remain open — not built
+  // yet, and Soul Cast (the character-builder piece) already shipped
+  // separately inside Persona Studio.
+  {id:"soulstudio",label:"Soul Studio",sub:"Higgsfield Soul 2.0/Soul Cinema — image-only. Soul Cast built in Persona Studio, Soul HEX built here. Cinematic Locations/Cameras not yet built.",
+    imageModel:"fal-ai/flux/dev",imageOnly:true,soulHex:true,partial:true},
 ];
 // Tiers visible in the picker for the CURRENT mode. Full separation, not
 // just different labels: Camera Crafts (image) only ever offers Soul
@@ -505,6 +517,21 @@ function renderCsSettingsBody(){
         <button class="btn btn-outline btn-xs" onclick="switchMod('directors',document.querySelector('[data-mod=directors]'))">Change</button>
       </div>
     </div>
+    ${tier.soulHex?`
+    <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Soul HEX <span style="color:var(--textm);font-weight:400;text-transform:none">— color palette matching</span></div>
+      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Upload a reference image and Soul HEX brings its colors into your generation. Optional — leave empty for a normal generation.</div>
+    </div>
+    <div class="f-group">
+      <input type="file" accept="image/*" id="csSoulHexUpload" style="display:none" onchange="handleCsSoulHexUpload(event)">
+      ${S.csSoulHexRef?`
+        <div style="display:flex;align-items:center;gap:10px">
+          <img src="${S.csSoulHexRef}" style="width:44px;height:44px;object-fit:cover;border-radius:8px">
+          <span style="flex:1;font-size:12px;color:var(--textm)">Color reference attached</span>
+          <button class="btn btn-ghost btn-xs" onclick="S.csSoulHexRef=null;renderCsSettingsBody()">✕ Remove</button>
+        </div>`:`
+        <button class="btn btn-outline btn-full" onclick="document.getElementById('csSoulHexUpload').click()">+ Add color reference</button>`}
+    </div>`:''}
     ${tier.styleSettingsPanel?`
     <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
       <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Style Settings <span style="color:var(--textm);font-weight:400;text-transform:none">— Cinema Studio 3.5</span></div>
@@ -617,6 +644,18 @@ function setCsMode(mode){
   if(tierBtn)tierBtn.textContent=mode==="video"?"🎬":"📷";
   renderCsHome(document.getElementById("csViewBody"));
   syncCsSidebarActive();
+}
+
+async function handleCsSoulHexUpload(event){
+  const file=event.target.files&&event.target.files[0];
+  event.target.value="";
+  if(!file)return;
+  try{
+    S.csSoulHexRef=await downscaleImageFile(file,1024,0.9);
+    renderCsSettingsBody();
+  }catch(err){
+    toast("Couldn't read that reference image: "+err.message,"error");
+  }
 }
 
 function updateCsCostHint(){
@@ -837,7 +876,21 @@ async function sendCinemaStudioGen(){
     const colorPalette=tier.styleSettingsPanel?(document.getElementById("csColorPalette")?.value||""):"";
     const lighting=tier.styleSettingsPanel?(document.getElementById("csLighting")?.value||""):"";
     const cameraMovesetStyle=tier.styleSettingsPanel?(document.getElementById("csCameraMovesetStyle")?.value||""):"";
-    const parts=[genre.frag,cleanPrompt,cameraMove,speedRamp,style,colorPalette,lighting,cameraMovesetStyle,directorPrompt].filter(Boolean);
+    // Soul HEX — real, not just a UI toggle: upload the reference the
+    // same way Character mentions already get uploaded, and add it to
+    // the SAME imageUrls array genViaFluxEdit already consumes below, so
+    // it's genuinely composited in, not just described in text.
+    let soulHexFrag="";
+    if(tier.soulHex&&S.csSoulHexRef){
+      try{
+        const hosted=await uploadRefsToFal([{dataUrl:S.csSoulHexRef,name:"soulhex-ref"}],apiKey);
+        if(hosted&&hosted[0]){
+          imageUrls.push(hosted[0]);
+          soulHexFrag="match the color palette, tones and mood of the attached reference image";
+        }
+      }catch(err){console.warn("Soul HEX reference upload failed",err.message);}
+    }
+    const parts=[genre.frag,cleanPrompt,cameraMove,speedRamp,style,colorPalette,lighting,cameraMovesetStyle,soulHexFrag,directorPrompt].filter(Boolean);
     const finalPrompt=parts.join(", ");
     const projectId=S.csActiveProjectId||"";
     const providerLabel=isVideo?"Kat Films 4K":"Camera Crafts 4K";
@@ -849,10 +902,11 @@ async function sendCinemaStudioGen(){
       logCost(model,providerLabel+" ("+tier.label+")");
       replaceCsLoadingBubble(loadingId,{type:"video",content:videoUrl,meta:{prompt:finalPrompt,providerLabel,assetId:savedAsset.id}});
     } else {
-      // Character mentions in Image mode get a REAL multi-reference
-      // composition (genViaFluxEdit, already used elsewhere in this app
-      // for multi-character storyboard shots) instead of plain
-      // text-to-image, so a mentioned character's actual photo is used.
+      // Character mentions (and now Soul HEX) in Image mode get a REAL
+      // multi-reference composition (genViaFluxEdit, already used
+      // elsewhere in this app for multi-character storyboard shots)
+      // instead of plain text-to-image, so a mentioned character's
+      // actual photo — or Soul HEX's color reference — is genuinely used.
       const result=imageUrls.length
         ?await genViaFluxEdit(finalPrompt,imageUrls,ratio,"fal-ai/flux-2/flash/edit")
         :await genViaFal(finalPrompt,"",model,ratio,false);
