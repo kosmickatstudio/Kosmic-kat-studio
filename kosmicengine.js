@@ -1870,6 +1870,17 @@ const KosmicEngine=(function(){
     const restored=JSON.parse(JSON.stringify(row.session));
     restored.projectId=target;
     S.directorChat=restored;
+    // Belt-and-suspenders: enterProject()'s fast path requires
+    // S.directorChat.projectId to exactly equal S.kosmicEngineProjectId. Both
+    // already point at target here, but if anything calls enterProject()
+    // again after this (project switch, module re-render, another tab),
+    // even a transient mismatch between the two would fall through into the
+    // recovery cascade and can end in reset() — silently overwriting the
+    // session that was just restored with the blank welcome message. This
+    // was reported as "toast fires, restore does nothing" — this line closes
+    // that gap rather than relying on the two already agreeing.
+    S.kosmicEngineProjectId=target;
+    window.save&&window.save("kosmicEngineProjectId");
     save();
     stashCurrentSession();
     const el=document.getElementById("dcRecoverModal");
@@ -1927,7 +1938,16 @@ const KosmicEngine=(function(){
       toast("Recovered your earlier Kosmic Engine progress","success");
       return;
     }
-    // 4. Nothing anywhere — genuinely a fresh start for this project.
+    // 4. Last check before giving up: something else (another await resolving
+    //    elsewhere, a manual restore racing with this same call) may have
+    //    already set the right session while the two awaits above were in
+    //    flight. Re-check before the destructive path rather than trusting
+    //    the snapshot taken at the top of this function.
+    if(S.directorChat&&S.directorChat.projectId===projectId&&S.directorChat.messages&&S.directorChat.messages.length){
+      renderThread();renderTaskPanel();
+      return;
+    }
+    // 5. Nothing anywhere — genuinely a fresh start for this project.
     reset(projectId);
     renderTaskPanel();
   }
