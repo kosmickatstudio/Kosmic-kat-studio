@@ -831,7 +831,30 @@ const KosmicEngine=(function(){
     document.body.appendChild(overlay);
   }
 
+  let _dispatching=false;
   async function dispatchTasks(){
+    // Re-entrancy guard: dispatchTasks mutates S.directorChat.tasks and the
+    // awaiting*/permissionPaused gate fields directly, with no locking. It's
+    // called from 13 places across this file, several fire-and-forget
+    // (no await) — a double-tap on Generate/Approve on mobile, or any two
+    // callers overlapping, would otherwise run two passes concurrently
+    // against the same task graph: capable of dispatching the same paid
+    // generation batch twice, and of corrupting the gate state on the way
+    // into the next approval step (the two races can each think they're the
+    // one setting awaitingApprovalTaskId, and only one wins). If a second
+    // call comes in while one is in flight, it's dropped — dispatchTasks is
+    // always re-triggered again after every state change that could make a
+    // new task ready, so nothing gets permanently stuck by skipping a call
+    // that would have just re-read the same state anyway.
+    if(_dispatching)return;
+    _dispatching=true;
+    try{
+      await dispatchTasksInner();
+    }finally{
+      _dispatching=false;
+    }
+  }
+  async function dispatchTasksInner(){
     const tasks=S.directorChat.tasks;
     // Extends the existing "don't dispatch while waiting on the user" guard
     // rather than adding a parallel mechanism — awaiting approval, awaiting
@@ -877,7 +900,7 @@ const KosmicEngine=(function(){
         const lines=await Promise.all(failed.map(async t=>`${t.label}: ${await normalizeError(t.error,guessProvider(t))}`));
         push("agent","",{error:`${failed.length} of ${parallelReady.length} parallel task(s) failed —\n\n${lines.join('\n\n')}`,retryable:true,retryTaskIds:failed.map(t=>t.id)});
       }
-      await dispatchTasks();
+      await dispatchTasksInner();
       return;
     }
     if(sequentialReady.length){
@@ -919,7 +942,7 @@ const KosmicEngine=(function(){
         push("agent","",{error:normalized,retryable:true,retryTaskIds:[t.id],taskId:t.id});
         return;
       }
-      await dispatchTasks();
+      await dispatchTasksInner();
     }
   }
 
