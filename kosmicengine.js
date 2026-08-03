@@ -479,7 +479,7 @@ const KosmicEngine=(function(){
       // Rejection feedback is appended rather than replacing anything: the
       // user is correcting a specific fault, not restating the whole brief.
       const csFix=p.charSheetFeedback?`. IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.charSheetFeedback}`:"";
-      const prompt=`${c.desc}, full character reference turnaround sheet, single composite image arranged in a grid showing: front full-body view, back full-body view, 3/4 angle full-body view, and a close-up face portrait — consistent character design across all views, clean plain background, professional character design sheet, only this one character, no other people${csFix}${styleSuffix(p)}${rulesSuffix(p)}`;
+      const prompt=`${c.desc}, full character reference turnaround sheet, single composite image arranged in an organized grid showing: front full-body view, back full-body view, 3/4 angle full-body view, close-up face portrait (front angle), and close-up face portrait (side profile angle) — clearly show any special or distinguishing features (scars, markings, accessories, unique traits) in the close-up views, consistent character design across all views, environmental background reflecting the story's actual setting rather than a plain studio backdrop, professional character design sheet, only this one character, no other people${csFix}${styleSuffix(p)}${rulesSuffix(p)}`;
       // Pass the uploaded reference to the generator itself on models that
       // accept one, for actual visual likeness rather than likeness by
       // description alone. Falls through to the plain path when the selected
@@ -503,7 +503,7 @@ const KosmicEngine=(function(){
       const sides=characters.filter(c=>c.tier==="SIDE");
       const lineup=sides.map(c=>`${c.name} (${c.desc})`).join("; ");
       const sideFix=p.charSheetFeedback?` IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.charSheetFeedback}`:"";
-      const prompt=`Character lineup reference sheet, ${sides.length} distinct background/side characters standing side by side for comparison, each clearly separated: ${lineup}. Clean plain background, consistent lighting, simple standing poses, professional character design reference — each character visually distinct from the others.${sideFix}${styleSuffix(p)}${rulesSuffix(p)}`;
+      const prompt=`Character lineup reference sheet, ${sides.length} distinct background/side characters standing side by side for comparison, each clearly separated: ${lineup}. Clearly show any special or distinguishing features (scars, markings, accessories, unique traits) each character has, environmental background reflecting the story's actual setting rather than a plain studio backdrop, consistent lighting, simple standing poses, professional character design reference — each character visually distinct from the others.${sideFix}${styleSuffix(p)}${rulesSuffix(p)}`;
       // A side-character LINEUP is inherently wide, so it keeps 16:9 unless the
       // production is vertical, where a wide plate would letterbox badly.
       const sideRatio=(p.aspectRatio==="9:16")?"9:16":"16:9";
