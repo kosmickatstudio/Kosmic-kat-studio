@@ -45,18 +45,25 @@
 //     app's real getActiveDirectorPrompt()/Directorial Studio, not a new
 //     director concept). Genre, Speed Ramp, Duration with Custom round
 //     out the rest of the confirmed 2.5 feature set.
-//   - "Kat Films 1.5" ≈ Cinema Studio 3, built with what was confirmed
-//     ("Enhanced camera and speed ramp control" per the reference) —
-//     same field set as tier 1 for now since the specific enhancement
-//     details weren't fully legible in the source video; flagged
-//     honestly rather than guessed at.
+//   - "Kat Films 1.5" ≈ Cinema Studio 3. A dedicated Cinema Studio 3
+//     walkthrough (separate from the 2.5 one) was OCR-reviewed and
+//     confirmed its actual "enhanced camera and speed ramp control" means
+//     a genuinely different Speed Ramp preset list — Auto, Ramp Up, Flash
+//     In, Flash Out, Bullet Time, Hero Moment (SPEED_RAMPS_ENHANCED) — not
+//     a vague "more control" gesture. That's now really wired in. Camera
+//     Movement itself is the same confirmed 14-option list as 2.5, not
+//     different. One remaining known gap, flagged rather than guessed at:
+//     the same video showed a "Shot Control" field once, alongside the
+//     Image/Video switch, without enough legible context to know what it
+//     does — not built yet, worth a closer look at that field specifically.
 //   - "Kat Films 2" ≈ Cinema Studio 3.5 — per direct instruction, this
-//     research is INCOMPLETE. Built minimally and clearly marked as
-//     partial rather than shipped as if it were feature-complete.
-// Built in parts per direct instruction — this pass is the UI rebuild +
-// full tier scaffold + a COMPLETE Kat Films 1. Tiers 1.5/2 get real,
-// working generation today but are explicitly flagged as partial builds
-// to finish once more source material is available.
+//     research is INCOMPLETE. Inherits the enhanced Speed Ramp list as a
+//     reasonable inference (later tiers building on earlier ones is the
+//     pattern actually observed across 2.5→3), but built minimally beyond
+//     that and clearly marked partial rather than shipped as complete.
+// Built in parts per direct instruction — this pass completed Kat Films
+// 1.5's real Speed Ramp differentiator. "Shot Control" and full Kat
+// Films 2 parity remain open for a future pass.
 //
 // "Cinema Studio 3.5" etc. as named models are Higgsfield's own in-house
 // model brand, not reachable via fal.ai — invented endpoints aren't
@@ -106,10 +113,10 @@ const KAT_FILMS_TIERS=[
   {id:"signature1",label:"Kat Films — Signature 1",sub:"Empty — reserved for a future tier",empty:true},
   {id:"katfilms1",label:"Kat Films 1",sub:"≈ Cinema Studio 2.5 — Camera selection, Style Presets, AI Director (fully built)",
     videoModel:"bytedance/seedance-2.0/fast/text-to-video",imageModel:"fal-ai/flux/dev"},
-  {id:"katfilms1_5",label:"Kat Films 1.5",sub:"≈ Cinema Studio 3 — enhanced camera & speed ramp control",
-    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",partial:true},
+  {id:"katfilms1_5",label:"Kat Films 1.5",sub:"≈ Cinema Studio 3 — adds enhanced Speed Ramp presets (Flash In/Out, Bullet Time, Hero Moment)",
+    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,partial:true},
   {id:"katfilms2",label:"Kat Films 2",sub:"≈ Cinema Studio 3.5 — research incomplete",
-    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",partial:true},
+    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,partial:true},
 ];
 function getCsTier(){return KAT_FILMS_TIERS.find(t=>t.id===S.csTier)||KAT_FILMS_TIERS[1];}
 
@@ -146,10 +153,10 @@ const KAT_FILMS_CAMERA_MOVES=[
   {label:"Drone Shot",value:"sweeping aerial drone shot"},
 ];
 
-// Only "Slow-Mo" and "Auto" were clearly legible in the reference video;
-// the rest of this list carries over from the version built earlier as a
-// reasonable, clearly-labeled set rather than guessing at Higgsfield's
-// exact remaining option names.
+// Only "Slow-Mo" and "Auto" were clearly legible in the Cinema Studio 2.5
+// video; the rest of this list is a reasonable, clearly-labeled set
+// rather than a guess at Higgsfield's exact remaining option names for
+// that tier.
 const SPEED_RAMPS=[
   {label:"Auto",value:""},
   {label:"None — constant speed",value:"constant real-time speed throughout, no speed ramping"},
@@ -157,6 +164,25 @@ const SPEED_RAMPS=[
   {label:"Ramp Up (slow → fast)",value:"speed ramps from slow motion into fast real-time motion"},
   {label:"Ramp Down (fast → slow)",value:"speed ramps from fast motion down into dramatic slow-motion"},
 ];
+
+// Cinema Studio 3's actual Speed Ramp option list, OCR-confirmed directly
+// from its Director's Panel (a genuinely different, more cinema-specific
+// preset set than 2.5's — this IS the concrete substance behind 3.0's
+// "enhanced camera and speed ramp control" tagline, not a guess at what
+// "enhanced" might mean):
+const SPEED_RAMPS_ENHANCED=[
+  {label:"Auto",value:""},
+  {label:"Ramp Up",value:"speed ramps from slow motion into fast real-time motion"},
+  {label:"Flash In",value:"a rapid flash-cut speed surge into the shot"},
+  {label:"Flash Out",value:"a rapid flash-cut speed surge out of the shot"},
+  {label:"Bullet Time",value:"dramatic bullet-time effect, motion freezes as the camera orbits around the subject"},
+  {label:"Hero Moment",value:"motion eases into a slow, powerful hero moment emphasizing the subject"},
+];
+// KNOWN GAP, flagged rather than guessed at: the same Director's Panel
+// also showed a field labeled "Shot Control" once in the OCR sweep,
+// alongside the Image/Video switch — not enough legible context to know
+// what it actually does, so it isn't built yet. Worth a real visual pass
+// once frame-viewing is back, or a closer video of that specific field.
 
 // Duration includes "Custom" (confirmed in the reference video) — since
 // Seedance only accepts specific durations, a custom entry gets snapped
@@ -366,8 +392,8 @@ function renderCsSettingsBody(){
       <div id="csCameraMoveTrigger" onclick="openSimplePicker('csCameraMove','Camera Movement')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
     </div>
     <div class="f-group">
-      <label class="f-label">Speed Ramp</label>
-      <select class="f-select" id="csSpeedRamp" style="display:none" onchange="renderSimpleTrigger('csSpeedRamp')">${SPEED_RAMPS.map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}</select>
+      <label class="f-label">Speed Ramp${tier.enhancedSpeedRamp?' <span style="font-weight:400;color:var(--gold)">— enhanced (Cinema Studio 3+)</span>':''}</label>
+      <select class="f-select" id="csSpeedRamp" style="display:none" onchange="renderSimpleTrigger('csSpeedRamp')">${(tier.enhancedSpeedRamp?SPEED_RAMPS_ENHANCED:SPEED_RAMPS).map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}</select>
       <div id="csSpeedRampTrigger" onclick="openSimplePicker('csSpeedRamp','Speed Ramp')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
     </div>` : ''}
     <div class="f-group">
