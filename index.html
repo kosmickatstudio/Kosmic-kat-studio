@@ -1293,7 +1293,7 @@ function idbGetAllKeys(){
 // Same key strings as before (kk_projects etc) so the migration read from
 // localStorage below can reuse them directly — this map is the one place
 // that knows the S-key <-> storage-key relationship, save()/gs() both use it.
-const STATE_KEY_MAP={settings:"kk_settings",projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",activityLog:"kk_activity",productions:"kk_productions",collections:"kk_collections",igChatHistory:"kk_ig_chat",afChatHistory:"kk_af_chat",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",flowProjects:"kk_flow_projects",assetRegistry:"kk_asset_registry",directorChat:"kk_director_chat",kosmicEngineSessions:"kk_ke_sessions",vcElements:"kk_vc_elements",worldMemory:"kk_world_memory"};
+const STATE_KEY_MAP={settings:"kk_settings",projects:"kk_projects",characters:"kk_characters",shots:"kk_shots",episodes:"kk_episodes",assets:"kk_assets",uploads:"kk_uploads",activityLog:"kk_activity",productions:"kk_productions",collections:"kk_collections",igChatHistory:"kk_ig_chat",afChatHistory:"kk_af_chat",editorSequence:"kk_editor_seq",costLog:"kk_cost_log",team:"kk_team",flowProjects:"kk_flow_projects",assetRegistry:"kk_asset_registry",directorChat:"kk_director_chat",kosmicEngineSessions:"kk_ke_sessions",vcElements:"kk_vc_elements",worldMemory:"kk_world_memory",kosmicEngineProjectId:"kk_ke_project_id"};
 async function loadStateFromStorage(){
   try{
     const existingIdbKeys=await idbGetAllKeys();
@@ -10208,7 +10208,7 @@ async function runPromptwriter(silent=false){
 
   try{
     const reply=await callAiSimple(
-      `${task}${projectGenreNote}\n\nAlso pick exactly ONE directorial approach that best fits this story's genre and tone, from this list: ${personaList}.\n\n${continuityNote}${reviewNote}\n\n${durationRule}\n\nAlso list every named character who actually appears, each tagged by story importance:\n- MC: the single main character/protagonist (exactly one)\n- LEAD: co-leads, the antagonist, or any other character important enough to need their own dedicated visual reference (zero or more)\n- SIDE: minor/background characters who only need a quick shared reference, not a full dedicated sheet (zero or more)\n\nAlso identify 1-3 key recurring locations/settings this story actually takes place in (skip this if it's just one simple location not worth a dedicated reference sheet).\n\nFormat EXACTLY like this, nothing else:\nPERSONA: <one name from the list, no title>\nCHARACTER: MC | <name> | <full visual description — appearance, build, clothing, distinguishing features>\nCHARACTER: LEAD | <name> | <full visual description>\nCHARACTER: SIDE | <name> | <short visual description>\n(one CHARACTER line per character, in this exact format, order doesn't matter)\nLOCATIONS: <location name>: <short visual description>\n<location name 2>: <short visual description>\n(one per line, omit this whole section if there's nothing worth a dedicated sheet)\nEPISODE 1: <duration>s | <content for episode 1>\nEPISODE 2: <duration>s | <content for episode 2>\n(continue for all ${n} episodes)`,
+      `${task}${projectGenreNote}\n\nAlso pick exactly ONE directorial approach that best fits this story's genre and tone, from this list: ${personaList}.\n\n${continuityNote}${reviewNote}\n\n${durationRule}\n\nAlso write ONE overall visual rendering style line for this production — the actual look of the footage (e.g. "ultra-photorealistic cinematic documentary", "2D flat-color anime", "stop-motion claymation", "painterly watercolor"). Infer this from the concept/brief if the user specified one; otherwise pick whatever best fits the story. This must describe RENDERING STYLE only, not plot or character traits — it gets applied to every single image and video generated in this production, including character sheets, so it needs to stand alone without other context.\n\nAlso list every named character who actually appears, each tagged by story importance:\n- MC: the single main character/protagonist (exactly one)\n- LEAD: co-leads, the antagonist, or any other character important enough to need their own dedicated visual reference (zero or more)\n- SIDE: minor/background characters who only need a quick shared reference, not a full dedicated sheet (zero or more)\n\nAlso identify 1-3 key recurring locations/settings this story actually takes place in (skip this if it's just one simple location not worth a dedicated reference sheet).\n\nFormat EXACTLY like this, nothing else:\nPERSONA: <one name from the list, no title>\nSTYLE: <the one-line rendering style described above>\nCHARACTER: MC | <name> | <full visual description — appearance, build, clothing, distinguishing features>\nCHARACTER: LEAD | <name> | <full visual description>\nCHARACTER: SIDE | <name> | <short visual description>\n(one CHARACTER line per character, in this exact format, order doesn't matter)\nLOCATIONS: <location name>: <short visual description>\n<location name 2>: <short visual description>\n(one per line, omit this whole section if there's nothing worth a dedicated sheet)\nEPISODE 1: <duration>s | <content for episode 1>\nEPISODE 2: <duration>s | <content for episode 2>\n(continue for all ${n} episodes)`,
       "You are a professional Promptwriter for an AI video production pipeline. Follow the requested format exactly, one line per field, no markdown, no extra commentary.",
       draft.brainModel
     );
@@ -10239,6 +10239,13 @@ function parsePromptwriterOutput(text,n,minClip,maxClip){
   const rawPersonaName=personaMatch?personaMatch[1].trim():"";
   const matchedDirector=DIRECTORS.find(d=>d.name.toLowerCase().includes(rawPersonaName.toLowerCase())||rawPersonaName.toLowerCase().includes(d.id));
   const persona=matchedDirector||DIRECTORS[0]; // fallback: first persona if AI's answer didn't match cleanly
+
+  // Overall rendering style (photorealistic / anime / claymation / etc) —
+  // separate from character physical descriptions and episode content on
+  // purpose, so it can be appended standalone to character-sheet and
+  // location-plate prompts, which otherwise had zero style signal at all.
+  const styleMatch=text.match(/STYLE:\s*(.+)/i);
+  const visualStyle=styleMatch?styleMatch[1].trim():"";
 
   // New tiered format: one or more "CHARACTER: TIER | Name | Description" lines.
   // Parsed into a structured array (characters) so the Character Sheet step can
@@ -10277,7 +10284,7 @@ function parsePromptwriterOutput(text,n,minClip,maxClip){
     duration=Math.max(minClip,Math.min(maxClip,duration)); // clamp to this model's real valid range
     episodes.push({duration,content:m[2].trim()});
   }
-  return {characterDesc,characters,episodes,persona:persona.name.replace('Director ',''),personaId:persona.id,locations};
+  return {characterDesc,characters,episodes,persona:persona.name.replace('Director ',''),personaId:persona.id,locations,visualStyle};
 }
 
 function createProduction(draft,parsed){
@@ -10292,6 +10299,7 @@ function createProduction(draft,parsed){
     costSpent:0,
     persona:parsed.persona,
     personaId:parsed.personaId,
+    visualStyle:parsed.visualStyle||"", // overall rendering look — read by charsheet/location/storyboard/scene prompts so "ultra-photorealistic" (or whatever was written) actually reaches every generation, not just episode content
     locations:parsed.locations||[], // from Promptwriter's own LOCATIONS: section — Kosmic Engine's loc_plan reuses this instead of re-deriving locations from scratch with a second AI call
     status:"active",
     created:new Date().toISOString(),
