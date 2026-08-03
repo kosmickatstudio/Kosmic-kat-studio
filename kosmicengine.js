@@ -486,7 +486,17 @@ const KosmicEngine=(function(){
       // model has no reference endpoint — the description already written into
       // the brief carries the likeness in that case, so this degrades rather
       // than failing.
-      const result=await genSheetWithRefs(p,prompt,p.aspectRatio||"1:1");
+      // Map reference images to characters by upload order — first ref image
+      // corresponds to the first named MC/LEAD character, second to the
+      // second, and so on. Previously every character sheet's generation
+      // call received the FULL p.refImages list regardless of which
+      // character was being made, so a photo meant for one character (say,
+      // a person) and one meant for another (say, an animal) both got fed
+      // into EVERY character's generation — the model had no way to know
+      // which reference was actually relevant, and produced neither
+      // faithfully. This scopes each generation to only its own reference.
+      const myRef=(p.refImages||[])[task.charIndex];
+      const result=await genSheetWithRefs(p,prompt,p.aspectRatio||"1:1",myRef?[myRef]:[]);
       p.characterSheets=p.characterSheets||[];
       // Model recorded at generation time. p.imageModel is user-settable and
       // model_select can change it mid-production, so reading it later would
@@ -1149,8 +1159,8 @@ const KosmicEngine=(function(){
   // inline data URLs directly (maxRef 4), fal-ai/nano-banana-pro needs its
   // /edit endpoint and HOSTED urls (maxRef 2), and other models have no
   // reference path at all.
-  async function genSheetWithRefs(p,prompt,ratio){
-    const refs=(p.refImages||[]).filter(Boolean);
+  async function genSheetWithRefs(p,prompt,ratio,refsOverride){
+    const refs=(refsOverride!==undefined?refsOverride:(p.refImages||[])).filter(Boolean);
     const cap=(typeof IMAGE_MODEL_CAPABILITIES!=="undefined"&&IMAGE_MODEL_CAPABILITIES[p.imageModel])||{};
     if(refs.length&&cap.multiRef){
       try{
@@ -1224,7 +1234,7 @@ const KosmicEngine=(function(){
   // since those are built from character.desc / location.desc alone. Same
   // append-only pattern as rulesSuffix so both can stack on one prompt.
   function styleSuffix(p){
-    return (p&&p.visualStyle)?`. Overall visual style: ${p.visualStyle}`:"";
+    return (p&&p.visualStyle)?`. Overall rendering technique for this production (medium, lighting, color grading — this describes HOW it's shot, not what's in frame; the character/location description above always takes priority if anything here seems to conflict with it): ${p.visualStyle}`:"";
   }
   async function editProjectRules(){
     const pid=S.kosmicEngineProjectId;
