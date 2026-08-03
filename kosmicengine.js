@@ -1027,7 +1027,7 @@ const KosmicEngine=(function(){
   // messages into collapsible per-task blocks without duplicating any of the
   // extra-card logic (approval / error / permission / questions / resume).
   function renderMessage(m,i){
-      if(m.role==="user")return `<div class="ig-bubble-user">${m.content}</div>`;
+      if(m.role==="user")return `<div class="ig-bubble-user">${m.refs&&m.refs.length?`<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:7px;margin-bottom:7px;border-bottom:1px solid rgba(255,255,255,0.2)">${m.refs.map(u=>`<img src="${esc(u)}" onclick="KosmicEngine.viewGeneration('${esc(u)}','image')" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.3);flex-shrink:0;cursor:pointer">`).join('')}</div>`:''}${m.content}</div>`;
       let extra="";
       if(m.approval)extra=`<div class="dc-approval-card">
         ${m.approval.images?`<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px">${m.approval.images.filter(Boolean).map(u=>`<img src="${esc(u)}" onclick="KosmicEngine.viewGeneration('${esc(u)}','image')" style="width:150px;height:150px;object-fit:cover;flex-shrink:0;border-radius:10px;border:1px solid var(--glass-brd);cursor:pointer">`).join('')}</div>`:''}
@@ -1969,7 +1969,12 @@ const KosmicEngine=(function(){
     const text=input.value.trim();
     if(!text)return;
     input.value="";
-    push("user",text);
+    // Snapshot for display only — handleUserMessage() below still reads the
+    // live pendingRefs() itself for actual analysis/consumption, exactly as
+    // before. This copy just gives the sent message something to show so the
+    // reference doesn't visually vanish the moment it's sent.
+    const attachedRefs=pendingRefs().slice();
+    push("user",text,attachedRefs.length?{refs:attachedRefs}:{});
     handleUserMessage(text);
   }
   async function handleUserMessage(text){
@@ -2016,9 +2021,9 @@ const KosmicEngine=(function(){
         continuity:"both",brainModel:gs("ai_model","claude"),refImages:refs,reviewedCharacterDesc:remembered?remembered.desc:"",hasFullScript:false,fullScriptText:briefText,episodeCount:1,
       };
       save();
-      push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}"${remembered.semantic?', recalled by meaning — '+Math.round(remembered.score*100)+'% match':''}) — I'll keep their approved look consistent unless you tell me otherwise.`:""} Before I start, set the ${intakeQuestions().length} things below — or just say "go" to run with the defaults (1 episode, ~8s, 720p, 16:9, narrative + visual continuity).`,{questions:true});
       S.directorChat.intakeStage="confirm_plan";
       S.directorChat.qaAnswers={};
+      push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}"${remembered.semantic?', recalled by meaning — '+Math.round(remembered.score*100)+'% match':''}) — I'll keep their approved look consistent unless you tell me otherwise.`:""} Before I start, set the ${intakeQuestions().length} things below — or just say "go" to run with the defaults (1 episode, ~8s, 720p, 16:9, narrative + visual continuity).`,{questions:true});
       save();
       return;
     }
