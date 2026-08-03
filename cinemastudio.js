@@ -138,44 +138,41 @@ S.csRefImages=S.csRefImages||[];
 S.csRefImageCounter=S.csRefImageCounter||0;
 
 const KAT_FILMS_TIERS=[
-  {id:"signature1",label:"Kat Films — Signature 1",sub:"Empty — reserved for a future tier",empty:true},
+  // Signature 1 / 1 / 1.5 / 2 are the Cinema Studio 2.5→3→3.5 progression
+  // — video-motion features (Camera Movement, Speed Ramp, AI Director,
+  // Style Settings). Per direct instruction: these are Kat Films 4K
+  // features specifically, not shared with Camera Crafts — videoOnly,
+  // full stop, not just differently labeled there.
+  {id:"signature1",label:"Kat Films — Signature 1",sub:"Empty — reserved for a future tier",empty:true,videoOnly:true},
   {id:"katfilms1",label:"Kat Films 1",sub:"≈ Cinema Studio 2.5 — Camera selection, Style Presets, AI Director (fully built)",
-    videoModel:"bytedance/seedance-2.0/fast/text-to-video",imageModel:"fal-ai/flux/dev"},
+    videoModel:"bytedance/seedance-2.0/fast/text-to-video",imageModel:"fal-ai/flux/dev",videoOnly:true},
   {id:"katfilms1_5",label:"Kat Films 1.5",sub:"≈ Cinema Studio 3 — adds enhanced Speed Ramp presets (Flash In/Out, Bullet Time, Hero Moment)",
-    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,partial:true},
+    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,partial:true,videoOnly:true},
   {id:"katfilms2",label:"Kat Films 2",sub:"≈ Cinema Studio 3.5 — adds Style Settings (Color Palette/Lighting/Camera Moveset Style); research ongoing",
-    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,styleSettingsPanel:true,partial:true},
-  // Soul Studio — image-ONLY per direct instruction, NOT a 5th tier in the
-  // shared Kat Films progression above. Covers Higgsfield's separate Soul
-  // model family (Soul 2.0 / Soul Cinema, plus AI Cast / Cinematic
-  // Locations / Cinematic Cameras / Soul HEX — all confirmed via OCR of a
-  // dedicated Soul Cinema walkthrough, a genuinely different product line
-  // from the Cinema Studio 2.5/3/3.5 progression the tiers above cover).
-  // No Soul video model was found in that recording, hence imageOnly.
-  // Reserved/empty for now (same honest pattern as Signature 1): Soul
-  // Cast, the character-builder piece of Soul Cinema, already shipped
-  // separately inside Persona Studio; Cinematic Locations/Cameras and
-  // Soul HEX are the remaining pieces, not built here yet.
+    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,styleSettingsPanel:true,partial:true,videoOnly:true},
+  // Soul Studio — the ONLY tier Camera Crafts 4K offers. Higgsfield's
+  // separate Soul model family (Soul 2.0 / Soul Cinema, plus AI Cast /
+  // Cinematic Locations / Cinematic Cameras / Soul HEX — confirmed via
+  // OCR of a dedicated Soul Cinema walkthrough, the actual reason that
+  // recording was sent). Genuinely image-only (no Soul video model found)
+  // AND genuinely the answer to what Camera Crafts 4K itself should be,
+  // not a re-skin of Kat Films' video tiers. Reserved/empty for now, same
+  // honest pattern as Signature 1: Soul Cast (the character-builder
+  // piece) already shipped inside Persona Studio; Cinematic Locations/
+  // Cameras and Soul HEX are the remaining pieces, not built here yet —
+  // until one of those lands, Camera Crafts 4K has no working generate
+  // tier, and that's the honest state rather than quietly borrowing Kat
+  // Films' imageModel to fake one.
   {id:"soulstudio",label:"Soul Studio",sub:"Higgsfield Soul 2.0/Soul Cinema — image-only. Soul Cast already built in Persona Studio; Cinematic Locations/Cameras + Soul HEX not yet built.",
     empty:true,imageOnly:true},
 ];
-// Tiers visible in the picker for the CURRENT mode — Soul Studio only
-// ever shows up in Camera Crafts (image), never in Kat Films (video).
+// Tiers visible in the picker for the CURRENT mode. Full separation, not
+// just different labels: Camera Crafts (image) only ever offers Soul
+// Studio; Kat Films (video) only ever offers the 4 videoOnly tiers.
 function csTiersForMode(mode){
   return KAT_FILMS_TIERS.filter(t=>!(t.imageOnly&&mode!=="image")&&!(t.videoOnly&&mode!=="video"));
 }
 function getCsTier(){return KAT_FILMS_TIERS.find(t=>t.id===S.csTier)||KAT_FILMS_TIERS[1];}
-// Kat Films 1/1.5/2/Signature 1 are the SAME underlying tier and real
-// generation in both modes (each has both a videoModel and imageModel) —
-// only Soul Studio is genuinely image-only. So rather than hiding those
-// shared tiers from Camera Crafts (which would leave it with no working
-// tier at all, since Soul Studio is reserved/empty), their DISPLAY NAME
-// swaps to "Camera Crafts" in image mode, same as this file already does
-// for the module title/provider label everywhere else. "Soul Studio"
-// itself never gets touched by this — it has no "Kat Films" in its name.
-function csTierLabel(tier,mode){
-  return (mode||S.csMode)==="video"?tier.label:tier.label.replace("Kat Films","Camera Crafts");
-}
 
 const CINEMA_GENRES=[
   {label:"General",frag:""},
@@ -344,7 +341,7 @@ function csHeaderSubtitle(){
   const hasKey=gs("api_falai");
   const tier=getCsTier();
   const director=gs("active_director","")?(getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name:"";
-  return `${hasKey?'<span style="color:var(--green);font-weight:700">●</span>':'<span style="color:var(--red);font-weight:700">●</span>'} ${escapeHtml(csTierLabel(tier))}${tier.partial?' <span style="color:var(--gold)">(partial)</span>':''} · ${CS_VIEW_LABELS[S.csView]||'Home'}${director?' · '+pIcon('film',10)+' '+escapeHtml(director):''}`;
+  return `${hasKey?'<span style="color:var(--green);font-weight:700">●</span>':'<span style="color:var(--red);font-weight:700">●</span>'} ${escapeHtml(tier.label)}${tier.partial?' <span style="color:var(--gold)">(partial)</span>':''} · ${CS_VIEW_LABELS[S.csView]||'Home'}${director?' · '+pIcon('film',10)+' '+escapeHtml(director):''}`;
 }
 
 function openCsNavMenu(){
@@ -422,7 +419,7 @@ function renderCsHome(wrap){
   if(tier.empty){
     wrap.innerHTML=`<div class="ig-chat-shell" style="padding:40px 20px;text-align:center">
       <div style="font-size:32px;margin-bottom:10px;opacity:0.5">🎬</div>
-      <div style="font-size:14px;font-weight:700;color:var(--textm)">${escapeHtml(csTierLabel(tier))} is empty right now</div>
+      <div style="font-size:14px;font-weight:700;color:var(--textm)">${escapeHtml(tier.label)} is empty right now</div>
       <div style="font-size:12px;color:var(--texts);margin-top:6px">This slot is reserved for a future tier — nothing to generate with yet.</div>
       <button class="btn btn-outline btn-sm" style="margin-top:14px" onclick="openCsTierPicker()">Choose a different tier</button>
     </div>`;
@@ -474,10 +471,10 @@ function renderCsSettingsBody(){
   const isVideo=S.csMode==="video";
   const tier=getCsTier();
   body.innerHTML=`
-    ${tier.partial?`<div style="background:rgba(230,126,34,0.12);border:1px solid rgba(230,126,34,0.3);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--textm);margin-bottom:12px">⚠️ ${escapeHtml(csTierLabel(tier))} is a partial build — flagged, not hidden. Full parity coming once more source material is confirmed.</div>`:''}
+    ${tier.partial?`<div style="background:rgba(230,126,34,0.12);border:1px solid rgba(230,126,34,0.3);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--textm);margin-bottom:12px">⚠️ ${escapeHtml(tier.label)} is a partial build — flagged, not hidden. Full parity coming once more source material is confirmed.</div>`:''}
     <div class="f-group">
       <label class="f-label">${isVideo?"Kat Films":"Camera Crafts"} Tier</label>
-      <select class="f-select" id="csTierSelect" style="display:none" onchange="renderSimpleTrigger('csTierSelect')">${csTiersForMode(S.csMode).map(t=>`<option value="${t.id}" ${t.id===S.csTier?'selected':''}>${escapeHtml(csTierLabel(t))} — ${escapeHtml(t.sub)}</option>`).join('')}</select>
+      <select class="f-select" id="csTierSelect" style="display:none" onchange="renderSimpleTrigger('csTierSelect')">${csTiersForMode(S.csMode).map(t=>`<option value="${t.id}" ${t.id===S.csTier?'selected':''}>${escapeHtml(t.label)} — ${escapeHtml(t.sub)}</option>`).join('')}</select>
       <div id="csTierSelectTrigger" onclick="openCsTierPicker()" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
     </div>
     <div class="f-group">
@@ -588,7 +585,7 @@ function openCsTierPicker(){
           const selected=t.id===S.csTier;
           return `<div onclick="selectCsTier('${t.id}')" style="display:flex;align-items:center;gap:11px;padding:12px 12px;border-radius:12px;cursor:pointer;margin-bottom:6px;border:1.5px solid ${selected?'var(--vs)':'transparent'};background:${selected?'var(--lav)':'transparent'}">
             <div style="flex:1;min-width:0">
-              <div style="font-size:13.5px;font-weight:700;color:var(--text)">${escapeHtml(csTierLabel(t))}${t.empty?' <span style="color:var(--textm);font-weight:400">(empty)</span>':t.partial?' <span style="color:var(--gold);font-weight:400">(partial)</span>':''}</div>
+              <div style="font-size:13.5px;font-weight:700;color:var(--text)">${escapeHtml(t.label)}${t.empty?' <span style="color:var(--textm);font-weight:400">(empty)</span>':t.partial?' <span style="color:var(--gold);font-weight:400">(partial)</span>':''}</div>
               <div style="font-size:11px;color:var(--textm);margin-top:1px">${escapeHtml(t.sub)}</div>
             </div>
             ${selected?`<div style="color:var(--violet)">${pIcon('check',16)}</div>`:''}
@@ -806,7 +803,7 @@ async function sendCinemaStudioGen(){
   const apiKey=gs("api_falai","");
   if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
   const tier=getCsTier();
-  if(tier.empty){toast(`${csTierLabel(tier)} is empty — choose a different tier`,"error");return;}
+  if(tier.empty){toast(`${tier.label} is empty — choose a different tier`,"error");return;}
   const promptEl=document.getElementById("csPrompt");
   const rawPrompt=promptEl?.value.trim();
   if(!rawPrompt){toast("Describe your scene first","error");return;}
@@ -849,7 +846,7 @@ async function sendCinemaStudioGen(){
       const videoUrl=await genViaSeedanceReference(finalPrompt,model,ratio,duration,imageUrls,[],[]);
       const savedAsset=createVideoAsset(videoUrl,finalPrompt,projectId,{model,providerLabel},true);
       if(projectId)addCsGenerationToProject(projectId,savedAsset.id);
-      logCost(model,providerLabel+" ("+csTierLabel(tier)+")");
+      logCost(model,providerLabel+" ("+tier.label+")");
       replaceCsLoadingBubble(loadingId,{type:"video",content:videoUrl,meta:{prompt:finalPrompt,providerLabel,assetId:savedAsset.id}});
     } else {
       // Character mentions in Image mode get a REAL multi-reference
@@ -861,7 +858,7 @@ async function sendCinemaStudioGen(){
         :await genViaFal(finalPrompt,"",model,ratio,false);
       const savedAsset=await createImageAsset(result.url,finalPrompt,projectId,{model:imageUrls.length?"fal-ai/flux-2/flash/edit":model,providerLabel});
       if(projectId)addCsGenerationToProject(projectId,savedAsset.id);
-      logCost(imageUrls.length?"fal-ai/flux-2/flash/edit":model,providerLabel+" ("+csTierLabel(tier)+")");
+      logCost(imageUrls.length?"fal-ai/flux-2/flash/edit":model,providerLabel+" ("+tier.label+")");
       replaceCsLoadingBubble(loadingId,{type:"image",content:result.url,meta:{prompt:finalPrompt,providerLabel,assetId:savedAsset.id}});
     }
     toast("✨ Generated","success");
