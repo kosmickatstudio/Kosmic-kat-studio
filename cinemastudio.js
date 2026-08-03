@@ -175,8 +175,8 @@ const KAT_FILMS_TIERS=[
   // Cinematic Locations and Cinematic Cameras remain open — not built
   // yet, and Soul Cast (the character-builder piece) already shipped
   // separately inside Persona Studio.
-  {id:"soulstudio",label:"Soul Studio",sub:"Higgsfield Soul 2.0/Soul Cinema — image-only. Soul Cast built in Persona Studio, Soul HEX built here. Cinematic Locations/Cameras not yet built.",
-    imageModel:"fal-ai/flux/dev",imageOnly:true,soulHex:true,partial:true},
+  {id:"soulstudio",label:"Soul Studio",sub:"Higgsfield Soul 2.0/Soul Cinema — image-only. Soul Cast built in Persona Studio, Soul HEX + Cinematic Locations built here. Cinematic Cameras not yet built.",
+    imageModel:"fal-ai/flux/dev",imageOnly:true,soulHex:true,cinematicLocations:true,partial:true},
 ];
 // Tiers visible in the picker for the CURRENT mode. Full separation, not
 // just different labels: Camera Crafts (image) only ever offers Soul
@@ -532,6 +532,19 @@ function renderCsSettingsBody(){
         </div>`:`
         <button class="btn btn-outline btn-full" onclick="document.getElementById('csSoulHexUpload').click()">+ Add color reference</button>`}
     </div>`:''}
+    ${tier.cinematicLocations?`
+    <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Cinematic Locations <span style="color:var(--textm);font-weight:400;text-transform:none">— rich environments, no characters</span></div>
+      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Describe a place instead of a shot — generates one or more environment variations of it. Works alongside Soul HEX above.</div>
+    </div>
+    <div class="f-group" style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <input type="checkbox" id="csLocationsMode" onchange="toggleCsLocationsMode()" style="width:18px;height:18px">
+      <label for="csLocationsMode" style="font-size:13px;font-weight:600;color:var(--text);margin:0">This is a location, not a shot</label>
+    </div>
+    <div class="f-group" id="csLocationsBatchWrap" style="display:none">
+      <label class="f-label">How many variations? (1-10)</label>
+      <input type="number" class="f-input" id="csLocationsBatch" min="1" max="10" value="3">
+    </div>`:''}
     ${tier.styleSettingsPanel?`
     <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
       <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Style Settings <span style="color:var(--textm);font-weight:400;text-transform:none">— Cinema Studio 3.5</span></div>
@@ -644,6 +657,18 @@ function setCsMode(mode){
   if(tierBtn)tierBtn.textContent=mode==="video"?"🎬":"📷";
   renderCsHome(document.getElementById("csViewBody"));
   syncCsSidebarActive();
+}
+
+// Flips the prompt field between generic "describe your scene" framing
+// and location-specific framing, and reveals the variation-count field —
+// purely a UI toggle, the actual location-only prompt injection happens
+// at generation time in sendCinemaStudioGen.
+function toggleCsLocationsMode(){
+  const on=document.getElementById("csLocationsMode")?.checked;
+  const batchWrap=document.getElementById("csLocationsBatchWrap");
+  if(batchWrap)batchWrap.style.display=on?"block":"none";
+  const promptEl=document.getElementById("csPrompt");
+  if(promptEl)promptEl.placeholder=on?"Describe the location — e.g. a rain-soaked neon alley at night":"Describe what you want to create...";
 }
 
 async function handleCsSoulHexUpload(event){
@@ -857,6 +882,14 @@ async function sendCinemaStudioGen(){
     duration=durVal==="custom"?snapToKatFilmsDuration(parseInt(document.getElementById("csCustomDuration")?.value,10)||6):snapToKatFilmsDuration(parseInt(durVal,10)||6);
   }
   const model=isVideo?tier.videoModel:tier.imageModel;
+  // Cinematic Locations — image-only (Soul Studio is imageOnly anyway),
+  // confirmed via OCR: its own "describe your location" field + a batch
+  // count (1-10 seen). Everything else in this function (Soul HEX,
+  // Character mentions, single-shot generation) behaves exactly as
+  // before when this isn't checked — this only branches the image path
+  // into a loop when it is.
+  const useLocationsBatch=!isVideo&&tier.cinematicLocations&&!!document.getElementById("csLocationsMode")?.checked;
+  const locationsBatchCount=useLocationsBatch?Math.min(10,Math.max(1,parseInt(document.getElementById("csLocationsBatch")?.value,10)||3)):1;
   const btn=document.getElementById("csGenBtn");
   btn.disabled=true;btn.textContent="⏳";
 
@@ -866,8 +899,11 @@ async function sendCinemaStudioGen(){
   const refImagesSnapshot=S.csRefImages.slice();
   S.csRefImages=[];
   renderCsRefImageStrip();
-  const loadingId="csLoading_"+Date.now();
-  pushCsChatMessage({id:loadingId,type:"loading",content:isVideo?"Rolling camera…":"Composing shot…"});
+  // Declared here (not per-branch) so the outer catch below can always
+  // see it — a per-branch `const loadingId` would be invisible outside
+  // its own if/else block, breaking error handling for anything that
+  // throws before reaching a branch.
+  let loadingId=null;
 
   try{
     const {cleanPrompt,imageUrls}=await resolveCsCharacterMentions(rawPrompt,apiKey,refImagesSnapshot);
@@ -876,6 +912,7 @@ async function sendCinemaStudioGen(){
     const colorPalette=tier.styleSettingsPanel?(document.getElementById("csColorPalette")?.value||""):"";
     const lighting=tier.styleSettingsPanel?(document.getElementById("csLighting")?.value||""):"";
     const cameraMovesetStyle=tier.styleSettingsPanel?(document.getElementById("csCameraMovesetStyle")?.value||""):"";
+    const locationFrag=useLocationsBatch?"wide establishing shot of the location itself, rich environmental detail, cinematic lighting, no visible characters or people":"";
     // Soul HEX — real, not just a UI toggle: upload the reference the
     // same way Character mentions already get uploaded, and add it to
     // the SAME imageUrls array genViaFluxEdit already consumes below, so
@@ -890,18 +927,45 @@ async function sendCinemaStudioGen(){
         }
       }catch(err){console.warn("Soul HEX reference upload failed",err.message);}
     }
-    const parts=[genre.frag,cleanPrompt,cameraMove,speedRamp,style,colorPalette,lighting,cameraMovesetStyle,soulHexFrag,directorPrompt].filter(Boolean);
-    const finalPrompt=parts.join(", ");
+    const baseParts=[genre.frag,cleanPrompt,cameraMove,speedRamp,style,colorPalette,lighting,cameraMovesetStyle,locationFrag,soulHexFrag,directorPrompt].filter(Boolean);
     const projectId=S.csActiveProjectId||"";
     const providerLabel=isVideo?"Kat Films 4K":"Camera Crafts 4K";
 
     if(isVideo){
+      const finalPrompt=baseParts.join(", ");
+      loadingId="csLoading_"+Date.now();
+      pushCsChatMessage({id:loadingId,type:"loading",content:"Rolling camera…"});
       const videoUrl=await genViaSeedanceReference(finalPrompt,model,ratio,duration,imageUrls,[],[]);
       const savedAsset=createVideoAsset(videoUrl,finalPrompt,projectId,{model,providerLabel},true);
       if(projectId)addCsGenerationToProject(projectId,savedAsset.id);
       logCost(model,providerLabel+" ("+tier.label+")");
       replaceCsLoadingBubble(loadingId,{type:"video",content:videoUrl,meta:{prompt:finalPrompt,providerLabel,assetId:savedAsset.id}});
+    } else if(useLocationsBatch){
+      // One bubble per variation, generated and replaced in sequence —
+      // same proven pattern Aesthetic Reel already uses for its packs,
+      // reused here rather than inventing a new batch-grid UI.
+      toast(`📍 Generating ${locationsBatchCount} location variation${locationsBatchCount>1?'s':''}…`,"success");
+      for(let i=0;i<locationsBatchCount;i++){
+        const finalPrompt=[...baseParts,`variation ${i+1} of ${locationsBatchCount}, different angle or time of day than the other variations`].join(", ");
+        const loadingId="csLoading_"+Date.now()+"_"+i;
+        pushCsChatMessage({id:loadingId,type:"loading",content:`Composing location ${i+1}/${locationsBatchCount}…`});
+        try{
+          const result=imageUrls.length
+            ?await genViaFluxEdit(finalPrompt,imageUrls,ratio,"fal-ai/flux-2/flash/edit")
+            :await genViaFal(finalPrompt,"",model,ratio,false);
+          const savedAsset=await createImageAsset(result.url,finalPrompt,projectId,{model:imageUrls.length?"fal-ai/flux-2/flash/edit":model,providerLabel});
+          if(projectId)addCsGenerationToProject(projectId,savedAsset.id);
+          logCost(imageUrls.length?"fal-ai/flux-2/flash/edit":model,providerLabel+" ("+tier.label+", location "+(i+1)+"/"+locationsBatchCount+")");
+          replaceCsLoadingBubble(loadingId,{type:"image",content:result.url,meta:{prompt:finalPrompt,providerLabel,assetId:savedAsset.id}});
+        }catch(err){
+          replaceCsLoadingBubble(loadingId,{type:"error",content:err.message});
+        }
+      }
+      toast(`✅ ${locationsBatchCount} location variation${locationsBatchCount>1?'s':''} done`,"success");
     } else {
+      const finalPrompt=baseParts.join(", ");
+      loadingId="csLoading_"+Date.now();
+      pushCsChatMessage({id:loadingId,type:"loading",content:"Composing shot…"});
       // Character mentions (and now Soul HEX) in Image mode get a REAL
       // multi-reference composition (genViaFluxEdit, already used
       // elsewhere in this app for multi-character storyboard shots)
@@ -917,7 +981,7 @@ async function sendCinemaStudioGen(){
     }
     toast("✨ Generated","success");
   }catch(err){
-    replaceCsLoadingBubble(loadingId,{type:"error",content:err.message});
+    if(loadingId)replaceCsLoadingBubble(loadingId,{type:"error",content:err.message});
     toast("❌ "+err.message,"error");
   }
   btn.disabled=false;btn.textContent="➤";
