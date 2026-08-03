@@ -570,7 +570,8 @@ function updateCsCostHint(){
     const est=estimateVideoCost(tier.videoModel,6,"720p",false);
     hint.textContent=est?formatCostLine(est):"";
   }else{
-    hint.textContent="";
+    const est=estimateImageCost(tier.imageModel,1);
+    hint.textContent=est?formatCostLine(est):"";
   }
 }
 
