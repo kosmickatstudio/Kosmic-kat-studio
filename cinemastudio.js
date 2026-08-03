@@ -89,6 +89,12 @@
 // Character @mentions in Image mode use genViaFluxEdit (real multi-
 // reference image composition, already used elsewhere in this app) so a
 // mentioned character's actual reference photo is genuinely used.
+// Beyond named Characters, a "+" button next to the prompt (matching
+// Higgsfield's own "+ | @" composer pattern) lets you attach ANY image
+// ad-hoc and reference it as @Image1, @Image2, etc. — real uploads,
+// really passed into the actual generation call alongside whatever
+// Character mentions are also present. Attachments are ephemeral (not
+// persisted, cleared after each send) same as the prompt text itself.
 //
 // SESSION NOTE: direct image/frame viewing was non-functional for this
 // entire session (confirmed by testing on multiple fresh extractions and
@@ -107,7 +113,7 @@
 // selectSimpleOption, openVisualPicker, renderVisualTrigger,
 // STYLE_PRESETS, getAllDirectors, sheetSwipeStart/Move/End,
 // genViaSeedanceReference, genViaFal, genViaFluxEdit, uploadRefsToFal,
-// createVideoAsset, createImageAsset, logCost, showPromptDialog,
+// downscaleImageFile, createVideoAsset, createImageAsset, logCost, showPromptDialog,
 // downloadWithName, sanitizeFilenamePart, openCollectionPicker,
 // VC_RESULT_ICONS. Also needs getActiveDirectorPrompt from directors.js,
 // which must be loaded too.
@@ -121,6 +127,15 @@ S.csMode=S.csMode||"video";
 S.csTier=S.csTier||gs("cs_tier","katfilms1")||"katfilms1";
 S.csChatHistory=S.csChatHistory||gs("cs_chat_history",[])||[];
 S.csMentionOpen=false;
+// Ad-hoc reference images — tagged @Image1, @Image2 etc., the generic
+// counterpart to @CharacterName mentions. Deliberately NOT persisted
+// (data URLs get large fast) and cleared per-generation, same lifecycle
+// as the prompt text itself — these are "attachments to this message,"
+// not a saved library. csRefImageCounter is monotonic so a removed tag's
+// number is never reused mid-session, avoiding collisions with text
+// someone already typed.
+S.csRefImages=S.csRefImages||[];
+S.csRefImageCounter=S.csRefImageCounter||0;
 
 const KAT_FILMS_TIERS=[
   {id:"signature1",label:"Kat Films — Signature 1",sub:"Empty — reserved for a future tier",empty:true},
@@ -394,9 +409,12 @@ function renderCsHome(wrap){
             <button id="csModeImage" onclick="setCsMode('image')" style="border:none;border-radius:7px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;background:${!isVideo?'var(--violet)':'transparent'};color:${!isVideo?'#fff':'var(--textm)'}">📷 Image</button>
             <button id="csModeVideo" onclick="setCsMode('video')" style="border:none;border-radius:7px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;background:${isVideo?'var(--violet)':'transparent'};color:${isVideo?'#fff':'var(--textm)'}">🎬 Video</button>
           </div>
-          <textarea class="ig-input-textarea-v2" id="csPrompt" rows="1" placeholder="${hasKey?'Describe your scene — use @ to add a character':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleCsChatKeydown(event)" oninput="handleCsPromptInput(event);this.style.height='auto';this.style.height=Math.min(this.scrollHeight,200)+'px'"></textarea>
+          <textarea class="ig-input-textarea-v2" id="csPrompt" rows="1" placeholder="${hasKey?'Describe your scene — use @ to add a character or reference image':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleCsChatKeydown(event)" oninput="handleCsPromptInput(event);this.style.height='auto';this.style.height=Math.min(this.scrollHeight,200)+'px'"></textarea>
           <div id="csMentionDropdown" style="display:none;position:absolute;left:10px;right:10px;background:var(--pearl2);border:1.5px solid var(--glass-brd);border-radius:10px;padding:4px;z-index:10;max-height:160px;overflow-y:auto"></div>
+          <input type="file" accept="image/*" id="csRefImageFile" style="display:none" onchange="handleCsRefImageUpload(event)">
+          <div id="csRefImageStrip" style="display:flex;gap:6px;flex-wrap:wrap;margin:0 2px 6px"></div>
           <div class="ig-input-toolbar">
+            <button class="ig-tool-btn" onclick="document.getElementById('csRefImageFile').click()" title="Attach a reference image">+</button>
             <button class="ig-tool-btn" onclick="toggleCsSettings()" title="Settings">⚙</button>
             <button class="ig-send-round" id="csGenBtn" ${!hasKey?'disabled':''} onclick="sendCinemaStudioGen()" title="Generate">➤</button>
           </div>
@@ -406,6 +424,7 @@ function renderCsHome(wrap){
     </div>`;
   renderCsSettingsBody();
   renderCsChatThread();
+  renderCsRefImageStrip();
   updateCsCostHint();
 }
 
@@ -604,26 +623,85 @@ function insertCsMention(name){
   ta.focus();
 }
 
-// Resolves every @Name mention that matches a real saved Character into
-// (a) a plain, model-readable mention (fal models don't understand
-// "@Name" syntax — that's this app's own UI convention) plus their lock
-// description for context, and (b) their reference image, hosted for the
-// actual API call. Unmatched @Words are left as-is — most likely just
-// part of the sentence, not a real mention.
-async function resolveCsCharacterMentions(text,apiKey){
+// ── AD-HOC REFERENCE IMAGES — the generic counterpart to @CharacterName.
+// Higgsfield's own composer has a "+" next to its "@" for exactly this:
+// tag any uploaded image (not just a saved library entry) as @Image1,
+// @Image2, etc. ──
+async function handleCsRefImageUpload(event){
+  const file=event.target.files[0];
+  event.target.value="";
+  if(!file)return;
+  if(!file.type.startsWith("image/")){toast("Images only","error");return;}
+  try{
+    const dataUrl=await downscaleImageFile(file);
+    const tag="Image"+(++S.csRefImageCounter);
+    S.csRefImages.push({tag,dataUrl,name:file.name});
+    insertCsRefTag(tag);
+    renderCsRefImageStrip();
+  }catch(err){toast(err.message,"error");}
+}
+function insertCsRefTag(tag){
+  const ta=document.getElementById("csPrompt");
+  if(!ta)return;
+  const cursor=ta.selectionStart;
+  const before=ta.value.slice(0,cursor);
+  const after=ta.value.slice(cursor);
+  ta.value=`${before}@${tag} ${after}`;
+  ta.focus();
+}
+function renderCsRefImageStrip(){
+  const strip=document.getElementById("csRefImageStrip");
+  if(!strip)return;
+  strip.innerHTML=S.csRefImages.map((r,i)=>`<div style="position:relative;width:44px;height:44px">
+    <img src="${r.dataUrl}" style="width:44px;height:44px;border-radius:8px;object-fit:cover">
+    <div style="position:absolute;bottom:-2px;left:-2px;right:-2px;text-align:center;background:rgba(0,0,0,0.65);color:#fff;font-size:7px;border-radius:4px;padding:1px">@${r.tag}</div>
+    <button onclick="removeCsRefImage(${i})" style="position:absolute;top:-5px;right:-5px;width:15px;height:15px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:8px;cursor:pointer;line-height:1">✕</button>
+  </div>`).join('');
+}
+function removeCsRefImage(i){
+  const removed=S.csRefImages[i];
+  if(!removed)return;
+  S.csRefImages.splice(i,1);
+  const ta=document.getElementById("csPrompt");
+  if(ta)ta.value=ta.value.replace(new RegExp(`@${removed.tag}\\b\\s?`,"gi"),"");
+  renderCsRefImageStrip();
+}
+
+
+// Resolves every @Tag mention in the prompt against TWO real sources:
+// (1) this app's Character library (@CharacterName — substituted with a
+// plain, model-readable name + lock description, since fal models don't
+// understand "@Name" syntax; that's this app's own UI convention) and
+// (2) ad-hoc attached reference images (@Image1 etc. — the tag itself is
+// stripped from the visible prompt since there's no name to substitute;
+// the image does the work via image_urls instead). Both real image
+// uploads happen here, hosted for the actual API call. Unmatched @Words
+// are left as-is — most likely just part of the sentence.
+async function resolveCsCharacterMentions(text,apiKey,refImages){
   const mentioned=[...text.matchAll(/@([a-zA-Z0-9_]+)/g)].map(m=>m[1]);
   let cleanPrompt=text;
   const imageUrls=[];
-  for(const name of mentioned){
-    const c=(S.characters||[]).find(ch=>ch.name.toLowerCase()===name.toLowerCase());
-    if(!c)continue;
-    const re=new RegExp(`@${name}\\b`,"gi");
-    cleanPrompt=cleanPrompt.replace(re,c.lock?`${c.name} (${c.lock})`:c.name);
-    if(c.refImg){
+  for(const tag of mentioned){
+    const c=(S.characters||[]).find(ch=>ch.name.toLowerCase()===tag.toLowerCase());
+    if(c){
+      const re=new RegExp(`@${tag}\\b`,"gi");
+      cleanPrompt=cleanPrompt.replace(re,c.lock?`${c.name} (${c.lock})`:c.name);
+      if(c.refImg){
+        try{
+          const hosted=await uploadRefsToFal([{dataUrl:c.refImg,name:c.name}],apiKey);
+          if(hosted&&hosted[0])imageUrls.push(hosted[0]);
+        }catch(err){console.warn("Couldn't upload reference for",c.name,err.message);}
+      }
+      continue;
+    }
+    const ref=(refImages||S.csRefImages).find(r=>r.tag.toLowerCase()===tag.toLowerCase());
+    if(ref){
+      const re=new RegExp(`@${tag}\\b\\s?`,"gi");
+      cleanPrompt=cleanPrompt.replace(re,"").trim();
       try{
-        const hosted=await uploadRefsToFal([{dataUrl:c.refImg,name:c.name}],apiKey);
+        const hosted=await uploadRefsToFal([{dataUrl:ref.dataUrl,name:ref.name}],apiKey);
         if(hosted&&hosted[0])imageUrls.push(hosted[0]);
-      }catch(err){console.warn("Couldn't upload reference for",c.name,err.message);}
+      }catch(err){console.warn("Couldn't upload reference image",ref.name,err.message);}
     }
   }
   return {cleanPrompt,imageUrls};
@@ -708,11 +786,14 @@ async function sendCinemaStudioGen(){
   pushCsChatMessage({role:"user",content:rawPrompt});
   promptEl.value="";
   promptEl.style.height="auto";
+  const refImagesSnapshot=S.csRefImages.slice();
+  S.csRefImages=[];
+  renderCsRefImageStrip();
   const loadingId="csLoading_"+Date.now();
   pushCsChatMessage({id:loadingId,type:"loading",content:isVideo?"Rolling camera…":"Composing shot…"});
 
   try{
-    const {cleanPrompt,imageUrls}=await resolveCsCharacterMentions(rawPrompt,apiKey);
+    const {cleanPrompt,imageUrls}=await resolveCsCharacterMentions(rawPrompt,apiKey,refImagesSnapshot);
     const style=document.getElementById("csStyle")?.value||"";
     const directorPrompt=getActiveDirectorPrompt();
     const colorPalette=tier.styleSettingsPanel?(document.getElementById("csColorPalette")?.value||""):"";
