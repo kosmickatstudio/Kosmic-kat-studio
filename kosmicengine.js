@@ -43,6 +43,7 @@ function renderKosmicEngineModule(el){
     // session — fall back to the gate rather than silently continuing
     // against a project that no longer exists.
     S.kosmicEngineProjectId=null;
+    window.save&&window.save("kosmicEngineProjectId");
     renderKosmicEngineGate(el);
     return;
   }
@@ -120,6 +121,7 @@ function openKosmicEngineProjectCreate(){
 }
 function selectKosmicEngineProject(id){
   S.kosmicEngineProjectId=id;
+  window.save&&window.save("kosmicEngineProjectId");
   renderModule("kosmicengine");
 }
 function switchKosmicEngineProject(){
@@ -129,6 +131,7 @@ function switchKosmicEngineProject(){
   // have written the in-progress session to its per-project home.
   KosmicEngine.stashCurrentSession();
   S.kosmicEngineProjectId=null;
+  window.save&&window.save("kosmicEngineProjectId");
   renderModule("kosmicengine");
 }
 
@@ -2248,7 +2251,7 @@ const KosmicEngine=(function(){
     // scoped elsewhere (or nowhere), and an unstamped session would fall
     // into enterProject's legacy-adoption branch and get misattributed to
     // whichever project happened to be open next.
-    if(p.projectId)S.kosmicEngineProjectId=p.projectId;
+    if(p.projectId){S.kosmicEngineProjectId=p.projectId;window.save&&window.save("kosmicEngineProjectId");}
     S.directorChat={active:true,productionId:prodId,projectId:p.projectId||S.kosmicEngineProjectId||null,directorName:directorName(),messages:[],tasks:null,awaitingApprovalTaskId:null,draft:{episodeCount:p.episodes.length},intakeStage:"running",qaAnswers:{},awaitingPermissionIds:null,permissionPaused:false};
     const tasks=buildTaskGraph(p.episodes.length);
     // plan/model_select created the production and picked models in the
