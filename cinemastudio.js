@@ -436,7 +436,7 @@ function renderCsSettingsBody(){
   body.innerHTML=`
     ${tier.partial?`<div style="background:rgba(230,126,34,0.12);border:1px solid rgba(230,126,34,0.3);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--textm);margin-bottom:12px">⚠️ ${escapeHtml(tier.label)} is a partial build — flagged, not hidden. Full parity coming once more source material is confirmed.</div>`:''}
     <div class="f-group">
-      <label class="f-label">Kat Films Tier</label>
+      <label class="f-label">${isVideo?"Kat Films":"Camera Crafts"} Tier</label>
       <select class="f-select" id="csTierSelect" style="display:none" onchange="renderSimpleTrigger('csTierSelect')">${KAT_FILMS_TIERS.map(t=>`<option value="${t.id}" ${t.id===S.csTier?'selected':''}>${escapeHtml(t.label)} — ${escapeHtml(t.sub)}</option>`).join('')}</select>
       <div id="csTierSelectTrigger" onclick="openCsTierPicker()" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
     </div>
@@ -540,7 +540,7 @@ function openCsTierPicker(){
   overlay.innerHTML=`
     <div style="background:var(--surface);width:100%;max-height:78vh;border-radius:20px 20px 0 0;overflow-y:auto;box-shadow:var(--shv)">
       <div style="position:sticky;top:0;background:var(--surface);padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;z-index:2">
-        <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">Choose a Kat Films Tier</div>
+        <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">Choose a ${S.csMode==="video"?"Kat Films":"Camera Crafts"} Tier</div>
         <button onclick="closeModelPicker()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
       </div>
       <div style="padding:10px 14px 24px">
