@@ -189,38 +189,76 @@ function renderCinemaStudio(el){
   const tabsEl=document.getElementById("moduleTabs");
   if(tabsEl){tabsEl.style.display="none";tabsEl.innerHTML="";}
   el.innerHTML=`
-    <div style="display:flex;gap:0;min-height:60vh">
-      <div style="width:128px;flex-shrink:0;border-right:1px solid var(--glass-brd);padding:10px 6px;display:flex;flex-direction:column">
-        <div id="csTitle" style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;color:var(--violet);padding:4px 6px 2px">${S.csMode==="video"?"🎬 Kat Films 4K":"📷 Camera Crafts 4K"}</div>
-        <div id="csTierBadge" style="font-size:9px;color:var(--textm);padding:0 6px 8px">${escapeHtml(getCsTier().label)}</div>
-        ${[["home","🏠 Home"],["generations","🎞 My Generations"],["elements","🎭 My Elements"],["favorites","⭐ My Favorites"],["community","👥 Community"],["academy","🎓 Academy"]].map(([id,label])=>
-          `<button class="btn btn-sm" style="width:100%;text-align:left;margin-bottom:3px;background:${S.csView===id?'var(--violet)':'transparent'};color:${S.csView===id?'#fff':'var(--text)'};border:none;font-size:11px" onclick="setCsView('${id}')">${label}</button>`
-        ).join('')}
-        <!-- PROJECTS — a persistent panel below the nav, not a tab of its
-             own, matching where it actually sits in the reference layout:
-             visible no matter which of the 6 views above is active. -->
-        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--glass-brd)">
-          <div style="font-size:9.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--textm);padding:0 6px 6px">Projects</div>
-          <button class="btn btn-outline btn-sm" style="width:100%;margin-bottom:6px;font-size:11px" onclick="newCsProject()">+ New Project</button>
-          <select class="f-select" id="csProjectLoader" style="font-size:11px;padding:6px" onchange="loadCsProject(this.value)">
-            <option value="">Load Project…</option>
-            ${S.csProjects.slice().reverse().map(p=>`<option value="${p.id}" ${p.id===S.csActiveProjectId?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}
-          </select>
+    <div style="max-width:600px;margin:0 auto;padding:10px 8px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <button class="ig-icon-btn" onclick="openCsNavMenu()" title="Menu">☰</button>
+        <div style="flex:1;min-width:0">
+          <div id="csTitle" style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${S.csMode==="video"?"🎬 Kat Films 4K":"📷 Camera Crafts 4K"}</div>
+          <div id="csTierBadge" style="font-size:10px;color:var(--textm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${csHeaderSubtitle()}</div>
         </div>
+        <button class="ig-icon-btn" onclick="openCsTierPicker()" title="Change Tier">${S.csMode==="video"?'🎬':'📷'}</button>
       </div>
-      <div style="flex:1;padding:14px;max-width:560px">
-        <div id="csViewBody"></div>
-      </div>
+      <div id="csViewBody"></div>
     </div>`;
   syncCsSidebarActive();
   renderCsViewBody();
 }
 
-function setCsView(id){S.csView=id;renderCinemaStudio(document.getElementById("moduleContent"));}
+// Full-width on phones was the whole point of this rebuild — a permanent
+// 128px inner sidebar (Home/My Generations/etc + Projects) ate a huge
+// share of a real phone viewport and squeezed the actual chat into a
+// cramped corner column. Same fix Image Gen already uses for its own
+// nav-ish overlay (☰ Chat History → openIgChatHistory, a centered
+// .modal-overlay, not a permanent column) — mirrored here exactly rather
+// than inventing a new mobile pattern.
+const CS_VIEW_LABELS={home:"Home",generations:"My Generations",elements:"My Elements",favorites:"My Favorites",community:"Community",academy:"Academy"};
+
+function csHeaderSubtitle(){
+  const hasKey=gs("api_falai");
+  const tier=getCsTier();
+  const director=gs("active_director","")?(getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name:"";
+  return `${hasKey?'<span style="color:var(--green);font-weight:700">●</span>':'<span style="color:var(--red);font-weight:700">●</span>'} ${escapeHtml(tier.label)}${tier.partial?' <span style="color:var(--gold)">(partial)</span>':''} · ${CS_VIEW_LABELS[S.csView]||'Home'}${director?' · '+pIcon('film',10)+' '+escapeHtml(director):''}`;
+}
+
+function openCsNavMenu(){
+  const overlay=document.createElement("div");
+  overlay.className="modal-overlay show";
+  overlay.id="csNavModal";
+  overlay.innerHTML=`
+    <div class="modal" style="max-height:80vh;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">${S.csMode==="video"?"🎬 Kat Films 4K":"📷 Camera Crafts 4K"}</div>
+        <button class="ig-icon-btn" onclick="document.getElementById('csNavModal').remove()">✕</button>
+      </div>
+      <div style="overflow-y:auto;flex:1">
+        ${Object.entries(CS_VIEW_LABELS).map(([id,label])=>{
+          const icons={home:"🏠",generations:"🎞",elements:"🎭",favorites:"⭐",community:"👥",academy:"🎓"};
+          return `<button class="btn btn-sm" style="width:100%;text-align:left;margin-bottom:4px;background:${S.csView===id?'var(--violet)':'transparent'};color:${S.csView===id?'#fff':'var(--text)'};border:${S.csView===id?'none':'1px solid var(--border)'};padding:10px 12px" onclick="setCsView('${id}');document.getElementById('csNavModal').remove()">${icons[id]} ${label}</button>`;
+        }).join('')}
+        <div style="margin:14px 0 8px;padding-top:10px;border-top:1px solid var(--glass-brd)">
+          <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--textm);margin-bottom:8px">Projects</div>
+          <button class="btn btn-outline btn-sm" style="width:100%;margin-bottom:8px" onclick="document.getElementById('csNavModal').remove();newCsProject()">+ New Project</button>
+          <select class="f-select" id="csProjectLoader" onchange="loadCsProject(this.value)">
+            <option value="">Load Project…</option>
+            ${S.csProjects.slice().reverse().map(p=>`<option value="${p.id}" ${p.id===S.csActiveProjectId?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function setCsView(id){
+  S.csView=id;
+  const badge=document.getElementById("csTierBadge");
+  if(badge)badge.innerHTML=csHeaderSubtitle();
+  renderCsViewBody();
+}
 function loadCsProject(id){
   S.csActiveProjectId=id||null;
   saveSetting("cs_active_project",S.csActiveProjectId);
-  renderCinemaStudio(document.getElementById("moduleContent"));
+  document.getElementById("csNavModal")?.remove();
+  toast(id?"Project loaded":"No project selected — generations save unfiled","success");
 }
 
 function renderCsViewBody(){
@@ -266,15 +304,6 @@ function renderCsHome(wrap){
 
   wrap.innerHTML=`
     <div class="ig-chat-shell">
-      <div class="ig-chat-header">
-        <button class="ig-icon-btn" onclick="openCsTierPicker()" title="Change Tier">${isVideo?'🎬':'📷'}</button>
-        <div style="flex:1;text-align:center">
-          <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">${isVideo?'Kat Films 4K':'Camera Crafts 4K'}</div>
-          <div style="font-size:10px;color:var(--textm);margin-top:1px">${hasKey?'<span style="color:var(--green);font-weight:700">●</span> Ready':'<span style="color:var(--red);font-weight:700">●</span> No key configured'} · ${escapeHtml(tier.label)}${tier.partial?' <span style="color:var(--gold)">(partial build)</span>':''}${gs("active_director","")?' · '+pIcon('film',10)+' '+escapeHtml((getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name||''):''}</div>
-        </div>
-        <button class="ig-icon-btn" onclick="toast('Chat history stays right here — scroll up','')" title="Info">ℹ</button>
-      </div>
-
       <div class="ig-chat-thread" id="csChatThread"></div>
 
       <div class="ig-settings-backdrop" id="csSettingsBackdrop" onclick="toggleCsSettings()"></div>
@@ -432,6 +461,10 @@ function selectCsTier(tierId){
 function setCsMode(mode){
   if(S.csMode===mode)return;
   S.csMode=mode;
+  const titleEl=document.getElementById("csTitle");
+  if(titleEl)titleEl.textContent=mode==="video"?"🎬 Kat Films 4K":"📷 Camera Crafts 4K";
+  const tierBtn=document.querySelector('[title="Change Tier"]');
+  if(tierBtn)tierBtn.textContent=mode==="video"?"🎬":"📷";
   renderCsHome(document.getElementById("csViewBody"));
   syncCsSidebarActive();
 }
