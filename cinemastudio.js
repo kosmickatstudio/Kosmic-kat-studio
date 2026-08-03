@@ -175,8 +175,8 @@ const KAT_FILMS_TIERS=[
   // Cinematic Locations and Cinematic Cameras remain open — not built
   // yet, and Soul Cast (the character-builder piece) already shipped
   // separately inside Persona Studio.
-  {id:"soulstudio",label:"Soul Studio",sub:"Higgsfield Soul 2.0/Soul Cinema — image-only. Soul Cast built in Persona Studio, Soul HEX + Cinematic Locations built here. Cinematic Cameras not yet built.",
-    imageModel:"fal-ai/flux/dev",imageOnly:true,soulHex:true,cinematicLocations:true,partial:true},
+  {id:"soulstudio",label:"Soul Studio",sub:"Higgsfield Soul 2.0/Soul Cinema — image-only. Soul Cast (Persona Studio), Soul HEX, Cinematic Locations + Cinematic Cameras all built (fully built)",
+    imageModel:"fal-ai/flux/dev",imageOnly:true,soulHex:true,cinematicLocations:true,cinematicCameras:true},
 ];
 // Tiers visible in the picker for the CURRENT mode. Full separation, not
 // just different labels: Camera Crafts (image) only ever offers Soul
@@ -197,6 +197,20 @@ const CINEMA_GENRES=[
   {label:"Noir",frag:"film noir cinematography, high-contrast shadows, moody atmosphere"},
   {label:"Epic",frag:"epic sweeping cinematography, grand scale, dramatic grandeur"},
 ];
+
+// Cinematic Cameras (Soul Studio, image-only) — confirmed via OCR: a
+// camera+lens chip reading "Studio Digital S35" / "Premium Modern Prime"
+// / "35mm" (aperture value illegible). Only that one pairing is actually
+// confirmed from the source video. Camera/Lens/Focal Length/Aperture
+// aren't real fal API parameters (same honest note as Kat Films' Camera
+// Movement/Speed Ramp) — they're prompt-injection phrases, so the extra
+// options below beyond the confirmed pairing are real, well-known
+// cinematography vocabulary added for a genuinely usable picker rather
+// than a one-option list, NOT additional confirmed Higgsfield presets.
+const CS_SOUL_CAMERAS=["Auto","Studio Digital S35","ARRI Alexa","RED Komodo","Sony Venice","Blackmagic URSA"];
+const CS_SOUL_LENSES=["Auto","Premium Modern Prime","Anamorphic","Vintage Prime","Wide Angle Prime","Telephoto Zoom","Macro"];
+const CS_SOUL_FOCAL_LENGTHS=["Auto","24mm","35mm","50mm","85mm","100mm","135mm"];
+const CS_SOUL_APERTURES=["Auto","f/1.4","f/1.8","f/2.8","f/4","f/5.6","f/8"];
 
 // The full 14-option list confirmed directly from the reference video's
 // Camera Movement grid (Handheld through Dolly Right) — deliberately
@@ -545,6 +559,35 @@ function renderCsSettingsBody(){
       <label class="f-label">How many variations? (1-10)</label>
       <input type="number" class="f-input" id="csLocationsBatch" min="1" max="10" value="3">
     </div>`:''}
+    ${tier.cinematicCameras?`
+    <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Cinematic Cameras <span style="color:var(--textm);font-weight:400;text-transform:none">— camera + lens control</span></div>
+      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Confirmed pairing from the source: Studio Digital S35 / Premium Modern Prime / 35mm. Leave on Auto for a normal generation.</div>
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Camera</label>
+        <select class="f-select" id="csSoulCamera" style="display:none" onchange="renderSimpleTrigger('csSoulCamera')">${CS_SOUL_CAMERAS.map(c=>`<option value="${c}">${c}</option>`).join('')}</select>
+        <div id="csSoulCameraTrigger" onclick="openSimplePicker('csSoulCamera','Camera')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Lens</label>
+        <select class="f-select" id="csSoulLens" style="display:none" onchange="renderSimpleTrigger('csSoulLens')">${CS_SOUL_LENSES.map(l=>`<option value="${l}">${l}</option>`).join('')}</select>
+        <div id="csSoulLensTrigger" onclick="openSimplePicker('csSoulLens','Lens')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Focal Length</label>
+        <select class="f-select" id="csSoulFocal" style="display:none" onchange="renderSimpleTrigger('csSoulFocal')">${CS_SOUL_FOCAL_LENGTHS.map(f=>`<option value="${f}">${f}</option>`).join('')}</select>
+        <div id="csSoulFocalTrigger" onclick="openSimplePicker('csSoulFocal','Focal Length')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Aperture</label>
+        <select class="f-select" id="csSoulAperture" style="display:none" onchange="renderSimpleTrigger('csSoulAperture')">${CS_SOUL_APERTURES.map(a=>`<option value="${a}">${a}</option>`).join('')}</select>
+        <div id="csSoulApertureTrigger" onclick="openSimplePicker('csSoulAperture','Aperture')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
+    </div>`:''}
     ${tier.styleSettingsPanel?`
     <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
       <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Style Settings <span style="color:var(--textm);font-weight:400;text-transform:none">— Cinema Studio 3.5</span></div>
@@ -589,6 +632,7 @@ function renderCsSettingsBody(){
   renderVisualTrigger("csStyle","style");
   if(isVideo){renderSimpleTrigger("csCameraMove");renderSimpleTrigger("csSpeedRamp");renderSimpleTrigger("csDuration");}
   if(tier.styleSettingsPanel){renderSimpleTrigger("csColorPalette");renderSimpleTrigger("csLighting");renderSimpleTrigger("csCameraMovesetStyle");}
+  if(tier.cinematicCameras){renderSimpleTrigger("csSoulCamera");renderSimpleTrigger("csSoulLens");renderSimpleTrigger("csSoulFocal");renderSimpleTrigger("csSoulAperture");}
   renderSimpleTrigger("csRatio");
   const durSel=document.getElementById("csDuration");
   if(durSel)durSel.addEventListener("change",()=>{
@@ -913,6 +957,23 @@ async function sendCinemaStudioGen(){
     const lighting=tier.styleSettingsPanel?(document.getElementById("csLighting")?.value||""):"";
     const cameraMovesetStyle=tier.styleSettingsPanel?(document.getElementById("csCameraMovesetStyle")?.value||""):"";
     const locationFrag=useLocationsBatch?"wide establishing shot of the location itself, rich environmental detail, cinematic lighting, no visible characters or people":"";
+    // Cinematic Cameras — Camera/Lens/Focal Length/Aperture aren't real
+    // fal API parameters (same honest note as Kat Films' Camera Movement/
+    // Speed Ramp) — folded into the prompt as a real photography
+    // description instead. "Auto" on any field means don't mention it.
+    let cinematicCameraFrag="";
+    if(tier.cinematicCameras){
+      const cam=document.getElementById("csSoulCamera")?.value||"Auto";
+      const lens=document.getElementById("csSoulLens")?.value||"Auto";
+      const focal=document.getElementById("csSoulFocal")?.value||"Auto";
+      const aperture=document.getElementById("csSoulAperture")?.value||"Auto";
+      const camBits=[];
+      if(cam!=="Auto")camBits.push(`shot on a ${cam} camera`);
+      if(lens!=="Auto")camBits.push(`${lens} lens`);
+      if(focal!=="Auto")camBits.push(`${focal} focal length`);
+      if(aperture!=="Auto")camBits.push(`${aperture} aperture`);
+      cinematicCameraFrag=camBits.join(", ");
+    }
     // Soul HEX — real, not just a UI toggle: upload the reference the
     // same way Character mentions already get uploaded, and add it to
     // the SAME imageUrls array genViaFluxEdit already consumes below, so
@@ -927,7 +988,7 @@ async function sendCinemaStudioGen(){
         }
       }catch(err){console.warn("Soul HEX reference upload failed",err.message);}
     }
-    const baseParts=[genre.frag,cleanPrompt,cameraMove,speedRamp,style,colorPalette,lighting,cameraMovesetStyle,locationFrag,soulHexFrag,directorPrompt].filter(Boolean);
+    const baseParts=[genre.frag,cleanPrompt,cameraMove,speedRamp,style,colorPalette,lighting,cameraMovesetStyle,locationFrag,cinematicCameraFrag,soulHexFrag,directorPrompt].filter(Boolean);
     const projectId=S.csActiveProjectId||"";
     const providerLabel=isVideo?"Kat Films 4K":"Camera Crafts 4K";
 
