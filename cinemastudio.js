@@ -56,14 +56,27 @@
 //     the same video showed a "Shot Control" field once, alongside the
 //     Image/Video switch, without enough legible context to know what it
 //     does — not built yet, worth a closer look at that field specifically.
-//   - "Kat Films 2" ≈ Cinema Studio 3.5 — per direct instruction, this
-//     research is INCOMPLETE. Inherits the enhanced Speed Ramp list as a
+//   - "Kat Films 2" ≈ Cinema Studio 3.5. A dedicated 3.5 walkthrough
+//     (120s, OCR-reviewed same as the others — image viewing was still
+//     down this session too) confirmed a genuinely new layer beyond 2.5/
+//     3.0: a "Style Settings" panel with three named tabs — Color
+//     Palette, Lighting, Camera Moveset Style — now really wired in
+//     (CS35_COLOR_PALETTES/CS35_LIGHTING/CS35_CAMERA_MOVESET_STYLES).
+//     Also added two genuinely new Genre values seen in this tier's
+//     picker, Noir and Epic (not duplicates of the existing list).
+//     HONEST GAPS, flagged rather than guessed at: only one or two preset
+//     names were legible per Style Settings tab, so those lists are
+//     almost certainly incomplete, and which exact tab "Dreamy" belongs
+//     under is a best-effort read, not a certainty. The same video also
+//     showed a separate "Camera Settings" panel repeatedly later on —
+//     confirmed to exist, but its fields weren't legible enough via OCR
+//     to build. Inherits the enhanced Speed Ramp list from tier 1.5 as a
 //     reasonable inference (later tiers building on earlier ones is the
-//     pattern actually observed across 2.5→3), but built minimally beyond
-//     that and clearly marked partial rather than shipped as complete.
+//     pattern actually observed across 2.5→3→3.5).
 // Built in parts per direct instruction — this pass completed Kat Films
-// 1.5's real Speed Ramp differentiator. "Shot Control" and full Kat
-// Films 2 parity remain open for a future pass.
+// 1.5's real Speed Ramp differentiator and Kat Films 2's Style Settings
+// panel. "Shot Control", the "Camera Settings" panel, and fuller preset
+// lists per Style Settings tab remain open for a future pass.
 //
 // "Cinema Studio 3.5" etc. as named models are Higgsfield's own in-house
 // model brand, not reachable via fal.ai — invented endpoints aren't
@@ -115,8 +128,8 @@ const KAT_FILMS_TIERS=[
     videoModel:"bytedance/seedance-2.0/fast/text-to-video",imageModel:"fal-ai/flux/dev"},
   {id:"katfilms1_5",label:"Kat Films 1.5",sub:"≈ Cinema Studio 3 — adds enhanced Speed Ramp presets (Flash In/Out, Bullet Time, Hero Moment)",
     videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,partial:true},
-  {id:"katfilms2",label:"Kat Films 2",sub:"≈ Cinema Studio 3.5 — research incomplete",
-    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,partial:true},
+  {id:"katfilms2",label:"Kat Films 2",sub:"≈ Cinema Studio 3.5 — adds Style Settings (Color Palette/Lighting/Camera Moveset Style); research ongoing",
+    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,styleSettingsPanel:true,partial:true},
 ];
 function getCsTier(){return KAT_FILMS_TIERS.find(t=>t.id===S.csTier)||KAT_FILMS_TIERS[1];}
 
@@ -128,6 +141,8 @@ const CINEMA_GENRES=[
   {label:"Comedy",frag:"bright playful cinematography, comedic timing"},
   {label:"Dialogue/Drama",frag:"grounded dramatic cinematography, natural character-focused framing"},
   {label:"Chase/Pursuit",frag:"kinetic pursuit cinematography, fast tracking movement"},
+  {label:"Noir",frag:"film noir cinematography, high-contrast shadows, moody atmosphere"},
+  {label:"Epic",frag:"epic sweeping cinematography, grand scale, dramatic grandeur"},
 ];
 
 // The full 14-option list confirmed directly from the reference video's
@@ -192,6 +207,37 @@ const KAT_FILMS_DURATIONS=[4,5,6,8,10,12,15];
 function snapToKatFilmsDuration(seconds){
   return KAT_FILMS_DURATIONS.find(d=>d>=seconds)||KAT_FILMS_DURATIONS[KAT_FILMS_DURATIONS.length-1];
 }
+
+// Cinema Studio 3.5-exclusive "Style Settings" panel — a genuinely new
+// layer confirmed via OCR, distinct from Genre/Style Preset/AI Director:
+// three named tabs (Color Palette / Lighting / Camera Moveset Style),
+// each with its own presets. HONEST GAP: only one or two preset names
+// were legible per tab in the source video, and which specific preset
+// belongs under which tab is a best-effort reading, not a certainty —
+// "Dreamy" in particular could plausibly sit under Lighting or be a
+// separate top-level field ("Style: Dreamy" appeared once on its own).
+// Placed under Lighting here since a soft dreamy quality is usually a
+// lighting characteristic, flagged rather than silently assumed correct.
+// Each tab almost certainly has more real presets than shown here — this
+// is what was legible, not a claim that these are the complete lists.
+const CS35_COLOR_PALETTES=[
+  {label:"Auto",value:""},
+  {label:"Hyper Neon",value:"hyper-saturated neon color grading, vivid electric hues"},
+  {label:"Raw Chaos",value:"raw chaotic color grading, gritty desaturated clash of tones"},
+];
+const CS35_LIGHTING=[
+  {label:"Auto",value:""},
+  {label:"Overhead Fall",value:"dramatic overhead lighting falling downward onto the subject"},
+  {label:"Dreamy",value:"soft dreamy diffused lighting, gentle glow"},
+];
+const CS35_CAMERA_MOVESET_STYLES=[
+  {label:"Auto",value:""},
+  {label:"Epic Scale",value:"epic large-scale camera work, sweeping grandeur"},
+];
+// KNOWN GAP, flagged rather than guessed at: the same video also showed
+// a separate "Camera Settings" panel later on (distinct from Style
+// Settings) repeatedly, but the on-screen text wasn't legible enough via
+// OCR to know its actual fields — not built yet.
 
 // Entry point from the sidebar — each of the two buttons calls this with
 // its own mode so opening "Camera Crafts 4K" actually starts in Image
@@ -403,7 +449,27 @@ function renderCsSettingsBody(){
         <button class="btn btn-outline btn-xs" onclick="switchMod('directors',document.querySelector('[data-mod=directors]'))">Change</button>
       </div>
     </div>
-    <div class="f-row">
+    ${tier.styleSettingsPanel?`
+    <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Style Settings <span style="color:var(--textm);font-weight:400;text-transform:none">— Cinema Studio 3.5</span></div>
+      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Each list below is what was legible in the source video — likely not the complete preset set for each tab yet.</div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Color Palette</label>
+      <select class="f-select" id="csColorPalette" style="display:none" onchange="renderSimpleTrigger('csColorPalette')">${CS35_COLOR_PALETTES.map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}</select>
+      <div id="csColorPaletteTrigger" onclick="openSimplePicker('csColorPalette','Color Palette')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Lighting</label>
+      <select class="f-select" id="csLighting" style="display:none" onchange="renderSimpleTrigger('csLighting')">${CS35_LIGHTING.map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}</select>
+      <div id="csLightingTrigger" onclick="openSimplePicker('csLighting','Lighting')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Camera Moveset Style</label>
+      <select class="f-select" id="csCameraMovesetStyle" style="display:none" onchange="renderSimpleTrigger('csCameraMovesetStyle')">${CS35_CAMERA_MOVESET_STYLES.map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}</select>
+      <div id="csCameraMovesetStyleTrigger" onclick="openSimplePicker('csCameraMovesetStyle','Camera Moveset Style')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+    </div>`:''}
+    <div class="f-row" style="margin-top:${tier.styleSettingsPanel?'10px':'0'}">
       <div class="f-group">
         <label class="f-label">Aspect Ratio</label>
         <select class="f-select" id="csRatio" style="display:none" onchange="renderSimpleTrigger('csRatio')">
@@ -426,6 +492,7 @@ function renderCsSettingsBody(){
   renderSimpleTrigger("csGenre");
   renderVisualTrigger("csStyle","style");
   if(isVideo){renderSimpleTrigger("csCameraMove");renderSimpleTrigger("csSpeedRamp");renderSimpleTrigger("csDuration");}
+  if(tier.styleSettingsPanel){renderSimpleTrigger("csColorPalette");renderSimpleTrigger("csLighting");renderSimpleTrigger("csCameraMovesetStyle");}
   renderSimpleTrigger("csRatio");
   const durSel=document.getElementById("csDuration");
   if(durSel)durSel.addEventListener("change",()=>{
@@ -647,7 +714,10 @@ async function sendCinemaStudioGen(){
     const {cleanPrompt,imageUrls}=await resolveCsCharacterMentions(rawPrompt,apiKey);
     const style=document.getElementById("csStyle")?.value||"";
     const directorPrompt=getActiveDirectorPrompt();
-    const parts=[genre.frag,cleanPrompt,cameraMove,speedRamp,style,directorPrompt].filter(Boolean);
+    const colorPalette=tier.styleSettingsPanel?(document.getElementById("csColorPalette")?.value||""):"";
+    const lighting=tier.styleSettingsPanel?(document.getElementById("csLighting")?.value||""):"";
+    const cameraMovesetStyle=tier.styleSettingsPanel?(document.getElementById("csCameraMovesetStyle")?.value||""):"";
+    const parts=[genre.frag,cleanPrompt,cameraMove,speedRamp,style,colorPalette,lighting,cameraMovesetStyle,directorPrompt].filter(Boolean);
     const finalPrompt=parts.join(", ");
     const projectId=S.csActiveProjectId||"";
     const providerLabel=isVideo?"Kat Films 4K":"Camera Crafts 4K";
