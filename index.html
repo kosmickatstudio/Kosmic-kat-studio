@@ -12888,6 +12888,30 @@ const PERSONA_TAXONOMY={
     hairHeadGrowth:["None","Short Hair","Long Hair","Mane","Feathers","Fur Tuft"],
     accessoriesMarkings:["None","Piercings","Tattoos","Jewelry","Face Paint","Scarification"],
     renderingStyle:["Realistic","Cinematic","Painterly","3D Render","Cartoon","Hyperrealistic"]
+  },
+  // "Soul Cast" tab — a film-actor framing on top of the same persona,
+  // confirmed via OCR of a Higgsfield Cinema Studio recording (8-tab
+  // builder: Genre/Budget/Era/Archetype/Identity/Physical Appearance/
+  // Details/Outfit). Identity and Physical Appearance are deliberately
+  // NOT rebuilt here — this app's Persona Studio already covers that
+  // exact ground (Gender/Ethnicity/Skin/Eyes/Age/Face/Body). Only the
+  // genuinely new axes are added: Genre, Budget, Era, Archetype.
+  //
+  // Genre deliberately reuses Kat Films 4K's own CINEMA_GENRES (defined
+  // in cinemastudio.js, same global scope) instead of a second genre
+  // list — same vocabulary a persona gets @mentioned into later, and one
+  // fewer place for the two lists to quietly drift apart.
+  //
+  // Budget ($10M-$80M) and Era (1900s-1970s) are the exact ranges
+  // confirmed via OCR. Era's 1980s-Present continuation and the
+  // Archetype list are NOT confirmed from the recording — they're a
+  // reasonable extrapolation (a "what period is your film set in"
+  // picker stopping at the 1970s would be an odd real product), flagged
+  // here rather than silently presented as certain.
+  cinema:{
+    budgetMillions:[10,20,30,40,50,60,70,80],
+    era:["1900s","1910s","1920s","1930s","1940s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s","Present Day"],
+    archetype:["Hero","Anti-Hero","Villain","Mentor","Sidekick","Love Interest","Femme Fatale","Detective","Outlaw","Chosen One","Trickster","Comic Relief"]
   }
 };
 
@@ -12947,6 +12971,7 @@ function defaultPersonaDraft(){
     face:{eyesType:[],eyesDetails:[],mouthTeeth:"",ears:"",horns:"",faceSkinMaterial:"",surfacePattern:""},
     body:{bodyType:"",leftArm:"",rightArm:"",leftLeg:"",rightLeg:""},
     style:{hairHeadGrowth:"",accessoriesMarkings:"",renderingStyle:""},
+    cinema:{genre:"",budgetMillions:"",era:"",archetype:"",archetypeCustom:""},
     bodyNotes:"",styleNotes:"",
     bio:"",niche:"",lock:"",linkedCharacterId:null,contentLog:[]
   };
@@ -12960,7 +12985,8 @@ function renderPersonaBuilderForm(editId=null){
   S._personaDraft=Object.assign({},base,S._personaDraft,{
     face:Object.assign({},base.face,S._personaDraft.face||{}),
     body:Object.assign({},base.body,S._personaDraft.body||{}),
-    style:Object.assign({},base.style,S._personaDraft.style||{})
+    style:Object.assign({},base.style,S._personaDraft.style||{}),
+    cinema:Object.assign({},base.cinema,S._personaDraft.cinema||{})
   });
   S._personaEditId=editId;
   S._personaActiveTab="face";
@@ -12975,7 +13001,8 @@ function renderPersonaBuilderForm(editId=null){
     <button type="button" class="btn btn-outline btn-full" style="margin-bottom:14px" onclick="surprisePersonaDraft()">🔀 Surprise Me — randomize every option</button>
     <div id="personaBuilderBody"></div>
     <label class="f-label" style="margin-top:16px">Bio &amp; personality</label>
-    <textarea class="f-input" id="personaBio" rows="3" placeholder="Voice, tone, backstory, quirks — what makes this persona feel like a recurring character rather than a one-off image" oninput="S._personaDraft.bio=this.value" style="margin-bottom:10px">${escapeHtml(d.bio)}</textarea>
+    <textarea class="f-input" id="personaBio" rows="3" placeholder="Voice, tone, backstory, quirks — what makes this persona feel like a recurring character rather than a one-off image" oninput="S._personaDraft.bio=this.value" style="margin-bottom:8px">${escapeHtml(d.bio)}</textarea>
+    <button type="button" class="btn btn-outline btn-full" style="margin-bottom:10px" onclick="autoGeneratePersonaBackstory()">🪄 Auto-generate backstory from Soul Cast selections</button>
     <label class="f-label">Content niche</label>
     <input class="f-input" id="personaNiche" placeholder="e.g. comedy skits, product reviews, lifestyle vlogs" value="${escapeHtml(d.niche)}" oninput="S._personaDraft.niche=this.value" style="margin-bottom:16px">
     <button class="btn btn-outline btn-full" style="margin-bottom:8px" onclick="autoComposePersonaLock()">🪄 Auto-generate Identity Lock from selections</button>
@@ -13009,8 +13036,8 @@ function renderPersonaBuilderBody(){
     ${personaOptionRow("Skin Conditions","skinConditions",PERSONA_TAXONOMY.skinConditions,d.skinConditions,true)}
     ${personaOptionRow("Age","age",PERSONA_TAXONOMY.age,d.age,false)}
     <div style="margin:16px 0 10px;font-weight:700;color:var(--violet);font-size:12.5px">Advanced settings</div>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      ${["face","body","style"].map(t=>`<button type="button" class="btn ${S._personaActiveTab===t?'btn-primary':'btn-outline'} btn-sm" style="flex:1" onclick="S._personaActiveTab='${t}';renderPersonaBuilderBody()">${t.charAt(0).toUpperCase()+t.slice(1)}</button>`).join('')}
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      ${["face","body","style","cinema"].map(t=>`<button type="button" class="btn ${S._personaActiveTab===t?'btn-primary':'btn-outline'} btn-sm" style="flex:1;padding-left:4px;padding-right:4px" onclick="S._personaActiveTab='${t}';renderPersonaBuilderBody()">${t==="cinema"?"🎬 Cinema":t.charAt(0).toUpperCase()+t.slice(1)}</button>`).join('')}
     </div>
     <div id="personaAdvancedPanel"></div>`;
   renderPersonaAdvancedPanel();
@@ -13038,13 +13065,27 @@ function renderPersonaAdvancedPanel(){
       ${personaOptionRow("Right Leg","body.rightLeg",PERSONA_TAXONOMY.body.rightLeg,d.body.rightLeg,false)}
       <label class="f-label">Anything else about the body</label>
       <textarea class="f-input" rows="2" placeholder="Optional — anything the option grid above doesn't cover" oninput="S._personaDraft.bodyNotes=this.value" style="margin-bottom:6px">${escapeHtml(d.bodyNotes)}</textarea>`;
-  } else {
+  } else if(S._personaActiveTab==="style"){
     wrap.innerHTML=`
       ${personaOptionRow("Hair / Head Growth","style.hairHeadGrowth",PERSONA_TAXONOMY.style.hairHeadGrowth,d.style.hairHeadGrowth,false)}
       ${personaOptionRow("Accessories &amp; Markings","style.accessoriesMarkings",PERSONA_TAXONOMY.style.accessoriesMarkings,d.style.accessoriesMarkings,false)}
       ${personaOptionRow("Rendering Style","style.renderingStyle",PERSONA_TAXONOMY.style.renderingStyle,d.style.renderingStyle,false)}
       <label class="f-label">Anything else about the style</label>
       <textarea class="f-input" rows="2" placeholder="Optional — anything the option grid above doesn't cover" oninput="S._personaDraft.styleNotes=this.value" style="margin-bottom:6px">${escapeHtml(d.styleNotes)}</textarea>`;
+  } else {
+    // Soul Cast — confirmed via OCR of a Higgsfield Cinema Studio
+    // recording. Genre reuses Kat Films 4K's own CINEMA_GENRES (defined
+    // in cinemastudio.js) rather than a second list.
+    const genreLabels=(typeof CINEMA_GENRES!=="undefined"?CINEMA_GENRES:[]).map(g=>g.label);
+    const budgetLabels=PERSONA_TAXONOMY.cinema.budgetMillions.map(b=>`$${b}M`);
+    wrap.innerHTML=`
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Frames this persona as a film character rather than an image style — feeds into the auto-generated backstory and Identity Lock below. Genre uses the same list Kat Films 4K scenes use, so a persona built here pairs naturally with a scene later.</div>
+      ${personaOptionRow("Genre","cinema.genre",genreLabels,d.cinema.genre,false)}
+      ${personaOptionRow("Budget","cinema.budgetMillions",budgetLabels,d.cinema.budgetMillions,false)}
+      ${personaOptionRow("Era","cinema.era",PERSONA_TAXONOMY.cinema.era,d.cinema.era,false)}
+      ${personaOptionRow("Archetype","cinema.archetype",PERSONA_TAXONOMY.cinema.archetype,d.cinema.archetype,false)}
+      <label class="f-label">Archetype not listed?</label>
+      <input class="f-input" placeholder="Type your own — e.g. Reluctant King" value="${escapeHtml(d.cinema.archetypeCustom)}" oninput="S._personaDraft.cinema.archetypeCustom=this.value" style="margin-bottom:6px">`;
   }
 }
 
@@ -13075,7 +13116,7 @@ function togglePersonaOption(path,value,multi){
   } else {
     obj[key]=obj[key]===value?"":value;
   }
-  if(path.startsWith("face.")||path.startsWith("body.")||path.startsWith("style."))renderPersonaAdvancedPanel();
+  if(path.startsWith("face.")||path.startsWith("body.")||path.startsWith("style.")||path.startsWith("cinema."))renderPersonaAdvancedPanel();
   else renderPersonaBuilderBody();
 }
 
@@ -13107,6 +13148,14 @@ function autoComposePersonaLock(){
   if(d.style.renderingStyle)parts.push(`${d.style.renderingStyle.toLowerCase()} rendering style`);
   if(d.bodyNotes)parts.push(d.bodyNotes);
   if(d.styleNotes)parts.push(d.styleNotes);
+  if(d.cinema.era&&d.cinema.era!=="Present Day")parts.push(`set in the ${d.cinema.era}`);
+  if(d.cinema.genre){
+    const genreDef=(typeof CINEMA_GENRES!=="undefined"?CINEMA_GENRES:[]).find(g=>g.label===d.cinema.genre);
+    parts.push(genreDef&&genreDef.frag?genreDef.frag:`${d.cinema.genre.toLowerCase()} genre character`);
+  }
+  const archetype=d.cinema.archetypeCustom||d.cinema.archetype;
+  if(archetype)parts.push(`${archetype.toLowerCase()} archetype`);
+  if(d.cinema.budgetMillions)parts.push(`${parseInt(d.cinema.budgetMillions)>=50?"high-budget polished production value":"lean independent-film production value"}`);
   parts.push("maintain exact facial features, proportions, colors and markings across every shot — no design drift");
   S._personaDraft.lock=parts.join(", ");
   const lockEl=document.getElementById("personaLock");
@@ -13146,9 +13195,52 @@ function surprisePersonaDraft(){
   d.style.hairHeadGrowth=pick(PERSONA_TAXONOMY.style.hairHeadGrowth);
   d.style.accessoriesMarkings=pick(PERSONA_TAXONOMY.style.accessoriesMarkings);
   d.style.renderingStyle=pick(PERSONA_TAXONOMY.style.renderingStyle);
+  const genreLabels=(typeof CINEMA_GENRES!=="undefined"?CINEMA_GENRES:[]).map(g=>g.label);
+  if(genreLabels.length)d.cinema.genre=pick(genreLabels);
+  d.cinema.budgetMillions=`$${pick(PERSONA_TAXONOMY.cinema.budgetMillions)}M`;
+  d.cinema.era=pick(PERSONA_TAXONOMY.cinema.era);
+  d.cinema.archetype=pick(PERSONA_TAXONOMY.cinema.archetype);
   renderPersonaBuilderBody();
   autoComposePersonaLock();
   toast("🔀 Surprised! Tweak anything before saving","success");
+}
+
+// Soul Cast auto-generates a backstory from the selected traits — real
+// confirmed feature, built here by reusing the same callAiSimple path
+// magicPrompt already uses, rather than a new LLM integration.
+async function autoGeneratePersonaBackstory(){
+  const d=S._personaDraft;
+  if(!d.name||!d.name.trim()){toast("Give this persona a name first","error");return;}
+  const archetype=d.cinema.archetypeCustom||d.cinema.archetype;
+  const traits=[
+    d.characterType&&`species/type: ${d.characterType}`,
+    d.gender&&`gender: ${d.gender}`,
+    d.ethnicity&&`origin: ${d.ethnicity}`,
+    d.age&&`age range: ${d.age}`,
+    d.cinema.genre&&`genre: ${d.cinema.genre}`,
+    d.cinema.era&&`era: ${d.cinema.era}`,
+    archetype&&`archetype: ${archetype}`,
+    d.cinema.budgetMillions&&`production scale: ${d.cinema.budgetMillions} budget`,
+    d.niche&&`content niche: ${d.niche}`
+  ].filter(Boolean).join(", ");
+  if(!traits){toast("Pick a few Soul Cast / persona traits first — nothing to build a backstory from yet","error");return;}
+  toast("🪄 Writing backstory…","");
+  try{
+    const backstory=await callAiSimple(
+      `Write a short backstory (3-4 sentences, no preamble, no headers) for a fictional character named "${d.name}" with these traits: ${traits}. Make it feel like a real character bio for a recurring persona in ongoing content, not a one-off scene description.`,
+      "You are a character writer for a content studio. Output ONLY the backstory text, nothing else — no quotes, no labels."
+    );
+    if(backstory&&backstory.trim()){
+      d.bio=backstory.trim().replace(/^["']|["']$/g,'');
+      const bioEl=document.getElementById("personaBio");
+      if(bioEl)bioEl.value=d.bio;
+      toast("🪄 Backstory written — edit freely before saving","success");
+    } else {
+      toast("Got nothing back — try again","error");
+    }
+  }catch(err){
+    toast("❌ Backstory generation failed: "+err.message,"error");
+  }
 }
 
 function savePersona(){
