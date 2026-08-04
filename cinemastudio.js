@@ -95,6 +95,11 @@
 // really passed into the actual generation call alongside whatever
 // Character mentions are also present. Attachments are ephemeral (not
 // persisted, cleared after each send) same as the prompt text itself.
+// A dedicated "@" button sits right next to "+", also matching
+// Higgsfield's pattern exactly — it's not just decorative, it inserts @
+// and opens the same real Character dropdown typing "@" does
+// (openCsMentionPicker), since relying on someone already knowing to
+// type "@" isn't discoverable on its own.
 //
 // SESSION NOTE: direct image/frame viewing was non-functional for this
 // entire session (confirmed by testing on multiple fresh extractions and
@@ -424,6 +429,7 @@ function renderCsHome(wrap){
           <div id="csRefImageStrip" style="display:flex;gap:6px;flex-wrap:wrap;margin:0 2px 6px"></div>
           <div class="ig-input-toolbar">
             <button class="ig-tool-btn" onclick="document.getElementById('csRefImageFile').click()" title="Attach a reference image">+</button>
+            <button class="ig-tool-btn" onclick="openCsMentionPicker()" title="Add a character">@</button>
             ${isVideo?`<select class="f-select" id="csShotControl" style="display:none" onchange="onCsShotControlChange()"><option value="smart">Smart</option><option value="custom">Custom Multishot</option></select>
             <div id="csShotControlTrigger" onclick="openSimplePicker('csShotControl','Shot Control')" style="font-size:10.5px;padding:4px 8px;border-radius:8px;border:1px solid var(--glass-brd);background:var(--pearl2);cursor:pointer;white-space:nowrap"></div>`:''}
             <button class="ig-tool-btn" onclick="toggleCsSettings()" title="Settings">⚙</button>
@@ -702,6 +708,27 @@ function insertCsMention(name){
   ta.value=`${before}@${name} ${after}`;
   document.getElementById("csMentionDropdown").style.display="none";
   ta.focus();
+}
+
+// Dedicated @ button next to + — matches Higgsfield's own composer,
+// which has both as separate icons rather than only supporting @ via
+// typing it manually. Inserts @ at the cursor and immediately shows the
+// same character dropdown handleCsPromptInput would, so the mention
+// feature is discoverable without already knowing the shortcut.
+function openCsMentionPicker(){
+  const ta=document.getElementById("csPrompt");
+  if(!ta||ta.disabled)return;
+  if(!(S.characters||[]).length){
+    toast("No characters yet — build one in the Character Library first","error");
+    return;
+  }
+  const cursor=ta.selectionStart??ta.value.length;
+  const before=ta.value.slice(0,cursor);
+  const after=ta.value.slice(cursor);
+  ta.value=`${before}@${after}`;
+  ta.focus();
+  ta.selectionStart=ta.selectionEnd=cursor+1;
+  handleCsPromptInput({target:ta});
 }
 
 // ── AD-HOC REFERENCE IMAGES — the generic counterpart to @CharacterName.
