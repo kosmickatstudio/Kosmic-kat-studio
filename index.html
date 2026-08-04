@@ -203,6 +203,20 @@ html[data-theme="dark"] .mod-btn.active .mod-icon svg{
 @keyframes ig-fade-in{from{opacity:0}to{opacity:1}}
 .ig-settings-sheet{position:fixed;left:0;right:0;bottom:0;background:var(--glass-solid);border-radius:26px 26px 0 0;border:1px solid var(--glass-brd);border-bottom:none;box-shadow:0 -16px 56px rgba(0,0,0,0.32),inset 0 1px 0 rgba(255,255,255,0.08);z-index:150;max-height:82vh;overflow-y:auto;transform:translateY(100%);transition:transform 0.35s cubic-bezier(0.32,0.72,0,1);padding-bottom:env(safe-area-inset-bottom,0px)}
 .ig-settings-sheet.open{transform:translateY(0)}
+/* DESKTOP FIX: left:0/right:0 above is correct on mobile — the whole
+   point of a bottom sheet is edge-to-edge — but on a wide desktop
+   viewport it stretches across the entire screen width too, which reads
+   as "covering everything" rather than a settings panel. Same class is
+   shared by Image Gen, Video Canvas, Kat Films/Camera Crafts,
+   Directorial Studio, and other sheet-style overlays, so fixing it once
+   here fixes all of them. Mirrors how .modal already caps itself
+   (width:380px;max-width:90vw) instead of ever going edge-to-edge. Mobile
+   layout (viewports under 768px) is completely untouched — this only
+   applies above that breakpoint. */
+@media (min-width:768px){
+  .ig-settings-sheet{left:50%;right:auto;bottom:24px;width:440px;max-width:90vw;border-radius:22px;transform:translate(-50%,120%)}
+  .ig-settings-sheet.open{transform:translate(-50%,0)}
+}
 .ig-settings-sheet::before{content:'';position:absolute;top:0;left:14%;right:14%;height:1px;background:linear-gradient(90deg,transparent,var(--glow-gold),transparent)}
 .ig-sheet-handle{width:40px;height:5px;background:linear-gradient(90deg,var(--violet),var(--ice));border-radius:3px;margin:12px auto 6px;box-shadow:0 0 10px var(--glow-ice);opacity:0.7}
 .ig-sheet-header{display:flex;align-items:center;justify-content:space-between;padding:8px 18px 14px;border-bottom:1px solid var(--glass-brd);background:linear-gradient(135deg,rgba(61,31,122,0.08),transparent 60%)}
