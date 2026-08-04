@@ -52,10 +52,9 @@
 //     In, Flash Out, Bullet Time, Hero Moment (SPEED_RAMPS_ENHANCED) — not
 //     a vague "more control" gesture. That's now really wired in. Camera
 //     Movement itself is the same confirmed 14-option list as 2.5, not
-//     different. One remaining known gap, flagged rather than guessed at:
-//     the same video showed a "Shot Control" field once, alongside the
-//     Image/Video switch, without enough legible context to know what it
-//     does — not built yet, worth a closer look at that field specifically.
+//     different. "Shot Control" (Smart vs Custom Multishot) — flagged as
+//     an unconfirmed gap earlier — was later confirmed directly from a
+//     real screenshot and is now built (see Shot Control section below).
 //   - "Kat Films 2" ≈ Cinema Studio 3.5. A dedicated 3.5 walkthrough
 //     (120s, OCR-reviewed same as the others — image viewing was still
 //     down this session too) confirmed a genuinely new layer beyond 2.5/
@@ -75,8 +74,9 @@
 //     pattern actually observed across 2.5→3→3.5).
 // Built in parts per direct instruction — this pass completed Kat Films
 // 1.5's real Speed Ramp differentiator and Kat Films 2's Style Settings
-// panel. "Shot Control", the "Camera Settings" panel, and fuller preset
-// lists per Style Settings tab remain open for a future pass.
+// panel. Shot Control (Smart/Custom Multishot, see below) was confirmed
+// and built in a later pass. The "Camera Settings" panel and fuller
+// preset lists per Style Settings tab remain open for a future pass.
 //
 // "Cinema Studio 3.5" etc. as named models are Higgsfield's own in-house
 // model brand, not reachable via fal.ai — invented endpoints aren't
@@ -136,54 +136,25 @@ S.csMentionOpen=false;
 // someone already typed.
 S.csRefImages=S.csRefImages||[];
 S.csRefImageCounter=S.csRefImageCounter||0;
-// Soul HEX — a single dedicated color-reference image, deliberately kept
-// separate from the generic @mention/ad-hoc ref system above. Soul HEX's
-// real purpose (confirmed via OCR: "Upload a reference image and let
-// Soul HEX bring its colors into your own style") is singular and
-// specific — match a palette — not a multi-image subject composition, so
-// it gets its own slot rather than being folded into csRefImages.
-S.csSoulHexRef=S.csSoulHexRef||null;
+// Shot Control — confirmed directly from a real Cinema Studio 3
+// screenshot: a "Smart" (single continuous shot, existing Duration field
+// applies) vs "Custom Multishot" (break ONE generation into sequential
+// scene segments, all sharing the same scene description, each with its
+// own duration + pacing) toggle. Ephemeral like the ref image
+// attachments — scoped to "this generation," not a saved preference.
+S.csShotControl=S.csShotControl||"smart";
+S.csScenes=S.csScenes||[];
+S.csSceneCounter=S.csSceneCounter||0;
 
 const KAT_FILMS_TIERS=[
-  // Signature 1 / 1 / 1.5 / 2 are the Cinema Studio 2.5→3→3.5 progression
-  // — video-motion features (Camera Movement, Speed Ramp, AI Director,
-  // Style Settings). Per direct instruction: these are Kat Films 4K
-  // features specifically, not shared with Camera Crafts — videoOnly,
-  // full stop, not just differently labeled there.
-  {id:"signature1",label:"Kat Films — Signature 1",sub:"Empty — reserved for a future tier",empty:true,videoOnly:true},
+  {id:"signature1",label:"Kat Films — Signature 1",sub:"Empty — reserved for a future tier",empty:true},
   {id:"katfilms1",label:"Kat Films 1",sub:"≈ Cinema Studio 2.5 — Camera selection, Style Presets, AI Director (fully built)",
-    videoModel:"bytedance/seedance-2.0/fast/text-to-video",imageModel:"fal-ai/flux/dev",videoOnly:true},
+    videoModel:"bytedance/seedance-2.0/fast/text-to-video",imageModel:"fal-ai/flux/dev"},
   {id:"katfilms1_5",label:"Kat Films 1.5",sub:"≈ Cinema Studio 3 — adds enhanced Speed Ramp presets (Flash In/Out, Bullet Time, Hero Moment)",
-    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,partial:true,videoOnly:true},
+    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,partial:true},
   {id:"katfilms2",label:"Kat Films 2",sub:"≈ Cinema Studio 3.5 — adds Style Settings (Color Palette/Lighting/Camera Moveset Style); research ongoing",
-    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,styleSettingsPanel:true,partial:true,videoOnly:true},
-  // Soul Studio — the ONLY tier Camera Crafts 4K offers. Higgsfield's
-  // separate Soul model family (Soul 2.0 / Soul Cinema, plus AI Cast /
-  // Cinematic Locations / Cinematic Cameras / Soul HEX — confirmed via
-  // OCR of a dedicated Soul Cinema walkthrough, the actual reason that
-  // recording was sent). Genuinely image-only (no Soul video model found)
-  // AND genuinely the answer to what Camera Crafts 4K itself should be,
-  // not a re-skin of Kat Films' video tiers.
-  // Soul HEX is the first real piece built here (built one solid piece
-  // at a time, same as Soul Cast before it): color-palette matching from
-  // a reference image. No invented "Soul" fal model — imageModel falls
-  // back to the same fal-ai/flux/dev every other tier's fallback uses;
-  // when a Soul HEX reference is attached, generation routes through
-  // genViaFluxEdit instead (real multi-reference composition, already
-  // used elsewhere in this file for Character @mentions) with an
-  // explicit color-matching instruction folded into the prompt.
-  // Cinematic Locations and Cinematic Cameras remain open — not built
-  // yet, and Soul Cast (the character-builder piece) already shipped
-  // separately inside Persona Studio.
-  {id:"soulstudio",label:"Soul Studio",sub:"Higgsfield Soul 2.0/Soul Cinema — image-only. Soul Cast (Persona Studio), Soul HEX, Cinematic Locations + Cinematic Cameras all built (fully built)",
-    imageModel:"fal-ai/flux/dev",imageOnly:true,soulHex:true,cinematicLocations:true,cinematicCameras:true},
+    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,styleSettingsPanel:true,partial:true},
 ];
-// Tiers visible in the picker for the CURRENT mode. Full separation, not
-// just different labels: Camera Crafts (image) only ever offers Soul
-// Studio; Kat Films (video) only ever offers the 4 videoOnly tiers.
-function csTiersForMode(mode){
-  return KAT_FILMS_TIERS.filter(t=>!(t.imageOnly&&mode!=="image")&&!(t.videoOnly&&mode!=="video"));
-}
 function getCsTier(){return KAT_FILMS_TIERS.find(t=>t.id===S.csTier)||KAT_FILMS_TIERS[1];}
 
 const CINEMA_GENRES=[
@@ -197,20 +168,6 @@ const CINEMA_GENRES=[
   {label:"Noir",frag:"film noir cinematography, high-contrast shadows, moody atmosphere"},
   {label:"Epic",frag:"epic sweeping cinematography, grand scale, dramatic grandeur"},
 ];
-
-// Cinematic Cameras (Soul Studio, image-only) — confirmed via OCR: a
-// camera+lens chip reading "Studio Digital S35" / "Premium Modern Prime"
-// / "35mm" (aperture value illegible). Only that one pairing is actually
-// confirmed from the source video. Camera/Lens/Focal Length/Aperture
-// aren't real fal API parameters (same honest note as Kat Films' Camera
-// Movement/Speed Ramp) — they're prompt-injection phrases, so the extra
-// options below beyond the confirmed pairing are real, well-known
-// cinematography vocabulary added for a genuinely usable picker rather
-// than a one-option list, NOT additional confirmed Higgsfield presets.
-const CS_SOUL_CAMERAS=["Auto","Studio Digital S35","ARRI Alexa","RED Komodo","Sony Venice","Blackmagic URSA"];
-const CS_SOUL_LENSES=["Auto","Premium Modern Prime","Anamorphic","Vintage Prime","Wide Angle Prime","Telephoto Zoom","Macro"];
-const CS_SOUL_FOCAL_LENGTHS=["Auto","24mm","35mm","50mm","85mm","100mm","135mm"];
-const CS_SOUL_APERTURES=["Auto","f/1.4","f/1.8","f/2.8","f/4","f/5.6","f/8"];
 
 // The full 14-option list confirmed directly from the reference video's
 // Camera Movement grid (Handheld through Dolly Right) — deliberately
@@ -260,11 +217,10 @@ const SPEED_RAMPS_ENHANCED=[
   {label:"Bullet Time",value:"dramatic bullet-time effect, motion freezes as the camera orbits around the subject"},
   {label:"Hero Moment",value:"motion eases into a slow, powerful hero moment emphasizing the subject"},
 ];
-// KNOWN GAP, flagged rather than guessed at: the same Director's Panel
-// also showed a field labeled "Shot Control" once in the OCR sweep,
-// alongside the Image/Video switch — not enough legible context to know
-// what it actually does, so it isn't built yet. Worth a real visual pass
-// once frame-viewing is back, or a closer video of that specific field.
+// UPDATE: "Shot Control" (mentioned once here as an unconfirmed OCR
+// find) was later confirmed directly from a real screenshot — Smart vs
+// Custom Multishot — and is now built. See S.csShotControl / Scene Cards
+// further down this file.
 
 // Duration includes "Custom" (confirmed in the reference video) — since
 // Seedance only accepts specific durations, a custom entry gets snapped
@@ -310,19 +266,8 @@ const CS35_CAMERA_MOVESET_STYLES=[
 // its own mode so opening "Camera Crafts 4K" actually starts in Image
 // mode and "Kat Films 4K" starts in Video mode, before the in-composer
 // toggle can take over.
-// Shared by openCinemaStudio (fresh sidebar entry) and setCsMode
-// (in-composer toggle) so a tier restricted to the other mode (e.g.
-// image-only Soul Studio) can never stay selected once we're not in its
-// mode, however we got here.
-function ensureCsTierValidForMode(mode){
-  if(!csTiersForMode(mode).some(t=>t.id===S.csTier)){
-    S.csTier=csTiersForMode(mode)[0]?.id||S.csTier;
-    saveSetting("cs_tier",S.csTier);
-  }
-}
 function openCinemaStudio(mode,el){
   S.csMode=mode;
-  ensureCsTierValidForMode(mode);
   switchMod("cinemastudio",el);
 }
 
@@ -468,6 +413,7 @@ function renderCsHome(wrap){
 
       <div class="ig-chat-inputbar">
         <div class="ig-input-shell">
+          <div id="csSceneCardsRow" style="display:none;gap:8px;overflow-x-auto;margin-bottom:8px"></div>
           <div style="display:flex;gap:4px;margin-bottom:6px;background:var(--pearl2);border-radius:9px;padding:3px;width:fit-content">
             <button id="csModeImage" onclick="setCsMode('image')" style="border:none;border-radius:7px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;background:${!isVideo?'var(--violet)':'transparent'};color:${!isVideo?'#fff':'var(--textm)'}">📷 Image</button>
             <button id="csModeVideo" onclick="setCsMode('video')" style="border:none;border-radius:7px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;background:${isVideo?'var(--violet)':'transparent'};color:${isVideo?'#fff':'var(--textm)'}">🎬 Video</button>
@@ -478,6 +424,8 @@ function renderCsHome(wrap){
           <div id="csRefImageStrip" style="display:flex;gap:6px;flex-wrap:wrap;margin:0 2px 6px"></div>
           <div class="ig-input-toolbar">
             <button class="ig-tool-btn" onclick="document.getElementById('csRefImageFile').click()" title="Attach a reference image">+</button>
+            ${isVideo?`<select class="f-select" id="csShotControl" style="display:none" onchange="onCsShotControlChange()"><option value="smart">Smart</option><option value="custom">Custom Multishot</option></select>
+            <div id="csShotControlTrigger" onclick="openSimplePicker('csShotControl','Shot Control')" style="font-size:10.5px;padding:4px 8px;border-radius:8px;border:1px solid var(--glass-brd);background:var(--pearl2);cursor:pointer;white-space:nowrap"></div>`:''}
             <button class="ig-tool-btn" onclick="toggleCsSettings()" title="Settings">⚙</button>
             <button class="ig-send-round" id="csGenBtn" ${!hasKey?'disabled':''} onclick="sendCinemaStudioGen()" title="Generate">➤</button>
           </div>
@@ -488,6 +436,7 @@ function renderCsHome(wrap){
   renderCsSettingsBody();
   renderCsChatThread();
   renderCsRefImageStrip();
+  if(isVideo){renderSimpleTrigger("csShotControl");renderCsSceneCards();}
   updateCsCostHint();
 }
 
@@ -499,8 +448,8 @@ function renderCsSettingsBody(){
   body.innerHTML=`
     ${tier.partial?`<div style="background:rgba(230,126,34,0.12);border:1px solid rgba(230,126,34,0.3);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--textm);margin-bottom:12px">⚠️ ${escapeHtml(tier.label)} is a partial build — flagged, not hidden. Full parity coming once more source material is confirmed.</div>`:''}
     <div class="f-group">
-      <label class="f-label">${isVideo?"Kat Films":"Camera Crafts"} Tier</label>
-      <select class="f-select" id="csTierSelect" style="display:none" onchange="renderSimpleTrigger('csTierSelect')">${csTiersForMode(S.csMode).map(t=>`<option value="${t.id}" ${t.id===S.csTier?'selected':''}>${escapeHtml(t.label)} — ${escapeHtml(t.sub)}</option>`).join('')}</select>
+      <label class="f-label">Kat Films Tier</label>
+      <select class="f-select" id="csTierSelect" style="display:none" onchange="renderSimpleTrigger('csTierSelect')">${KAT_FILMS_TIERS.map(t=>`<option value="${t.id}" ${t.id===S.csTier?'selected':''}>${escapeHtml(t.label)} — ${escapeHtml(t.sub)}</option>`).join('')}</select>
       <div id="csTierSelectTrigger" onclick="openCsTierPicker()" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
     </div>
     <div class="f-group">
@@ -531,63 +480,6 @@ function renderCsSettingsBody(){
         <button class="btn btn-outline btn-xs" onclick="switchMod('directors',document.querySelector('[data-mod=directors]'))">Change</button>
       </div>
     </div>
-    ${tier.soulHex?`
-    <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
-      <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Soul HEX <span style="color:var(--textm);font-weight:400;text-transform:none">— color palette matching</span></div>
-      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Upload a reference image and Soul HEX brings its colors into your generation. Optional — leave empty for a normal generation.</div>
-    </div>
-    <div class="f-group">
-      <input type="file" accept="image/*" id="csSoulHexUpload" style="display:none" onchange="handleCsSoulHexUpload(event)">
-      ${S.csSoulHexRef?`
-        <div style="display:flex;align-items:center;gap:10px">
-          <img src="${S.csSoulHexRef}" style="width:44px;height:44px;object-fit:cover;border-radius:8px">
-          <span style="flex:1;font-size:12px;color:var(--textm)">Color reference attached</span>
-          <button class="btn btn-ghost btn-xs" onclick="S.csSoulHexRef=null;renderCsSettingsBody()">✕ Remove</button>
-        </div>`:`
-        <button class="btn btn-outline btn-full" onclick="document.getElementById('csSoulHexUpload').click()">+ Add color reference</button>`}
-    </div>`:''}
-    ${tier.cinematicLocations?`
-    <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
-      <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Cinematic Locations <span style="color:var(--textm);font-weight:400;text-transform:none">— rich environments, no characters</span></div>
-      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Describe a place instead of a shot — generates one or more environment variations of it. Works alongside Soul HEX above.</div>
-    </div>
-    <div class="f-group" style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-      <input type="checkbox" id="csLocationsMode" onchange="toggleCsLocationsMode()" style="width:18px;height:18px">
-      <label for="csLocationsMode" style="font-size:13px;font-weight:600;color:var(--text);margin:0">This is a location, not a shot</label>
-    </div>
-    <div class="f-group" id="csLocationsBatchWrap" style="display:none">
-      <label class="f-label">How many variations? (1-10)</label>
-      <input type="number" class="f-input" id="csLocationsBatch" min="1" max="10" value="3">
-    </div>`:''}
-    ${tier.cinematicCameras?`
-    <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
-      <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Cinematic Cameras <span style="color:var(--textm);font-weight:400;text-transform:none">— camera + lens control</span></div>
-      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Confirmed pairing from the source: Studio Digital S35 / Premium Modern Prime / 35mm. Leave on Auto for a normal generation.</div>
-    </div>
-    <div class="f-row">
-      <div class="f-group">
-        <label class="f-label">Camera</label>
-        <select class="f-select" id="csSoulCamera" style="display:none" onchange="renderSimpleTrigger('csSoulCamera')">${CS_SOUL_CAMERAS.map(c=>`<option value="${c}">${c}</option>`).join('')}</select>
-        <div id="csSoulCameraTrigger" onclick="openSimplePicker('csSoulCamera','Camera')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-      </div>
-      <div class="f-group">
-        <label class="f-label">Lens</label>
-        <select class="f-select" id="csSoulLens" style="display:none" onchange="renderSimpleTrigger('csSoulLens')">${CS_SOUL_LENSES.map(l=>`<option value="${l}">${l}</option>`).join('')}</select>
-        <div id="csSoulLensTrigger" onclick="openSimplePicker('csSoulLens','Lens')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-      </div>
-    </div>
-    <div class="f-row">
-      <div class="f-group">
-        <label class="f-label">Focal Length</label>
-        <select class="f-select" id="csSoulFocal" style="display:none" onchange="renderSimpleTrigger('csSoulFocal')">${CS_SOUL_FOCAL_LENGTHS.map(f=>`<option value="${f}">${f}</option>`).join('')}</select>
-        <div id="csSoulFocalTrigger" onclick="openSimplePicker('csSoulFocal','Focal Length')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-      </div>
-      <div class="f-group">
-        <label class="f-label">Aperture</label>
-        <select class="f-select" id="csSoulAperture" style="display:none" onchange="renderSimpleTrigger('csSoulAperture')">${CS_SOUL_APERTURES.map(a=>`<option value="${a}">${a}</option>`).join('')}</select>
-        <div id="csSoulApertureTrigger" onclick="openSimplePicker('csSoulAperture','Aperture')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-      </div>
-    </div>`:''}
     ${tier.styleSettingsPanel?`
     <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
       <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Style Settings <span style="color:var(--textm);font-weight:400;text-transform:none">— Cinema Studio 3.5</span></div>
@@ -616,15 +508,19 @@ function renderCsSettingsBody(){
         </select>
         <div id="csRatioTrigger" onclick="openSimplePicker('csRatio','Aspect Ratio')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
       </div>
-      ${isVideo?`<div class="f-group">
+      ${isVideo&&S.csShotControl!=="custom"?`<div class="f-group">
         <label class="f-label">Duration</label>
-        <select class="f-select" id="csDuration" style="display:none" onchange="renderSimpleTrigger('csDuration')">${KAT_FILMS_DURATIONS.map(d=>`<option value="${d}" ${d===6?'selected':''}>${d}s</option>`).join('')}<option value="custom">Custom…</option></select>
+        <select class="f-select" id="csDuration" style="display:none" onchange="renderSimpleTrigger('csDuration');updateCsCostHint()">${KAT_FILMS_DURATIONS.map(d=>`<option value="${d}" ${d===6?'selected':''}>${d}s</option>`).join('')}<option value="custom">Custom…</option></select>
         <div id="csDurationTrigger" onclick="openSimplePicker('csDuration','Duration')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>`:''}
+      ${isVideo&&S.csShotControl==="custom"?`<div class="f-group">
+        <label class="f-label">Duration</label>
+        <div style="border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;background:var(--surface);font-size:13px;color:var(--textm)">Set per scene below (${S.csScenes.reduce((sum,s)=>sum+s.duration,0)}s total)</div>
       </div>`:''}
     </div>
     <div id="csCustomDurationWrap" style="display:none" class="f-group">
       <label class="f-label">Custom Duration (seconds) <span style="font-weight:400;color:var(--texts)">— snapped to the nearest length the model supports</span></label>
-      <input type="number" class="f-input" id="csCustomDuration" min="3" max="15" value="6">
+      <input type="number" class="f-input" id="csCustomDuration" min="3" max="15" value="6" oninput="updateCsCostHint()">
     </div>
     <div style="font-size:10px;color:var(--textm);margin-top:4px">Powered by: <b>${escapeHtml(isVideo?tier.videoModel:tier.imageModel)}</b></div>`;
   renderSimpleTrigger("csTierSelect");
@@ -632,7 +528,6 @@ function renderCsSettingsBody(){
   renderVisualTrigger("csStyle","style");
   if(isVideo){renderSimpleTrigger("csCameraMove");renderSimpleTrigger("csSpeedRamp");renderSimpleTrigger("csDuration");}
   if(tier.styleSettingsPanel){renderSimpleTrigger("csColorPalette");renderSimpleTrigger("csLighting");renderSimpleTrigger("csCameraMovesetStyle");}
-  if(tier.cinematicCameras){renderSimpleTrigger("csSoulCamera");renderSimpleTrigger("csSoulLens");renderSimpleTrigger("csSoulFocal");renderSimpleTrigger("csSoulAperture");}
   renderSimpleTrigger("csRatio");
   const durSel=document.getElementById("csDuration");
   if(durSel)durSel.addEventListener("change",()=>{
@@ -661,11 +556,11 @@ function openCsTierPicker(){
   overlay.innerHTML=`
     <div style="background:var(--surface);width:100%;max-height:78vh;border-radius:20px 20px 0 0;overflow-y:auto;box-shadow:var(--shv)">
       <div style="position:sticky;top:0;background:var(--surface);padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;z-index:2">
-        <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">Choose a ${S.csMode==="video"?"Kat Films":"Camera Crafts"} Tier</div>
+        <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">Choose a Kat Films Tier</div>
         <button onclick="closeModelPicker()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
       </div>
       <div style="padding:10px 14px 24px">
-        ${csTiersForMode(S.csMode).map(t=>{
+        ${KAT_FILMS_TIERS.map(t=>{
           const selected=t.id===S.csTier;
           return `<div onclick="selectCsTier('${t.id}')" style="display:flex;align-items:center;gap:11px;padding:12px 12px;border-radius:12px;cursor:pointer;margin-bottom:6px;border:1.5px solid ${selected?'var(--vs)':'transparent'};background:${selected?'var(--lav)':'transparent'}">
             <div style="flex:1;min-width:0">
@@ -694,7 +589,6 @@ function selectCsTier(tierId){
 function setCsMode(mode){
   if(S.csMode===mode)return;
   S.csMode=mode;
-  ensureCsTierValidForMode(mode);
   const titleEl=document.getElementById("csTitle");
   if(titleEl)titleEl.textContent=mode==="video"?"🎬 Kat Films 4K":"📷 Camera Crafts 4K";
   const tierBtn=document.querySelector('[title="Change Tier"]');
@@ -703,37 +597,21 @@ function setCsMode(mode){
   syncCsSidebarActive();
 }
 
-// Flips the prompt field between generic "describe your scene" framing
-// and location-specific framing, and reveals the variation-count field —
-// purely a UI toggle, the actual location-only prompt injection happens
-// at generation time in sendCinemaStudioGen.
-function toggleCsLocationsMode(){
-  const on=document.getElementById("csLocationsMode")?.checked;
-  const batchWrap=document.getElementById("csLocationsBatchWrap");
-  if(batchWrap)batchWrap.style.display=on?"block":"none";
-  const promptEl=document.getElementById("csPrompt");
-  if(promptEl)promptEl.placeholder=on?"Describe the location — e.g. a rain-soaked neon alley at night":"Describe what you want to create...";
-}
-
-async function handleCsSoulHexUpload(event){
-  const file=event.target.files&&event.target.files[0];
-  event.target.value="";
-  if(!file)return;
-  try{
-    S.csSoulHexRef=await downscaleImageFile(file,1024,0.9);
-    renderCsSettingsBody();
-  }catch(err){
-    toast("Couldn't read that reference image: "+err.message,"error");
-  }
-}
-
 function updateCsCostHint(){
   const tier=getCsTier();
   const hint=document.getElementById("csCostHint");
   if(!hint)return;
   if(S.csMode==="video"){
-    const est=estimateVideoCost(tier.videoModel,6,"720p",false);
-    hint.textContent=est?formatCostLine(est):"";
+    if(S.csShotControl==="custom"&&S.csScenes.length){
+      const totalSeconds=S.csScenes.reduce((sum,s)=>sum+snapToKatFilmsDuration(s.duration),0);
+      const est=estimateVideoCost(tier.videoModel,totalSeconds,"720p",false);
+      hint.textContent=est?`${formatCostLine(est)} (${S.csScenes.length} scenes)`:"";
+    }else{
+      const durVal=document.getElementById("csDuration")?.value;
+      const seconds=durVal==="custom"?parseInt(document.getElementById("csCustomDuration")?.value,10)||6:parseInt(durVal,10)||6;
+      const est=estimateVideoCost(tier.videoModel,seconds,"720p",false);
+      hint.textContent=est?formatCostLine(est):"";
+    }
   }else{
     const est=estimateImageCost(tier.imageModel,1);
     hint.textContent=est?formatCostLine(est):"";
@@ -744,8 +622,65 @@ function handleCsChatKeydown(e){
   if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();sendCinemaStudioGen();}
 }
 
-// ── @ MENTION AUTOCOMPLETE — matches against this app's real Character
-// library (S.characters), not a second invented "Elements" system. ──
+// ── SHOT CONTROL — confirmed via screenshot: Smart (default, single
+// continuous shot) vs Custom Multishot (break this generation into
+// sequential scene segments, same shared description, each segment with
+// its own duration + Speed Ramp). Seedance has no native multi-scene
+// parameter, so Custom Multishot is real, not simulated: each scene
+// becomes its own real generation call, all landing in order in Video
+// Editor's sequence — the closest honest equivalent to "one generate
+// button, one multi-part result" this app's actual capabilities allow. ──
+function onCsShotControlChange(){
+  S.csShotControl=document.getElementById("csShotControl")?.value||"smart";
+  if(S.csShotControl==="custom"&&!S.csScenes.length){
+    addCsScene();addCsScene();
+  }
+  renderCsSceneCards();
+  updateCsCostHint();
+}
+
+function addCsScene(){
+  S.csScenes.push({id:++S.csSceneCounter,duration:4,speedRamp:""});
+  renderCsSceneCards();
+  updateCsCostHint();
+}
+function removeCsScene(id){
+  S.csScenes=S.csScenes.filter(s=>s.id!==id);
+  if(!S.csScenes.length)S.csShotControl="smart";
+  renderCsSceneCards();
+  const sel=document.getElementById("csShotControl");
+  if(sel){sel.value=S.csShotControl;renderSimpleTrigger("csShotControl");}
+  updateCsCostHint();
+}
+function updateCsSceneDuration(id,val){
+  const s=S.csScenes.find(x=>x.id===id);
+  if(s){s.duration=Math.max(3,Math.min(15,parseInt(val,10)||4));updateCsCostHint();}
+}
+function updateCsSceneSpeedRamp(id,val){
+  const s=S.csScenes.find(x=>x.id===id);
+  if(s)s.speedRamp=val;
+}
+
+function renderCsSceneCards(){
+  const row=document.getElementById("csSceneCardsRow");
+  if(!row)return;
+  if(S.csShotControl!=="custom"){row.style.display="none";return;}
+  row.style.display="flex";
+  const tier=getCsTier();
+  const rampList=tier.enhancedSpeedRamp?SPEED_RAMPS_ENHANCED:SPEED_RAMPS;
+  row.innerHTML=S.csScenes.map((s,i)=>`<div class="panel" style="min-width:110px;padding:8px;flex-shrink:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="font-size:11px;font-weight:700;color:var(--violet)">Scene ${i+1}</span>
+      <button onclick="removeCsScene(${s.id})" style="width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <select style="width:100%;font-size:10px;padding:3px;border-radius:6px;border:1px solid var(--glass-brd);background:var(--pearl2);margin-bottom:4px" onchange="updateCsSceneSpeedRamp(${s.id},this.value)">
+      ${rampList.map(r=>`<option value="${r.value}" ${r.value===s.speedRamp?'selected':''}>${r.label}</option>`).join('')}
+    </select>
+    <input type="number" min="3" max="15" value="${s.duration}" style="width:100%;font-size:10px;padding:3px;border-radius:6px;border:1px solid var(--glass-brd);background:var(--pearl2)" onchange="updateCsSceneDuration(${s.id},this.value)">
+  </div>`).join('')+`<button onclick="addCsScene()" class="panel" style="min-width:44px;flex-shrink:0;border:1.5px dashed var(--glass-brd);background:transparent;cursor:pointer;font-size:18px;color:var(--violet)">+</button>`;
+}
+
+
 function handleCsPromptInput(e){
   const ta=e.target;
   const cursor=ta.selectionStart;
@@ -926,14 +861,6 @@ async function sendCinemaStudioGen(){
     duration=durVal==="custom"?snapToKatFilmsDuration(parseInt(document.getElementById("csCustomDuration")?.value,10)||6):snapToKatFilmsDuration(parseInt(durVal,10)||6);
   }
   const model=isVideo?tier.videoModel:tier.imageModel;
-  // Cinematic Locations — image-only (Soul Studio is imageOnly anyway),
-  // confirmed via OCR: its own "describe your location" field + a batch
-  // count (1-10 seen). Everything else in this function (Soul HEX,
-  // Character mentions, single-shot generation) behaves exactly as
-  // before when this isn't checked — this only branches the image path
-  // into a loop when it is.
-  const useLocationsBatch=!isVideo&&tier.cinematicLocations&&!!document.getElementById("csLocationsMode")?.checked;
-  const locationsBatchCount=useLocationsBatch?Math.min(10,Math.max(1,parseInt(document.getElementById("csLocationsBatch")?.value,10)||3)):1;
   const btn=document.getElementById("csGenBtn");
   btn.disabled=true;btn.textContent="⏳";
 
@@ -943,11 +870,9 @@ async function sendCinemaStudioGen(){
   const refImagesSnapshot=S.csRefImages.slice();
   S.csRefImages=[];
   renderCsRefImageStrip();
-  // Declared here (not per-branch) so the outer catch below can always
-  // see it — a per-branch `const loadingId` would be invisible outside
-  // its own if/else block, breaking error handling for anything that
-  // throws before reaching a branch.
-  let loadingId=null;
+  const isMultishot=isVideo&&S.csShotControl==="custom"&&S.csScenes.length>0;
+  const loadingId="csLoading_"+Date.now();
+  if(!isMultishot)pushCsChatMessage({id:loadingId,type:"loading",content:isVideo?"Rolling camera…":"Composing shot…"});
 
   try{
     const {cleanPrompt,imageUrls}=await resolveCsCharacterMentions(rawPrompt,apiKey,refImagesSnapshot);
@@ -956,82 +881,60 @@ async function sendCinemaStudioGen(){
     const colorPalette=tier.styleSettingsPanel?(document.getElementById("csColorPalette")?.value||""):"";
     const lighting=tier.styleSettingsPanel?(document.getElementById("csLighting")?.value||""):"";
     const cameraMovesetStyle=tier.styleSettingsPanel?(document.getElementById("csCameraMovesetStyle")?.value||""):"";
-    const locationFrag=useLocationsBatch?"wide establishing shot of the location itself, rich environmental detail, cinematic lighting, no visible characters or people":"";
-    // Cinematic Cameras — Camera/Lens/Focal Length/Aperture aren't real
-    // fal API parameters (same honest note as Kat Films' Camera Movement/
-    // Speed Ramp) — folded into the prompt as a real photography
-    // description instead. "Auto" on any field means don't mention it.
-    let cinematicCameraFrag="";
-    if(tier.cinematicCameras){
-      const cam=document.getElementById("csSoulCamera")?.value||"Auto";
-      const lens=document.getElementById("csSoulLens")?.value||"Auto";
-      const focal=document.getElementById("csSoulFocal")?.value||"Auto";
-      const aperture=document.getElementById("csSoulAperture")?.value||"Auto";
-      const camBits=[];
-      if(cam!=="Auto")camBits.push(`shot on a ${cam} camera`);
-      if(lens!=="Auto")camBits.push(`${lens} lens`);
-      if(focal!=="Auto")camBits.push(`${focal} focal length`);
-      if(aperture!=="Auto")camBits.push(`${aperture} aperture`);
-      cinematicCameraFrag=camBits.join(", ");
-    }
-    // Soul HEX — real, not just a UI toggle: upload the reference the
-    // same way Character mentions already get uploaded, and add it to
-    // the SAME imageUrls array genViaFluxEdit already consumes below, so
-    // it's genuinely composited in, not just described in text.
-    let soulHexFrag="";
-    if(tier.soulHex&&S.csSoulHexRef){
-      try{
-        const hosted=await uploadRefsToFal([{dataUrl:S.csSoulHexRef,name:"soulhex-ref"}],apiKey);
-        if(hosted&&hosted[0]){
-          imageUrls.push(hosted[0]);
-          soulHexFrag="match the color palette, tones and mood of the attached reference image";
-        }
-      }catch(err){console.warn("Soul HEX reference upload failed",err.message);}
-    }
-    const baseParts=[genre.frag,cleanPrompt,cameraMove,speedRamp,style,colorPalette,lighting,cameraMovesetStyle,locationFrag,cinematicCameraFrag,soulHexFrag,directorPrompt].filter(Boolean);
     const projectId=S.csActiveProjectId||"";
     const providerLabel=isVideo?"Kat Films 4K":"Camera Crafts 4K";
+    const basePromptParts=[genre.frag,cleanPrompt,cameraMove,style,colorPalette,lighting,cameraMovesetStyle];
 
-    if(isVideo){
-      const finalPrompt=baseParts.join(", ");
-      loadingId="csLoading_"+Date.now();
-      pushCsChatMessage({id:loadingId,type:"loading",content:"Rolling camera…"});
+    if(isMultishot){
+      // CUSTOM MULTISHOT — real, not simulated: each scene is its own
+      // Seedance call sharing the same base description, differing only
+      // in its own duration + Speed Ramp. Seedance has no native
+      // multi-scene parameter, so this is the honest way to deliver
+      // "one press, one multi-part result": every scene lands in order
+      // in Video Editor's sequence, ready to play through as one piece.
+      let anyFailed=false;
+      for(let i=0;i<S.csScenes.length;i++){
+        const scene=S.csScenes[i];
+        const sceneLoadingId="csLoading_"+Date.now()+"_"+i;
+        pushCsChatMessage({id:sceneLoadingId,type:"loading",content:`Scene ${i+1}/${S.csScenes.length}…`});
+        const sceneParts=[...basePromptParts,scene.speedRamp,directorPrompt].filter(Boolean);
+        const scenePrompt=sceneParts.join(", ");
+        const sceneDuration=snapToKatFilmsDuration(scene.duration);
+        try{
+          const videoUrl=await genViaSeedanceReference(scenePrompt,model,ratio,sceneDuration,imageUrls,[],[]);
+          const savedAsset=createVideoAsset(videoUrl,scenePrompt,projectId,{model,providerLabel},true);
+          if(projectId)addCsGenerationToProject(projectId,savedAsset.id);
+          addToSequence(savedAsset.id);
+          logCost(model,providerLabel+" ("+tier.label+" — Scene "+(i+1)+")");
+          replaceCsLoadingBubble(sceneLoadingId,{type:"video",content:videoUrl,meta:{prompt:scenePrompt,providerLabel:providerLabel+" — Scene "+(i+1),assetId:savedAsset.id}});
+        }catch(err){
+          anyFailed=true;
+          replaceCsLoadingBubble(sceneLoadingId,{type:"error",content:`Scene ${i+1}: `+err.message});
+        }
+      }
+      toast(anyFailed?"⚠️ Multishot finished with some errors — check scenes above":"✨ Multishot complete — all scenes added to Video Editor in order","success");
+      S.csScenes=[];
+      S.csShotControl="smart";
+      const shotSel=document.getElementById("csShotControl");
+      if(shotSel){shotSel.value="smart";renderSimpleTrigger("csShotControl");}
+      renderCsSceneCards();
+      renderCsSettingsBody();
+    } else if(isVideo){
+      const parts=[...basePromptParts,speedRamp,directorPrompt].filter(Boolean);
+      const finalPrompt=parts.join(", ");
       const videoUrl=await genViaSeedanceReference(finalPrompt,model,ratio,duration,imageUrls,[],[]);
       const savedAsset=createVideoAsset(videoUrl,finalPrompt,projectId,{model,providerLabel},true);
       if(projectId)addCsGenerationToProject(projectId,savedAsset.id);
       logCost(model,providerLabel+" ("+tier.label+")");
       replaceCsLoadingBubble(loadingId,{type:"video",content:videoUrl,meta:{prompt:finalPrompt,providerLabel,assetId:savedAsset.id}});
-    } else if(useLocationsBatch){
-      // One bubble per variation, generated and replaced in sequence —
-      // same proven pattern Aesthetic Reel already uses for its packs,
-      // reused here rather than inventing a new batch-grid UI.
-      toast(`📍 Generating ${locationsBatchCount} location variation${locationsBatchCount>1?'s':''}…`,"success");
-      for(let i=0;i<locationsBatchCount;i++){
-        const finalPrompt=[...baseParts,`variation ${i+1} of ${locationsBatchCount}, different angle or time of day than the other variations`].join(", ");
-        const loadingId="csLoading_"+Date.now()+"_"+i;
-        pushCsChatMessage({id:loadingId,type:"loading",content:`Composing location ${i+1}/${locationsBatchCount}…`});
-        try{
-          const result=imageUrls.length
-            ?await genViaFluxEdit(finalPrompt,imageUrls,ratio,"fal-ai/flux-2/flash/edit")
-            :await genViaFal(finalPrompt,"",model,ratio,false);
-          const savedAsset=await createImageAsset(result.url,finalPrompt,projectId,{model:imageUrls.length?"fal-ai/flux-2/flash/edit":model,providerLabel});
-          if(projectId)addCsGenerationToProject(projectId,savedAsset.id);
-          logCost(imageUrls.length?"fal-ai/flux-2/flash/edit":model,providerLabel+" ("+tier.label+", location "+(i+1)+"/"+locationsBatchCount+")");
-          replaceCsLoadingBubble(loadingId,{type:"image",content:result.url,meta:{prompt:finalPrompt,providerLabel,assetId:savedAsset.id}});
-        }catch(err){
-          replaceCsLoadingBubble(loadingId,{type:"error",content:err.message});
-        }
-      }
-      toast(`✅ ${locationsBatchCount} location variation${locationsBatchCount>1?'s':''} done`,"success");
+      toast("✨ Generated","success");
     } else {
-      const finalPrompt=baseParts.join(", ");
-      loadingId="csLoading_"+Date.now();
-      pushCsChatMessage({id:loadingId,type:"loading",content:"Composing shot…"});
-      // Character mentions (and now Soul HEX) in Image mode get a REAL
-      // multi-reference composition (genViaFluxEdit, already used
-      // elsewhere in this app for multi-character storyboard shots)
-      // instead of plain text-to-image, so a mentioned character's
-      // actual photo — or Soul HEX's color reference — is genuinely used.
+      const parts=[...basePromptParts,directorPrompt].filter(Boolean);
+      const finalPrompt=parts.join(", ");
+      // Character mentions in Image mode get a REAL multi-reference
+      // composition (genViaFluxEdit, already used elsewhere in this app
+      // for multi-character storyboard shots) instead of plain
+      // text-to-image, so a mentioned character's actual photo is used.
       const result=imageUrls.length
         ?await genViaFluxEdit(finalPrompt,imageUrls,ratio,"fal-ai/flux-2/flash/edit")
         :await genViaFal(finalPrompt,"",model,ratio,false);
@@ -1039,10 +942,10 @@ async function sendCinemaStudioGen(){
       if(projectId)addCsGenerationToProject(projectId,savedAsset.id);
       logCost(imageUrls.length?"fal-ai/flux-2/flash/edit":model,providerLabel+" ("+tier.label+")");
       replaceCsLoadingBubble(loadingId,{type:"image",content:result.url,meta:{prompt:finalPrompt,providerLabel,assetId:savedAsset.id}});
+      toast("✨ Generated","success");
     }
-    toast("✨ Generated","success");
   }catch(err){
-    if(loadingId)replaceCsLoadingBubble(loadingId,{type:"error",content:err.message});
+    replaceCsLoadingBubble(loadingId,{type:"error",content:err.message});
     toast("❌ "+err.message,"error");
   }
   btn.disabled=false;btn.textContent="➤";
