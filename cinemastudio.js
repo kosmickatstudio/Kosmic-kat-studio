@@ -560,7 +560,7 @@ function openCsTierPicker(){
   overlay.style.cssText="position:fixed;inset:0;background:rgba(20,10,40,0.45);z-index:400;display:flex;align-items:flex-end";
   overlay.onclick=(e)=>{if(e.target===overlay)closeModelPicker();};
   overlay.innerHTML=`
-    <div style="background:var(--surface);width:100%;max-height:78vh;border-radius:20px 20px 0 0;overflow-y:auto;box-shadow:var(--shv)">
+    <div class="picker-sheet">
       <div style="position:sticky;top:0;background:var(--surface);padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;z-index:2">
         <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">Choose a Kat Films Tier</div>
         <button onclick="closeModelPicker()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
