@@ -218,6 +218,20 @@ html[data-theme="dark"] .mod-btn.active .mod-icon svg{
   .ig-settings-sheet.open{transform:translate(-50%,0)}
 }
 .ig-settings-sheet::before{content:'';position:absolute;top:0;left:14%;right:14%;height:1px;background:linear-gradient(90deg,transparent,var(--glow-gold),transparent)}
+/* PICKER SHEETS — the actual dropdown/picker overlays (Model, Genre,
+   Camera Movement, Aspect Ratio, Duration, Style Preset, Batch Count,
+   Kat Films Tier, etc.) are built by JS with an inline width:100% style
+   rather than this CSS class historically — same root bug as
+   .ig-settings-sheet above (correct edge-to-edge on mobile, wrong on
+   desktop), just in 4 separate functions instead of one shared class:
+   openModelPicker/openSimplePicker/openVisualPicker in this file, plus
+   Kat Films' own openCsTierPicker in cinemastudio.js. Defined once here
+   and applied via class="picker-sheet" in all 4 rather than leaving each
+   with its own copy of the same inline style to fix separately. */
+.picker-sheet{background:var(--surface);width:100%;max-height:78vh;border-radius:20px 20px 0 0;overflow-y:auto;box-shadow:var(--shv)}
+@media (min-width:768px){
+  .picker-sheet{max-width:440px;margin-left:auto;margin-right:auto;margin-bottom:24px;border-radius:20px}
+}
 .ig-sheet-handle{width:40px;height:5px;background:linear-gradient(90deg,var(--violet),var(--ice));border-radius:3px;margin:12px auto 6px;box-shadow:0 0 10px var(--glow-ice);opacity:0.7}
 .ig-sheet-header{display:flex;align-items:center;justify-content:space-between;padding:8px 18px 14px;border-bottom:1px solid var(--glass-brd);background:linear-gradient(135deg,rgba(61,31,122,0.08),transparent 60%)}
 
@@ -3054,7 +3068,7 @@ function openModelPicker(selectId,kind,allowed){
   overlay.style.cssText="position:fixed;inset:0;background:rgba(20,10,40,0.45);z-index:400;display:flex;align-items:flex-end";
   overlay.onclick=(e)=>{if(e.target===overlay)closeModelPicker();};
   overlay.innerHTML=`
-    <div style="background:var(--surface);width:100%;max-height:78vh;border-radius:20px 20px 0 0;overflow-y:auto;box-shadow:var(--shv)">
+    <div class="picker-sheet">
       <div style="position:sticky;top:0;background:var(--surface);padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;z-index:2">
         <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">${titles[kind]||"Choose Model"}</div>
         <button onclick="closeModelPicker()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
@@ -3112,7 +3126,7 @@ function openSimplePicker(selectId,title){
   overlay.onclick=(e)=>{if(e.target===overlay)closeModelPicker();};
   const opts=[...sel.options].map(o=>({value:o.value,label:o.textContent}));
   overlay.innerHTML=`
-    <div style="background:var(--surface);width:100%;max-height:78vh;border-radius:20px 20px 0 0;overflow-y:auto;box-shadow:var(--shv)">
+    <div class="picker-sheet">
       <div style="position:sticky;top:0;background:var(--surface);padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;z-index:2">
         <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">${title}</div>
         <button onclick="closeModelPicker()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
@@ -3211,7 +3225,7 @@ function openVisualPicker(selectId,title,kind){
   overlay.style.cssText="position:fixed;inset:0;background:rgba(20,10,40,0.45);z-index:400;display:flex;align-items:flex-end";
   overlay.onclick=(e)=>{if(e.target===overlay)closeModelPicker();};
   overlay.innerHTML=`
-    <div style="background:var(--surface);width:100%;max-height:78vh;border-radius:20px 20px 0 0;overflow-y:auto;box-shadow:var(--shv)">
+    <div class="picker-sheet">
       <div style="position:sticky;top:0;background:var(--surface);padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;z-index:2">
         <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">${title}</div>
         <button onclick="closeModelPicker()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
