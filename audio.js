@@ -54,7 +54,7 @@ async function openVoicePicker(selectId,triggerId){
   overlay.style.cssText="position:fixed;inset:0;background:rgba(20,10,40,0.45);z-index:400;display:flex;align-items:flex-end";
   overlay.onclick=(e)=>{if(e.target===overlay)overlay.remove();};
   overlay.innerHTML=`
-    <div style="background:var(--surface);width:100%;max-height:80vh;border-radius:20px 20px 0 0;overflow-y:auto;box-shadow:var(--shv)">
+    <div class="picker-sheet">
       <div style="position:sticky;top:0;background:var(--surface);padding:14px 18px 10px;z-index:2;border-bottom:1px solid var(--border)">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
           <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">Choose Voice</div>
