@@ -313,6 +313,11 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 .status-dot.loading{background:var(--yellow);animation:pulse 0.8s infinite}
 .status-dot.error{background:var(--red)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+/* Indeterminate progress fill for the generation structural diagram — no
+   real percentage exists (fal.ai's queue is state-based: queued/in
+   progress/done, never a %), so this is honestly a sliding indicator of
+   "still working," not a fabricated number. */
+@keyframes vc-diagram-progress-slide{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--lav2);border-top-color:var(--violet);border-radius:50%;animation:spin 0.7s linear infinite}
 
@@ -6410,6 +6415,15 @@ async function saveCharacterPreset(){
   const ready=(S.vcElements||[]).filter(e=>e&&e.frontal&&e.angles&&e.angles.length);
   if(!ready.length){toast("Build at least one complete Element first","error");return;}
   closeSaveCharacterPresetModal();
+  // ROOT CAUSE of the storage/retry-limit-exceeded failure, confirmed
+  // against the actual screenshot: the status bar showed ~0.21 KB/s — a
+  // genuinely very slow connection. Firebase's default max upload retry
+  // time is only ~2 minutes; at 0.21 KB/s even one modest image can take
+  // longer than that to finish, so the SDK gives up before a slow-but-
+  // otherwise-fine upload ever completes. Raised to 10 minutes here so
+  // slow connections get a real chance to finish instead of being treated
+  // as failed.
+  fbStorage.setMaxUploadRetryTime(600000);
   toast("Saving preset…","");
   try{
     // One shared uploader for every image in every element — a data URL goes
@@ -6425,20 +6439,36 @@ async function saveCharacterPreset(){
       await ref.put(blob);
       return {dataUrl:await ref.getDownloadURL(),name:img.name||""};
     };
-    const elements=await Promise.all(ready.map(async el=>({
-      name:el.name||"",
-      tag:el.tag||"Characters",
-      desc:el.desc||"",
-      frontal:await hostImg(el.frontal),
-      angles:(await Promise.all(el.angles.map(hostImg))).filter(Boolean),
-      // Video is uploaded the same way as any image (Firebase Storage
-      // accepts arbitrary blobs), so a preset with a bound video survives
-      // a reload the same as its images do.
-      video:el.video?await hostImg(el.video):null,
-      // voiceId is already a fal-side identifier, not a local file — nothing
-      // to upload, just carry it through as-is.
-      voiceId:el.voiceId||null,
-    })));
+    // Uploads used to run in parallel at every level (all elements at once,
+    // all angles within an element at once) — on a fast connection that's
+    // efficient, but on a ~0.21 KB/s connection it splits the already-tiny
+    // bandwidth across many simultaneous uploads, making every single one
+    // of them slower and more likely to individually hit the retry ceiling.
+    // Sequential (one file at a time, awaited in a plain for-loop) gives
+    // each upload the full available bandwidth — slower in total on a fast
+    // connection, but far more likely to actually finish on a slow one,
+    // which is the situation this is actually fixing for.
+    const elements=[];
+    for(const el of ready){
+      const frontal=await hostImg(el.frontal);
+      const angles=[];
+      for(const a of el.angles){
+        const hosted=await hostImg(a);
+        if(hosted)angles.push(hosted);
+      }
+      const video=el.video?await hostImg(el.video):null;
+      elements.push({
+        name:el.name||"",
+        tag:el.tag||"Characters",
+        desc:el.desc||"",
+        frontal,
+        angles,
+        video,
+        // voiceId is already a fal-side identifier, not a local file —
+        // nothing to upload, just carry it through as-is.
+        voiceId:el.voiceId||null,
+      });
+    }
     // Guarded here rather than trusting the boot-time init elsewhere in the
     // file to have already run. That init is a single, distant site — if
     // Video Canvas is reachable before it completes, S.characterPresets is
@@ -7630,12 +7660,30 @@ function insertVcTag(tag){
   const cursor=input.selectionStart;
   const textBeforeCursor=input.value.slice(0,cursor);
   const textAfterCursor=input.value.slice(cursor);
-  const newBefore=textBeforeCursor.replace(/@(\w*)$/,`@${tag} `);
+  const match=textBeforeCursor.match(/@(\w*)$/);
+  const matchStart=textBeforeCursor.length-match[0].length;
+  const beforeMatch=textBeforeCursor.slice(0,matchStart);
+  // Previously only guaranteed a trailing space after the inserted tag —
+  // if the text immediately BEFORE "@" had no space of its own (pasted
+  // text, or typing "@" right after a word with no space), the tag merged
+  // straight into that preceding word until a space was pressed manually.
+  // Now guaranteed on both sides.
+  const needsLeadingSpace=beforeMatch.length>0&&!/\s$/.test(beforeMatch);
+  const newBefore=beforeMatch+(needsLeadingSpace?" ":"")+`@${tag} `;
   input.value=newBefore+textAfterCursor;
   const newCursorPos=newBefore.length;
   input.focus();
   input.setSelectionRange(newCursorPos,newCursorPos);
   hideVcTagAutocomplete();
+  // Setting .value directly (as opposed to the user actually typing) does
+  // NOT fire the textarea's own "input" event, which is what the live
+  // in-place glow and chip strip are wired to — so clicking a tag from
+  // this dropdown left both looking stale until something else later
+  // forced a re-render (e.g. actually sending the prompt). Called
+  // explicitly here so tagging via click glows immediately, the same as
+  // tagging by typing already did.
+  renderVcChatHighlight();
+  renderVcTagChips();
 }
 
 function handleVcChatKeydown(e){
@@ -8322,6 +8370,41 @@ async function deleteVcChatSession(sessionId){
   openVcChatHistory();
 }
 
+// ── GENERATION STRUCTURAL DIAGRAM — replaces the plain "Generating with
+// reference assets…" line with a visual box diagram of what's actually
+// feeding the generation (each real attached asset, not placeholders),
+// flowing into an empty result box with an indeterminate progress fill.
+// Deliberately brand-neutral (no "fal.ai" or provider name anywhere in
+// it, per direct instruction) and deliberately NOT a fake percentage —
+// fal.ai's own queue is state-based (queued/in progress/done), it never
+// reports a real percent, so a sliding indeterminate bar is the honest
+// representation instead of inventing a number that doesn't exist. ──
+function vcGenerationDiagramHTML(promptText){
+  const nodes=[];
+  (S.vcMultiImages||[]).forEach((img,i)=>nodes.push({label:`@Image${i+1}`,thumb:img.dataUrl}));
+  (S.vcMultiVideos||[]).forEach((v,i)=>nodes.push({label:`@Video${i+1}`,icon:"🎬"}));
+  (S.vcMultiAudios||[]).forEach((a,i)=>nodes.push({label:`@Audio${i+1}`,icon:"🎵"}));
+  nodes.push({label:"Prompt",icon:"✎"});
+  const nodeHTML=nodes.map(n=>`<div style="width:52px;text-align:center">
+      <div style="width:44px;height:44px;border-radius:9px;overflow:hidden;background:var(--pearl2);border:1.5px solid var(--glass-brd);display:flex;align-items:center;justify-content:center;margin:0 auto 3px">
+        ${n.thumb?`<img src="${n.thumb}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:16px">${n.icon}</span>`}
+      </div>
+      <div style="font-size:8px;color:var(--textm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.label}</div>
+    </div>`).join('');
+  return `<div style="margin-top:10px;padding:14px;background:var(--pearl2);border-radius:14px;max-width:320px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:6px">${nodeHTML}</div>
+    <div style="text-align:center;color:var(--textm);font-size:14px;line-height:1">↓</div>
+    <div style="text-align:center;padding:7px;background:var(--violet);color:#fff;border-radius:8px;font-size:10.5px;font-weight:700;margin:4px 0">Scene Composer</div>
+    <div style="text-align:center;color:var(--textm);font-size:14px;line-height:1">↓</div>
+    <div style="border:1.5px dashed var(--glass-brd);border-radius:10px;padding:14px;text-align:center">
+      <div style="width:100%;height:6px;background:var(--glass-brd);border-radius:3px;overflow:hidden;position:relative;margin-bottom:6px">
+        <div style="position:absolute;top:0;left:0;width:30%;height:100%;background:linear-gradient(90deg,var(--violet),var(--ice));border-radius:3px;animation:vc-diagram-progress-slide 1.6s ease-in-out infinite"></div>
+      </div>
+      <div style="font-size:10px;color:var(--textm)">Rendering your scene…</div>
+    </div>
+  </div>`;
+}
+
 async function sendVcChatPrompt(){
   const multiShotOn=document.getElementById("vcMultiShotToggle")?.checked;
   if(multiShotOn){
@@ -8357,6 +8440,14 @@ async function sendVcChatPrompt(){
     multiShotOn:false,
   }});
   inputEl.value="";inputEl.style.height="auto";
+  // Same root cause as insertVcTag's stale-glow bug: setting .value
+  // directly doesn't fire "input", so the mirror overlay (vcChatHighlight)
+  // kept showing the just-sent prompt's highlighted text rendered on top
+  // of the now-empty real textarea underneath — the overlapping/garbled
+  // look in the prompt box right after sending. Explicit calls here keep
+  // the mirror and chip strip in sync with the actual cleared value.
+  renderVcChatHighlight();
+  renderVcTagChips();
   const loadingId="vcLoading_"+Date.now();
   const sendBtn=document.getElementById("vcSendBtn");
   sendBtn.disabled=true;
@@ -8426,17 +8517,17 @@ async function sendVcChatPrompt(){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length&&!S.vcMultiAudios.length){
         throw new Error("Add at least one reference image, video, or audio file — this model needs one to generate.");
       }
-      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"});
+      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"+vcGenerationDiagramHTML(prompt)});
       videoUrl=await genViaSeedanceReference(prompt,model,ratio,duration,hostedImages,hostedVideos,hostedAudios);
       providerLabel="Seedance 2.0 Reference-to-Video";costKey=model;
     } else if(cap.provider==="veo-ref"){
       if(!S.vcMultiImages.length)throw new Error("Add at least 1 reference image (up to 3) — this model needs one to generate.");
-      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Generating with reference images…"});
+      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Generating with reference images…"+vcGenerationDiagramHTML(prompt)});
       videoUrl=await genViaVeoReference(prompt,ratio,duration,hostedImages);
       providerLabel="Veo 3.1 Reference-to-Video";costKey=model;
     } else if(cap.provider==="kling-o3-ref"){
       if(!S.vcMultiImages.length&&!S.vcMultiVideos.length)throw new Error("Add at least 1 reference image or video — this model needs one to generate.");
-      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"});
+      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"+vcGenerationDiagramHTML(prompt)});
       videoUrl=await genViaKlingO3Reference(prompt,ratio,duration,hostedImages,hostedVideos,undefined,undefined,S.vcElementGroupMode,document.getElementById("vcCfgScaleSlider")&&cap.cfgScale?parseFloat(document.getElementById("vcCfgScaleSlider").value):null);
       providerLabel="Kling O3 Pro Reference-to-Video";costKey=model;
     } else {
@@ -8526,8 +8617,21 @@ async function sendVcChatPrompt(){
     logCost(costKey,prompt.slice(0,60),1,realCostEst?realCostEst.cost:null);
     toast(`✨ Video generated via ${providerLabel}!`,"success");
   }catch(err){
-    replaceVcLoadingBubble(loadingId,{role:"assistant",type:"error",content:err.message});
-    toast("❌ "+err.message,"error");
+    // This specific fal.ai rejection is their own safety classifier
+    // flagging a reference image (usually because it contains a real,
+    // recognizable face), not a bug in this app — nothing here can
+    // prevent it from firing, and the classifier isn't perfectly
+    // consistent, which is genuinely why a retry with the exact same
+    // images sometimes succeeds. Kept the original error text visible
+    // (not replaced) and added the plain-language explanation + what
+    // actually helps, instead of leaving it as an unexplained fal.ai
+    // error string.
+    const isContentFlag=/likenesses of real people|private information/i.test(err.message);
+    const friendlyMsg=isContentFlag
+      ?`${err.message}\n\nThis is fal.ai's own safety filter, not a bug here — it flagged one of your reference images, most likely one with a real recognizable face. It isn't perfectly consistent, so retrying as-is sometimes works; if it keeps failing, try swapping out whichever reference image is most likely to be the trigger.`
+      :err.message;
+    replaceVcLoadingBubble(loadingId,{role:"assistant",type:"error",content:friendlyMsg});
+    toast("❌ "+(isContentFlag?"Blocked by fal.ai's safety filter — see details below":err.message),"error");
   }
   sendBtn.disabled=false;
 }
@@ -8916,11 +9020,16 @@ function getAllDirectors(){
 // - Veo 3.1: genuinely fixed enum, only 4s/6s/8s, formatted as a string with
 //   the unit suffix — this one is NOT a range, unlike the other two
 const VIDEO_MODEL_DURATIONS={
-  "bytedance/seedance-2.0/fast/text-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
-  "bytedance/seedance-2.0/text-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
-  "bytedance/seedance-2.0/fast/reference-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
-  "bytedance/seedance-2.0/reference-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
-  "bytedance/seedance-2.0/image-to-video":{options:[4,5,6,8,10,12,15],format:n=>String(n)},
+  // Seedance 2.0's real duration range, confirmed directly against fal.ai's
+  // own API docs: "Supports 4 to 15 seconds" — every integer in that
+  // range is valid, not just a handful of discrete steps. The previous
+  // [4,5,6,8,10,12,15] list silently skipped 7/9/11/13/14, which is why
+  // the slider couldn't stop on them — not a UI bug, a wrong constraint.
+  "bytedance/seedance-2.0/fast/text-to-video":{options:[4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
+  "bytedance/seedance-2.0/text-to-video":{options:[4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
+  "bytedance/seedance-2.0/fast/reference-to-video":{options:[4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
+  "bytedance/seedance-2.0/reference-to-video":{options:[4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
+  "bytedance/seedance-2.0/image-to-video":{options:[4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/v2.1/master/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/v2.6/pro/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/v3/standard/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
@@ -8928,6 +9037,8 @@ const VIDEO_MODEL_DURATIONS={
   "fal-ai/kling-video/o3/pro/reference-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/o3/standard/image-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "fal-ai/kling-video/v3/4k/image-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},"fal-ai/kling-video/v3/4k/text-to-video":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
+  // Veo3.1 checked too — its real duration list IS exactly 4/6/8 (confirmed
+  // directly against fal.ai's docs), so this one was already correct.
   "fal-ai/veo3.1":{options:[4,6,8],format:n=>`${n}s`},
   "fal-ai/veo3.1/reference-to-video":{options:[4,6,8],format:n=>`${n}s`},
   // Veo 3 Direct (Gemini API): genViaVeoDirect doesn't currently send a
