@@ -44,10 +44,6 @@ function renderHome(el){
           <button class="dp-btn" onclick="openDisplayContentModal()">+ Add Content</button>
         </div>
         <div id="homeDisplaySlot" style="display:none;width:100%;height:100%"></div>
-        <div style="position:absolute;top:8px;right:8px;display:flex;gap:5px">
-          <button class="disp-ctrl" onclick="openDisplayContentModal()" title="Add Content">+</button>
-          <button class="disp-ctrl" onclick="clearDisplay()" title="Clear">✕</button>
-        </div>
         <div id="homeDots" style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);display:flex;gap:5px"></div>
       </div>
     </div>
