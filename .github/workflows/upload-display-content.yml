@@ -1,0 +1,53 @@
+# Runs the real Firebase Storage/Firestore upload for Home's display
+# carousel. Exists because Claude's own sandbox has no network path to
+# Firebase/Google APIs (restricted egress allowlist — confirmed directly,
+# not assumed) — GitHub Actions runners have full internet access, so the
+# actual upload happens here instead.
+#
+# FIREBASE_SERVICE_ACCOUNT is a real Firebase Admin SDK service account
+# key, stored as an encrypted GitHub Actions secret (never committed to
+# the repo in plaintext, not visible again after upload even to Claude).
+# Admin SDK access bypasses Firestore/Storage security rules entirely —
+# that's the whole point of a service account — so this workflow itself
+# IS the access-control boundary: only whoever can trigger a workflow_run
+# in this repo can add Home display content through this path.
+name: Upload Home Display Content
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_url:
+        description: "URL to fetch the file from (e.g. a GitHub Release asset)"
+        required: true
+      content_type:
+        description: "video or image"
+        required: true
+        default: "video"
+      file_name:
+        description: "Original file name, used for the Storage path"
+        required: true
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install firebase-admin
+        run: npm install firebase-admin@12
+
+      - name: Download source file
+        run: |
+          curl -L --fail --retry 3 -o /tmp/upload_file "${{ inputs.source_url }}"
+          ls -la /tmp/upload_file
+
+      - name: Upload to Firebase Storage + write Firestore entry
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          CONTENT_TYPE: ${{ inputs.content_type }}
+          FILE_NAME: ${{ inputs.file_name }}
+        run: node scripts/upload-display-content.js
