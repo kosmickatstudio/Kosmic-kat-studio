@@ -16,13 +16,44 @@ const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 const contentType = process.env.CONTENT_TYPE;
 const fileName = process.env.FILE_NAME;
 
+// Firebase changed its default bucket naming convention (older projects:
+// <project-id>.appspot.com, newer: <project-id>.firebasestorage.app) —
+// the app's client-side config says .firebasestorage.app, but that's not
+// proof a bucket was actually ever provisioned under that name (the
+// Storage "Get started" step has to be completed at least once). Trying
+// both here and reporting which one (if either) is real, rather than
+// assuming the client config is authoritative.
+const CANDIDATE_BUCKETS = [
+  "kosmic-kat-studio.firebasestorage.app",
+  "kosmic-kat-studio.appspot.com",
+];
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  storageBucket: "kosmic-kat-studio.firebasestorage.app",
 });
 
+async function findRealBucket() {
+  for (const name of CANDIDATE_BUCKETS) {
+    try {
+      const bucket = admin.storage().bucket(name);
+      const [exists] = await bucket.exists();
+      console.log(`Bucket ${name}: exists=${exists}`);
+      if (exists) return bucket;
+    } catch (err) {
+      console.log(`Bucket ${name}: error checking - ${err.message}`);
+    }
+  }
+  return null;
+}
+
 async function main() {
-  const bucket = admin.storage().bucket();
+  const bucket = await findRealBucket();
+  if (!bucket) {
+    throw new Error(
+      "No Storage bucket exists under either kosmic-kat-studio.firebasestorage.app or kosmic-kat-studio.appspot.com. " +
+      "This means Firebase Storage was likely never fully set up for this project (the 'Get started' step in the Storage console has to be completed once) — not a code or credentials problem."
+    );
+  }
   const db = admin.firestore();
 
   const storagePath = `home-display/${Date.now()}_${fileName}`;
