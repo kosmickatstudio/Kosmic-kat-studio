@@ -58,9 +58,15 @@ async function main() {
   await docRef.set({ items: existingItems, updatedAt: Date.now() });
 
   console.log("Done. Public URL:", publicUrl);
+  return item;
 }
 
-main().catch((err) => {
-  console.error("Upload failed:", err);
-  process.exit(1);
-});
+main()
+  .then((item) => {
+    fs.writeFileSync("/tmp/result.json", JSON.stringify({ success: true, item }, null, 2));
+  })
+  .catch((err) => {
+    console.error("Upload failed:", err);
+    fs.writeFileSync("/tmp/result.json", JSON.stringify({ success: false, error: String(err && err.message || err), stack: String(err && err.stack || "") }, null, 2));
+    process.exitCode = 1;
+  });
