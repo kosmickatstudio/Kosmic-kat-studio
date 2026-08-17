@@ -1206,6 +1206,8 @@ const API_SERVICES = [
   {key:"aicredits", label:"AICredits", ph:"sk-…", mod:"aicredits"},
   {key:"falai", label:"fal.ai", ph:"…", mod:"imagegen"},
   {key:"replicate", label:"Replicate", ph:"r8_…", mod:"imagegen"},
+  {key:"bfl", label:"Black Forest Labs (FLUX direct)", ph:"…", mod:"imagegen"},
+  {key:"evolink", label:"EvoLink", ph:"…", mod:"imagegen"},
   {key:"elevenlabs", label:"ElevenLabs", ph:"…", mod:"audio"},
   {key:"suno", label:"Suno AI", ph:"…", mod:"audio"},
   {key:"kling", label:"Kling", ph:"…", mod:"videocanvas"},
@@ -1701,6 +1703,15 @@ const COST_TABLE={
   // instead of $0.3034/s, well above this estimate).
   "bytedance/seedance-2.0/fast/text-to-video":1.94,
   "bytedance/seedance-2.0/text-to-video":2.43,
+  // Seedance 2.5 went live on EvoLink Aug 7 2026 (very recent) — 480p/720p
+  // only (no 1080p/4K, unlike 2.0). Rate below is from a third-party
+  // platform quoting EvoLink's own credits, not independently confirmed
+  // as EvoLink's exact number — flagged, not asserted as certain. 5s @ 480p.
+  "evolink/seedance-2.5/text-to-video":1.15,
+  // MiniMax H3 on EvoLink: confirmed $0.13/s at 2K, 768p billed at 8/13 of
+  // that rate (~$0.08/s) — both numbers directly confirmed via EvoLink's
+  // own docs. 5s @ 768p shown here.
+  "evolink/minimax-h3/text-to-video":0.40,
   "bytedance/seedance-2.0/fast/image-to-video":1.94,
   "bytedance/seedance-2.0/image-to-video":2.43,
   // Multi-reference (up to 12 image/video/audio files) — these dropdown
@@ -2917,6 +2928,8 @@ const VIDEO_MODEL_GROUPS=[
   {label:"Seedance 2.0 (ByteDance)",items:[
     {value:"bytedance/seedance-2.0/fast/text-to-video",name:"Seedance 2.0 Fast",sub:"Fast tier, lower cost, no reference images"},
     {value:"bytedance/seedance-2.0/text-to-video",name:"Seedance 2.0",sub:"Standard tier, higher quality, no reference images"},
+    {value:"evolink/seedance-2.5/text-to-video",name:"Seedance 2.5",sub:"Newest Seedance gen, via EvoLink — 480p/720p only"},
+    {value:"evolink/minimax-h3/text-to-video",name:"MiniMax H3",sub:"Via EvoLink — 768p or native 2K"},
     {value:"bytedance/seedance-2.0/fast/reference-to-video",name:"Seedance 2.0 Fast — Multi-Reference",sub:"Fast tier, up to 9 images/3 videos/3 audio refs"},
     {value:"bytedance/seedance-2.0/reference-to-video",name:"Seedance 2.0 — Multi-Reference",sub:"Standard tier, up to 9 images/3 videos/3 audio refs"},
     {value:"bytedance/seedance-2.0/image-to-video",name:"Seedance 2.0 — Start→End Frame",sub:"Anchors a first and last frame"},
@@ -3013,7 +3026,7 @@ function brainModelSetting(provider){return provider+"_brain_model";}
 function getBrainModel(provider){return gs(brainModelSetting(provider),(BRAIN_SUBMODELS[provider]&&BRAIN_SUBMODELS[provider][0].id)||"");}
 // Curated subsets for tools that don't offer every video model (e.g. no
 // multi-reference options where that tool has no reference-image input).
-const SE_MODEL_ALLOWED=["bytedance/seedance-2.0/fast/text-to-video","bytedance/seedance-2.0/text-to-video","fal-ai/kling-video/v2.1/master/text-to-video","fal-ai/kling-video/v2.6/pro/text-to-video","fal-ai/kling-video/v3/standard/text-to-video","fal-ai/kling-video/v3/pro/text-to-video","fal-ai/veo3.1"];
+const SE_MODEL_ALLOWED=["bytedance/seedance-2.0/fast/text-to-video","bytedance/seedance-2.0/text-to-video","evolink/seedance-2.5/text-to-video","evolink/minimax-h3/text-to-video","fal-ai/kling-video/v2.1/master/text-to-video","fal-ai/kling-video/v2.6/pro/text-to-video","fal-ai/kling-video/v3/standard/text-to-video","fal-ai/kling-video/v3/pro/text-to-video","fal-ai/veo3.1"];
 const PD_VIDEO_MODEL_ALLOWED=["bytedance/seedance-2.0/reference-to-video","bytedance/seedance-2.0/fast/reference-to-video","bytedance/seedance-2.0/image-to-video","fal-ai/kling-video/v2.1/master/text-to-video","fal-ai/kling-video/v2.6/pro/text-to-video","fal-ai/kling-video/v3/standard/text-to-video","fal-ai/kling-video/v3/pro/text-to-video","fal-ai/veo3.1"];
 function modelVisualMeta(value){
   if(value.includes("flux-2"))return{grad:"linear-gradient(135deg,#ff6b1a,#1a1a1a)",mono:"F2"};
@@ -4923,17 +4936,80 @@ const IMAGE_TO_VIDEO_MAP={
 // ── SEEDANCE 2.0 REFERENCE-TO-VIDEO — real multi-modal endpoint, verified.
 // Up to 9 images + 3 videos + 3 audio (12 total). Prompt must use @Image1/
 // @Video1/@Audio1 tags to reference the uploaded assets.
+// ── EVOLINK — confirmed schema (evolink.ai/docs): POST
+// https://api.evolink.ai/v1/videos/generations with {model, prompt, ...},
+// auth "Authorization: Bearer <key>" (NOT fal's "Key <key>"), returns
+// {id, status:"pending"}; poll GET /v1/tasks/{id} until
+// status:"completed", result video URL in results[0]. Confirmed via
+// EvoLink's own docs + a real request/response example on their
+// MiniMax H3 image-to-video page.
+//
+// Seedance 2.0's app-internal model IDs deliberately stay in their
+// original fal.ai-style format (bytedance/seedance-2.0/...) — ~30 places
+// across this app (cost table, dropdowns, capability maps, duration/
+// resolution/ratio option maps) already key off those exact strings.
+// Rewriting every one of those references would be invasive for no
+// real benefit; only the actual network call needed to change providers.
+// This map translates the existing internal ID to EvoLink's real flat
+// model ID right before the request goes out — everything else in the
+// app continues to work completely unchanged.
+const EVOLINK_MODEL_MAP={
+  "bytedance/seedance-2.0/fast/text-to-video":"seedance-2.0-fast-text-to-video",
+  "bytedance/seedance-2.0/text-to-video":"seedance-2.0-text-to-video",
+  "bytedance/seedance-2.0/fast/image-to-video":"seedance-2.0-fast-image-to-video",
+  "bytedance/seedance-2.0/image-to-video":"seedance-2.0-image-to-video",
+  "bytedance/seedance-2.0/fast/reference-to-video":"seedance-2.0-fast-reference-to-video",
+  "bytedance/seedance-2.0/reference-to-video":"seedance-2.0-reference-to-video",
+  // New models, added directly with their real EvoLink IDs (no fal.ai
+  // equivalent to translate from — these are EvoLink-only in this app).
+  "evolink/seedance-2.5/text-to-video":"seedance-2.5-text-to-video",
+  "evolink/seedance-2.5/image-to-video":"seedance-2.5-image-to-video",
+  "evolink/seedance-2.5/reference-to-video":"seedance-2.5-reference-to-video",
+  "evolink/minimax-h3/text-to-video":"minimax-h3-text-to-video",
+  "evolink/minimax-h3/image-to-video":"minimax-h3-image-to-video",
+  "evolink/minimax-h3/reference-to-video":"minimax-h3-reference-to-video",
+};
+
+async function genViaEvolinkVideo(evolinkModel,body){
+  const apiKey=gs("api_evolink","");
+  if(!apiKey)throw new Error("Add an EvoLink API key in Settings first");
+  const submitRes=await fetch("https://api.evolink.ai/v1/videos/generations",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
+    body:JSON.stringify({model:evolinkModel,...body})
+  });
+  const submitData=await submitRes.json();
+  if(!submitRes.ok||submitData.error){
+    throw new Error((submitData.error&&submitData.error.message)||submitRes.statusText||"EvoLink submit failed");
+  }
+  const taskId=submitData.id;
+  if(!taskId)throw new Error("No task id returned from EvoLink");
+  let attempts=0,finalData=null;
+  while(attempts<90){
+    await new Promise(r=>setTimeout(r,5000));attempts++;
+    const statusRes=await fetch(`https://api.evolink.ai/v1/tasks/${taskId}`,{headers:{"Authorization":"Bearer "+apiKey}});
+    const statusData=await statusRes.json();
+    if(statusData.status==="completed"){finalData=statusData;break;}
+    if(statusData.status==="failed")throw new Error((statusData.error&&statusData.error.message)||"EvoLink generation failed");
+  }
+  if(!finalData)throw new Error("Timed out — try again");
+  const videoUrl=finalData.results&&finalData.results[0];
+  if(!videoUrl)throw new Error("No video returned from EvoLink");
+  return videoUrl;
+}
+
+// Modified to route through EvoLink instead of fal.ai's queue — same
+// function signature, same return contract (a plain video URL string),
+// so every existing call site (Video Canvas, Kat Films 4K) keeps working
+// completely unchanged.
 async function genViaSeedanceReference(prompt,model,ratio,duration,imageUrls,videoUrls,audioUrls){
-  const apiKey=gs("api_falai","");
-  if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
-  const body={prompt,aspect_ratio:ratio,duration:String(duration),generate_audio:true};
+  const evolinkModel=EVOLINK_MODEL_MAP[model];
+  if(!evolinkModel)throw new Error(`No EvoLink mapping for model "${model}"`);
+  const body={prompt,aspect_ratio:ratio,duration:String(duration)};
   if(imageUrls&&imageUrls.length)body.image_urls=imageUrls;
   if(videoUrls&&videoUrls.length)body.video_urls=videoUrls;
   if(audioUrls&&audioUrls.length)body.audio_urls=audioUrls;
-  const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
-  const submitData=await submitRes.json();
-  if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
-  return pollFalVideoResult(model,submitData,apiKey);
+  return genViaEvolinkVideo(evolinkModel,body);
 }
 
 // ── VEO 3.1 REFERENCE-TO-VIDEO — real endpoint, verified. Up to 3 reference images.
@@ -9027,6 +9103,8 @@ const VIDEO_MODEL_DURATIONS={
   // the slider couldn't stop on them — not a UI bug, a wrong constraint.
   "bytedance/seedance-2.0/fast/text-to-video":{options:[4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "bytedance/seedance-2.0/text-to-video":{options:[4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
+  "evolink/seedance-2.5/text-to-video":{options:[4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30],format:n=>String(n)},
+  "evolink/minimax-h3/text-to-video":{options:[4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "bytedance/seedance-2.0/fast/reference-to-video":{options:[4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "bytedance/seedance-2.0/reference-to-video":{options:[4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
   "bytedance/seedance-2.0/image-to-video":{options:[4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
@@ -9062,6 +9140,8 @@ const VIDEO_MODEL_DURATIONS={
 const VIDEO_MODEL_RESOLUTIONS={
   "bytedance/seedance-2.0/fast/text-to-video":["480p","720p"],
   "bytedance/seedance-2.0/text-to-video":["480p","720p","1080p","4k"],
+  "evolink/seedance-2.5/text-to-video":["480p","720p"],
+  "evolink/minimax-h3/text-to-video":["768p","2k"],
   "bytedance/seedance-2.0/fast/reference-to-video":["480p","720p"],
   "bytedance/seedance-2.0/reference-to-video":["480p","720p","1080p","4k"],
   "bytedance/seedance-2.0/image-to-video":["480p","720p","1080p","4k"],
@@ -9216,6 +9296,8 @@ async function cancelProductionWizard(){
 const PD_ASPECT_RATIOS={
   "bytedance/seedance-2.0/fast/text-to-video":["16:9","9:16","4:3","3:4","21:9","1:1"],
   "bytedance/seedance-2.0/text-to-video":["16:9","9:16","4:3","3:4","21:9","1:1"],
+  "evolink/seedance-2.5/text-to-video":["16:9","9:16","1:1"],
+  "evolink/minimax-h3/text-to-video":["16:9","9:16","1:1"],
   "bytedance/seedance-2.0/reference-to-video":["16:9","9:16","4:3","3:4","21:9","1:1"],
   "bytedance/seedance-2.0/fast/reference-to-video":["16:9","9:16","4:3","3:4","21:9","1:1"],
   "bytedance/seedance-2.0/image-to-video":["16:9","9:16","4:3","3:4","21:9","1:1"],
