@@ -141,6 +141,11 @@ S.csMentionOpen=false;
 // someone already typed.
 S.csRefImages=S.csRefImages||[];
 S.csRefImageCounter=S.csRefImageCounter||0;
+// Soul HEX — a single dedicated color-reference image, deliberately kept
+// separate from the generic @mention/ad-hoc ref system above. Soul HEX's
+// real purpose (confirmed via OCR) is singular and specific — match a
+// palette — not a multi-image subject composition.
+S.csSoulHexRef=S.csSoulHexRef||null;
 // Shot Control — confirmed directly from a real Cinema Studio 3
 // screenshot: a "Smart" (single continuous shot, existing Duration field
 // applies) vs "Custom Multishot" (break ONE generation into sequential
@@ -152,15 +157,48 @@ S.csScenes=S.csScenes||[];
 S.csSceneCounter=S.csSceneCounter||0;
 
 const KAT_FILMS_TIERS=[
-  {id:"signature1",label:"Kat Films — Signature 1",sub:"Empty — reserved for a future tier",empty:true},
+  {id:"signature1",label:"Kat Films — Signature 1",sub:"Empty — reserved for a future tier",empty:true,videoOnly:true},
   {id:"katfilms1",label:"Kat Films 1",sub:"≈ Cinema Studio 2.5 — Camera selection, Style Presets, AI Director (fully built)",
-    videoModel:"bytedance/seedance-2.0/fast/text-to-video",imageModel:"fal-ai/flux/dev"},
+    videoModel:"bytedance/seedance-2.0/fast/text-to-video",imageModel:"fal-ai/flux/dev",videoOnly:true},
   {id:"katfilms1_5",label:"Kat Films 1.5",sub:"≈ Cinema Studio 3 — adds enhanced Speed Ramp presets (Flash In/Out, Bullet Time, Hero Moment)",
-    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,partial:true},
+    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,partial:true,videoOnly:true},
   {id:"katfilms2",label:"Kat Films 2",sub:"≈ Cinema Studio 3.5 — adds Style Settings (Color Palette/Lighting/Camera Moveset Style); research ongoing",
-    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,styleSettingsPanel:true,partial:true},
+    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,styleSettingsPanel:true,partial:true,videoOnly:true},
+  // Soul Cinema's real structure (confirmed via OCR of a dedicated
+  // walkthrough) is 4 SEPARATELY selectable models — AI Cast, Cinematic
+  // Locations, Soul HEX, Cinematic Cameras — shown together in one
+  // "Cinematic models" list, not stacked as toggles inside one bundled
+  // tier. Kept genuinely separate here per direct instruction, mirroring
+  // how Kat Films' own tiers are separate rather than one mega-tier with
+  // checkboxes. All 4 image-only (no Soul video model was found), all
+  // fall back to the same fal-ai/flux/dev every other tier uses — no
+  // invented "Soul" fal model.
+  {id:"aicast",label:"AI Cast",sub:"Character building — already built, lives in Persona Studio's 🎬 Cinema tab rather than duplicated here.",
+    empty:true,imageOnly:true,linksToFn:"openPersonaStudioScreen",linksToLabel:"Open Persona Studio"},
+  {id:"soulhex",label:"Soul HEX",sub:"Upload a reference image and match its color palette, tones and mood in your generation.",
+    imageModel:"fal-ai/flux/dev",imageOnly:true,soulHex:true},
+  {id:"cinematiclocations",label:"Cinematic Locations",sub:"Rich environments with cinematic lighting — describe a place, generate 1-10 variations of it, no characters.",
+    imageModel:"fal-ai/flux/dev",imageOnly:true,cinematicLocations:true},
+  {id:"cinematiccameras",label:"Cinematic Cameras",sub:"Image generation with camera control — confirmed pairing: Studio Digital S35 / Premium Modern Prime / 35mm.",
+    imageModel:"fal-ai/flux/dev",imageOnly:true,cinematicCameras:true},
 ];
+// Tiers visible in the picker for the CURRENT mode. Full separation, not
+// just different labels: Camera Crafts (image) only ever offers the 4
+// Soul Cinema tiers above; Kat Films (video) only ever offers the 4
+// videoOnly tiers.
+function csTiersForMode(mode){
+  return KAT_FILMS_TIERS.filter(t=>!(t.imageOnly&&mode!=="image")&&!(t.videoOnly&&mode!=="video"));
+}
 function getCsTier(){return KAT_FILMS_TIERS.find(t=>t.id===S.csTier)||KAT_FILMS_TIERS[1];}
+// Shared by openCinemaStudio (fresh sidebar entry) and setCsMode
+// (in-composer toggle) so a tier restricted to the other mode can never
+// stay selected once we're not in its mode, however we got here.
+function ensureCsTierValidForMode(mode){
+  if(!csTiersForMode(mode).some(t=>t.id===S.csTier)){
+    S.csTier=csTiersForMode(mode)[0]?.id||S.csTier;
+    saveSetting("cs_tier",S.csTier);
+  }
+}
 
 const CINEMA_GENRES=[
   {label:"General",frag:""},
@@ -173,6 +211,20 @@ const CINEMA_GENRES=[
   {label:"Noir",frag:"film noir cinematography, high-contrast shadows, moody atmosphere"},
   {label:"Epic",frag:"epic sweeping cinematography, grand scale, dramatic grandeur"},
 ];
+
+// Cinematic Cameras (image-only) — confirmed via OCR: a camera+lens chip
+// reading "Studio Digital S35" / "Premium Modern Prime" / "35mm"
+// (aperture value illegible). Only that one pairing is actually confirmed
+// from the source video. Camera/Lens/Focal Length/Aperture aren't real
+// fal API parameters (same honest note as Kat Films' Camera Movement/
+// Speed Ramp) — they're prompt-injection phrases, so the extra options
+// below beyond the confirmed pairing are real, well-known cinematography
+// vocabulary added for a genuinely usable picker, NOT additional
+// confirmed Higgsfield presets.
+const CS_SOUL_CAMERAS=["Auto","Studio Digital S35","ARRI Alexa","RED Komodo","Sony Venice","Blackmagic URSA"];
+const CS_SOUL_LENSES=["Auto","Premium Modern Prime","Anamorphic","Vintage Prime","Wide Angle Prime","Telephoto Zoom","Macro"];
+const CS_SOUL_FOCAL_LENGTHS=["Auto","24mm","35mm","50mm","85mm","100mm","135mm"];
+const CS_SOUL_APERTURES=["Auto","f/1.4","f/1.8","f/2.8","f/4","f/5.6","f/8"];
 
 // The full 14-option list confirmed directly from the reference video's
 // Camera Movement grid (Handheld through Dolly Right) — deliberately
@@ -273,6 +325,7 @@ const CS35_CAMERA_MOVESET_STYLES=[
 // toggle can take over.
 function openCinemaStudio(mode,el){
   S.csMode=mode;
+  ensureCsTierValidForMode(mode);
   switchMod("cinemastudio",el);
 }
 
@@ -395,9 +448,10 @@ function renderCsHome(wrap){
   if(tier.empty){
     wrap.innerHTML=`<div class="ig-chat-shell" style="padding:40px 20px;text-align:center">
       <div style="font-size:32px;margin-bottom:10px;opacity:0.5">🎬</div>
-      <div style="font-size:14px;font-weight:700;color:var(--textm)">${escapeHtml(tier.label)} is empty right now</div>
-      <div style="font-size:12px;color:var(--texts);margin-top:6px">This slot is reserved for a future tier — nothing to generate with yet.</div>
-      <button class="btn btn-outline btn-sm" style="margin-top:14px" onclick="openCsTierPicker()">Choose a different tier</button>
+      <div style="font-size:14px;font-weight:700;color:var(--textm)">${escapeHtml(tier.label)}${tier.linksToFn?'':' is empty right now'}</div>
+      <div style="font-size:12px;color:var(--texts);margin-top:6px">${tier.linksToFn?escapeHtml(tier.sub):"This slot is reserved for a future tier — nothing to generate with yet."}</div>
+      ${tier.linksToFn?`<button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="${tier.linksToFn}()">${escapeHtml(tier.linksToLabel||"Open")}</button>`:''}
+      <button class="btn btn-outline btn-sm" style="margin-top:${tier.linksToFn?'8':'14'}px" onclick="openCsTierPicker()">Choose a different tier</button>
     </div>`;
     return;
   }
@@ -454,8 +508,8 @@ function renderCsSettingsBody(){
   body.innerHTML=`
     ${tier.partial?`<div style="background:rgba(230,126,34,0.12);border:1px solid rgba(230,126,34,0.3);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--textm);margin-bottom:12px">⚠️ ${escapeHtml(tier.label)} is a partial build — flagged, not hidden. Full parity coming once more source material is confirmed.</div>`:''}
     <div class="f-group">
-      <label class="f-label">Kat Films Tier</label>
-      <select class="f-select" id="csTierSelect" style="display:none" onchange="renderSimpleTrigger('csTierSelect')">${KAT_FILMS_TIERS.map(t=>`<option value="${t.id}" ${t.id===S.csTier?'selected':''}>${escapeHtml(t.label)} — ${escapeHtml(t.sub)}</option>`).join('')}</select>
+      <label class="f-label">${isVideo?"Kat Films":"Camera Crafts"} Tier</label>
+      <select class="f-select" id="csTierSelect" style="display:none" onchange="renderSimpleTrigger('csTierSelect')">${csTiersForMode(S.csMode).map(t=>`<option value="${t.id}" ${t.id===S.csTier?'selected':''}>${escapeHtml(t.label)} — ${escapeHtml(t.sub)}</option>`).join('')}</select>
       <div id="csTierSelectTrigger" onclick="openCsTierPicker()" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
     </div>
     <div class="f-group">
@@ -506,6 +560,59 @@ function renderCsSettingsBody(){
       <select class="f-select" id="csCameraMovesetStyle" style="display:none" onchange="renderSimpleTrigger('csCameraMovesetStyle')">${CS35_CAMERA_MOVESET_STYLES.map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}</select>
       <div id="csCameraMovesetStyleTrigger" onclick="openSimplePicker('csCameraMovesetStyle','Camera Moveset Style')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
     </div>`:''}
+    ${tier.soulHex?`
+    <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Soul HEX <span style="color:var(--textm);font-weight:400;text-transform:none">— color palette matching</span></div>
+      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Upload a reference image and Soul HEX brings its colors into your generation. Optional — leave empty for a normal generation.</div>
+    </div>
+    <div class="f-group">
+      <input type="file" accept="image/*" id="csSoulHexUpload" style="display:none" onchange="handleCsSoulHexUpload(event)">
+      ${S.csSoulHexRef?`
+        <div style="display:flex;align-items:center;gap:10px">
+          <img src="${S.csSoulHexRef}" style="width:44px;height:44px;object-fit:cover;border-radius:8px">
+          <span style="flex:1;font-size:12px;color:var(--textm)">Color reference attached</span>
+          <button class="btn btn-ghost btn-xs" onclick="S.csSoulHexRef=null;renderCsSettingsBody()">✕ Remove</button>
+        </div>`:`
+        <button class="btn btn-outline btn-full" onclick="document.getElementById('csSoulHexUpload').click()">+ Add color reference</button>`}
+    </div>`:''}
+    ${tier.cinematicLocations?`
+    <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Cinematic Locations <span style="color:var(--textm);font-weight:400;text-transform:none">— rich environments, no characters</span></div>
+      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Describe a place — generates this many environment variations of it. Works alongside Soul HEX if that's also attached.</div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">How many variations? (1-10)</label>
+      <input type="number" class="f-input" id="csLocationsBatch" min="1" max="10" value="3">
+    </div>`:''}
+    ${tier.cinematicCameras?`
+    <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Cinematic Cameras <span style="color:var(--textm);font-weight:400;text-transform:none">— camera + lens control</span></div>
+      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Confirmed pairing from the source: Studio Digital S35 / Premium Modern Prime / 35mm. Leave on Auto for a normal generation.</div>
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Camera</label>
+        <select class="f-select" id="csSoulCamera" style="display:none" onchange="renderSimpleTrigger('csSoulCamera')">${CS_SOUL_CAMERAS.map(c=>`<option value="${c}">${c}</option>`).join('')}</select>
+        <div id="csSoulCameraTrigger" onclick="openSimplePicker('csSoulCamera','Camera')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Lens</label>
+        <select class="f-select" id="csSoulLens" style="display:none" onchange="renderSimpleTrigger('csSoulLens')">${CS_SOUL_LENSES.map(l=>`<option value="${l}">${l}</option>`).join('')}</select>
+        <div id="csSoulLensTrigger" onclick="openSimplePicker('csSoulLens','Lens')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Focal Length</label>
+        <select class="f-select" id="csSoulFocal" style="display:none" onchange="renderSimpleTrigger('csSoulFocal')">${CS_SOUL_FOCAL_LENGTHS.map(f=>`<option value="${f}">${f}</option>`).join('')}</select>
+        <div id="csSoulFocalTrigger" onclick="openSimplePicker('csSoulFocal','Focal Length')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Aperture</label>
+        <select class="f-select" id="csSoulAperture" style="display:none" onchange="renderSimpleTrigger('csSoulAperture')">${CS_SOUL_APERTURES.map(a=>`<option value="${a}">${a}</option>`).join('')}</select>
+        <div id="csSoulApertureTrigger" onclick="openSimplePicker('csSoulAperture','Aperture')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
+      </div>
+    </div>`:''}
     <div class="f-row" style="margin-top:${tier.styleSettingsPanel?'10px':'0'}">
       <div class="f-group">
         <label class="f-label">Aspect Ratio</label>
@@ -534,6 +641,7 @@ function renderCsSettingsBody(){
   renderVisualTrigger("csStyle","style");
   if(isVideo){renderSimpleTrigger("csCameraMove");renderSimpleTrigger("csSpeedRamp");renderSimpleTrigger("csDuration");}
   if(tier.styleSettingsPanel){renderSimpleTrigger("csColorPalette");renderSimpleTrigger("csLighting");renderSimpleTrigger("csCameraMovesetStyle");}
+  if(tier.cinematicCameras){renderSimpleTrigger("csSoulCamera");renderSimpleTrigger("csSoulLens");renderSimpleTrigger("csSoulFocal");renderSimpleTrigger("csSoulAperture");}
   renderSimpleTrigger("csRatio");
   const durSel=document.getElementById("csDuration");
   if(durSel)durSel.addEventListener("change",()=>{
@@ -562,11 +670,11 @@ function openCsTierPicker(){
   overlay.innerHTML=`
     <div class="picker-sheet">
       <div style="position:sticky;top:0;background:var(--surface);padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;z-index:2">
-        <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">Choose a Kat Films Tier</div>
+        <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">Choose a ${S.csMode==="video"?"Kat Films":"Camera Crafts"} Tier</div>
         <button onclick="closeModelPicker()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
       </div>
       <div style="padding:10px 14px 24px">
-        ${KAT_FILMS_TIERS.map(t=>{
+        ${csTiersForMode(S.csMode).map(t=>{
           const selected=t.id===S.csTier;
           return `<div onclick="selectCsTier('${t.id}')" style="display:flex;align-items:center;gap:11px;padding:12px 12px;border-radius:12px;cursor:pointer;margin-bottom:6px;border:1.5px solid ${selected?'var(--vs)':'transparent'};background:${selected?'var(--lav)':'transparent'}">
             <div style="flex:1;min-width:0">
@@ -595,12 +703,25 @@ function selectCsTier(tierId){
 function setCsMode(mode){
   if(S.csMode===mode)return;
   S.csMode=mode;
+  ensureCsTierValidForMode(mode);
   const titleEl=document.getElementById("csTitle");
   if(titleEl)titleEl.textContent=mode==="video"?"🎬 Kat Films 4K":"📷 Camera Crafts 4K";
   const tierBtn=document.querySelector('[title="Change Tier"]');
   if(tierBtn)tierBtn.textContent=mode==="video"?"🎬":"📷";
   renderCsHome(document.getElementById("csViewBody"));
   syncCsSidebarActive();
+}
+
+async function handleCsSoulHexUpload(event){
+  const file=event.target.files&&event.target.files[0];
+  event.target.value="";
+  if(!file)return;
+  try{
+    S.csSoulHexRef=await downscaleImageFile(file,1024,0.9);
+    renderCsSettingsBody();
+  }catch(err){
+    toast("Couldn't read that reference image: "+err.message,"error");
+  }
 }
 
 function updateCsCostHint(){
@@ -956,12 +1077,73 @@ async function sendCinemaStudioGen(){
       replaceCsLoadingBubble(loadingId,{type:"video",content:videoUrl,meta:{prompt:finalPrompt,providerLabel,assetId:savedAsset.id}});
       toast("✨ Generated","success");
     } else {
-      const parts=[...basePromptParts,directorPrompt].filter(Boolean);
+      // Soul HEX — real, not just a UI toggle: upload the reference the
+      // same way Character mentions already get uploaded, and add it to
+      // the SAME imageUrls array genViaFluxEdit already consumes below,
+      // so it's genuinely composited in, not just described in text.
+      let soulHexFrag="";
+      if(tier.soulHex&&S.csSoulHexRef){
+        try{
+          const hosted=await uploadRefsToFal([{dataUrl:S.csSoulHexRef,name:"soulhex-ref"}],apiKey);
+          if(hosted&&hosted[0]){
+            imageUrls.push(hosted[0]);
+            soulHexFrag="match the color palette, tones and mood of the attached reference image";
+          }
+        }catch(err){console.warn("Soul HEX reference upload failed",err.message);}
+      }
+      // Cinematic Cameras — Camera/Lens/Focal Length/Aperture aren't real
+      // fal API parameters (same honest note as Kat Films' Camera
+      // Movement/Speed Ramp) — folded into the prompt as a real
+      // photography description instead. "Auto" on any field = no-op.
+      let cinematicCameraFrag="";
+      if(tier.cinematicCameras){
+        const cam=document.getElementById("csSoulCamera")?.value||"Auto";
+        const lens=document.getElementById("csSoulLens")?.value||"Auto";
+        const focal=document.getElementById("csSoulFocal")?.value||"Auto";
+        const aperture=document.getElementById("csSoulAperture")?.value||"Auto";
+        const camBits=[];
+        if(cam!=="Auto")camBits.push(`shot on a ${cam} camera`);
+        if(lens!=="Auto")camBits.push(`${lens} lens`);
+        if(focal!=="Auto")camBits.push(`${focal} focal length`);
+        if(aperture!=="Auto")camBits.push(`${aperture} aperture`);
+        cinematicCameraFrag=camBits.join(", ");
+      }
+      if(tier.cinematicLocations){
+        // Cinematic Locations — its own dedicated tier now (not a
+        // checkbox on a shared tier), so selecting it IS the location
+        // framing. One bubble per variation, generated and replaced in
+        // sequence — same proven pattern Aesthetic Reel already uses.
+        const batchCount=Math.min(10,Math.max(1,parseInt(document.getElementById("csLocationsBatch")?.value,10)||3));
+        const locationFrag="wide establishing shot of the location itself, rich environmental detail, cinematic lighting, no visible characters or people";
+        toast(`📍 Generating ${batchCount} location variation${batchCount>1?'s':''}…`,"success");
+        for(let i=0;i<batchCount;i++){
+          const parts=[...basePromptParts,locationFrag,cinematicCameraFrag,soulHexFrag,directorPrompt,`variation ${i+1} of ${batchCount}, different angle or time of day than the other variations`].filter(Boolean);
+          const finalPrompt=parts.join(", ");
+          const sceneLoadingId="csLoading_"+Date.now()+"_"+i;
+          pushCsChatMessage({id:sceneLoadingId,type:"loading",content:`Composing location ${i+1}/${batchCount}…`});
+          try{
+            const result=imageUrls.length
+              ?await genViaFluxEdit(finalPrompt,imageUrls,ratio,"fal-ai/flux-2/flash/edit")
+              :await genViaFal(finalPrompt,"",model,ratio,false);
+            const savedAsset=await createImageAsset(result.url,finalPrompt,projectId,{model:imageUrls.length?"fal-ai/flux-2/flash/edit":model,providerLabel});
+            if(projectId)addCsGenerationToProject(projectId,savedAsset.id);
+            logCost(imageUrls.length?"fal-ai/flux-2/flash/edit":model,providerLabel+" (location "+(i+1)+"/"+batchCount+")");
+            replaceCsLoadingBubble(sceneLoadingId,{type:"image",content:result.url,meta:{prompt:finalPrompt,providerLabel,assetId:savedAsset.id}});
+          }catch(err){
+            replaceCsLoadingBubble(sceneLoadingId,{type:"error",content:err.message});
+          }
+        }
+        toast(`✅ ${batchCount} location variation${batchCount>1?'s':''} done`,"success");
+        btn.disabled=false;btn.textContent="➤";
+        return;
+      }
+      const parts=[...basePromptParts,cinematicCameraFrag,soulHexFrag,directorPrompt].filter(Boolean);
       const finalPrompt=parts.join(", ");
-      // Character mentions in Image mode get a REAL multi-reference
-      // composition (genViaFluxEdit, already used elsewhere in this app
-      // for multi-character storyboard shots) instead of plain
-      // text-to-image, so a mentioned character's actual photo is used.
+      // Character mentions (and now Soul HEX) in Image mode get a REAL
+      // multi-reference composition (genViaFluxEdit, already used
+      // elsewhere in this app for multi-character storyboard shots)
+      // instead of plain text-to-image, so a mentioned character's
+      // actual photo — or Soul HEX's color reference — is genuinely used.
       const result=imageUrls.length
         ?await genViaFluxEdit(finalPrompt,imageUrls,ratio,"fal-ai/flux-2/flash/edit")
         :await genViaFal(finalPrompt,"",model,ratio,false);
