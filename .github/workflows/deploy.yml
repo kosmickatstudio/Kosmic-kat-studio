@@ -25,61 +25,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Wire current free LLMs into Home Brain selector
-        shell: python
-        run: |
-          from pathlib import Path
-
-          p = Path("home.js")
-          s = p.read_text(encoding="utf-8")
-
-          marker = "const DIRECTOR_BANNERS={"
-          override = r'''// ── CURRENT FREE LLM OVERRIDES ──
-// Provider IDs verified against current provider documentation on 2026-09-08.
-// This is intentionally limited to free developer-tier models that are
-// currently usable through the existing direct-provider architecture.
-if(typeof BRAIN_SUBMODELS!=="undefined"){
-  Object.assign(BRAIN_SUBMODELS,{
-    gemini:[
-      {id:"gemini-3.8-flash",label:"Gemini 3.8 Flash — FREE (latest)"},
-      {id:"gemini-3.7-flash",label:"Gemini 3.7 Flash — FREE"},
-      {id:"gemini-3.1-flash-lite",label:"Gemini 3.1 Flash-Lite — FREE (fast)"}
-    ],
-    groq:[
-      {id:"openai/gpt-oss-120b",label:"GPT-OSS 120B — FREE"},
-      {id:"openai/gpt-oss-20b",label:"GPT-OSS 20B — FREE (fast)"},
-      {id:"qwen/qwen3.8-27b",label:"Qwen 3.8 27B — FREE"}
-    ]
-  });
-
-  // Migrate stale saved choices only for the providers whose free catalog
-  // changed. Other providers and user selections remain untouched.
-  if(typeof gs==="function" && typeof saveSetting==="function"){
-    const freeGemini=BRAIN_SUBMODELS.gemini.map(x=>x.id);
-    const freeGroq=BRAIN_SUBMODELS.groq.map(x=>x.id);
-    if(!freeGemini.includes(gs("gemini_brain_model",""))) saveSetting("gemini_brain_model",freeGemini[0]);
-    if(!freeGroq.includes(gs("groq_brain_model",""))) saveSetting("groq_brain_model",freeGroq[0]);
-  }
-}
-
-'''
-          if marker not in s:
-              raise SystemExit("home.js marker not found")
-          if "CURRENT FREE LLM OVERRIDES" not in s:
-              s = s.replace(marker, override + marker, 1)
-
-          s = s.replace(
-              "Google Gemini (Vision-capable, cheap, supports images)",
-              "Google Gemini — Free Tier models"
-          )
-          s = s.replace(
-              "Groq GPT-OSS 120B (Free & fast, text only)",
-              "Groq — Free LLMs (GPT-OSS / Qwen)"
-          )
-
-          p.write_text(s, encoding="utf-8")
+        run: python scripts/update-free-llms.py
 
       - name: Persist LLM wiring to main
-        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
