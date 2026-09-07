@@ -1,3 +1,4 @@
+# Deterministic deployment-time patch for the Home Brain model catalog.
 from pathlib import Path
 
 HOME = Path("home.js")
