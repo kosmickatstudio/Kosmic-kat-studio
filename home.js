@@ -87,6 +87,76 @@ window.refreshCurrentLlmUI=function(){
 setTimeout(window.refreshCurrentLlmUI,0);
 setTimeout(window.refreshCurrentLlmUI,300);
 
+// ── CURRENT LLM CATALOG + LIVE UI WIRING ──
+// Verified against current provider documentation on 2026-09-08.
+// IMPORTANT: this catalog never writes API keys or clears settings.
+// API keys remain browser-local and are never stored in the repository.
+const CURRENT_LLM_CATALOG={
+  claude:[
+    {id:"claude-fable-5",label:"Claude Fable 5 — latest / frontier"},
+    {id:"claude-opus-5",label:"Claude Opus 5 — advanced reasoning"},
+    {id:"claude-sonnet-5",label:"Claude Sonnet 5 — balanced"},
+    {id:"claude-haiku-4-5-20251001",label:"Claude Haiku 4.5 — fast"},
+    {id:"claude-opus-4-8",label:"Claude Opus 4.8"},
+    {id:"claude-opus-4-7",label:"Claude Opus 4.7"},
+    {id:"claude-opus-4-6",label:"Claude Opus 4.6"},
+    {id:"claude-sonnet-4-6",label:"Claude Sonnet 4.6"}
+  ],
+  gemini:[
+    {id:"gemini-3.8-flash",label:"Gemini 3.8 Flash — FREE (latest)"},
+    {id:"gemini-3.7-flash",label:"Gemini 3.7 Flash — FREE"},
+    {id:"gemini-3.1-flash-lite",label:"Gemini 3.1 Flash-Lite — FREE (fast)"}
+  ],
+  openai:[
+    {id:"gpt-5.6-sol",label:"GPT-5.6 Sol — flagship"},
+    {id:"gpt-5.6-terra",label:"GPT-5.6 Terra — balanced"},
+    {id:"gpt-5.6-luna",label:"GPT-5.6 Luna — cost-efficient"}
+  ],
+  groq:[
+    {id:"openai/gpt-oss-120b",label:"GPT-OSS 120B — FREE (latest)"},
+    {id:"openai/gpt-oss-20b",label:"GPT-OSS 20B — FREE (fast)"},
+    {id:"qwen/qwen3.8-27b",label:"Qwen 3.8 27B — FREE"}
+  ]
+};
+function applyCurrentLlmCatalog(){
+  if(typeof BRAIN_SUBMODELS!=="undefined"){
+    Object.keys(CURRENT_LLM_CATALOG).forEach(function(provider){
+      BRAIN_SUBMODELS[provider]=CURRENT_LLM_CATALOG[provider].map(function(model){return {id:model.id,label:model.label};});
+    });
+  }
+}
+applyCurrentLlmCatalog();
+window.updateBrainSubModelVisibility=function(){
+  applyCurrentLlmCatalog();
+  var providerSel=document.getElementById("aiModelSelect");
+  var wrap=document.getElementById("brainSubModelWrap");
+  var sel=document.getElementById("brainSubModelSelect");
+  var label=document.getElementById("brainSubModelLabel");
+  if(!providerSel||!wrap||!sel)return;
+  var provider=providerSel.value;
+  var options=(typeof BRAIN_SUBMODELS!=="undefined"&&BRAIN_SUBMODELS[provider])||null;
+  if(!options){wrap.style.display="none";sel.innerHTML="";return;}
+  wrap.style.display="block";
+  var providerNames={claude:"Claude",gemini:"Gemini",openai:"OpenAI",groq:"Groq",deepseek:"DeepSeek"};
+  if(label)label.textContent="(which "+(providerNames[provider]||provider)+" model to actually use)";
+  var key=provider+"_brain_model";
+  var current=(typeof gs==="function"?gs(key,options[0].id):options[0].id);
+  if(!options.some(function(o){return o.id===current;})) current=options[0].id;
+  sel.innerHTML=options.map(function(o){
+    return '<option value="'+String(o.id).replace(/"/g,'&quot;')+'" '+(o.id===current?'selected':'')+'>'+o.label+'</option>';
+  }).join("");
+  if(typeof renderSimpleTrigger==="function")renderSimpleTrigger("brainSubModelSelect");
+};
+window.refreshCurrentLlmUI=function(){
+  applyCurrentLlmCatalog();
+  if(document.getElementById("aiModelSelect")){
+    window.updateBrainSubModelVisibility();
+    if(typeof renderModelTrigger==="function")renderModelTrigger("aiModelSelect","brain");
+  }
+};
+setTimeout(window.refreshCurrentLlmUI,0);
+setTimeout(window.refreshCurrentLlmUI,300);
+
 const DIRECTOR_BANNERS={
   kosmic:"linear-gradient(135deg,#27272A,#52525B)",
   siamese:"linear-gradient(135deg,#7C2D12,#EA580C)",
