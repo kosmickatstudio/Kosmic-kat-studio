@@ -15,28 +15,68 @@
 // LOAD ORDER: must load AFTER index.html's main inline script.
 // ══════════════════════════════════════════════════════════════════════
 
-// ── CURRENT FREE LLM OVERRIDES ──
-// Provider IDs verified against current provider documentation on 2026-09-08.
-if(typeof BRAIN_SUBMODELS!=="undefined"){
-  Object.assign(BRAIN_SUBMODELS,{
-    gemini:[
-      {id:"gemini-3.8-flash",label:"Gemini 3.8 Flash — FREE (latest)"},
-      {id:"gemini-3.7-flash",label:"Gemini 3.7 Flash — FREE"},
-      {id:"gemini-3.1-flash-lite",label:"Gemini 3.1 Flash-Lite — FREE (fast)"}
-    ],
-    groq:[
-      {id:"openai/gpt-oss-120b",label:"GPT-OSS 120B — FREE"},
-      {id:"openai/gpt-oss-20b",label:"GPT-OSS 20B — FREE (fast)"},
-      {id:"qwen/qwen3.8-27b",label:"Qwen 3.8 27B — FREE"}
-    ]
-  });
+// ── CURRENT FREE LLM CATALOG + LIVE UI WIRING ──
+// Verified against current provider documentation on 2026-09-08.
+const CURRENT_FREE_LLM_CATALOG={
+  gemini:[
+    {id:"gemini-3.8-flash",label:"Gemini 3.8 Flash — FREE (latest)"},
+    {id:"gemini-3.7-flash",label:"Gemini 3.7 Flash — FREE"},
+    {id:"gemini-3.1-flash-lite",label:"Gemini 3.1 Flash-Lite — FREE (fast)"}
+  ],
+  groq:[
+    {id:"openai/gpt-oss-120b",label:"GPT-OSS 120B — FREE (latest)"},
+    {id:"openai/gpt-oss-20b",label:"GPT-OSS 20B — FREE (fast)"},
+    {id:"qwen/qwen3.8-27b",label:"Qwen 3.8 27B — FREE"}
+  ]
+};
+function applyCurrentFreeLlmCatalog(){
+  if(typeof BRAIN_SUBMODELS!=="undefined"){
+    Object.keys(CURRENT_FREE_LLM_CATALOG).forEach(function(provider){
+      BRAIN_SUBMODELS[provider]=CURRENT_FREE_LLM_CATALOG[provider].map(function(model){return {id:model.id,label:model.label};});
+    });
+  }
   if(typeof gs==="function" && typeof saveSetting==="function"){
-    const gemini=BRAIN_SUBMODELS.gemini.map(x=>x.id);
-    const groq=BRAIN_SUBMODELS.groq.map(x=>x.id);
-    if(!gemini.includes(gs("gemini_brain_model",""))) saveSetting("gemini_brain_model",gemini[0]);
-    if(!groq.includes(gs("groq_brain_model",""))) saveSetting("groq_brain_model",groq[0]);
+    Object.keys(CURRENT_FREE_LLM_CATALOG).forEach(function(provider){
+      var key=provider+"_brain_model";
+      var valid=CURRENT_FREE_LLM_CATALOG[provider].map(function(model){return model.id;});
+      if(!valid.includes(gs(key,""))) saveSetting(key,valid[0]);
+    });
   }
 }
+applyCurrentFreeLlmCatalog();
+window.updateBrainSubModelVisibility=function(){
+  applyCurrentFreeLlmCatalog();
+  var providerSel=document.getElementById("aiModelSelect");
+  var wrap=document.getElementById("brainSubModelWrap");
+  var sel=document.getElementById("brainSubModelSelect");
+  var label=document.getElementById("brainSubModelLabel");
+  if(!providerSel||!wrap||!sel)return;
+  var provider=providerSel.value;
+  var options=(typeof BRAIN_SUBMODELS!=="undefined"&&BRAIN_SUBMODELS[provider])||null;
+  if(!options){wrap.style.display="none";sel.innerHTML="";return;}
+  wrap.style.display="block";
+  var providerNames={claude:"Claude",gemini:"Gemini",openai:"OpenAI",groq:"Groq",deepseek:"DeepSeek"};
+  if(label)label.textContent="(which "+(providerNames[provider]||provider)+" model to actually use)";
+  var key=provider+"_brain_model";
+  var current=(typeof gs==="function"?gs(key,options[0].id):options[0].id);
+  if(!options.some(function(o){return o.id===current;})){
+    current=options[0].id;
+    if(typeof saveSetting==="function")saveSetting(key,current);
+  }
+  sel.innerHTML=options.map(function(o){
+    return '<option value="'+String(o.id).replace(/"/g,'&quot;')+'" '+(o.id===current?'selected':'')+'>'+o.label+'</option>';
+  }).join("");
+  if(typeof renderSimpleTrigger==="function")renderSimpleTrigger("brainSubModelSelect");
+};
+window.refreshCurrentFreeLlmUI=function(){
+  applyCurrentFreeLlmCatalog();
+  if(document.getElementById("aiModelSelect")){
+    window.updateBrainSubModelVisibility();
+    if(typeof renderModelTrigger==="function")renderModelTrigger("aiModelSelect","brain");
+  }
+};
+setTimeout(window.refreshCurrentFreeLlmUI,0);
+setTimeout(window.refreshCurrentFreeLlmUI,300);
 
 const DIRECTOR_BANNERS={
   kosmic:"linear-gradient(135deg,#27272A,#52525B)",
@@ -99,9 +139,9 @@ function renderHome(el){
       <div class="f-group">
         <select class="f-select" id="aiModelSelect" onchange="saveSetting('ai_model',this.value);updateAiModelLabel();updateAicreditsModelVisibility();updateBrainSubModelVisibility();renderModelTrigger('aiModelSelect','brain')" style="display:none">
         <option value="claude" ${gs("ai_model","claude")==="claude"?"selected":""}>Claude (Anthropic) (Best quality, supports images)</option>
-        <option value="gemini" ${gs("ai_model","claude")==="gemini"?"selected":""}>Google Gemini — Free Tier models</option>
+        <option value="gemini" ${gs("ai_model","claude")==="gemini"?"selected":""}>Google Gemini — Free (3.8 Flash latest)</option>
         <option value="openai" ${gs("ai_model","claude")==="openai"?"selected":""}>OpenAI GPT-4o (Supports images)</option>
-        <option value="groq" ${gs("ai_model","claude")==="groq"?"selected":""}>Groq — Free LLMs (GPT-OSS / Qwen)</option>
+        <option value="groq" ${gs("ai_model","claude")==="groq"?"selected":""}>Groq — Free (GPT-OSS 120B / Qwen 3.8 27B)</option>
         <option value="deepseek" ${gs("ai_model","claude")==="deepseek"?"selected":""}>DeepSeek V4 Flash (Ultra cheap, text only)</option>
         <option value="aicredits" ${gs("ai_model","claude")==="aicredits"?"selected":""}>AICredits Gateway (Routes to whichever model you pick below, images if that model supports them)</option>
         </select>
