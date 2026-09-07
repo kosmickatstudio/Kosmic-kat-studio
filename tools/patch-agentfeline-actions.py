@@ -1,71 +1,58 @@
 from pathlib import Path
 
-# Deployment patch: Agent Feline response actions are injected before Pages upload.
 p = Path('agentfeline.js')
 s = p.read_text(encoding='utf-8')
-marker = 'function afRenderAgentCard(msg){'
-if marker not in s:
-    raise SystemExit('Agent Feline render marker not found')
 
 helper = r'''// ── AGENT FELINE RESPONSE ACTIONS ──
-// Copy, native Share (with clipboard fallback), and a persistent Like toggle.
-function afActionKey(msg){return String(msg.agentId||'agent')+'_'+String(msg.turnId||'');}
-async function afCopyResponse(key){
-  const msg=(S.afChatHistory||[]).find(m=>m.role==='assistant'&&afActionKey(m)===key);
-  if(!msg)return;
-  const text=String(msg.content||'');
-  try{
-    if(navigator.clipboard&&navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
-    else{
-      const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0';
-      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
-    }
-    toast('✓ Response copied','');
-  }catch(e){toast('Could not copy the response','error');}
-}
-async function afShareResponse(key){
-  const msg=(S.afChatHistory||[]).find(m=>m.role==='assistant'&&afActionKey(m)===key);
-  if(!msg)return;
-  const text=String(msg.content||'');
-  try{
-    if(navigator.share) await navigator.share({title:'Agent Feline — '+String(msg.agentName||'AI'),text});
-    else{
-      await afCopyResponse(key);
-      toast('Share is unavailable here — response copied instead','');
-    }
-  }catch(e){
-    if(e&&e.name!=='AbortError')toast('Could not share the response','error');
+// UI-level actions attached to every rendered Agent Feline assistant bubble.
+(function(){
+  if(window.__afResponseActionsInstalled)return;
+  window.__afResponseActionsInstalled=true;
+  const keyPrefix='kosmic_af_like_';
+  function textFor(bubble){
+    const clone=bubble.cloneNode(true);
+    clone.querySelectorAll('.af-response-actions').forEach(x=>x.remove());
+    return (clone.innerText||clone.textContent||'').trim();
   }
-}
-function afToggleLike(key){
-  const msg=(S.afChatHistory||[]).find(m=>m.role==='assistant'&&afActionKey(m)===key);
-  if(!msg)return;
-  msg.liked=msg.liked!==true;
-  save('afChatHistory');
-  renderAfChatThread();
-}
-function afResponseActions(msg){
-  const key=afActionKey(msg).replace(/'/g,"\\'");
-  const liked=msg.liked===true;
-  return `<div style="display:flex;align-items:center;gap:4px;margin-top:9px;padding-top:7px;border-top:1px solid var(--border)">
-    <button type="button" onclick="afCopyResponse('${key}')" title="Copy response" aria-label="Copy response" style="border:0;background:transparent;color:var(--textm);font-size:11px;padding:5px 7px;border-radius:7px;cursor:pointer">${pIcon('copy',12)} <span>Copy</span></button>
-    <button type="button" onclick="afShareResponse('${key}')" title="Share response" aria-label="Share response" style="border:0;background:transparent;color:var(--textm);font-size:11px;padding:5px 7px;border-radius:7px;cursor:pointer">${pIcon('share',12)} <span>Share</span></button>
-    <button type="button" onclick="afToggleLike('${key}')" title="${liked?'Unlike response':'Like response'}" aria-label="${liked?'Unlike response':'Like response'}" style="border:0;background:transparent;color:${liked?'var(--violet)':'var(--textm)'};font-size:11px;font-weight:${liked?'700':'500'};padding:5px 7px;border-radius:7px;cursor:pointer">${liked?'♥':'♡'} <span>${liked?'Liked':'Like'}</span></button>
-  </div>`;
-}
-
+  function hash(s){let h=0;for(let i=0;i<s.length;i++)h=((h<<5)-h+s.charCodeAt(i))|0;return String(h);}
+  function addActions(bubble){
+    if(!bubble||bubble.querySelector('.af-response-actions'))return;
+    const text=textFor(bubble); if(!text)return;
+    const key=keyPrefix+hash(text);
+    const liked=localStorage.getItem(key)==='1';
+    const bar=document.createElement('div');
+    bar.className='af-response-actions';
+    bar.style.cssText='display:flex;align-items:center;gap:4px;margin-top:9px;padding-top:7px;border-top:1px solid var(--border);font-size:11px';
+    function btn(label,icon,fn,active){
+      const b=document.createElement('button'); b.type='button'; b.title=label; b.setAttribute('aria-label',label);
+      b.style.cssText='border:0;background:transparent;color:'+(active?'var(--violet)':'var(--textm)')+';font-size:11px;font-weight:'+(active?'700':'500')+';padding:5px 7px;border-radius:7px;cursor:pointer';
+      b.innerHTML='<span style="font-size:13px;vertical-align:-1px">'+icon+'</span> <span>'+label.replace(' response','')+'</span>';
+      b.addEventListener('click',fn); return b;
+    }
+    bar.appendChild(btn('Copy response','▣',async()=>{
+      try{if(navigator.clipboard&&navigator.clipboard.writeText)await navigator.clipboard.writeText(text);else{const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();} if(typeof toast==='function')toast('✓ Response copied','');}catch(e){if(typeof toast==='function')toast('Could not copy the response','error');}
+    }));
+    bar.appendChild(btn('Share response','↗',async()=>{
+      try{if(navigator.share)await navigator.share({title:'Agent Feline',text});else{if(navigator.clipboard)await navigator.clipboard.writeText(text);if(typeof toast==='function')toast('Share unavailable — response copied','');}}catch(e){if(e&&e.name!=='AbortError'&&typeof toast==='function')toast('Could not share the response','error');}
+    }));
+    const like=btn(liked?'Unlike response':'Like response',liked?'♥':'♡',()=>{
+      const now=localStorage.getItem(key)!=='1'; localStorage.setItem(key,now?'1':'0');
+      like.innerHTML='<span style="font-size:13px;vertical-align:-1px">'+(now?'♥':'♡')+'</span> <span>'+(now?'Liked':'Like')+'</span>';
+      like.style.color=now?'var(--violet)':'var(--textm)'; like.style.fontWeight=now?'700':'500'; like.title=now?'Unlike response':'Like response'; like.setAttribute('aria-label',like.title);
+    },liked);
+    bar.appendChild(like);
+    bubble.appendChild(bar);
+  }
+  function scan(root){
+    (root.querySelectorAll?root.querySelectorAll('.ig-bubble-assistant'):[]).forEach(addActions);
+    if(root.matches&&root.matches('.ig-bubble-assistant'))addActions(root);
+  }
+  scan(document);
+  new MutationObserver(m=>m.forEach(x=>x.addedNodes.forEach(n=>{if(n.nodeType===1)scan(n);})).observe(document.documentElement,{childList:true,subtree:true});
+})();
 '''
 
 if '// ── AGENT FELINE RESPONSE ACTIONS ──' not in s:
-    s = s.replace(marker, helper + marker, 1)
-
-old = '''  if(msg.imageError)body+=`<div style="font-size:10.5px;color:var(--gold);margin-top:6px">${pIcon('search',10)} ${afEscape(msg.imageError)}</div>`;
-  return `<div class="ig-bubble-assistant" style="margin:0">${header}${body}</div>`;'''
-new = '''  if(msg.imageError)body+=`<div style="font-size:10.5px;color:var(--gold);margin-top:6px">${pIcon('search',10)} ${afEscape(msg.imageError)}</div>`;
-  if(!msg.error)body+=afResponseActions(msg);
-  return `<div class="ig-bubble-assistant" style="margin:0">${header}${body}</div>`;'''
-if old not in s:
-    raise SystemExit('Agent Feline card return block not found')
-s = s.replace(old, new, 1)
-p.write_text(s, encoding='utf-8')
-print('Agent Feline response actions patched')
+    s += '\n' + helper
+p.write_text(s,encoding='utf-8')
+print('Agent Feline response actions installed')
