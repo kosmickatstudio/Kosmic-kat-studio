@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Deployment patch: Agent Feline response actions are injected before Pages upload.
 p = Path('agentfeline.js')
 s = p.read_text(encoding='utf-8')
 marker = 'function afRenderAgentCard(msg){'
