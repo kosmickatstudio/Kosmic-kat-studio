@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -23,6 +23,44 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Repair duplicated Home catalog block only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('home.js')
+          s=p.read_text(encoding='utf-8')
+          marker='// ── CURRENT LLM CATALOG + LIVE UI WIRING ──'
+          director='const DIRECTOR_BANNERS={'
+          starts=[]
+          pos=0
+          while True:
+            i=s.find(marker,pos)
+            if i<0: break
+            starts.append(i); pos=i+len(marker)
+          if len(starts)>1:
+            first=starts[0]
+            end=s.find(director,first)
+            if end<0: raise SystemExit('Home director marker not found')
+            block=s[first:end]
+            s=s[:first]+block+s[end:]
+            p.write_text(s,encoding='utf-8')
+            print('Removed duplicated CURRENT LLM catalog blocks; no other home.js code changed')
+          else:
+            print('Home catalog already clean')
+          PY
+
+      - name: Persist Home repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add home.js
+          if git diff --cached --quiet; then
+            echo "No Home repair needed"
+          else
+            git commit -m "fix: remove duplicated Home catalog block"
+            git push
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
