@@ -26,7 +26,8 @@ jobs:
               tail=s[first+len(block):]
               tail=tail.replace(block,'',count-1)
               s=s[:first]+block+tail
-              p.write_text(s)
+          s=s.rstrip()+"\n"
+          p.write_text(s)
           if s.count(block)!=1: raise SystemExit(f'expected exactly one recovery loader, found {s.count(block)}')
           PY
           node --check motion.js
