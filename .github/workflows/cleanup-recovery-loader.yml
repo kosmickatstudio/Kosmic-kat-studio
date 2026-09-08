@@ -1,0 +1,40 @@
+name: Clean up Engine recovery loader
+on:
+  push:
+    branches: ["main"]
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Remove duplicate recovery loader
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('motion.js')
+          s=p.read_text()
+          block='// KOSMIC ENGINE PRODUCTION RECOVERY\n(function(){const x=document.createElement("script");x.src="engine-recovery.js";x.async=false;x.dataset.kosmicEngineRecovery="1";document.head.appendChild(x)})();'
+          count=s.count(block)
+          if count>1:
+              first=s.find(block)
+              tail=s[first+len(block):]
+              tail=tail.replace(block,'',count-1)
+              s=s[:first]+block+tail
+              p.write_text(s)
+          if s.count(block)!=1: raise SystemExit(f'expected exactly one recovery loader, found {s.count(block)}')
+          PY
+          node --check motion.js
+          node --check engine-recovery.js
+          node --check kosmicengine.js
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add motion.js
+          git diff --cached --quiet || git commit -m '[recovery] remove duplicate loader'
+          git push
