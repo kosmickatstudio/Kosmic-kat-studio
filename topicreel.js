@@ -68,9 +68,9 @@ function renderTopicReel(el){
   const tabsEl=document.getElementById("moduleTabs");
   if(tabsEl){tabsEl.style.display="none";tabsEl.innerHTML="";}
   const hasFal=gs("api_falai"),hasEleven=gs("api_elevenlabs");
-  const hasBrain=["api_anthropic","api_gemini","api_groq","api_deepseek","api_openai","api_aicredits"].some(k=>gs(k));
+  const hasBrain=["api_anthropic","api_gemini","api_groq","api_deepseek","api_openai","api_xai","api_evolink","api_aicredits"].some(k=>gs(k));
   const missing=[];
-  if(!hasBrain)missing.push("an AI brain key (Anthropic/Gemini/Groq/DeepSeek/OpenAI/AICredits) for scriptwriting");
+  if(!hasBrain)missing.push("an AI brain key (Anthropic/Gemini/Groq/DeepSeek/OpenAI/xAI/EvoLink/AICredits) for scriptwriting");
   if(!hasEleven)missing.push("an ElevenLabs key for narration");
   if(!hasFal)missing.push("a fal.ai key for the visuals");
 

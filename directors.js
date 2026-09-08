@@ -273,7 +273,7 @@ async function analyzeShotFeedback(){
   const text=document.getElementById("feedbackInput").value.trim();
   if(!text){toast("Paste a hook or shot description first","error");return;}
   const model=gs("ai_model","claude");
-  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",grok:"api_xai",kimi:"api_evolink",aicredits:"api_aicredits"};
   if(!gs(apiKeyMap[model],"")){toast("Add an AI API key in Settings first","error");return;}
   const resultEl=document.getElementById("feedbackResult");
   resultEl.innerHTML=`<div style="text-align:center;padding:20px;color:var(--textm);font-size:13px">${pIcon('search',14)} Analyzing…</div>`;

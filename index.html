@@ -2546,7 +2546,7 @@ async function aiGenerateShots(projectId){
   const p=S.projects.find(x=>x.id===projectId);
   if(!p)return;
   const model=gs("ai_model","claude");
-  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",grok:"api_xai",kimi:"api_evolink",aicredits:"api_aicredits"};
   if(!gs(apiKeyMap[model],"")){toast("Add an AI brain API key (Anthropic/Gemini/Groq/DeepSeek/OpenAI/AICredits) in Settings first","error");return;}
 
   const btn=document.getElementById("aiGenShotsBtn");
@@ -2962,6 +2962,8 @@ const BRAIN_MODEL_GROUPS=[
     {value:"openai",name:"OpenAI GPT-4o",sub:"Supports images"},
     {value:"groq",name:"Groq GPT-OSS 120B",sub:"Free & fast, text only"},
     {value:"deepseek",name:"DeepSeek V4 Flash",sub:"Ultra cheap, text only"},
+    {value:"grok",name:"Grok 4.6 (xAI)",sub:"xAI flagship, reasoning"},
+    {value:"kimi",name:"Kimi K3 (EvoLink)",sub:"Long-context reasoning"},
     {value:"aicredits",name:"AICredits Gateway",sub:"Routes to whichever model you pick below, images if that model supports them"},
   ]},
 ];
@@ -4018,7 +4020,7 @@ async function magicPrompt(targetId,mediaType){
   const rough=el.value.trim();
   if(!rough){toast("Type a rough idea first","error");return;}
   const model=gs("ai_model","claude");
-  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",grok:"api_xai",kimi:"api_evolink",aicredits:"api_aicredits"};
   if(!gs(apiKeyMap[model],"")){toast("Add an AI API key in Settings first (used for Magic Prompt / AI Director)","error");return;}
   toast("🪄 Enhancing prompt…","");
   try{
@@ -12409,8 +12411,8 @@ function toggleAiPanel(){
 
 function updateAiModelLabel(){
   const model=gs("ai_model","claude");
-  const modelNames={claude:"Claude (Anthropic)",gemini:"Google Gemini",groq:"Groq GPT-OSS 120B",deepseek:"DeepSeek V4 Flash",openai:"OpenAI GPT-4o",aicredits:"AICredits ("+(gs("aicredits_model","")||"no model set")+")"};
-  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
+  const modelNames={claude:"Claude (Anthropic)",gemini:"Google Gemini",groq:"Groq GPT-OSS 120B",deepseek:"DeepSeek V4 Flash",openai:"OpenAI GPT-4o",grok:"Grok 4.6 (xAI)",kimi:"Kimi K3 (EvoLink)",aicredits:"AICredits ("+(gs("aicredits_model","")||"no model set")+")"};
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",grok:"api_xai",kimi:"api_evolink",aicredits:"api_aicredits"};
   const hasKey=!!gs(apiKeyMap[model],"");
   const lbl=document.getElementById("aiModelLabel");
   const status=document.getElementById("aiApiStatus");
@@ -12469,7 +12471,7 @@ function aiKeyDown(e){
 
 async function callAiSimple(userPrompt,systemPrompt,modelOverride){
   const model=modelOverride||gs("ai_model","claude");
-  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",grok:"api_xai",kimi:"api_evolink",aicredits:"api_aicredits"};
   const apiKey=gs(apiKeyMap[model],"");
   if(!apiKey)throw new Error("Add an AI brain API key (Anthropic/Gemini/Groq/DeepSeek/OpenAI/AICredits) in Settings first");
   if(model==="claude"){
@@ -12494,13 +12496,13 @@ async function callAiSimple(userPrompt,systemPrompt,modelOverride){
     // AICredits is a real OpenAI-compatible gateway (verified against their own
     // docs) — same request/response shape as OpenAI itself, just a different
     // base URL and a user-chosen model name instead of a fixed one.
-    const endpoints={groq:"https://api.groq.com/openai/v1/chat/completions",deepseek:"https://api.deepseek.com/v1/chat/completions",openai:"https://api.openai.com/v1/chat/completions",aicredits:"https://api.aicredits.in/v1/chat/completions"};
-    const modelIds={groq:getBrainModel("groq"),deepseek:getBrainModel("deepseek"),openai:getBrainModel("openai"),aicredits:gs("aicredits_model","")||"gpt-4o-mini"};
+    const endpoints={groq:"https://api.groq.com/openai/v1/chat/completions",deepseek:"https://api.deepseek.com/v1/chat/completions",openai:"https://api.openai.com/v1/chat/completions",grok:"https://api.x.ai/v1/chat/completions",kimi:"https://direct.evolink.ai/v1/chat/completions",aicredits:"https://api.aicredits.in/v1/chat/completions"};
+    const modelIds={groq:getBrainModel("groq"),deepseek:getBrainModel("deepseek"),openai:getBrainModel("openai"),grok:getBrainModel("grok")||"grok-4.6",kimi:getBrainModel("kimi")||"kimi-k3",aicredits:gs("aicredits_model","")||"gpt-4o-mini"};
     if(model==="aicredits"&&!gs("aicredits_model",""))throw new Error("Set which model AICredits should use in Settings (e.g. claude-3-5-sonnet, gpt-4o)");
     const response=await fetch(endpoints[model],{
       method:"POST",
       headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
-      body:JSON.stringify({model:modelIds[model],messages:[{role:"system",content:systemPrompt},{role:"user",content:userPrompt}],max_tokens:1200})
+      body:JSON.stringify({model:modelIds[model],messages:[{role:"system",content:systemPrompt},{role:"user",content:userPrompt}],max_tokens:1200,...((model==="grok"||model==="kimi")?{reasoning_effort:"high"}: {})})
     });
     const data=await response.json();
     if(data.error)throw new Error(data.error.message||data.error);
@@ -12513,7 +12515,7 @@ async function sendAiPrompt(){
   const msg=promptEl.value.trim();
   if(!msg)return;
   const model=gs("ai_model","claude");
-  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",aicredits:"api_aicredits"};
+  const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",grok:"api_xai",kimi:"api_evolink",aicredits:"api_aicredits"};
   const apiKey=gs(apiKeyMap[model],"");
   if(!apiKey){toast("Add an API key in Settings first","error");return;}
   if(model==="aicredits"&&!gs("aicredits_model","")){toast("Set which model AICredits should use in Settings first","error");return;}

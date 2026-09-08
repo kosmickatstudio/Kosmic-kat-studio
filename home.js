@@ -73,7 +73,7 @@ window.updateBrainSubModelVisibility=function(){
   var options=(typeof BRAIN_SUBMODELS!=="undefined"&&BRAIN_SUBMODELS[provider])||null;
   if(!options){wrap.style.display="none";sel.innerHTML="";return;}
   wrap.style.display="block";
-  var providerNames={claude:"Claude",gemini:"Gemini",openai:"OpenAI",groq:"Groq",deepseek:"DeepSeek"};
+  var providerNames={claude:"Claude",gemini:"Gemini",openai:"OpenAI",groq:"Groq",deepseek:"DeepSeek",grok:"Grok (xAI)",kimi:"Kimi K3 (EvoLink)"};
   if(label)label.textContent="(which "+(providerNames[provider]||provider)+" model to actually use)";
   var key=provider+"_brain_model";
   var current=(typeof gs==="function"?gs(key,options[0].id):options[0].id);
@@ -319,7 +319,7 @@ function updateBrainSubModelVisibility(){
   const options=BRAIN_SUBMODELS[provider];
   if(!options){wrap.style.display="none";return;}
   wrap.style.display="block";
-  const providerNames={claude:"Claude",gemini:"Gemini",openai:"OpenAI",groq:"Groq",deepseek:"DeepSeek"};
+  const providerNames={claude:"Claude",gemini:"Gemini",openai:"OpenAI",groq:"Groq",deepseek:"DeepSeek",grok:"Grok (xAI)",kimi:"Kimi K3 (EvoLink)"};
   if(label)label.textContent=`(which ${providerNames[provider]||provider} model to actually use)`;
   const current=getBrainModel(provider);
   sel.innerHTML=options.map(o=>`<option value="${o.id}" ${o.id===current?"selected":""}>${o.label}</option>`).join('');
