@@ -141,8 +141,8 @@ async function afCallKimi(userText){
   const model=getBrainModel("kimi")||"kimi-k3";
   const res=await fetch("https://direct.evolink.ai/v1/chat/completions",{
     method:"POST",
-    headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
-    body:JSON.stringify({model,prompt:userText,system_prompt:afSystemPrompt("Kimi")})
+    headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
+    body:JSON.stringify({model,messages:[{role:"system",content:afSystemPrompt("Kimi")},{role:"user",content:userText}],reasoning_effort:"high",max_tokens:4000})
   });
   const data=await res.json();
   if(!res.ok)throw new Error((data.detail&&data.detail[0]&&data.detail[0].msg)||data.error||res.statusText);
@@ -166,7 +166,7 @@ const AF_TEXT_FN={claude:afCallClaude,gpt:afCallGpt,gemini:afCallGemini,kimi:afC
 async function afGenSeedream(prompt){
   const apiKey=gs("api_falai","");
   const res=await fetch("https://fal.run/bytedance/seedream/v5/pro/text-to-image",{
-    method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
+    method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
     body:JSON.stringify({prompt})
   });
   const data=await res.json();
@@ -506,3 +506,5 @@ async function sendAfPrompt(){
 }
 
 // ── KIMI EVOLINK ROUTE: 2026-09-08 ──
+
+// ── KIMI EVOLINK API FIX: 2026-09-08 ──
