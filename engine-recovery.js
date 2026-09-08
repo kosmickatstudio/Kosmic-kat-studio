@@ -36,19 +36,25 @@
     if(!task||!p)return false;
     if(task.type==="plan")return !!p.id&&!!p.episodes&&p.episodes.length>0;
     if(task.type==="model_select")return !!p.imageModel&&!!p.videoModel&&!p.modelSelectionError;
-    if(task.type==="char_plan")return !!(d&&d.tasks&&d.tasks.some(x=>x!==task&&x.status!=="running"&&x.deps&&x.deps.includes("char_plan")&&(x.type==="charsheet_single"||x.type==="charsheet_side")));
+    if(task.type==="char_plan"){
+      const children=(d&&d.tasks||[]).filter(x=>x!==task&&x.deps&&x.deps.includes("char_plan")&&(x.type==="charsheet_single"||x.type==="charsheet_side"));
+      return children.length>0&&children.every(x=>x.status==="done")&&(p.characterSheets||[]).length>=children.length;
+    }
     if(task.type==="charsheet_single"){
       const chars=(p.characters||[]).filter(c=>c.tier==="MC"||c.tier==="LEAD"),c=chars[task.charIndex];
       return !!c&&(p.characterSheets||[]).some(s=>s&&s.name===c.name&&hasUrl(s.sheetUrl));
     }
     if(task.type==="charsheet_side")return (p.characterSheets||[]).some(s=>s&&s.tier==="SIDE"&&hasUrl(s.sheetUrl));
     if(task.type==="charsheet_review")return p.characterSheetStatus==="approved";
-    if(task.type==="loc_plan")return !!(d&&d.tasks&&d.tasks.some(x=>x!==task&&x.status!=="running"&&x.deps&&x.deps.includes("loc_plan")&&x.type==="loc_img"));
+    if(task.type==="loc_plan"){
+      const children=(d&&d.tasks||[]).filter(x=>x!==task&&x.deps&&x.deps.includes("loc_plan")&&x.type==="loc_img");
+      return children.length>0&&children.every(x=>x.status==="done")&&(p.locationBible||[]).every(l=>hasUrl(l&&l.url));
+    }
     if(task.type==="loc_img"){const loc=(p.locationBible||[])[task.locIndex];return !!loc&&hasUrl(loc.url);}
     if(task.type==="loc_review")return Array.isArray(p.locationBible)&&p.locationBible.length>0&&p.locationBible.every(l=>hasUrl(l.url))&&!!p.locationDesc;
     if(task.type==="script"){const e=epFor(p,task.epIndex);return !!e&&e.scriptStatus!=="pending"&&typeof e.script==="string"&&e.script.trim().length>0;}
-    if(task.type==="storyboard"){const e=epFor(p,task.epIndex);return !!e&&e.storyboardStatus!=="pending"&&Array.isArray(e.storyboard)&&e.storyboard.some(s=>hasUrl(s&&s.url));}
-    if(task.type==="scene"){const e=epFor(p,task.epIndex);return !!e&&e.sceneStatus!=="pending"&&Array.isArray(e.shots)&&e.shots.some(s=>hasUrl(s&&s.videoUrl));}
+    if(task.type==="storyboard"){const e=epFor(p,task.epIndex);return !!e&&e.storyboardStatus!=="pending"&&e.storyboardStatus!=="partial"&&Array.isArray(e.storyboard)&&e.storyboard.length>0&&e.storyboard.every(s=>hasUrl(s&&s.url));}
+    if(task.type==="scene"){const e=epFor(p,task.epIndex);return !!e&&e.sceneStatus!=="pending"&&e.sceneStatus!=="partial"&&Array.isArray(e.shots)&&e.shots.length>0&&e.shots.every(s=>hasUrl(s&&s.videoUrl));}
     return false;
   }
   function taskDescription(t){return t&&t.label?t.label:"This production task";}
