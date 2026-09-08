@@ -603,8 +603,13 @@ const KosmicEngine=(function(){
         const imgMatch=reply.match(/IMAGE:\s*(\S+)/);
         const vidMatch=reply.match(/VIDEO:\s*(\S+)/);
         const reasonMatch=reply.match(/REASON:\s*(.+)/);
-        if(imgMatch&&VALID_IMAGE.includes(imgMatch[1]))p.imageModel=imgMatch[1];
-        if(vidMatch&&VALID_VIDEO.includes(vidMatch[1]))p.videoModel=vidMatch[1];
+        const selectedImage=imgMatch&&imgMatch[1];
+        const selectedVideo=vidMatch&&vidMatch[1];
+        if(!selectedImage||!VALID_IMAGE.includes(selectedImage)||!selectedVideo||!VALID_VIDEO.includes(selectedVideo)){
+          throw new Error("The selected Engine brain returned an invalid or incomplete image/video model selection.");
+        }
+        p.imageModel=selectedImage;
+        p.videoModel=selectedVideo;
         const clamped=clampQualityToModel(p);
         if(clamped)push("agent",`Note: ${clamped.was} isn't available on the chosen video model — using ${clamped.now}.`);
         save2Productions();
