@@ -252,3 +252,12 @@ function clearMotionBrush(){
 
 // KOSMIC ENGINE MOBILE REVIEW UX
 (function(){const x=document.createElement("script");x.src="engine-mobile-review.js";x.async=false;x.dataset.kosmicEngineMobileReview="1";document.head.appendChild(x)})();
+(function loadEngineStrategyUi(){
+  const src="engine-strategy-ui.js";
+  if(document.querySelector('script[data-kosmic-engine-strategy="1"]'))return;
+  const s=document.createElement("script");
+  s.src=src;
+  s.async=false;
+  s.dataset.kosmicEngineStrategy="1";
+  document.head.appendChild(s);
+})();
