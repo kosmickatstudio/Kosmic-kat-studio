@@ -13,19 +13,19 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
           p=Path('kosmicengine.js')
           s=p.read_text()
-
-          # Dispatcher: every execution gets a persisted token. A late result from
-          # an older attempt can therefore never finalize a newer retry.
-          old='''      parallelReady.forEach(t=>t.status="running");
+          def need(old,new,label):
+              global s
+              if old not in s:
+                  raise SystemExit(label)
+              s=s.replace(old,new,1)
+          need('''      parallelReady.forEach(t=>t.status="running");
       save();
       await Promise.allSettled(parallelReady.map(async t=>{
         try{
           const out=await runTaskWork(t);
-          t.status="done";'''
-          new='''      parallelReady.forEach(t=>{
+          t.status="done";''','''      parallelReady.forEach(t=>{
         t.status="running";
         t.runToken=`${Date.now()}-${Math.random().toString(36).slice(2)}`;
         t.runStartedAt=Date.now();
@@ -36,43 +36,26 @@ jobs:
         try{
           const out=await runTaskWork(t);
           if(t.runToken!==__runToken)throw new Error("Stale Engine task attempt ignored");
-          t.status="done";'''
-          if old not in s:
-              raise SystemExit('parallel dispatcher anchor not found')
-          s=s.replace(old,new,1)
-
-          old='''      t.status="running";
+          t.status="done";''','parallel')
+          need('''      t.status="running";
       save();
-      if(!t.requiresApproval&&t.type!=="plan")push("agent",`⏳ ${t.label}…`,{taskId:t.id});'''
-          new='''      t.status="running";
+      if(!t.requiresApproval&&t.type!=="plan")push("agent",`⏳ ${t.label}…`,{taskId:t.id});''','''      t.status="running";
       t.runToken=`${Date.now()}-${Math.random().toString(36).slice(2)}`;
       t.runStartedAt=Date.now();
       save();
-      if(!t.requiresApproval&&t.type!=="plan")push("agent",`⏳ ${t.label}…`,{taskId:t.id});'''
-          if old not in s:
-              raise SystemExit('sequential start anchor not found')
-          s=s.replace(old,new,1)
-
-          old='''      try{
+      if(!t.requiresApproval&&t.type!=="plan")push("agent",`⏳ ${t.label}…`,{taskId:t.id});''','serial-start')
+          need('''      try{
         const out=await runTaskWork(t);
-        if(t.requiresApproval){'''
-          new='''      try{
+        if(t.requiresApproval){''','''      try{
         const __runToken=t.runToken;
         const out=await runTaskWork(t);
         if(t.runToken!==__runToken)throw new Error("Stale Engine task attempt ignored");
-        if(t.requiresApproval){'''
-          if old not in s:
-              raise SystemExit('sequential completion anchor not found')
-          s=s.replace(old,new,1)
-
-          # Engine work has several provider awaits followed by writes into the
-          # production object. Abort the continuation if a newer retry replaced
-          # this attempt while the provider request was in flight.
-          old='''  async function runTaskWork(task){
+        if(t.requiresApproval){''','serial-complete')
+          need('''  async function runTaskWork(task){
     return withEngineAiOverride(()=>_runTaskWork(task));
   }
-  async function _runTaskWork(task){'''
-          new='''  function assertTaskAttempt(task,attemptId){
+  async function _runTaskWork(task){
+    const prodId=S.directorChat.productionId;''','''  function assertTaskAttempt(task,attemptId){
     if(!task||task.runToken!==attemptId)throw new Error("Stale Engine task attempt ignored");
   }
   async function runTaskWork(task){
@@ -81,22 +64,17 @@ jobs:
     return withEngineAiOverride(()=>_runTaskWork(task,attemptId));
   }
   async function _runTaskWork(task,attemptId){
-    assertTaskAttempt(task,attemptId);'''
-          if old not in s:
-              raise SystemExit('runTaskWork anchor not found')
-          s=s.replace(old,new,1)
-
+    assertTaskAttempt(task,attemptId);
+    const prodId=S.directorChat.productionId;''','runner')
           start=s.index('  async function _runTaskWork(task,attemptId){')
-          end=s.index('\n  function ',start+len('  async function _runTaskWork(task,attemptId){'))
+          end=s.index('\n  function ',start+40)
           block=s[start:end]
-          lines=block.splitlines()
-          out=[]
+          lines=block.splitlines();out=[]
           for line in lines:
               out.append(line)
-              stripped=line.lstrip()
-              if 'await ' in line and not stripped.startswith('//') and not stripped.startswith('*'):
-                  indent=line[:len(line)-len(stripped)]
-                  out.append(indent+'assertTaskAttempt(task,attemptId);')
+              st=line.lstrip()
+              if 'await ' in line and not st.startswith('//') and not st.startswith('*'):
+                  out.append(line[:len(line)-len(st)]+'assertTaskAttempt(task,attemptId);')
           s=s[:start]+'\n'.join(out)+s[end:]
           p.write_text(s)
           PY
