@@ -1,0 +1,36 @@
+name: Apply Kosmic Engine modes
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Execute prepared patch
+        shell: python
+        run: |
+          from pathlib import Path
+          src=Path('.github/workflows/_engine_modes_patch.yml').read_text(encoding='utf-8')
+          lines=src.splitlines(True)
+          start=next(i for i,x in enumerate(lines) if x.strip()=='run: |' and i>0 and 'Apply Kosmic Engine' in lines[i-1])
+          end=next(i for i,x in enumerate(lines[start+1:],start+1) if x.startswith('      - name: Syntax check'))
+          code=''.join(x[10:] if x.startswith('          ') else x for x in lines[start+1:end])
+          exec(compile(code,'embedded-engine-patch.py','exec'),{})
+      - name: Syntax check
+        shell: bash
+        run: node --check kosmicengine.js
+      - name: Remove temporary patch workflows and commit
+        shell: bash
+        run: |
+          rm -f .github/workflows/_engine_modes_patch.yml .github/workflows/_engine_modes_apply.yml .github/workflows/_engine_patch_trigger.yml
+          git config user.name "kosmickatstudio"
+          git config user.email "kosmic735@gmail.com"
+          git add -A .github/workflows kosmicengine.js
+          git commit -m "feat: add Kosmic Engine Lite Advance Ultra tiers"
+          git push
