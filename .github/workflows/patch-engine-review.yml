@@ -1,0 +1,24 @@
+name: Patch Engine review loader
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Add granular review loader
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('motion.js'); s=p.read_text(); marker='// KOSMIC ENGINE GRANULAR ASSET REVIEW'
+          if marker not in s:
+              s += '\n// KOSMIC ENGINE GRANULAR ASSET REVIEW\n(function(){const x=document.createElement("script");x.src="engine-asset-review.js";x.async=false;x.dataset.kosmicEngineReview="1";document.head.appendChild(x)})();\n'; p.write_text(s)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add motion.js
+          git diff --cached --quiet || git commit -m "Load Kosmic Engine granular asset review"
+          git push
