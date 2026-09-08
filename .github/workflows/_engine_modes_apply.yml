@@ -12,6 +12,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Normalize prepared patch
+        shell: bash
+        run: python scripts/_fix-engine-modes-script.py
       - name: Execute prepared patch
         shell: bash
         run: python scripts/_apply-engine-modes.py
@@ -21,9 +24,9 @@ jobs:
       - name: Remove temporary patch workflows and commit
         shell: bash
         run: |
-          rm -f .github/workflows/_engine_modes_patch.yml .github/workflows/_engine_modes_apply.yml .github/workflows/_engine_patch_trigger.yml scripts/_apply-engine-modes.py
+          rm -f .github/workflows/_engine_modes_patch.yml .github/workflows/_engine_modes_apply.yml .github/workflows/_engine_patch_trigger.yml scripts/_apply-engine-modes.py scripts/_fix-engine-modes-script.py
           git config user.name "kosmickatstudio"
           git config user.email "kosmic735@gmail.com"
-          git add -A .github/workflows scripts/_apply-engine-modes.py kosmicengine.js
+          git add -A .github/workflows scripts/_apply-engine-modes.py scripts/_fix-engine-modes-script.py kosmicengine.js
           git commit -m "feat: add Kosmic Engine Lite Advance Ultra tiers"
           git push
