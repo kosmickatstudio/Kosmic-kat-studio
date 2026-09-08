@@ -88,7 +88,7 @@
     const t=d.tasks.find(x=>x&&x.id===id);if(!t||t.status!=="interrupted")return;
     const p=prodFor(d);if(!p){toast("That production no longer exists","error");return;}
     if(persistedCompletion(t,p,d)){t.status="done";t.error=null;t.recoveredAt=Date.now();t.recoveryReason="completion found before manual resume";save();renderRecoveryBanner();if(typeof e.renderTaskPanel==="function")e.renderTaskPanel();return;}
-    t.status="pending";t.error=null;delete t.interruptedAt;t.recoveryResumedAt=Date.now();t.recoveryReason="manually resumed after interrupted browser session";
+    t.status="pending";t.error=null;t.permitted=false;delete t.interruptedAt;t.recoveryResumedAt=Date.now();t.recoveryReason="manually resumed after interrupted browser session";
     save();renderRecoveryBanner();if(typeof e.renderTaskPanel==="function")e.renderTaskPanel();
     if(typeof e.dispatch==="function")e.dispatch();else toast("Recovery prepared, but the Engine dispatcher is unavailable in this build","error");
   }
@@ -106,8 +106,6 @@
     _wrapped=true;scheduleScan();
   }
   const boot=setInterval(()=>{wrapRender();if(_wrapped||++_bootTries>40)clearInterval(boot);},100);
-  // Public only for the recovery button. The Engine exports a thin dispatcher
-  // bridge; all actual task execution remains inside Kosmic Engine.
   window.__kosmicEngineRecovery={reconcile,render:renderRecoveryBanner,resumeTask};
   const attachApi=setInterval(()=>{
     if(typeof KosmicEngine!=="undefined"&&typeof KosmicEngine.resumeRecoveredTask!=="function")KosmicEngine.resumeRecoveredTask=resumeTask;
