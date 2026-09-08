@@ -1,0 +1,70 @@
+name: Harden Engine generation attempts
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch generation attempt guards
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('kosmicengine.js')
+          s = p.read_text()
+          old1 = '''      parallelReady.forEach(t=>t.status="running");
+      save();
+      await Promise.allSettled(parallelReady.map(async t=>{
+        try{
+          const out=await runTaskWork(t);
+          t.status="done";'''
+          new1 = '''      parallelReady.forEach(t=>{
+        t.status="running";
+        t.runToken=`${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        t.runStartedAt=Date.now();
+      });
+      save();
+      await Promise.allSettled(parallelReady.map(async t=>{
+        const __runToken=t.runToken;
+        try{
+          const out=await runTaskWork(t);
+          if(t.runToken!==__runToken)return;
+          t.status="done";'''
+          old2 = '''      t.status="running";
+      save();
+      try{
+        const out=await runTaskWork(t);
+        if(t.requiresApproval){'''
+          new2 = '''      t.status="running";
+      t.runToken=`${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      t.runStartedAt=Date.now();
+      save();
+      const __runToken=t.runToken;
+      try{
+        const out=await runTaskWork(t);
+        if(t.runToken!==__runToken)return;
+        if(t.requiresApproval){'''
+          if old1 not in s:
+            raise SystemExit('parallel dispatcher pattern not found')
+          if old2 not in s:
+            raise SystemExit('serial dispatcher pattern not found')
+          s = s.replace(old1,new1,1).replace(old2,new2,1)
+          p.write_text(s)
+      - name: Validate
+        run: |
+          node --check kosmicengine.js
+          node --check engine-recovery.js
+          git diff --check
+          grep -q 't.runToken' kosmicengine.js
+          grep -q '__runToken' kosmicengine.js
+      - name: Commit patch
+        run: |
+          git config user.name "kosmickatstudio"
+          git config user.email "kosmic7353800@users.noreply.github.com"
+          git add kosmicengine.js
+          git diff --cached --quiet && exit 0
+          git commit -m "[reliability] guard stale Engine generation attempts"
+          git push
