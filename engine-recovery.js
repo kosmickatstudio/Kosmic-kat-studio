@@ -22,8 +22,8 @@
   window.__kosmicEngineRecoveryLoaded=true;
   const RECOVERY_STATUSES=new Set(["running","interrupted"]);
   let _scanTimer=null,_wrapped=false;
-  function engine(){return window.KosmicEngine||null;}
-  function state(){return window.S||null;}
+  function engine(){return typeof KosmicEngine!=="undefined"?KosmicEngine:null;}
+  function state(){return typeof S!=="undefined"?S:null;}
   function save(){try{if(typeof window.save==="function")window.save("directorChat");}catch(e){console.warn("Kosmic recovery save failed:",e);}}
   function prodFor(d){const s=state();return s&&Array.isArray(s.productions)?s.productions.find(p=>p.id===d.productionId):null;}
   function epFor(p,index){return p&&Array.isArray(p.episodes)?p.episodes.find(e=>e.index===index):null;}
@@ -98,5 +98,12 @@
     _wrapped=true;scheduleScan();
   }
   let tries=0;const boot=setInterval(()=>{tries++;wrapRender();if(_wrapped||tries>40)clearInterval(boot);},100);
+  // Public only for the recovery button. The Engine exports a thin dispatcher
+  // bridge; all actual task execution remains inside Kosmic Engine.
   window.__kosmicEngineRecovery={reconcile,render:renderRecoveryBanner,resumeTask};
+  const attachApi=setInterval(()=>{
+    if(typeof KosmicEngine!=="undefined"&&typeof KosmicEngine.resumeRecoveredTask!=="function")KosmicEngine.resumeRecoveredTask=resumeTask;
+    if(typeof KosmicEngine!=="undefined"&&typeof KosmicEngine.dispatch!=="function")return;
+    if(typeof KosmicEngine!=="undefined")clearInterval(attachApi);
+  },100);
 })();
