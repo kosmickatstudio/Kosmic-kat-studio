@@ -517,7 +517,7 @@ const KosmicEngine=(function(){
     return r.note;
   }
   async function runQABatchDetailed(items){
-    const list=(items||[]).filter(x=>x&&x.url);
+    const list=(items||[]).filter(Boolean);
     if(!list.length)return{ran:false,passed:false,note:null,checks:[],reason:"no assets to check"};
     const checks=await Promise.all(list.map(async item=>{
       const r=await runQACheckDetailed(item.url,item.description||item.label||"production asset");
