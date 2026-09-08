@@ -610,12 +610,13 @@ const KosmicEngine=(function(){
         save2Productions();
         return{summary:`🧠 Models chosen — Image: ${p.imageModel.includes('nano-banana')?'Nano Banana Pro':'Seedream 5.0 Pro'}, Video: ${p.videoModel.includes('/fast/')?'Seedance 2.0 Fast':'Seedance 2.0 Standard'}.${reasonMatch?' '+reasonMatch[1].trim():''}`};
       }catch(err){
-        // Model selection is an enhancement, not a hard requirement — the
-        // defaults already set in the draft (Nano Banana Pro / Seedance
-        // Fast) are perfectly valid, so a failure here shouldn't block
-        // the production.
-        console.warn("Model auto-selection skipped, using defaults:",err.message);
-        return{summary:`🧠 Using default models (couldn't reach the brain for a custom pick): Nano Banana Pro, Seedance 2.0 Fast.`};
+        // Model selection is a required production checkpoint. Never silently
+        // substitute a paid generation strategy after the selected brain fails.
+        // This prevents the UI from claiming one configuration while the
+        // production actually runs another.
+        p.modelSelectionError=err?.message||String(err)||"Unknown model-selection error";
+        save2Productions();
+        throw new Error(`Model selection failed: ${p.modelSelectionError}. No image/video model fallback was applied; fix the selected Engine brain and retry.`);
       }
     }
     if(task.type==="char_plan"){
