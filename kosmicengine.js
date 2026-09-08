@@ -516,6 +516,18 @@ const KosmicEngine=(function(){
     const r=await runQACheckDetailed(imageUrl,description);
     return r.note;
   }
+  async function runQABatchDetailed(items){
+    const list=(items||[]).filter(x=>x&&x.url);
+    if(!list.length)return{ran:false,passed:false,note:null,checks:[],reason:"no assets to check"};
+    const checks=await Promise.all(list.map(async item=>{
+      const r=await runQACheckDetailed(item.url,item.description||item.label||"production asset");
+      return{label:item.label||"asset",...r};
+    }));
+    const ran=checks.length===list.length&&checks.every(x=>x.ran);
+    const passed=ran&&checks.every(x=>x.passed);
+    const flagged=checks.filter(x=>x.note).map(x=>`${x.label}: ${x.note}`);
+    return{ran,passed,note:flagged.length?flagged.join(" | "):null,checks,reason:ran?null:"one or more quality checks did not run"};
+  }
 
   function findTask(id){ return (S.directorChat.tasks||[]).find(t=>t.id===id); }
   function depsSatisfied(t){ return (t.deps||[]).every(id=>{const d=findTask(id);return d&&d.status==="done";}); }
@@ -696,9 +708,8 @@ const KosmicEngine=(function(){
       p.characterSheetStatus="ready";
       save2Productions();
       const sheets=p.characterSheets||[];
-      const mc=sheets.find(s=>s.tier==="MC"||s.tier==="LEAD");
-      const qa=mc?await runQACheckDetailed(mc.sheetUrl,mc.desc):{ran:false,passed:false,note:null,reason:"no sheet to check"};
-      task.qa=qa; const qaNote=qa.note;
+      const qa=await runQABatchDetailed(sheets.map(s=>({label:s.tier==="SIDE"?"Side characters":s.name,url:s.sheetUrl,description:s.desc})));
+      task.qa=qa; const qaNote=qa.note||(!qa.ran?`QA incomplete: ${qa.reason}`:null);
       return{summary:`🎭 Character Sheet${sheets.length!==1?'s':''} ready — ${sheets.map(s=>s.tier==='SIDE'?'Side characters':s.name).join(', ')}:`,approval:{images:sheets.map(s=>s.sheetUrl),qaNote}};
     }
     if(task.type==="loc_plan"){
@@ -778,9 +789,8 @@ const KosmicEngine=(function(){
       // generateEpisodeStoryboard) so environments stay consistent too.
       p.locationDesc=p.locationBible.map(l=>`${l.name}: ${l.desc}`).join("; ");
       save2Productions();
-      const firstLoc=p.locationBible[0];
-      const qa=firstLoc?await runQACheckDetailed(firstLoc.url,firstLoc.desc):{ran:false,passed:false,note:null,reason:"no location image to check"};
-      task.qa=qa; const qaNote=qa.note;
+      const qa=await runQABatchDetailed((p.locationBible||[]).map(l=>({label:l.name,url:l.url,description:l.desc})));
+      task.qa=qa; const qaNote=qa.note||(!qa.ran?`QA incomplete: ${qa.reason}`:null);
       return{summary:"📍 Location Bible ready — these environments will anchor every storyboard shot:",approval:{images:p.locationBible.map(l=>l.url).filter(Boolean),qaNote}};
     }
     if(task.type==="script"){
@@ -795,8 +805,8 @@ const KosmicEngine=(function(){
       const p=S.productions.find(x=>x.id===prodId);
       const e=getEpisode(p,task.epIndex);
       if(e.storyboardStatus==="pending")throw new Error("Storyboard generation failed — every shot errored out");
-      const qa=e.storyboard[0]?await runQACheckDetailed(e.storyboard[0].url,e.masterPrompt):{ran:false,passed:false,note:null,reason:"no storyboard frame to check"};
-      task.qa=qa; const qaNote=qa.note;
+      const qa=await runQABatchDetailed((e.storyboard||[]).map((shot,i)=>({label:`Shot ${i+1}`,url:shot.url,description:shot.prompt||e.masterPrompt})));
+      task.qa=qa; const qaNote=qa.note||(!qa.ran?`QA incomplete: ${qa.reason}`:null);
       return{summary:`🖼 Episode ${task.epIndex} storyboard ready${e.storyboardStatus==='partial'?' (partial — some shots failed)':''}:`,approval:{images:e.storyboard.map(s=>s.url),qaNote}};
     }
     if(task.type==="scene"){
