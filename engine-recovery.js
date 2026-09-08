@@ -30,8 +30,6 @@
   function prodFor(d){const s=state();return s&&Array.isArray(s.productions)?s.productions.find(p=>p.id===d.productionId):null;}
   function epFor(p,index){return p&&Array.isArray(p.episodes)?p.episodes.find(e=>e.index===index):null;}
   function hasUrl(v){return typeof v==="string"&&v.trim().length>0;}
-  // Only positive persisted-output evidence can auto-reconcile. An accepted
-  // remote request with a lost response is deliberately treated as uncertain.
   function persistedCompletion(task,p,d){
     if(!task||!p)return false;
     if(task.type==="plan")return !!p.id&&!!p.episodes&&p.episodes.length>0;
@@ -98,23 +96,155 @@
     save();renderRecoveryBanner();if(typeof e.renderTaskPanel==="function")e.renderTaskPanel();
     if(typeof e.dispatch==="function")e.dispatch();else toast("Recovery prepared, but the Engine dispatcher is unavailable in this build","error");
   }
+
+  // ── GENERATION ATTEMPT / LEASE GUARD ────────────────────────────────
+  // The Engine's task runner is intentionally private. We therefore keep the
+  // reliability boundary here, in the already-isolated recovery layer, rather
+  // than changing auth, routing, or generation code. Each running task gets a
+  // monotonically increasing lease. A retry invalidates the previous lease.
+  // Provider calls are wrapped at the public generation boundaries and must
+  // re-check ownership before their result is allowed back into the pipeline.
+  // This is the same request-identity pattern used to prevent stale async
+  // responses from committing after a newer attempt has started.
+  let _leaseSeq=0;
+  const _leases=new Map();
+  const STALE_ATTEMPT="KOSMIC_ENGINE_STALE_ATTEMPT";
+  function leaseForTask(t){
+    if(!t)return null;
+    if(!t.runToken){
+      t.runToken=`run_${Date.now()}_${++_leaseSeq}`;
+      t.runStartedAt=Date.now();
+    }
+    const existing=_leases.get(t.id);
+    if(!existing||existing.taskRef!==t||existing.token!==t.runToken){
+      _leases.set(t.id,{token:t.runToken,taskRef:t});
+    }
+    return _leases.get(t.id);
+  }
+  function runningTasks(){
+    const d=state()&&state().directorChat;
+    return d&&Array.isArray(d.tasks)?d.tasks.filter(t=>t&&t.status==="running"):[];
+  }
+  function captureRunningLeases(){runningTasks().forEach(leaseForTask);}
+  function currentLease(taskId,taskRef,token){
+    const d=state()&&state().directorChat;
+    const current=d&&Array.isArray(d.tasks)?d.tasks.find(t=>t&&t.id===taskId):null;
+    const lease=_leases.get(taskId);
+    return !!lease&&lease.taskRef===taskRef&&lease.token===token&&current===taskRef&&current.status==="running";
+  }
+  function staleError(){const e=new Error(STALE_ATTEMPT);e.code=STALE_ATTEMPT;return e;}
+  function assertLease(taskId,taskRef,token){if(!currentLease(taskId,taskRef,token))throw staleError();}
+  function candidateTask(kind,args){
+    const d=state()&&state().directorChat;
+    const tasks=runningTasks();
+    if(!d||!tasks.length)return null;
+    if(kind==="script"||kind==="storyboard"||kind==="scene"){
+      const prodId=args[0],epIndex=args[1];
+      return tasks.find(t=>t.type===kind&&t.epIndex===epIndex&&d.productionId===prodId)||null;
+    }
+    if(kind==="image"){
+      if(tasks.length===1)return tasks[0];
+      const prompt=String(args[0]||"").toLowerCase();
+      const exact=tasks.find(t=>{
+        const label=String(t.label||"").toLowerCase();
+        if(t.type==="loc_img")return label.replace(/^location\s*[—-]\s*/,"")&&prompt.includes(label.replace(/^location\s*[—-]\s*/,""));
+        if(t.type==="charsheet_side")return prompt.includes("side characters");
+        if(t.type==="charsheet_single")return label.replace(/^character sheet\s*[—-]\s*/,"")&&prompt.includes(label.replace(/^character sheet\s*[—-]\s*/,""));
+        return false;
+      });
+      return exact||null;
+    }
+    return null;
+  }
+  function wrapAsyncGlobal(name,kind){
+    const original=window[name];
+    if(typeof original!=="function"||original.__kosmicLeaseWrapped)return;
+    const wrapped=async function(){
+      const args=[...arguments];
+      const task=candidateTask(kind,args);
+      const lease=task&&leaseForTask(task);
+      const out=await original.apply(this,args);
+      if(task&&lease)assertLease(task.id,lease.taskRef,lease.token);
+      return out;
+    };
+    wrapped.__kosmicLeaseWrapped=true;
+    wrapped.__kosmicLeaseOriginal=original;
+    window[name]=wrapped;
+  }
+  function invalidateTaskLease(task){
+    if(!task)return;
+    const old=_leases.get(task.id);
+    if(old&&old.taskRef===task)_leases.delete(task.id);
+    task.runToken=`invalid_${Date.now()}_${++_leaseSeq}`;
+    task.runStartedAt=null;
+    task.attemptInvalidatedAt=Date.now();
+  }
+  function cloneTaskForRetry(task){
+    if(!task||!Array.isArray(state()?.directorChat?.tasks))return task;
+    const d=state().directorChat;
+    const idx=d.tasks.indexOf(task);
+    if(idx<0)return task;
+    const fresh={...task,status:"pending",error:null,permitted:false,runToken:null,runStartedAt:null,attemptSupersededAt:Date.now()};
+    d.tasks[idx]=fresh;
+    invalidateTaskLease(task);
+    return fresh;
+  }
+  function wrapRetry(){
+    const e=engine();
+    if(!e||typeof e.retry!=="function"||e.retry.__kosmicLeaseWrapped)return;
+    const original=e.retry;
+    e.retry=function(msgIndex){
+      const s=state(),d=s&&s.directorChat,m=d&&d.messages&&d.messages[msgIndex];
+      const ids=(m&&m.retryTaskIds)||[];
+      ids.forEach(id=>{const t=(d.tasks||[]).find(x=>x&&x.id===id);if(t&&t.status==="error")invalidateTaskLease(t);});
+      const out=original.apply(this,arguments);
+      captureRunningLeases();
+      return out;
+    };
+    e.retry.__kosmicLeaseWrapped=true;
+  }
+  function wrapDispatch(){
+    const e=engine();
+    if(!e||typeof e.dispatch!=="function"||e.dispatch.__kosmicLeaseWrapped)return;
+    const original=e.dispatch;
+    e.dispatch=function(){
+      const out=original.apply(this,arguments);
+      captureRunningLeases();
+      return out;
+    };
+    e.dispatch.__kosmicLeaseWrapped=true;
+  }
+  function installLeaseGuard(){
+    wrapDispatch();
+    wrapRetry();
+    wrapAsyncGlobal("generateEpisodeScript","script");
+    wrapAsyncGlobal("generateEpisodeStoryboard","storyboard");
+    wrapAsyncGlobal("generateEpisodeScene","scene");
+    wrapAsyncGlobal("genViaFal","image");
+    wrapAsyncGlobal("genViaGemini","image");
+    wrapAsyncGlobal("genViaOpenAI","image");
+    captureRunningLeases();
+  }
+
   function scheduleScan(){clearTimeout(_scanTimer);_scanTimer=setTimeout(()=>{if(!_sessionCaptured)captureSession();},250);}
   function captureSession(){
     const s=state(),d=s&&s.directorChat;
     if(!d||!d.projectId||!Array.isArray(d.messages)||!d.messages.length){_captureTries++;_scanTimer=setTimeout(captureSession,250);return;}
     _sessionCaptured=true;
     if(Array.isArray(d.tasks)&&d.tasks.length){reconcile();renderRecoveryBanner();}
+    installLeaseGuard();
   }
   function wrapRender(){
     if(_wrapped||typeof window.renderKosmicEngineModule!=="function")return;
     const original=window.renderKosmicEngineModule;
-    window.renderKosmicEngineModule=function(){const out=original.apply(this,arguments);scheduleScan();return out;};
+    window.renderKosmicEngineModule=function(){const out=original.apply(this,arguments);scheduleScan();installLeaseGuard();return out;};
     _wrapped=true;scheduleScan();
   }
-  const boot=setInterval(()=>{wrapRender();if(_wrapped||++_bootTries>40)clearInterval(boot);},100);
-  window.__kosmicEngineRecovery={reconcile,render:renderRecoveryBanner,resumeTask};
+  const boot=setInterval(()=>{wrapRender();installLeaseGuard();if(_wrapped||++_bootTries>40)clearInterval(boot);},100);
+  window.__kosmicEngineRecovery={reconcile,render:renderRecoveryBanner,resumeTask,installLeaseGuard,assertLease};
   const attachApi=setInterval(()=>{
     if(typeof KosmicEngine!=="undefined"&&typeof KosmicEngine.resumeRecoveredTask!=="function")KosmicEngine.resumeRecoveredTask=resumeTask;
+    installLeaseGuard();
     if(typeof KosmicEngine!=="undefined"&&typeof KosmicEngine.dispatch!=="function")return;
     if(typeof KosmicEngine!=="undefined")clearInterval(attachApi);
   },100);
