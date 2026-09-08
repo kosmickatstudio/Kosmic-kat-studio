@@ -233,3 +233,16 @@ function clearMotionBrush(){
   if(clearBtn)clearBtn.style.display="none";
   updateVcAttachmentBar();
 }
+
+// ── KOSMIC ENGINE GLASS COMPOSER ─────────────────────────────────────
+// Loaded from a tiny isolated UI layer so the Engine's generation code,
+// state, auth, API keys and model routing remain untouched.
+(function loadEngineGlassUi(){
+  const src="engine-glass-ui.js";
+  if(document.querySelector('script[data-kosmic-engine-glass="1"]'))return;
+  const s=document.createElement("script");
+  s.src=src;
+  s.async=false;
+  s.dataset.kosmicEngineGlass="1";
+  document.head.appendChild(s);
+})();
