@@ -1,0 +1,39 @@
+name: Load Engine strategy visibility UI
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[engine-strategy-loader]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add isolated strategy UI loader
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('motion.js')
+          s=p.read_text()
+          loader='''\n(function loadEngineStrategyUi(){\n  const src="engine-strategy-ui.js";\n  if(document.querySelector('script[data-kosmic-engine-strategy="1"]'))return;\n  const s=document.createElement("script");\n  s.src=src;\n  s.async=false;\n  s.dataset.kosmicEngineStrategy="1";\n  document.head.appendChild(s);\n})();\n'''
+          if 'data-kosmic-engine-strategy="1"' not in s:
+              p.write_text(s.rstrip()+loader)
+          PY
+          node --check motion.js
+          node --check engine-strategy-ui.js
+          git diff --check
+      - name: Commit and deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name 'kosmic-kat-bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add motion.js
+          git commit -m 'feat: load Engine strategy visibility UI [engine-strategy-loader]'
+          git push
+          gh workflow run deploy.yml --repo "${{ github.repository }}" --ref main
