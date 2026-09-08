@@ -831,6 +831,14 @@ const KosmicEngine=(function(){
     document.body.appendChild(overlay);
   }
 
+  function engineBrainPreflight(){
+    const brain=(S.directorChat?.draft?.brainModel)||gs("ai_model","claude");
+    const c={claude:["api_anthropic","Claude (Anthropic)"],gemini:["api_gemini","Google Gemini"],openai:["api_openai","OpenAI GPT-4o"],groq:["api_groq","Groq GPT-OSS"],deepseek:["api_deepseek","DeepSeek V4"],grok:["api_xai","Grok 4.6 (xAI)"],kimi:["api_evolink","Kimi K3 (EvoLink)"],aicredits:["api_aicredits","AICredits Gateway"]},i=c[brain];
+    if(!i)return{ok:false,error:`Unsupported AI brain "${brain}". Re-select an available brain in Home.`};
+    if(!String(gs(i[0],"")).trim())return{ok:false,error:`${i[1]} is selected for this production, but its API key is missing. Add the ${i[1]} API key in Settings, then tap Retry.`};
+    return{ok:true};
+  }
+
   let _dispatching=false;
   async function dispatchTasks(){
     // Re-entrancy guard: dispatchTasks mutates S.directorChat.tasks and the
@@ -861,6 +869,16 @@ const KosmicEngine=(function(){
     // permission and paused are all the same class of stop condition, and
     // splitting them across different checks is how re-entrancy bugs get in.
     if(!tasks||S.directorChat.awaitingApprovalTaskId||S.directorChat.awaitingPermissionIds||S.directorChat.permissionPaused)return;
+    const bc=engineBrainPreflight();
+    if(!bc.ok){
+      const sig=bc.error;
+      if(S.directorChat.brainPreflightErrorSignature!==sig){
+        S.directorChat.brainPreflightErrorSignature=sig;
+        push("agent","",{error:sig,retryable:true,retryTaskIds:tasks.filter(t=>t.status==="pending").map(t=>t.id)});
+      }
+      return;
+    }
+    if(S.directorChat.brainPreflightErrorSignature){S.directorChat.brainPreflightErrorSignature=null;save();}
     const ready=tasks.filter(t=>t.status==="pending"&&depsSatisfied(t));
     if(!ready.length)return;
     const parallelReady=ready.filter(t=>t.parallel);
