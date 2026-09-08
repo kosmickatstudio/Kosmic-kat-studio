@@ -1,0 +1,43 @@
+name: Patch Engine model selection validation
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[engine-model-parse-patch]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate model selector response
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('kosmicengine.js')
+          s=p.read_text()
+          old='''        const imgMatch=reply.match(/IMAGE:\\s*(\\S+)/);\n        const vidMatch=reply.match(/VIDEO:\\s*(\\S+)/);\n        const reasonMatch=reply.match(/REASON:\\s*(.+)/);\n        if(imgMatch&&VALID_IMAGE.includes(imgMatch[1]))p.imageModel=imgMatch[1];\n        if(vidMatch&&VALID_VIDEO.includes(vidMatch[1]))p.videoModel=vidMatch[1];'''
+          new='''        const imgMatch=reply.match(/IMAGE:\\s*(\\S+)/);\n        const vidMatch=reply.match(/VIDEO:\\s*(\\S+)/);\n        const reasonMatch=reply.match(/REASON:\\s*(.+)/);\n        const selectedImage=imgMatch&&imgMatch[1];\n        const selectedVideo=vidMatch&&vidMatch[1];\n        if(!selectedImage||!VALID_IMAGE.includes(selectedImage)||!selectedVideo||!VALID_VIDEO.includes(selectedVideo)){\n          throw new Error("The selected Engine brain returned an invalid or incomplete image/video model selection.");\n        }\n        p.imageModel=selectedImage;\n        p.videoModel=selectedVideo;'''
+          if old not in s:
+              raise SystemExit('Expected model-selection parse block not found; refusing to modify file.')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+          node --check kosmicengine.js
+          git diff --check
+      - name: Commit patch
+        run: |
+          git config user.name 'kosmic-kat-bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add kosmicengine.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: validate Engine model selection response [engine-model-parse-patch]'
+          git push
+      - name: Trigger Pages deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy.yml --repo "${{ github.repository }}" --ref main
