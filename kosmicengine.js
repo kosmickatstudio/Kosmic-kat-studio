@@ -682,7 +682,7 @@ const KosmicEngine=(function(){
       // Model recorded at generation time. p.imageModel is user-settable and
       // model_select can change it mid-production, so reading it later would
       // attribute an old sheet to whatever is selected NOW.
-      p.characterSheets.push({tier:c.tier,name:c.name,desc:c.desc,sheetUrl:result.url,model:p.imageModel||null});
+      const replacementIndex=Number.isInteger(task.assetReviewIndex)?task.assetReviewIndex:-1;const sheetRecord={tier:c.tier,name:c.name,desc:c.desc,sheetUrl:result.url,model:p.imageModel||null};if(replacementIndex>=0&&replacementIndex<(p.characterSheets||[]).length)p.characterSheets[replacementIndex]=sheetRecord;else p.characterSheets.push(sheetRecord);delete task.assetReviewIndex;
       save2Productions();
       trackProductionCost(p,p.imageModel,`Character Sheet — ${c.name}`);
       createImageAsset(result.url,`Character Sheet — ${c.name} (${p.concept.slice(0,40)})`,p.projectId);
