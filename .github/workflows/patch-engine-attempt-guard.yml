@@ -1,0 +1,66 @@
+name: Patch Engine attempt guard
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor == 'github-actions[bot]' || contains(github.event.head_commit.message, '[attempt-guard]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch guarded task attempts
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('kosmicengine.js')
+          s=p.read_text()
+          old='''  async function runTaskWork(task){\n    return withEngineAiOverride(()=>_runTaskWork(task));\n  }'''
+          new='''  function newTaskAttemptId(){\n    try{return crypto.randomUUID();}catch(e){return `kg_${Date.now()}_${Math.random().toString(36).slice(2)}`;}\n  }\n  function assertTaskAttempt(task,attemptId){\n    if(!task||task.attemptId!==attemptId)throw new Error("Stale Engine task attempt ignored");\n  }\n  async function runTaskWork(task){\n    const attemptId=task.attemptId||newTaskAttemptId();\n    task.attemptId=attemptId;\n    return withEngineAiOverride(()=>_runTaskWork(task,attemptId));\n  }'''
+          if old not in s: raise SystemExit('runTaskWork anchor not found')
+          s=s.replace(old,new,1)
+          old='''  async function _runTaskWork(task){\n    const prodId=S.directorChat.productionId;'''
+          new='''  async function _runTaskWork(task,attemptId){\n    assertTaskAttempt(task,attemptId);\n    const prodId=S.directorChat.productionId;'''
+          if old not in s: raise SystemExit('_runTaskWork anchor not found')
+          s=s.replace(old,new,1)
+          # Guard the post-await continuation inside this function. This is deliberately\n          # line-oriented and only touches await statements inside _runTaskWork.\n          start=s.index('  async function _runTaskWork(task,attemptId){')
+          end=s.index('\n  function ', start+20)
+          block=s[start:end]
+          import re
+          lines=block.splitlines()
+          out=[]
+          for line in lines:
+              out.append(line)
+              if 'await ' in line and not line.lstrip().startswith('//'):
+                  indent=line[:len(line)-len(line.lstrip())]
+                  out.append(indent+'assertTaskAttempt(task,attemptId);')
+          s=s[:start]+'\n'.join(out)+s[end:]
+          # Assign a fresh attempt whenever dispatcher starts a task.
+          old='''      parallelReady.forEach(t=>t.status="running");'''
+          new='''      parallelReady.forEach(t=>{t.status="running";t.attemptId=newTaskAttemptId();t.attemptStartedAt=Date.now();});'''
+          if old not in s: raise SystemExit('parallel running anchor not found')
+          s=s.replace(old,new,1)
+          old='''      t.status="running";\n      save();'''
+          new='''      t.status="running";\n      t.attemptId=newTaskAttemptId();\n      t.attemptStartedAt=Date.now();\n      save();'''
+          if old not in s: raise SystemExit('sequential running anchor not found')
+          s=s.replace(old,new,1)
+          # Never let an older async attempt finalize the task after a newer attempt exists.
+          old='''          const out=await runTaskWork(t);\n          t.status="done";'''
+          new='''          const attemptId=t.attemptId;\n          const out=await runTaskWork(t);\n          if(t.attemptId!==attemptId)throw new Error("Stale Engine task attempt ignored");\n          t.status="done";'''
+          if old not in s: raise SystemExit('parallel completion anchor not found')
+          s=s.replace(old,new,1)
+          old='''        const out=await runTaskWork(t);\n        if(t.requiresApproval){'''
+          new='''        const attemptId=t.attemptId;\n        const out=await runTaskWork(t);\n        if(t.attemptId!==attemptId)throw new Error("Stale Engine task attempt ignored");\n        if(t.requiresApproval){'''
+          if old not in s: raise SystemExit('sequential completion anchor not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+          node --check kosmicengine.js
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add kosmicengine.js
+          git diff --cached --quiet && exit 0
+          git commit -m "[attempt-guard] prevent stale Engine task completions"
+          git push
