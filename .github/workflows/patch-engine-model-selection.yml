@@ -1,0 +1,43 @@
+name: Patch Engine model selection reliability
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[engine-model-patch]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove silent model fallback
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('kosmicengine.js')
+          s=p.read_text()
+          old='''      }catch(err){\n        // Model selection is an enhancement, not a hard requirement — the\n        // defaults already set in the draft (Nano Banana Pro / Seedance\n        // Fast) are perfectly valid, so a failure here shouldn\'t block\n        // the production.\n        console.warn("Model auto-selection skipped, using defaults:",err.message);\n        return{summary:`🧠 Using default models (couldn\'t reach the brain for a custom pick): Nano Banana Pro, Seedance 2.0 Fast.`};\n      }'''
+          new='''      }catch(err){\n        // Model selection is a required production checkpoint. Never silently\n        // substitute a paid generation strategy after the selected brain fails.\n        // This prevents the UI from claiming one configuration while the\n        // production actually runs another.\n        p.modelSelectionError=err?.message||String(err)||"Unknown model-selection error";\n        save2Productions();\n        throw new Error(`Model selection failed: ${p.modelSelectionError}. No image/video model fallback was applied; fix the selected Engine brain and retry.`);\n      }'''
+          if old not in s:
+              raise SystemExit('Expected model-selection fallback block not found; refusing to modify file.')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+          node --check kosmicengine.js
+          git diff --check
+      - name: Commit patch
+        run: |
+          git config user.name 'kosmic-kat-bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add kosmicengine.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: prevent silent Engine model fallback [engine-model-patch]'
+          git push
+      - name: Trigger Pages deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy.yml --repo "${{ github.repository }}" --ref main
