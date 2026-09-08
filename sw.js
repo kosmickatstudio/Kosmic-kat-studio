@@ -1,8 +1,8 @@
 // Network-first service worker — always serves the latest deploy when online,
 // falls back to cache only when offline. Cache version bumps on each deploy-relevant change.
-const CACHE_NAME = "kosmic-kat-studio-v25";
+const CACHE_NAME = "kosmic-kat-studio-v26";
 const ASSETS = [
-  "/index.html","/audio.js","/adstudio.js","/editor.js","/team.js","/costs.js","/upscaler.js","/display.js","/flow.js","/nodecanvas.js","/motion.js","/assets.js","/gallery.js","/characters.js","/directors.js","/home.js","/kosmicengine.js","/cinemastudio.js","/engine-glass-ui.js","/engine-asset-review.js","/manifest.json","/icon-192.png","/icon-512.png"
+  "/index.html","/audio.js","/adstudio.js","/editor.js","/team.js","/costs.js","/upscaler.js","/display.js","/flow.js","/nodecanvas.js","/motion.js","/assets.js","/gallery.js","/characters.js","/directors.js","/home.js","/kosmicengine.js","/cinemastudio.js","/engine-glass-ui.js","/engine-asset-review.js","/engine-strategy-ui.js","/manifest.json","/icon-192.png","/icon-512.png"
 ];
 self.addEventListener("install",event=>{event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(ASSETS)));self.skipWaiting()});
 self.addEventListener("activate",event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim()});
