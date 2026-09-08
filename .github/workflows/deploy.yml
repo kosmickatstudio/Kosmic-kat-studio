@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
@@ -24,12 +24,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Apply narrow Kosmic Engine brain preflight patch
-        shell: bash
-        run: |
-          python3 -c "$(printf '%s' 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCnA9UGF0aCgia29zbWljZW5naW5lLmpzIikKcz1wLnJlYWRfdGV4dCgpCmE9IiAgbGV0IF9kaXNwYXRjaGluZz1mYWxzZTsiCmg9JycnICBmdW5jdGlvbiBlbmdpbmVCcmFpblByZWZsaWdodCgpewogICAgY29uc3QgYnJhaW49KFMuZGlyZWN0b3JDaGF0Py5kcmFmdD8uYnJhaW5Nb2RlbCl8fGdzKCJhaV9tb2RlbCIsImNsYXVkZSIpOwogICAgY29uc3QgYz17Y2xhdWRlOlsiYXBpX2FudGhyb3BpYyIsIkNsYXVkZSAoQW50aHJvcGljKSJdLGdlbWluaTpbImFwaV9nZW1pbmkiLCJHb29nbGUgR2VtaW5pIl0sb3BlbmFpOlsiYXBpX29wZW5haSIsIk9wZW5BSSBHUFQtNG8iXSxncm9xOlsiYXBpX2dyb3EiLCJHcm9xIEdQVC1PU1MiXSxkZWVwc2VlazpbImFwaV9kZWVwc2VlayIsIkRlZXBTZWVrIFY0Il0sZ3JvazpbImFwaV94YWkiLCJHcm9rIDQuNiAoeEFJKSJdLGtpbWk6WyJhcGlfZXZvbGluayIsIktpbWkgSzMgKEV2b0xpbmspIl0sYWljcmVkaXRzOlsiYXBpX2FpY3JlZGl0cyIsIkFJQ3JlZGl0cyBHYXRld2F5Il19LGk9Y1ticmFpbl07CiAgICBpZighaSlyZXR1cm57b2s6ZmFsc2UsZXJyb3I6YFVuc3VwcG9ydGVkIEFJIGJyYWluICIke2JyYWlufSIuIFJlLXNlbGVjdCBhbiBhdmFpbGFibGUgYnJhaW4gaW4gSG9tZS5gfTsKICAgIGlmKCFTdHJpbmcoZ3MoaVswXSwiIikpLnRyaW0oKSlyZXR1cm57b2s6ZmFsc2UsZXJyb3I6YCR7aVsxXX0gaXMgc2VsZWN0ZWQgZm9yIHRoaXMgcHJvZHVjdGlvbiwgYnV0IGl0cyBBUEkga2V5IGlzIG1pc3NpbmcuIEFkZCB0aGUgJHtpWzFdfSBBUEkga2V5IGluIFNldHRpbmdzLCB0aGVuIHRhcCBSZXRyeS5gfTsKICAgIHJldHVybntvazp0cnVlfTsKICB9CgonJycKaWYgImZ1bmN0aW9uIGVuZ2luZUJyYWluUHJlZmxpZ2h0KCkiIG5vdCBpbiBzOnM9cy5yZXBsYWNlKGEsaCthLDEpCm89JycnICAgIGlmKCF0YXNrc3x8Uy5kaXJlY3RvckNoYXQuYXdhaXRpbmdBcHByb3ZhbFRhc2tJZHx8Uy5kaXJlY3RvckNoYXQuYXdhaXRpbmdQZXJtaXNzaW9uSWRzfHxTLmRpcmVjdG9yQ2hhdC5wZXJtaXNzaW9uUGF1c2VkKXJldHVybjsKICAgIGNvbnN0IHJlYWR5PXRhc2tzLmZpbHRlcih0PT50LnN0YXR1cz09PSJwZW5kaW5nIiYmZGVwc1NhdGlzZmllZCh0KSk7JycnCm49JycnICAgIGlmKCF0YXNrc3x8Uy5kaXJlY3RvckNoYXQuYXdhaXRpbmdBcHByb3ZhbFRhc2tJZHx8Uy5kaXJlY3RvckNoYXQuYXdhaXRpbmdQZXJtaXNzaW9uSWRzfHxTLmRpcmVjdG9yQ2hhdC5wZXJtaXNzaW9uUGF1c2VkKXJldHVybjsKICAgIGNvbnN0IGJjPWVuZ2luZUJyYWluUHJlZmxpZ2h0KCk7CiAgICBpZighYmMub2spewogICAgICBjb25zdCBzaWc9YmMuZXJyb3I7CiAgICAgIGlmKFMuZGlyZWN0b3JDaGF0LmJyYWluUHJlZmxpZ2h0RXJyb3JTaWduYXR1cmUhPT1zaWcpewogICAgICAgIFMuZGlyZWN0b3JDaGF0LmJyYWluUHJlZmxpZ2h0RXJyb3JTaWduYXR1cmU9c2lnOwogICAgICAgIHB1c2goImFnZW50IiwiIix7ZXJyb3I6c2lnLHJldHJ5YWJsZTp0cnVlLHJldHJ5VGFza0lkczp0YXNrcy5maWx0ZXIodD0+dC5zdGF0dXM9PT0icGVuZGluZyIpLm1hcCh0PT50LmlkKX0pOwogICAgICB9CiAgICAgIHJldHVybjsKICAgIH0KICAgIGlmKFMuZGlyZWN0b3JDaGF0LmJyYWluUHJlZmxpZ2h0RXJyb3JTaWduYXR1cmUpe1MuZGlyZWN0b3JDaGF0LmJyYWluUHJlZmxpZ2h0RXJyb3JTaWduYXR1cmU9bnVsbDtzYXZlKCk7fQogICAgY29uc3QgcmVhZHk9dGFza3MuZmlsdGVyKHQ9PnQuc3RhdHVzPT09InBlbmRpbmciJiZkZXBzU2F0aXNmaWVkKHQpKTsnJycKaWYgbiBub3QgaW4gczpzPXMucmVwbGFjZShvLG4sMSkKcC53cml0ZV90ZXh0KHMpCg==' | base64 -d)"
-          git diff --check
-
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
@@ -44,15 +38,3 @@ jobs:
         uses: actions/deploy-pages@v4
         with:
           artifact_name: kosmic-pages
-
-      - name: Persist narrow source patch and remove temporary files
-        shell: bash
-        run: |
-          git checkout -- .github/workflows/deploy.yml
-          rm -f .github/workflows/fix-kosmic-engine-brain-preflight.yml .github/workflows/fix-kosmic-engine-brain-preflight-v2.yml __engine_patch_trigger.txt __engine_patch_trigger2.txt
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add kosmicengine.js
-          git add -u .github/workflows/fix-kosmic-engine-brain-preflight.yml .github/workflows/fix-kosmic-engine-brain-preflight-v2.yml __engine_patch_trigger.txt __engine_patch_trigger2.txt
-          git commit -m 'fix: validate Kosmic Engine selected brain before dispatch' || true
-          git push origin HEAD:main || true
