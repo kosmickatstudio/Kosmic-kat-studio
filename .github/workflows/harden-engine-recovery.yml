@@ -1,49 +1,10 @@
 name: Harden Engine Recovery
 on:
-  push:
-    paths:
-      - 'engine-recovery.js'
-      - '.github/workflows/harden-engine-recovery.yml'
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
-  harden:
-    if: github.actor != 'github-actions[bot]'
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Harden persisted completion checks
-        shell: python
-        run: |
-          from pathlib import Path
-          p=Path('engine-recovery.js')
-          s=p.read_text()
-          old='''    if(task.type==="char_plan")return !!(d&&d.tasks&&d.tasks.some(x=>x!==task&&x.status!=="running"&&x.deps&&x.deps.includes("char_plan")&&(x.type==="charsheet_single"||x.type==="charsheet_side")));'''
-          new='''    if(task.type==="char_plan"){
-      const children=(d&&d.tasks||[]).filter(x=>x!==task&&x.deps&&x.deps.includes("char_plan")&&(x.type==="charsheet_single"||x.type==="charsheet_side"));
-      return children.length>0&&children.every(x=>x.status==="done")&&(p.characterSheets||[]).length>=children.length;
-    }'''
-          old2='''    if(task.type==="loc_plan")return !!(d&&d.tasks&&d.tasks.some(x=>x!==task&&x.status!=="running"&&x.deps&&x.deps.includes("loc_plan")&&x.type==="loc_img"));'''
-          new2='''    if(task.type==="loc_plan"){
-      const children=(d&&d.tasks||[]).filter(x=>x!==task&&x.deps&&x.deps.includes("loc_plan")&&x.type==="loc_img");
-      return children.length>0&&children.every(x=>x.status==="done")&&(p.locationBible||[]).every(l=>hasUrl(l&&l.url));
-    }'''
-          old3='''    if(task.type==="storyboard"){const e=epFor(p,task.epIndex);return !!e&&e.storyboardStatus!=="pending"&&Array.isArray(e.storyboard)&&e.storyboard.some(s=>hasUrl(s&&s.url));}'''
-          new3='''    if(task.type==="storyboard"){const e=epFor(p,task.epIndex);return !!e&&e.storyboardStatus==="complete"&&Array.isArray(e.storyboard)&&e.storyboard.length>0&&e.storyboard.every(s=>hasUrl(s&&s.url));}'''
-          old4='''    if(task.type==="scene"){const e=epFor(p,task.epIndex);return !!e&&e.sceneStatus!=="pending"&&Array.isArray(e.shots)&&e.shots.some(s=>hasUrl(s&&s.videoUrl));}'''
-          new4='''    if(task.type==="scene"){const e=epFor(p,task.epIndex);return !!e&&e.sceneStatus==="complete"&&Array.isArray(e.shots)&&e.shots.length>0&&e.shots.every(s=>hasUrl(s&&s.videoUrl));}'''
-          for a,b in ((old,new),(old2,new2),(old3,new3),(old4,new4)):
-            if a not in s: raise SystemExit('expected recovery pattern missing')
-            s=s.replace(a,b,1)
-          p.write_text(s)
-      - name: Validate
-        run: |
-          node --check engine-recovery.js
-          git diff --check
-      - name: Commit
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add engine-recovery.js
-          git diff --cached --quiet || git commit -m '[recovery] harden persisted completion reconciliation'
-          git push
+      - run: echo cleanup
