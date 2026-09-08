@@ -10,49 +10,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Patch generation attempt guards
-        shell: python
         run: |
-          from pathlib import Path
-          p = Path('kosmicengine.js')
-          s = p.read_text()
-          old1 = '''      parallelReady.forEach(t=>t.status="running");
-      save();
-      await Promise.allSettled(parallelReady.map(async t=>{
-        try{
-          const out=await runTaskWork(t);
-          t.status="done";'''
-          new1 = '''      parallelReady.forEach(t=>{
-        t.status="running";
-        t.runToken=`${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        t.runStartedAt=Date.now();
-      });
-      save();
-      await Promise.allSettled(parallelReady.map(async t=>{
-        const __runToken=t.runToken;
-        try{
-          const out=await runTaskWork(t);
-          if(t.runToken!==__runToken)return;
-          t.status="done";'''
-          old2 = '''      t.status="running";
-      save();
-      try{
-        const out=await runTaskWork(t);
-        if(t.requiresApproval){'''
-          new2 = '''      t.status="running";
-      t.runToken=`${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      t.runStartedAt=Date.now();
-      save();
-      const __runToken=t.runToken;
-      try{
-        const out=await runTaskWork(t);
-        if(t.runToken!==__runToken)return;
-        if(t.requiresApproval){'''
-          if old1 not in s:
-            raise SystemExit('parallel dispatcher pattern not found')
-          if old2 not in s:
-            raise SystemExit('serial dispatcher pattern not found')
-          s = s.replace(old1,new1,1).replace(old2,new2,1)
-          p.write_text(s)
+          node <<'NODE'
+          const fs=require('fs');
+          const p='kosmicengine.js';
+          let s=fs.readFileSync(p,'utf8');
+          const old1='''      parallelReady.forEach(t=>t.status="running");\n      save();\n      await Promise.allSettled(parallelReady.map(async t=>{\n        try{\n          const out=await runTaskWork(t);\n          t.status="done";''';
+          const new1='''      parallelReady.forEach(t=>{\n        t.status="running";\n        t.runToken=`${Date.now()}-${Math.random().toString(36).slice(2)}`;\n        t.runStartedAt=Date.now();\n      });\n      save();\n      await Promise.allSettled(parallelReady.map(async t=>{\n        const __runToken=t.runToken;\n        try{\n          const out=await runTaskWork(t);\n          if(t.runToken!==__runToken)return;\n          t.status="done";''';
+          const old2='''      t.status="running";\n      save();\n      try{\n        const out=await runTaskWork(t);\n        if(t.requiresApproval){''';
+          const new2='''      t.status="running";\n      t.runToken=`${Date.now()}-${Math.random().toString(36).slice(2)}`;\n      t.runStartedAt=Date.now();\n      save();\n      const __runToken=t.runToken;\n      try{\n        const out=await runTaskWork(t);\n        if(t.runToken!==__runToken)return;\n        if(t.requiresApproval){''';
+          if(!s.includes(old1))throw new Error('parallel dispatcher pattern not found');
+          if(!s.includes(old2))throw new Error('serial dispatcher pattern not found');
+          s=s.replace(old1,new1).replace(old2,new2);
+          fs.writeFileSync(p,s);
+          NODE
       - name: Validate
         run: |
           node --check kosmicengine.js
