@@ -246,3 +246,6 @@ function clearMotionBrush(){
   s.dataset.kosmicEngineGlass="1";
   document.head.appendChild(s);
 })();
+
+// KOSMIC ENGINE GRANULAR ASSET REVIEW
+(function(){const x=document.createElement("script");x.src="engine-asset-review.js";x.async=false;x.dataset.kosmicEngineReview="1";document.head.appendChild(x)})();
