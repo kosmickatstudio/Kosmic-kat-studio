@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -24,14 +24,111 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Apply only the requested LLM brain additions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('home.js'); s=p.read_text(encoding='utf-8')
+          marker='// ── EXTRA BRAIN PROVIDERS: GROK + KIMI ──'
+          if marker not in s:
+            replacements={
+              '>Claude (Anthropic) (Best quality, supports images)</option>':'>Claude (Anthropic) — Claude Fable 5.1 / Opus 5</option>',
+              '>Google Gemini — Free (3.8 Flash latest)</option>':'>Google Gemini — Gemini 3.8 Flash (Free)</option>',
+              '>OpenAI GPT-4o (Supports images)</option>':'>OpenAI — GPT-5.6 Sol / Terra / Luna</option>',
+              '>Groq — Free (GPT-OSS 120B / Qwen 3.8 27B)</option>':'>Groq — GPT-OSS 120B / 20B / Qwen 3.8 (Free)</option>',
+              '>DeepSeek V4 Flash (Ultra cheap, text only)</option>':'>DeepSeek — V4 Flash</option>',
+            }
+            for old,new in replacements.items(): s=s.replace(old,new)
+            old='''  groq:[\n    {id:"openai/gpt-oss-120b",label:"GPT-OSS 120B — FREE (latest)"},\n    {id:"openai/gpt-oss-20b",label:"GPT-OSS 20B — FREE (fast)"},\n    {id:"qwen/qwen3.8-27b",label:"Qwen 3.8 27B — FREE"}\n  ]'''
+            new='''  groq:[\n    {id:"openai/gpt-oss-120b",label:"GPT-OSS 120B — FREE (latest)"},\n    {id:"openai/gpt-oss-20b",label:"GPT-OSS 20B — FREE (fast)"},\n    {id:"qwen/qwen3.8-27b",label:"Qwen 3.8 27B — FREE"}\n  ],\n  grok:[\n    {id:"grok-4.6",label:"Grok 4.6 — xAI flagship"}\n  ],\n  kimi:[\n    {id:"kimi-k3",label:"Kimi K3 — EvoLink"}\n  ]'''
+            if old not in s: raise SystemExit('home catalog block not found')
+            s=s.replace(old,new,1)
+            old='''              {id:"deepseek",label:"DeepSeek V4",ready:!!gs("api_deepseek")},\n              {id:"aicredits",label:"AICredits",ready:!!gs("api_aicredits")},'''
+            new='''              {id:"deepseek",label:"DeepSeek V4",ready:!!gs("api_deepseek")},\n              {id:"grok",label:"Grok 4.6 (xAI)",ready:!!gs("api_xai")},\n              {id:"kimi",label:"Kimi K3 (EvoLink)",ready:!!gs("api_evolink")},\n              {id:"aicredits",label:"AICredits",ready:!!gs("api_aicredits")},'''
+            if old not in s: raise SystemExit('home quick list not found')
+            s=s.replace(old,new,1)
+            old='''<option value="deepseek" ${gs("ai_model","claude")==="deepseek"?"selected":""}>DeepSeek V4 Flash (Ultra cheap, text only)</option>'''
+            new='''<option value="deepseek" ${gs("ai_model","claude")==="deepseek"?"selected":""}>DeepSeek — V4 Flash</option>\n        <option value="grok" ${gs("ai_model","claude")==="grok"?"selected":""}>Grok 4.6 (xAI)</option>\n        <option value="kimi" ${gs("ai_model","claude")==="kimi"?"selected":""}>Kimi K3 (EvoLink)</option>'''
+            if old not in s: raise SystemExit('home select option not found')
+            s=s.replace(old,new,1)
+            old="onchange=\"saveSetting('ai_model',this.value);updateAiModelLabel();updateAicreditsModelVisibility();updateBrainSubModelVisibility();"
+            new="onchange=\"saveSetting('ai_model',this.value);ensureExtraBrainKey(this.value);updateAiModelLabel();updateAicreditsModelVisibility();updateBrainSubModelVisibility();"
+            if old not in s: raise SystemExit('home select onchange not found')
+            s=s.replace(old,new,1)
+            old='''function setBrainModelQuick(id){\n  saveSetting("ai_model",id);'''
+            new='''function setBrainModelQuick(id){\n  if(!ensureExtraBrainKey(id))return;\n  saveSetting("ai_model",id);'''
+            if old not in s: raise SystemExit('quick setter not found')
+            s=s.replace(old,new,1)
+            s += r'''\n// ── EXTRA BRAIN PROVIDERS: GROK + KIMI ──
+function ensureExtraBrainKey(provider){
+  if(provider!=="grok"&&provider!=="kimi")return true;
+  const keyName=provider==="grok"?"api_xai":"api_evolink";
+  if(gs(keyName,""))return true;
+  const label=provider==="grok"?"xAI API key (Grok 4.6)":"EvoLink API key (Kimi K3)";
+  const key=prompt("Enter your "+label+". It will be stored only in this browser.");
+  if(!key||!key.trim()){toast("No API key entered — provider not selected","error");return false;}
+  saveSetting(keyName,key.trim());
+  return true;
+}
+(function(){
+  if(window.__kosmicExtraBrainsInstalled)return;
+  window.__kosmicExtraBrainsInstalled=true;
+  const original=window.callAiSimple;
+  if(typeof original!=="function")return;
+  async function direct(endpoint,key,model,userPrompt,systemPrompt){
+    const messages=[];
+    if(systemPrompt)messages.push({role:"system",content:systemPrompt});
+    messages.push({role:"user",content:userPrompt});
+    const res=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+key},body:JSON.stringify({model,messages,reasoning_effort:"high",max_tokens:4000})});
+    const data=await res.json();
+    if(!res.ok||data.error)throw new Error(data.error?.message||data.message||("Provider error "+res.status));
+    return data.choices?.[0]?.message?.content||"(No response)";
+  }
+  window.callAiSimple=async function(userPrompt,systemPrompt){
+    const provider=gs("ai_model","claude");
+    if(provider==="grok")return direct("https://api.x.ai/v1/chat/completions",gs("api_xai",""),gs("grok_brain_model","grok-4.6"),userPrompt,systemPrompt);
+    if(provider==="kimi")return direct("https://direct.evolink.ai/v1/chat/completions",gs("api_evolink",""),gs("kimi_brain_model","kimi-k3"),userPrompt,systemPrompt);
+    return original(userPrompt,systemPrompt);
+  };
+})();
+'''
+            p.write_text(s,encoding='utf-8')
+            print('Patched home.js')
+          else: print('home.js already patched')
+
+          p=Path('agentfeline.js'); s=p.read_text(encoding='utf-8')
+          marker2='// ── KIMI EVOLINK ROUTE: 2026-09-08 ──'
+          if marker2 not in s:
+            old='''  // No standalone Kimi key on this site — routed through the existing\n  // fal.ai key via fal's OpenRouter-powered any-model endpoint, per Kosmic's\n  // own hunch that fal might carry it. Confirmed: it does.\n  const apiKey=gs("api_falai","");\n  const model=getBrainModel("kimi")||"moonshotai/kimi-k3";\n  const res=await fetch("https://fal.run/openrouter/router",{'''
+            new='''  // Kimi K3 is routed directly through EvoLink's OpenAI-compatible API.\n  const apiKey=gs("api_evolink","");\n  const model=getBrainModel("kimi")||"kimi-k3";\n  const res=await fetch("https://direct.evolink.ai/v1/chat/completions",{'''
+            if old not in s: raise SystemExit('Agent Feline Kimi route not found')
+            s=s.replace(old,new,1)
+            old='''    method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},'''
+            new='''    method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},'''
+            s=s.replace(old,new,1)
+            old='''  kimi:{id:"kimi",name:"Kimi",logoKey:"kimi",\n    hasTextKey:()=>!!gs("api_falai",""),hasImageKey:()=>!!gs("api_falai",""),\n    imageLabel:"FLUX.2 Max (via fal.ai)",imageKeyHint:"a fal.ai",'''
+            new='''  kimi:{id:"kimi",name:"Kimi K3",logoKey:"kimi",\n    hasTextKey:()=>!!gs("api_evolink",""),hasImageKey:()=>false,\n    imageLabel:"Kimi K3 multimodal input",imageKeyHint:"an EvoLink",'''
+            if old not in s: raise SystemExit('Agent Feline Kimi agent definition not found')
+            s=s.replace(old,new,1)
+            s += '\n'+marker2+'\n'
+            p.write_text(s,encoding='utf-8')
+            print('Patched agentfeline.js')
+          else: print('agentfeline.js already patched')
+          PY
+
+      - name: Persist requested LLM changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add home.js agentfeline.js
+          if git diff --cached --quiet; then echo "No LLM changes needed"; else git commit -m "feat: add Grok xAI and Kimi K3 via EvoLink"; git push; fi
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
-
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
           path: "."
-
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
