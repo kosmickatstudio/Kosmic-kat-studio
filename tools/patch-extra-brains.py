@@ -40,7 +40,7 @@ if MARK not in s:
               {id:"aicredits",label:"AICredits",ready:!!gs("api_aicredits")},'''
     if old not in s: raise SystemExit('home quick list not found')
     s=s.replace(old,new,1)
-    old='''<option value="deepseek" ${gs("ai_model","claude")==="deepseek"?"selected":""}>DeepSeek V4 Flash (Ultra cheap, text only)</option>'''
+    old='''<option value="deepseek" ${gs("ai_model","claude")==="deepseek"?"selected":""}>DeepSeek — V4 Flash</option>'''
     new='''<option value="deepseek" ${gs("ai_model","claude")==="deepseek"?"selected":""}>DeepSeek — V4 Flash</option>
         <option value="grok" ${gs("ai_model","claude")==="grok"?"selected":""}>Grok 4.6 (xAI)</option>
         <option value="kimi" ${gs("ai_model","claude")==="kimi"?"selected":""}>Kimi K3 (EvoLink)</option>'''
