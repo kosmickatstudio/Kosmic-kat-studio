@@ -22,3 +22,4 @@ jobs:
           git add motion.js
           git diff --cached --quiet || git commit -m "Load Kosmic Engine mobile review UX"
           git push
+# one-time loader patch
