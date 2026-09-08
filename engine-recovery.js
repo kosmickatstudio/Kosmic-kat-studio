@@ -15,6 +15,9 @@
  *
  * This file deliberately leaves auth, sessions, API-key storage, provider
  * routing, and generation functions untouched.
+ *
+ * Recovery is conservative by design: uncertainty is surfaced to the human,
+ * not converted into an automatic paid retry.
  */
 (function(){
   "use strict";
@@ -98,8 +101,6 @@
     _wrapped=true;scheduleScan();
   }
   let tries=0;const boot=setInterval(()=>{tries++;wrapRender();if(_wrapped||tries>40)clearInterval(boot);},100);
-  // Public only for the recovery button. The Engine exports a thin dispatcher
-  // bridge; all actual task execution remains inside Kosmic Engine.
   window.__kosmicEngineRecovery={reconcile,render:renderRecoveryBanner,resumeTask};
   const attachApi=setInterval(()=>{
     if(typeof KosmicEngine!=="undefined"&&typeof KosmicEngine.resumeRecoveredTask!=="function")KosmicEngine.resumeRecoveredTask=resumeTask;
