@@ -7,24 +7,23 @@
  * would be a duplicate-charge machine disguised as a recovery feature.
  *
  * Safe strategy:
- *  1. Reconcile a running task from persisted production output when there is
+ *  1. On the first fully-loaded Engine session, reconcile tasks that were
+ *     already running before this page existed.
+ *  2. Reconcile a running task from persisted production output when there is
  *     positive evidence that its work already landed.
- *  2. Otherwise mark it `interrupted` and wait for an explicit user resume.
- *  3. Resuming changes ONLY that task back to pending and dispatches it.
- *  4. Completed tasks are never regenerated.
+ *  3. Otherwise mark it `interrupted` and wait for an explicit user resume.
+ *  4. Resuming changes ONLY that task back to pending and dispatches it.
+ *  5. Tasks created after this page loads are never mistaken for stale work.
  *
  * This file deliberately leaves auth, sessions, API-key storage, provider
  * routing, and generation functions untouched.
- *
- * Recovery is conservative by design: uncertainty is surfaced to the human,
- * not converted into an automatic paid retry.
  */
 (function(){
   "use strict";
   if(window.__kosmicEngineRecoveryLoaded)return;
   window.__kosmicEngineRecoveryLoaded=true;
   const RECOVERY_STATUSES=new Set(["running","interrupted"]);
-  let _scanTimer=null,_wrapped=false;
+  let _scanTimer=null,_wrapped=false,_sessionCaptured=false,_tries=0;
   function engine(){return typeof KosmicEngine!=="undefined"?KosmicEngine:null;}
   function state(){return typeof S!=="undefined"?S:null;}
   function save(){try{if(typeof window.save==="function")window.save("directorChat");}catch(e){console.warn("Kosmic recovery save failed:",e);}}
@@ -93,14 +92,22 @@
     save();renderRecoveryBanner();if(typeof e.renderTaskPanel==="function")e.renderTaskPanel();
     if(typeof e.dispatch==="function")e.dispatch();else toast("Recovery prepared, but the Engine dispatcher is unavailable in this build","error");
   }
-  function scheduleScan(){clearTimeout(_scanTimer);_scanTimer=setTimeout(()=>{reconcile();renderRecoveryBanner();},250);}
+  function scheduleScan(){clearTimeout(_scanTimer);_scanTimer=setTimeout(()=>{if(!_sessionCaptured)captureSession();},250);}
+  function captureSession(){
+    const s=state(),d=s&&s.directorChat;
+    if(!d||!d.projectId||!Array.isArray(d.messages)||!d.messages.length){if(++_tries<40)_scanTimer=setTimeout(captureSession,250);return;}
+    _sessionCaptured=true;
+    if(Array.isArray(d.tasks)&&d.tasks.length){reconcile();renderRecoveryBanner();}
+  }
   function wrapRender(){
     if(_wrapped||typeof window.renderKosmicEngineModule!=="function")return;
     const original=window.renderKosmicEngineModule;
     window.renderKosmicEngineModule=function(){const out=original.apply(this,arguments);scheduleScan();return out;};
     _wrapped=true;scheduleScan();
   }
-  let tries=0;const boot=setInterval(()=>{tries++;wrapRender();if(_wrapped||tries>40)clearInterval(boot);},100);
+  const boot=setInterval(()=>{wrapRender();if(_wrapped||++_tries>40)clearInterval(boot);},100);
+  // Public only for the recovery button. The Engine exports a thin dispatcher
+  // bridge; all actual task execution remains inside Kosmic Engine.
   window.__kosmicEngineRecovery={reconcile,render:renderRecoveryBanner,resumeTask};
   const attachApi=setInterval(()=>{
     if(typeof KosmicEngine!=="undefined"&&typeof KosmicEngine.resumeRecoveredTask!=="function")KosmicEngine.resumeRecoveredTask=resumeTask;
