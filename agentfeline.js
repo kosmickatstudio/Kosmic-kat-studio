@@ -59,9 +59,9 @@ const AGENTS={
     hasTextKey:()=>!!gs("api_gemini",""),hasImageKey:()=>!!gs("api_gemini",""),
     imageLabel:"Nano Banana Pro",imageKeyHint:"a Gemini",
     category:"Math, logic, multimodal reasoning"},
-  kimi:{id:"kimi",name:"Kimi",logoKey:"kimi",
-    hasTextKey:()=>!!gs("api_falai",""),hasImageKey:()=>!!gs("api_falai",""),
-    imageLabel:"FLUX.2 Max (via fal.ai)",imageKeyHint:"a fal.ai",
+  kimi:{id:"kimi",name:"Kimi K3",logoKey:"kimi",
+    hasTextKey:()=>!!gs("api_evolink",""),hasImageKey:()=>false,
+    imageLabel:"Kimi K3 multimodal input",imageKeyHint:"an EvoLink",
     category:"Huge context — long docs, deep research"},
   grok:{id:"grok",name:"Grok",logoKey:"grok",
     hasTextKey:()=>!!gs("api_xai",""),hasImageKey:()=>!!gs("api_xai",""),
@@ -136,12 +136,10 @@ async function afCallGemini(userText){
   return (data.candidates[0].content.parts||[]).map(p=>p.text).filter(Boolean).join("\n");
 }
 async function afCallKimi(userText){
-  // No standalone Kimi key on this site — routed through the existing
-  // fal.ai key via fal's OpenRouter-powered any-model endpoint, per Kosmic's
-  // own hunch that fal might carry it. Confirmed: it does.
-  const apiKey=gs("api_falai","");
-  const model=getBrainModel("kimi")||"moonshotai/kimi-k3";
-  const res=await fetch("https://fal.run/openrouter/router",{
+  // Kimi K3 is routed directly through EvoLink's OpenAI-compatible API.
+  const apiKey=gs("api_evolink","");
+  const model=getBrainModel("kimi")||"kimi-k3";
+  const res=await fetch("https://direct.evolink.ai/v1/chat/completions",{
     method:"POST",
     headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
     body:JSON.stringify({model,prompt:userText,system_prompt:afSystemPrompt("Kimi")})
@@ -168,7 +166,7 @@ const AF_TEXT_FN={claude:afCallClaude,gpt:afCallGpt,gemini:afCallGemini,kimi:afC
 async function afGenSeedream(prompt){
   const apiKey=gs("api_falai","");
   const res=await fetch("https://fal.run/bytedance/seedream/v5/pro/text-to-image",{
-    method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},
+    method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
     body:JSON.stringify({prompt})
   });
   const data=await res.json();
@@ -506,3 +504,5 @@ async function sendAfPrompt(){
     renderAfChatThread();
   });
 }
+
+// ── KIMI EVOLINK ROUTE: 2026-09-08 ──

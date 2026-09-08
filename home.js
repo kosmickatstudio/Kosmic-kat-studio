@@ -44,6 +44,12 @@ const CURRENT_LLM_CATALOG={
     {id:"openai/gpt-oss-120b",label:"GPT-OSS 120B — FREE (latest)"},
     {id:"openai/gpt-oss-20b",label:"GPT-OSS 20B — FREE (fast)"},
     {id:"qwen/qwen3.8-27b",label:"Qwen 3.8 27B — FREE"}
+  ],
+  grok:[
+    {id:"grok-4.6",label:"Grok 4.6 — xAI flagship"}
+  ],
+  kimi:[
+    {id:"kimi-k3",label:"Kimi K3 — EvoLink"}
   ]
 };
 function applyCurrentLlmCatalog(){
@@ -146,12 +152,14 @@ function renderHome(el){
       <div class="panel-title">✧ AI Director Brain</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Which AI powers your Director chat and prompt help — moved here from Settings.</div>
       <div class="f-group">
-        <select class="f-select" id="aiModelSelect" onchange="saveSetting('ai_model',this.value);updateAiModelLabel();updateAicreditsModelVisibility();updateBrainSubModelVisibility();renderModelTrigger('aiModelSelect','brain')" style="display:none">
-        <option value="claude" ${gs("ai_model","claude")==="claude"?"selected":""}>Claude (Anthropic) (Best quality, supports images)</option>
-        <option value="gemini" ${gs("ai_model","claude")==="gemini"?"selected":""}>Google Gemini — Free (3.8 Flash latest)</option>
-        <option value="openai" ${gs("ai_model","claude")==="openai"?"selected":""}>OpenAI GPT-4o (Supports images)</option>
-        <option value="groq" ${gs("ai_model","claude")==="groq"?"selected":""}>Groq — Free (GPT-OSS 120B / Qwen 3.8 27B)</option>
-        <option value="deepseek" ${gs("ai_model","claude")==="deepseek"?"selected":""}>DeepSeek V4 Flash (Ultra cheap, text only)</option>
+        <select class="f-select" id="aiModelSelect" onchange="saveSetting('ai_model',this.value);ensureExtraBrainKey(this.value);updateAiModelLabel();updateAicreditsModelVisibility();updateBrainSubModelVisibility();renderModelTrigger('aiModelSelect','brain')" style="display:none">
+        <option value="claude" ${gs("ai_model","claude")==="claude"?"selected":""}>Claude (Anthropic) — Claude Fable 5.1 / Opus 5</option>
+        <option value="gemini" ${gs("ai_model","claude")==="gemini"?"selected":""}>Google Gemini — Gemini 3.8 Flash (Free)</option>
+        <option value="openai" ${gs("ai_model","claude")==="openai"?"selected":""}>OpenAI — GPT-5.6 Sol / Terra / Luna</option>
+        <option value="groq" ${gs("ai_model","claude")==="groq"?"selected":""}>Groq — GPT-OSS 120B / 20B / Qwen 3.8 (Free)</option>
+        <option value="deepseek" ${gs("ai_model","claude")==="deepseek"?"selected":""}>DeepSeek — V4 Flash</option>
+        <option value="grok" ${gs("ai_model","claude")==="grok"?"selected":""}>Grok 4.6 (xAI)</option>
+        <option value="kimi" ${gs("ai_model","claude")==="kimi"?"selected":""}>Kimi K3 (EvoLink)</option>
         <option value="aicredits" ${gs("ai_model","claude")==="aicredits"?"selected":""}>AICredits Gateway (Routes to whichever model you pick below, images if that model supports them)</option>
         </select>
         <div id="aiModelSelectTrigger" onclick="openModelPicker('aiModelSelect','brain')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
@@ -272,6 +280,8 @@ function renderHome(el){
               {id:"openai",label:"GPT-4o",ready:!!gs("api_openai")},
               {id:"groq",label:"Groq GPT-OSS",ready:!!gs("api_groq")},
               {id:"deepseek",label:"DeepSeek V4",ready:!!gs("api_deepseek")},
+              {id:"grok",label:"Grok 4.6 (xAI)",ready:!!gs("api_xai")},
+              {id:"kimi",label:"Kimi K3 (EvoLink)",ready:!!gs("api_evolink")},
               {id:"aicredits",label:"AICredits",ready:!!gs("api_aicredits")},
             ].map(m=>{const active=gs("ai_model","claude")===m.id;return `<div onclick="setBrainModelQuick('${m.id}')" style="padding:4px 2px;cursor:pointer;display:flex;align-items:baseline;gap:4px">
                 ${m.ready?'':'<span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;border:1.3px solid var(--textm);opacity:0.6;margin-top:3px"></span>'}
@@ -348,6 +358,7 @@ function setDefaultModel(kind,id){
 }
 
 function setBrainModelQuick(id){
+  if(!ensureExtraBrainKey(id))return;
   saveSetting("ai_model",id);
   const sel=document.getElementById("aiModelSelect");
   if(sel)sel.value=id;
@@ -402,3 +413,36 @@ function cycleHomeDisplay(dir){
   renderHomeCarousel();
 }
 
+
+// ── EXTRA BRAIN PROVIDERS: GROK + KIMI ──
+function ensureExtraBrainKey(provider){
+  if(provider!=="grok"&&provider!=="kimi")return true;
+  const keyName=provider==="grok"?"api_xai":"api_evolink";
+  if(gs(keyName,""))return true;
+  const label=provider==="grok"?"xAI API key (Grok 4.6)":"EvoLink API key (Kimi K3)";
+  const key=prompt("Enter your "+label+". It will be stored only in this browser.");
+  if(!key||!key.trim()){toast("No API key entered — provider not selected","error");return false;}
+  saveSetting(keyName,key.trim());
+  return true;
+}
+(function(){
+  if(window.__kosmicExtraBrainsInstalled)return;
+  window.__kosmicExtraBrainsInstalled=true;
+  const original=window.callAiSimple;
+  if(typeof original!=="function")return;
+  async function direct(endpoint,key,model,userPrompt,systemPrompt){
+    const messages=[];
+    if(systemPrompt)messages.push({role:"system",content:systemPrompt});
+    messages.push({role:"user",content:userPrompt});
+    const res=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+key},body:JSON.stringify({model,messages,reasoning_effort:"high",max_tokens:4000})});
+    const data=await res.json();
+    if(!res.ok||data.error)throw new Error((data.error&&data.error.message)||data.message||( "Provider error "+res.status));
+    return (data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||"(No response)";
+  }
+  window.callAiSimple=async function(userPrompt,systemPrompt){
+    const provider=gs("ai_model","claude");
+    if(provider==="grok")return direct("https://api.x.ai/v1/chat/completions",gs("api_xai",""),gs("grok_brain_model","grok-4.6"),userPrompt,systemPrompt);
+    if(provider==="kimi")return direct("https://direct.evolink.ai/v1/chat/completions",gs("api_evolink",""),gs("kimi_brain_model","kimi-k3"),userPrompt,systemPrompt);
+    return original(userPrompt,systemPrompt);
+  };
+})();
