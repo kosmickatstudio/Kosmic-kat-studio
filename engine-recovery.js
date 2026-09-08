@@ -39,11 +39,11 @@
   // browser died before our app wrote the result, there is intentionally no
   // way to prove completion, so the task stays interrupted instead of risking
   // an automatic second paid request.
-  function persistedCompletion(task,p){
+  function persistedCompletion(task,p,d){
     if(!task||!p)return false;
     if(task.type==="plan")return !!p.id&&!!p.episodes&&p.episodes.length>0;
     if(task.type==="model_select")return !!p.imageModel&&!!p.videoModel&&!p.modelSelectionError;
-    if(task.type==="char_plan")return Array.isArray(p.characters)&&Array.isArray(task._generatedChildIds)&&task._generatedChildIds.length>0;
+    if(task.type==="char_plan")return !!(d&&d.tasks&&d.tasks.some(x=>x!==task&&x.status!=="running"&&x.deps&&x.deps.includes("char_plan")&&(x.type==="charsheet_single"||x.type==="charsheet_side")));
     if(task.type==="charsheet_single"){
       const chars=(p.characters||[]).filter(c=>c.tier==="MC"||c.tier==="LEAD");
       const c=chars[task.charIndex];
@@ -51,12 +51,12 @@
     }
     if(task.type==="charsheet_side")return (p.characterSheets||[]).some(s=>s&&s.tier==="SIDE"&&hasUrl(s.sheetUrl));
     if(task.type==="charsheet_review")return p.characterSheetStatus==="approved";
-    if(task.type==="loc_plan")return Array.isArray(task._generatedChildIds)&&task._generatedChildIds.length>0;
+    if(task.type==="loc_plan")return !!(d&&d.tasks&&d.tasks.some(x=>x!==task&&x.status!=="running"&&x.deps&&x.deps.includes("loc_plan")&&x.type==="loc_img"));
     if(task.type==="loc_img"){
       const loc=(p.locationBible||[])[task.locIndex];
       return !!loc&&hasUrl(loc.url);
     }
-    if(task.type==="loc_review")return Array.isArray(p.locationBible)&&p.locationBible.length>0&&p.locationBible.every(l=>hasUrl(l.url))&&p.locationDesc;
+    if(task.type==="loc_review")return Array.isArray(p.locationBible)&&p.locationBible.length>0&&p.locationBible.every(l=>hasUrl(l.url))&&!!p.locationDesc;
     if(task.type==="script"){
       const e=epFor(p,task.epIndex);
       return !!e&&e.scriptStatus!=="pending"&&typeof e.script==="string"&&e.script.trim().length>0;
@@ -87,7 +87,7 @@
     d.tasks.forEach(t=>{
       if(!t||!RECOVERY_STATUSES.has(t.status))return;
       if(t.status==="running"){
-        if(persistedCompletion(t,p)){
+        if(persistedCompletion(t,p,d)){
           t.status="done";
           t.error=null;
           t.recoveredAt=Date.now();
@@ -155,7 +155,7 @@
     if(!p){toast("That production no longer exists","error");return;}
     // Reconcile one final time before spending anything. If another tab/session
     // has already persisted the result, mark it done and never retry it.
-    if(persistedCompletion(t,p)){
+    if(persistedCompletion(t,p,d)){
       t.status="done";t.error=null;t.recoveredAt=Date.now();t.recoveryReason="completion found before manual resume";
       save();
       renderRecoveryBanner();
@@ -179,9 +179,8 @@
   function scheduleScan(){
     clearTimeout(_scanTimer);
     _scanTimer=setTimeout(function(){
-      const r=reconcile();
-      if(r.changed||r.interrupted.length)renderRecoveryBanner();
-      else renderRecoveryBanner();
+      reconcile();
+      renderRecoveryBanner();
     },250);
   }
 
@@ -197,8 +196,6 @@
     scheduleScan();
   }
 
-  // The module is loaded after the main script. A short retry is used only to
-  // wait for the Engine globals, never as a generation retry.
   let tries=0;
   const boot=setInterval(()=>{
     tries++;
@@ -206,8 +203,5 @@
     if(_wrapped||tries>40)clearInterval(boot);
   },100);
 
-  // Public only for the recovery button. `dispatch` is exported by the Engine
-  // as a thin bridge to its existing private dispatcher; no generation logic
-  // is duplicated here.
   window.__kosmicEngineRecovery={reconcile,render:renderRecoveryBanner,resumeTask};
 })();
