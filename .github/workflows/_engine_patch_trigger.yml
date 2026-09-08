@@ -1,0 +1,26 @@
+name: Trigger one-time Kosmic Engine modes patch
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  nudge:
+    if: ${{ github.event.head_commit.message != 'chore: trigger engine patch workflow' && github.event.head_commit.message != 'feat: add Kosmic Engine Lite Advance Ultra tiers' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Trigger patch workflow and remove trigger
+        shell: bash
+        run: |
+          if [ ! -f .github/workflows/_engine_modes_patch.yml ]; then exit 0; fi
+          printf '\n' >> .github/workflows/_engine_modes_patch.yml
+          rm -f .github/workflows/_engine_patch_trigger.yml
+          git config user.name "kosmickatstudio"
+          git config user.email "kosmic735@gmail.com"
+          git add .github/workflows/_engine_modes_patch.yml .github/workflows/_engine_patch_trigger.yml
+          git commit -m "chore: trigger engine patch workflow"
+          git push
