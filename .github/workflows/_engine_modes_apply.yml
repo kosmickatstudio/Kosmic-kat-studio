@@ -18,9 +18,9 @@ jobs:
           from pathlib import Path
           src=Path('.github/workflows/_engine_modes_patch.yml').read_text(encoding='utf-8')
           lines=src.splitlines(True)
-          start=next(i for i,x in enumerate(lines) if x.strip()=='run: |' and i>0 and 'Apply Kosmic Engine' in lines[i-1])
+          start=next(i for i,x in enumerate(lines) if x.strip()=='from pathlib import Path')
           end=next(i for i,x in enumerate(lines[start+1:],start+1) if x.startswith('      - name: Syntax check'))
-          code=''.join(x[10:] if x.startswith('          ') else x for x in lines[start+1:end])
+          code=''.join(x[10:] if x.startswith('          ') else x for x in lines[start:end])
           exec(compile(code,'embedded-engine-patch.py','exec'),{})
       - name: Syntax check
         shell: bash
