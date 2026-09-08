@@ -648,13 +648,13 @@ const KosmicEngine=(function(){
       const p=S.productions.find(x=>x.id===S.directorChat.productionId);
       const characters=(p.characters&&p.characters.length)?p.characters:[{tier:"MC",name:"Character",desc:p.characterDesc||""}];
       const c=characters.filter(x=>x.tier==="MC"||x.tier==="LEAD")[task.charIndex];
-      // One composite image containing front/back/3-4/face views, using ONLY
+      // One composite image containing SIX explicit consistency views, using ONLY
       // this character's own description — not the whole cast's combined
       // text, which is what caused multiple people to appear in one sheet.
       // Rejection feedback is appended rather than replacing anything: the
       // user is correcting a specific fault, not restating the whole brief.
       const csFix=p.charSheetFeedback?`. IMPORTANT — the previous attempt was rejected for this reason, address it directly: ${p.charSheetFeedback}`:"";
-      const prompt=`${c.desc}, full character reference turnaround sheet, single composite image arranged in an organized grid showing: front full-body view, back full-body view, 3/4 angle full-body view, close-up face portrait (front angle), and close-up face portrait (side profile angle) — clearly show any special or distinguishing features (scars, markings, accessories, unique traits) in the close-up views, consistent character design across all views, environmental background reflecting the story's actual setting rather than a plain studio backdrop, professional character design sheet, only this one character, no other people${csFix}${styleSuffix(p)}${rulesSuffix(p)}`;
+      const prompt=`${c.desc}, full character reference turnaround sheet, single composite image arranged in a clean organized 2x3 grid showing EXACTLY SIX views of the SAME character: (1) front full-body view, (2) back full-body view, (3) 3/4 angle full-body view, (4) neutral full-body side/profile view, (5) close-up face portrait front angle, and (6) close-up face portrait side profile angle — all six views must depict the identical person/creature with identical face, body proportions, hair, clothing, colors, scars, markings, accessories and unique traits; clearly show special distinguishing features in the close-ups; environmental background reflecting the story's actual setting rather than a plain studio backdrop; professional character design sheet, only this one character, no other people, no duplicate views, no missing panel${csFix}${styleSuffix(p)}${rulesSuffix(p)}`;
       // Pass the uploaded reference to the generator itself on models that
       // accept one, for actual visual likeness rather than likeness by
       // description alone. Falls through to the plain path when the selected
