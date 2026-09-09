@@ -1,0 +1,18 @@
+/* KOSMIC KAT — HOME LATEST UI/UX POLISH
+ * Presentation only. Reuses the existing Home DOM and interactions.
+ */
+.home-director-grid{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:9px!important}
+.home-director-grid>div{height:58px!important;border-radius:15px!important;border:1px solid rgba(110,76,190,.16)!important;box-shadow:0 8px 24px rgba(61,31,122,.07);transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease!important}
+.home-director-grid>div:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(61,31,122,.13);border-color:rgba(124,92,220,.38)!important}
+#homeAgentInput{font-size:16px!important;letter-spacing:-.01em}
+#homeAgentInput::placeholder{color:var(--textm);opacity:.82}
+#aiModelSelectTrigger,#brainSubModelSelectTrigger{min-height:44px!important;border-radius:14px!important;background:linear-gradient(180deg,rgba(255,255,255,.82),rgba(247,244,255,.72))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 5px 18px rgba(61,31,122,.06);border-color:rgba(111,78,190,.2)!important}
+#aiModelSelectTrigger:hover,#brainSubModelSelectTrigger:hover{border-color:var(--violet)!important;box-shadow:0 8px 24px rgba(61,31,122,.11)}
+#homeDisplayPlaceholder{max-width:92%;padding:14px 18px}
+#homeDisplayPlaceholder .dp-btn{border-radius:12px;padding:8px 14px;font-weight:800;box-shadow:0 7px 20px rgba(61,31,122,.1)}
+@media(max-width:700px){
+ .home-director-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #homeAgentInput{font-size:15px!important;min-height:92px!important}
+}
+@media(prefers-reduced-motion:reduce){.home-director-grid>div{transition:none!important}.home-director-grid>div:hover{transform:none}}
+[data-theme="dark"] #aiModelSelectTrigger,[data-theme="dark"] #brainSubModelSelectTrigger,body.dark #aiModelSelectTrigger,body.dark #brainSubModelSelectTrigger{background:rgba(30,25,43,.82)!important}
