@@ -1,8 +1,8 @@
 /* KOSMIC KAT — Video Settings structural parity + EvoLink ecosystem loader
  * Settings are kept in a document-level layer. EvoLink catalog, current route
  * corrections, route/schema expansion, integrity normalization, specialized
- * route safety, adapter fallback, Seedance 2.5 R2V schema, playground surface,
- * and modal layering load deterministically.
+ * route safety, adapter fallback, and the EXISTING Video Canvas EvoLink adapter
+ * load deterministically. No second video playground is created here.
  */
 (function installVideoSettingsParity(){
   "use strict";
@@ -14,10 +14,8 @@
     const css=document.createElement("link");css.rel="stylesheet";css.href=href;css.setAttribute(attr,value);document.head.appendChild(css);
   };
   loadCss("ui-v2-phase8.css","data-kosmic-ui-v2-phase","8");
-  loadCss("ui-v2-evolink-video.css","data-kosmic-evo-video-css","1");
   loadCss("ui-v2-settings-immune.css","data-kosmic-settings-immune","1");
   loadCss("ui-v2-layer-arbiter.css","data-kosmic-layer-arbiter","1");
-  loadCss("ui-v2-evolink-playground-complete.css","data-kosmic-evo-playground-complete-css","1");
 
   const loadScript=(src,marker,callback)=>{
     const existing=document.querySelector(`script[${marker}]`);
@@ -31,9 +29,7 @@
         loadScript("evolink-video-integrity.js","data-kosmic-evo-video-integrity",()=>{
           loadScript("evolink-video-adapter-fallback.js","data-kosmic-evo-video-adapter-fallback",()=>{
             loadScript("evolink-video-safety.js","data-kosmic-evo-video-safety",()=>{
-              loadScript("evolink-video-playground-complete.js","data-kosmic-evo-video-playground-complete",()=>{
-                loadScript("evolink-seedance25-r2v.js","data-kosmic-seedance25-r2v");
-              });
+              loadScript("evolink-video-canvas-adapter.js","data-kosmic-evo-video-canvas-adapter");
             });
           });
         });
