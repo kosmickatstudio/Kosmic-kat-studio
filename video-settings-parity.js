@@ -18,8 +18,8 @@
     css.dataset.kosmicUiV2Phase="8";
     document.head.appendChild(css);
   }
-  // EvoLink Video ecosystem is also loaded from this already-established,
-  // post-main-script helper so motion.js stays untouched.
+  // EvoLink Video ecosystem is loaded from this established post-main-script
+  // helper so motion.js remains untouched.
   if(!document.querySelector('link[data-kosmic-evo-video-css="1"]')){
     const css=document.createElement("link");
     css.rel="stylesheet";
@@ -27,13 +27,19 @@
     css.dataset.kosmicEvoVideoCss="1";
     document.head.appendChild(css);
   }
-  if(!document.querySelector('script[data-kosmic-evo-video="1"]')){
+  const loadScript=(src,marker,callback)=>{
+    if(document.querySelector(`script[${marker}]`)){if(callback)callback();return;}
     const s=document.createElement("script");
-    s.src="evolink-video.js";
+    s.src=src;
     s.async=false;
-    s.dataset.kosmicEvoVideo="1";
+    s.setAttribute(marker,"");
+    s.onload=()=>callback&&callback();
     document.head.appendChild(s);
-  }
+  };
+  loadScript("evolink-video.js","data-kosmic-evo-video","()=>{
+    // Route corrections must run after the base catalog has registered itself.
+    loadScript("evolink-video-current.js","data-kosmic-evo-video-current");
+  });
 
   function parityToggle(){
     const panel=document.getElementById("vcSettingsPanel");
