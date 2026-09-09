@@ -1,7 +1,7 @@
 /* KOSMIC KAT — Video Settings structural parity + EvoLink ecosystem loader
  * Settings are kept in a document-level layer. EvoLink catalog, current route
- * corrections, route/schema expansion, playground surface, and modal layering
- * load deterministically.
+ * corrections, route/schema expansion, integrity normalization, specialized
+ * route safety, playground surface, and modal layering load deterministically.
  */
 (function installVideoSettingsParity(){
   "use strict";
@@ -27,7 +27,11 @@
   loadScript("evolink-video.js","data-kosmic-evo-video",()=>{
     loadScript("evolink-video-current.js","data-kosmic-evo-video-current",()=>{
       loadScript("evolink-video-expansion.js","data-kosmic-evo-video-expansion",()=>{
-        loadScript("evolink-video-playground-complete.js","data-kosmic-evo-video-playground-complete");
+        loadScript("evolink-video-integrity.js","data-kosmic-evo-video-integrity",()=>{
+          loadScript("evolink-video-safety.js","data-kosmic-evo-video-safety",()=>{
+            loadScript("evolink-video-playground-complete.js","data-kosmic-evo-video-playground-complete");
+          });
+        });
       });
     });
   });
