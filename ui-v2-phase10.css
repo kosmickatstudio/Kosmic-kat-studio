@@ -1,0 +1,78 @@
+/* KOSMIC KAT UI V2 — PHASE 10
+ * Final system polish + QA presentation layer.
+ * Presentation-only: no application state, generation logic, routing,
+ * persistence, authentication, observers or DOM rewrites.
+ */
+
+/* ── Global consistency ───────────────────────────────────────────── */
+#moduleContent{min-width:0!important;box-sizing:border-box}
+#moduleContent *,#moduleContent *::before,#moduleContent *::after{box-sizing:border-box}
+#moduleContent img,#moduleContent video,#moduleContent canvas{max-width:100%}
+#moduleContent button,#moduleContent input,#moduleContent select,#moduleContent textarea{font:inherit}
+
+/* ── Prevent horizontal overflow from dense Studio modules ────────── */
+#moduleContent .grid2,#moduleContent .grid3,#moduleContent .grid4,
+#moduleContent .f-row,#moduleContent .row,#moduleContent .toolbar,
+#moduleContent .actions,#moduleContent .action-row{min-width:0;max-width:100%}
+#moduleContent .grid2>*,#moduleContent .grid3>*,#moduleContent .grid4>*,
+#moduleContent .f-row>*,#moduleContent .row>*,#moduleContent .toolbar>*{min-width:0}
+
+/* ── Unified interactive states ───────────────────────────────────── */
+#moduleContent button:not(:disabled),
+#moduleContent a,[role="button"]{transition:transform .16s ease,box-shadow .16s ease,background-color .16s ease,border-color .16s ease}
+#moduleContent button:disabled{cursor:not-allowed;opacity:.55}
+#moduleContent button:not(:disabled):active,[role="button"]:active{transform:translateY(0)!important}
+
+/* ── Media safety ──────────────────────────────────────────────────── */
+#moduleContent video{background:#0f0c16;object-fit:cover}
+#moduleContent img{object-fit:cover}
+#moduleContent img[width],#moduleContent video[width]{height:auto}
+
+/* ── Tables / logs ─────────────────────────────────────────────────── */
+#moduleContent table{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border-radius:14px}
+#moduleContent th{font-size:10px;font-weight:760;letter-spacing:.04em;text-transform:uppercase;color:var(--ui2-muted,#706a82);text-align:left}
+#moduleContent td,#moduleContent th{padding:9px 10px;vertical-align:middle}
+#moduleContent tr+tr td{border-top:1px solid rgba(98,64,176,.07)}
+#moduleContent pre,#moduleContent code{max-width:100%;overflow:auto}
+
+/* ── Modal / sheet QA ──────────────────────────────────────────────── */
+.modal,.modal-content,.settings-sheet,.settings-panel,.ig-settings-sheet{max-width:100vw}
+.modal-content{max-height:calc(100vh - 28px);overflow:auto}
+.ig-settings-sheet{max-width:min(100vw,720px)!important}
+
+/* ── Mobile: turn dense desktop rows into usable stacks ────────────── */
+@media(max-width:760px){
+  #moduleContent{padding-left:max(10px,env(safe-area-inset-left))!important;padding-right:max(10px,env(safe-area-inset-right))!important}
+  #moduleContent .grid2,#moduleContent .grid3,#moduleContent .grid4{grid-template-columns:minmax(0,1fr)!important}
+  #moduleContent .f-row{flex-wrap:wrap!important;gap:9px!important}
+  #moduleContent .f-group{min-width:min(100%,180px)!important}
+  #moduleContent .toolbar,#moduleContent .action-row{flex-wrap:wrap!important;gap:7px!important}
+  #moduleContent button{min-height:40px}
+  #moduleContent input,#moduleContent select,#moduleContent textarea{max-width:100%}
+  #moduleContent textarea{min-height:88px}
+  #moduleContent table{display:block;overflow-x:auto;white-space:nowrap}
+  .modal-content{max-height:calc(100vh - 16px);border-radius:16px!important}
+}
+
+/* ── Very small phones ─────────────────────────────────────────────── */
+@media(max-width:390px){
+  #moduleContent{padding-left:8px!important;padding-right:8px!important}
+  #moduleContent .panel,#moduleContent .card{border-radius:14px!important}
+  #moduleContent .panel{padding:12px!important}
+  #moduleContent button{min-height:38px}
+}
+
+/* ── Dark mode parity ──────────────────────────────────────────────── */
+html[data-theme="dark"] #moduleContent tr+tr td{border-color:rgba(195,174,250,.09)}
+html[data-theme="dark"] #moduleContent th{color:var(--ui2-muted,#b3a8c8)}
+html[data-theme="dark"] #moduleContent video{background:#08060d}
+
+/* ── Accessibility / reduced motion ───────────────────────────────── */
+@media(prefers-reduced-motion:reduce){
+  #moduleContent button:not(:disabled),#moduleContent a,[role="button"]{transition:none!important}
+}
+
+/* ── Safe-area support for bottom sheets and mobile controls ───────── */
+@supports(padding:max(0px)){
+  .ig-settings-sheet{padding-bottom:max(12px,env(safe-area-inset-bottom))}
+}
