@@ -1,0 +1,59 @@
+name: KosmicKat Runtime QA
+
+on:
+  workflow_run:
+    workflows: ["Deploy to GitHub Pages"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: "Live KosmicKat URL to audit"
+        required: false
+        default: "https://kosmickatstudio.github.io/Kosmic-kat-studio/"
+  schedule:
+    - cron: "17,47 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "kosmic-runtime-qa"
+  cancel-in-progress: true
+
+env:
+  KOSMIC_SITE_URL: ${{ inputs.site_url || 'https://kosmickatstudio.github.io/Kosmic-kat-studio/' }}
+
+jobs:
+  audit:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Playwright
+        run: npm install --no-save --no-package-lock playwright@latest
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Audit live website
+        run: node qa/runtime-audit.mjs
+
+      - name: Upload runtime diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kosmic-runtime-qa-${{ github.run_id }}
+          path: qa-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
