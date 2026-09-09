@@ -235,17 +235,13 @@ function clearMotionBrush(){
 }
 
 // ── KOSMIC ENGINE GLASS COMPOSER ─────────────────────────────────────
-// Loaded from a tiny isolated UI layer so the Engine's generation code,
-// state, auth, API keys and model routing remain untouched.
-(function loadEngineGlassUi(){
-  const src="engine-glass-ui.js";
-  if(document.querySelector('script[data-kosmic-engine-glass="1"]'))return;
-  const s=document.createElement("script");
-  s.src=src;
-  s.async=false;
-  s.dataset.kosmicEngineGlass="1";
-  document.head.appendChild(s);
-})();
+// TEMPORARILY DISABLED while the Engine core is isolated and verified.
+// The previous implementation attached a broad document observer and
+// performed DOM rewiring inside a dynamic script loader. Because a user
+// action on Kosmic Engine is freezing the whole page, this presentation
+// layer must not be allowed to execute until the core path is proven stable.
+// Engine generation, state, auth, API keys and model routing do not depend
+// on this optional presentation layer.
 
 // KOSMIC ENGINE GRANULAR ASSET REVIEW
 (function(){const x=document.createElement("script");x.src="engine-asset-review.js";x.async=false;x.dataset.kosmicEngineReview="1";document.head.appendChild(x)})();
