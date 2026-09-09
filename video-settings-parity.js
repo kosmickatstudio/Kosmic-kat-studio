@@ -18,15 +18,14 @@
   loadCss("ui-v2-home-premium.css","data-kosmic-home-premium-v2","1");
 
   const loadScript=(src,marker,callback)=>{
-    const existing=document.querySelector(`script[${marker}]`);
-    if(existing){if(callback)existing.addEventListener("load",callback,{once:true});return;}
+    const existing=document.querySelector(`script[${marker}=""]`);
+    if(existing){if(callback)setTimeout(callback,0);return;}
     const s=document.createElement("script");s.src=src;s.async=false;s.setAttribute(marker,"");
     if(callback)s.onload=callback;document.head.appendChild(s);
   };
 
-  loadScript("home-models-current.js","data-kosmic-home-models-current",()=>{
-    loadScript("home-premium-v2.js","data-kosmic-home-premium-v2");
-  });
+  loadScript("home-models-current.js","data-kosmic-home-models-current");
+  loadScript("home-premium-v2.js","data-kosmic-home-premium-v2");
   loadScript("evolink-video.js","data-kosmic-evo-video",()=>{
     loadScript("evolink-video-current.js","data-kosmic-evo-video-current",()=>{
       loadScript("evolink-video-expansion.js","data-kosmic-evo-video-expansion",()=>{
