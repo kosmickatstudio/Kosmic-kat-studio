@@ -15,6 +15,7 @@
   loadCss("ui-v2-settings-immune.css","data-kosmic-settings-immune","1");
   loadCss("ui-v2-layer-arbiter.css","data-kosmic-layer-arbiter","1");
   loadCss("ui-v2-evolink-route.css","data-kosmic-evolink-route-ui","1");
+  loadCss("ui-v2-home-premium.css","data-kosmic-home-premium-v2","1");
 
   const loadScript=(src,marker,callback)=>{
     const existing=document.querySelector(`script[${marker}]`);
@@ -23,7 +24,9 @@
     if(callback)s.onload=callback;document.head.appendChild(s);
   };
 
-  loadScript("home-models-current.js","data-kosmic-home-models-current");
+  loadScript("home-models-current.js","data-kosmic-home-models-current",()=>{
+    loadScript("home-premium-v2.js","data-kosmic-home-premium-v2");
+  });
   loadScript("evolink-video.js","data-kosmic-evo-video",()=>{
     loadScript("evolink-video-current.js","data-kosmic-evo-video-current",()=>{
       loadScript("evolink-video-expansion.js","data-kosmic-evo-video-expansion",()=>{
