@@ -24,9 +24,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Patch Home current model catalog
-        run: python3 scripts/update-home-models-2026-09.py
-
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
