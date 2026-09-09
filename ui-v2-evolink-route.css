@@ -6,7 +6,9 @@
 .evo-route-hud-name{font-size:10px;font-weight:800;color:var(--violet);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .evo-route-hud-id{margin-top:3px;font:500 9px/1.3 var(--font-mono,'JetBrains Mono',monospace);color:var(--textm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .evo-route-hud-meta{margin-top:3px;font-size:9px;color:var(--texts);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.evo-route-hud-price{margin-top:3px;font-size:9px;font-weight:800;color:var(--gold,#a66a08);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 [data-theme="dark"] .evo-route-hud,body.dark .evo-route-hud{background:linear-gradient(135deg,rgba(166,136,240,.12),rgba(111,227,255,.08));border-color:rgba(195,174,250,.16)}
 [data-theme="dark"] .evo-route-hud-name,body.dark .evo-route-hud-name{color:var(--gold)}
+[data-theme="dark"] .evo-route-hud-price,body.dark .evo-route-hud-price{color:#f0c878}
 @media(max-width:700px){.evo-route-hud{padding:7px 9px}.evo-route-hud-meta{white-space:normal}}
 @media(prefers-reduced-motion:reduce){.evo-route-hud{transition:none}}
