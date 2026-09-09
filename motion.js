@@ -238,6 +238,19 @@ function clearMotionBrush(){
 // KOSMIC ENGINE PRODUCTION RECOVERY
 (function(){const x=document.createElement("script");x.src="engine-recovery.js";x.async=false;x.dataset.kosmicEngineRecovery="1";document.head.appendChild(x)})();
 
+// VIDEO SETTINGS STRUCTURAL PARITY
+// Video Settings is nested inside the Video chat shell, while Image Settings
+// is a page-level sibling. Load the tiny parity helper so the Video sheet is
+// moved to the same DOM layer before the existing toggle runs.
+(function loadVideoSettingsParity(){
+  if(document.querySelector('script[data-kosmic-video-settings-parity="1"]'))return;
+  const s=document.createElement("script");
+  s.src="video-settings-parity.js";
+  s.async=false;
+  s.dataset.kosmicVideoSettingsParity="1";
+  document.head.appendChild(s);
+})();
+
 // ── GLOBAL UI V2 — CSS ONLY ───────────────────────────────────────────
 // Deliberately loaded here instead of adding another global observer or
 // script. The stylesheet progressively overrides the existing visual shell
