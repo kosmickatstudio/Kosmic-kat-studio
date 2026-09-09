@@ -1,0 +1,223 @@
+/* KOSMIC KAT UI V2 — PHASE 4: VIDEO STUDIO
+ * Visual-only layer. Video generation, PRO Edit Video, Topic Reel, Motion Control,
+ * Kat Films, Motion Brush, Video Canvas, model routing, generation/recovery and
+ * all application handlers remain untouched.
+ */
+
+/* ── Shared video workspace shell ───────────────────────────────────── */
+.module-content:has(.vc-chat-shell),
+.module-content:has(.video-studio),
+.module-content:has(.video-canvas),
+.module-content:has(.motion-control),
+.module-content:has(.topic-reel),
+.module-content:has(.edit-video){
+  min-width:0!important;
+}
+.module-content:has(.vc-chat-shell){
+  padding:18px 20px 22px!important;
+  background:transparent!important;
+}
+.vc-chat-shell,.video-studio,.video-canvas,.motion-control,.topic-reel,.edit-video{
+  border-radius:22px!important;
+  border:1px solid rgba(98,64,176,.10)!important;
+  background:linear-gradient(145deg,rgba(255,255,255,.93),rgba(249,247,253,.90))!important;
+  box-shadow:0 14px 38px rgba(61,31,122,.065),inset 0 1px 0 rgba(255,255,255,.98)!important;
+}
+
+/* ── Video Canvas / chat composition ────────────────────────────────── */
+.vc-chat-shell{min-height:calc(100vh - 190px)!important;padding:18px!important}
+.vc-chat-shell .vc-chat-header,
+.vc-chat-shell .vc-header,
+.video-studio .vc-chat-header{
+  min-height:48px!important;
+  border-bottom:1px solid rgba(98,64,176,.08)!important;
+}
+.vc-chat-shell .vc-chat-thread,
+.vc-chat-shell .vc-thread,
+.video-studio .vc-chat-thread{
+  min-width:0!important;
+  scrollbar-width:thin;
+}
+.vc-chat-shell .vc-input-shell,
+.vc-input-shell,
+.vc-chat-inputbar,
+.video-studio .ig-input-shell{
+  position:sticky!important;
+  bottom:10px!important;
+  z-index:20!important;
+  padding:11px!important;
+  border-radius:19px!important;
+  background:rgba(255,255,255,.95)!important;
+  border:1px solid rgba(98,64,176,.12)!important;
+  box-shadow:0 12px 32px rgba(61,31,122,.10),inset 0 1px 0 rgba(255,255,255,.98)!important;
+}
+.vc-input-shell:focus-within,
+.vc-chat-inputbar:focus-within{border-color:rgba(98,64,176,.25)!important;box-shadow:0 14px 34px rgba(61,31,122,.12),0 0 0 3px rgba(98,64,176,.055)!important}
+.vc-input-shell textarea,
+.vc-input-shell input,
+.vc-chat-inputbar textarea,
+.vc-chat-inputbar input{
+  border:0!important;background:transparent!important;box-shadow:none!important;border-radius:12px!important;min-height:46px!important;font-size:14px!important;line-height:1.5!important;
+}
+.vc-input-shell textarea:focus,.vc-input-shell input:focus,.vc-chat-inputbar textarea:focus,.vc-chat-inputbar input:focus{outline:none!important;box-shadow:none!important}
+
+/* ── Controls, model pickers and settings ───────────────────────────── */
+.vc-chat-shell .panel,
+.vc-chat-shell .card,
+.vc-chat-shell .tool-panel,
+.video-studio .panel,
+.video-studio .card,
+.video-studio .tool-panel,
+.motion-control .panel,
+.motion-control .card,
+.topic-reel .panel,
+.topic-reel .card,
+.edit-video .panel,
+.edit-video .card{
+  border-radius:16px!important;
+  background:rgba(255,255,255,.86)!important;
+  border-color:rgba(98,64,176,.09)!important;
+  box-shadow:0 8px 24px rgba(61,31,122,.05)!important;
+}
+.vc-chat-shell select,.vc-chat-shell input:not([type="range"]),.vc-chat-shell textarea,
+.video-studio select,.video-studio input:not([type="range"]),.video-studio textarea,
+.motion-control select,.motion-control input:not([type="range"]),.motion-control textarea,
+.topic-reel select,.topic-reel input:not([type="range"]),.topic-reel textarea,
+.edit-video select,.edit-video input:not([type="range"]),.edit-video textarea{
+  min-height:40px!important;
+  border-radius:11px!important;
+  background:rgba(249,248,252,.88)!important;
+  border-color:rgba(98,64,176,.10)!important;
+}
+.vc-chat-shell .panel-title,.video-studio .panel-title,.motion-control .panel-title,.topic-reel .panel-title,.edit-video .panel-title{
+  font-size:12px!important;font-weight:750!important;letter-spacing:.01em!important;
+}
+
+/* ── Video result cards and actions ─────────────────────────────────── */
+.vc-result-card,.vc-result,.video-result-card,.generation-result{
+  border-radius:17px!important;
+  overflow:hidden!important;
+  border:1px solid rgba(98,64,176,.09)!important;
+  background:rgba(255,255,255,.88)!important;
+  box-shadow:0 9px 25px rgba(61,31,122,.055)!important;
+}
+.vc-result-card video,.vc-result video,.video-result-card video,.generation-result video{border-radius:14px!important;display:block}
+.vc-result-actions{
+  display:flex!important;align-items:center!important;gap:7px!important;
+  padding:9px!important;
+}
+.vc-result-icon-btn{
+  width:34px!important;height:34px!important;min-width:34px!important;
+  border-radius:10px!important;
+  background:rgba(255,255,255,.90)!important;
+  border:1px solid rgba(98,64,176,.10)!important;
+  box-shadow:0 5px 13px rgba(61,31,122,.06)!important;
+  transition:transform .15s ease,box-shadow .15s ease,background .15s ease!important;
+}
+.vc-result-icon-btn:hover{transform:translateY(-1px)!important;background:#fff!important;box-shadow:0 8px 17px rgba(61,31,122,.10)!important}
+
+/* ── Kat Films / Cinema Studio ──────────────────────────────────────── */
+.ig-chat-shell:has(.cs-tier-picker),
+.module-content:has(.cs-tier-picker){min-width:0!important}
+.module-content:has(.cs-tier-picker) .ig-chat-shell{border-radius:22px!important}
+.cs-tier-picker,.cs-settings-sheet,.cs-settings-panel,
+[class*="cs-tier"],[class*="cs-settings"]{
+  border-radius:14px!important;
+}
+.cs-tier-picker button,[class*="cs-tier"] button,[class*="cs-settings"] button{
+  border-radius:11px!important;
+}
+.cs-tier-picker .active,[class*="cs-tier"] .active{
+  box-shadow:0 0 0 2px rgba(98,64,176,.10),0 7px 18px rgba(61,31,122,.07)!important;
+}
+
+/* ── Motion Control / Motion Brush ──────────────────────────────────── */
+.motion-control .canvas-wrap,
+.motion-control canvas,
+.motion-brush canvas,
+[id*="motion"] canvas{
+  border-radius:16px!important;
+}
+.motion-control .tool-btn,
+.motion-control .brush-btn,
+.motion-brush .tool-btn,
+.motion-brush button{
+  border-radius:11px!important;
+}
+.motion-control .toolbar,.motion-brush .toolbar{
+  border-radius:15px!important;
+  background:rgba(255,255,255,.82)!important;
+  border:1px solid rgba(98,64,176,.09)!important;
+  box-shadow:0 7px 20px rgba(61,31,122,.05)!important;
+}
+
+/* ── Topic Reel / Edit Video workspace ──────────────────────────────── */
+.topic-reel .step,.topic-reel .section,.edit-video .section,.edit-video .timeline,
+.topic-reel .topic-card,.edit-video .clip-card{
+  border-radius:15px!important;
+  border:1px solid rgba(98,64,176,.09)!important;
+  background:rgba(255,255,255,.82)!important;
+}
+.edit-video video{border-radius:15px!important;box-shadow:0 10px 25px rgba(61,31,122,.08)!important}
+.edit-video .timeline{overflow:hidden!important}
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media (min-width:1000px){
+  .module-content:has(.vc-chat-shell){max-width:1320px!important;margin:0 auto!important}
+  .module-content:has(.vc-chat-shell) .vc-chat-shell{max-width:1180px!important;margin:0 auto!important}
+}
+@media (min-width:701px) and (max-width:999px){
+  .module-content:has(.vc-chat-shell){padding:14px!important}
+  .vc-chat-shell,.video-studio,.video-canvas,.motion-control,.topic-reel,.edit-video{border-radius:18px!important;padding:14px!important}
+}
+@media (max-width:700px){
+  .module-content:has(.vc-chat-shell){padding:10px!important}
+  .vc-chat-shell,.video-studio,.video-canvas,.motion-control,.topic-reel,.edit-video{min-height:calc(100vh - 155px)!important;padding:10px!important;border-radius:16px!important}
+  .vc-input-shell,.vc-chat-inputbar,.video-studio .ig-input-shell{bottom:6px!important;padding:8px!important;border-radius:16px!important}
+  .vc-input-shell textarea,.vc-input-shell input,.vc-chat-inputbar textarea,.vc-chat-inputbar input{font-size:13px!important;min-height:42px!important}
+  .vc-result-actions{gap:5px!important;padding:7px!important}
+  .vc-result-icon-btn{width:32px!important;height:32px!important;min-width:32px!important}
+}
+
+/* ── Dark mode ──────────────────────────────────────────────────────── */
+html[data-theme="dark"] .vc-chat-shell,
+html[data-theme="dark"] .video-studio,
+html[data-theme="dark"] .video-canvas,
+html[data-theme="dark"] .motion-control,
+html[data-theme="dark"] .topic-reel,
+html[data-theme="dark"] .edit-video{
+  background:linear-gradient(145deg,rgba(30,24,43,.96),rgba(22,18,33,.94))!important;
+  border-color:rgba(195,174,250,.13)!important;
+}
+html[data-theme="dark"] .vc-input-shell,
+html[data-theme="dark"] .vc-chat-inputbar,
+html[data-theme="dark"] .vc-chat-shell .panel,
+html[data-theme="dark"] .vc-chat-shell .card,
+html[data-theme="dark"] .vc-chat-shell .tool-panel,
+html[data-theme="dark"] .video-studio .panel,
+html[data-theme="dark"] .video-studio .card,
+html[data-theme="dark"] .video-studio .tool-panel,
+html[data-theme="dark"] .motion-control .panel,
+html[data-theme="dark"] .motion-control .card,
+html[data-theme="dark"] .topic-reel .panel,
+html[data-theme="dark"] .topic-reel .card,
+html[data-theme="dark"] .edit-video .panel,
+html[data-theme="dark"] .edit-video .card,
+html[data-theme="dark"] .vc-result-card,
+html[data-theme="dark"] .vc-result,
+html[data-theme="dark"] .video-result-card,
+html[data-theme="dark"] .generation-result{
+  background:rgba(30,24,43,.90)!important;
+  border-color:rgba(195,174,250,.13)!important;
+  box-shadow:0 10px 30px rgba(0,0,0,.20)!important;
+}
+html[data-theme="dark"] .vc-chat-shell select,html[data-theme="dark"] .vc-chat-shell input:not([type="range"]),html[data-theme="dark"] .vc-chat-shell textarea,
+html[data-theme="dark"] .video-studio select,html[data-theme="dark"] .video-studio input:not([type="range"]),html[data-theme="dark"] .video-studio textarea,
+html[data-theme="dark"] .motion-control select,html[data-theme="dark"] .motion-control input:not([type="range"]),html[data-theme="dark"] .motion-control textarea,
+html[data-theme="dark"] .topic-reel select,html[data-theme="dark"] .topic-reel input:not([type="range"]),html[data-theme="dark"] .topic-reel textarea,
+html[data-theme="dark"] .edit-video select,html[data-theme="dark"] .edit-video input:not([type="range"]),html[data-theme="dark"] .edit-video textarea{
+  background:rgba(22,18,33,.92)!important;color:#f1ecfb!important;border-color:rgba(195,174,250,.14)!important;
+}
+html[data-theme="dark"] .vc-result-icon-btn{background:rgba(22,18,33,.92)!important;color:#f1ecfb!important;border-color:rgba(195,174,250,.14)!important}
+
+@media (prefers-reduced-motion:reduce){.vc-result-icon-btn{transition:none!important;transform:none!important}}
