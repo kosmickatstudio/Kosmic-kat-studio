@@ -1,9 +1,10 @@
 from pathlib import Path
 
-home=Path("home.js")
-s=home.read_text(encoding="utf-8")
-marker='const DIRECTOR_BANNERS={'
-override=r'''// ── HOME CURRENT MODEL CATALOG — 2026-09-10 ──
+home = Path("home.js")
+s = home.read_text(encoding="utf-8")
+
+marker = 'const DIRECTOR_BANNERS={'
+override = r'''// ── HOME CURRENT MODEL CATALOG — 2026-09-10 ──
 if(typeof BRAIN_SUBMODELS!=="undefined")Object.assign(BRAIN_SUBMODELS,{
   claude:[
     {id:"claude-fable-5-1",label:"Claude Fable 5.1 — latest / frontier"},
@@ -47,8 +48,16 @@ if(typeof BRAIN_SUBMODELS!=="undefined")Object.assign(BRAIN_SUBMODELS,{
 });
 
 '''
-if marker not in s: raise SystemExit("home marker not found")
-if "HOME CURRENT MODEL CATALOG — 2026-09-10" not in s:
-    s=s.replace(marker,override+marker,1)
-home.write_text(s,encoding="utf-8")
-print("Home current model catalog patched")
+if marker not in s:
+    raise SystemExit("home marker not found")
+
+# Keep the deployment helper deterministic: it replaces the Home catalog only
+# when running against an older build that does not yet contain the current
+# catalog. Once home.js owns the catalog, this becomes a harmless no-op.
+start = s.find('// ── HOME CURRENT MODEL CATALOG — 2026-09-10 ──')
+if start == -1:
+    s = s.replace(marker, override + marker, 1)
+    home.write_text(s, encoding="utf-8")
+    print("Home current model catalog patched")
+else:
+    print("Home current model catalog already present")
