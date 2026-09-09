@@ -1,0 +1,3 @@
+/* Phase bridge: Phase 1 already imports this file. Keep the bridge tiny so later
+ * visual phases can be layered without touching application JavaScript. */
+@import url("ui-v2-phase3.css");
