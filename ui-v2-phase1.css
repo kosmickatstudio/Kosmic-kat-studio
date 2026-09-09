@@ -1,0 +1,241 @@
+/* KOSMICKAT UI V2 — PHASE 1: GLOBAL GLASS SHELL
+ * Visual-only progressive layer. No feature/module logic is changed.
+ * Reference direction: bright white glassmorphism, restrained violet/ice/gold.
+ */
+:root{
+  --kkg-bg:#f8f9fd;
+  --kkg-white:rgba(255,255,255,.78);
+  --kkg-white-strong:rgba(255,255,255,.91);
+  --kkg-white-solid:#fff;
+  --kkg-line:rgba(89,68,145,.13);
+  --kkg-line-strong:rgba(89,68,145,.20);
+  --kkg-violet:#6240b0;
+  --kkg-violet-soft:rgba(98,64,176,.11);
+  --kkg-ice:#4aa9d9;
+  --kkg-ice-soft:rgba(74,169,217,.11);
+  --kkg-gold:#c9972a;
+  --kkg-gold-soft:rgba(201,151,42,.12);
+  --kkg-teal:#2dd4bf;
+  --kkg-shadow:0 8px 28px rgba(61,31,122,.065);
+  --kkg-shadow-hover:0 14px 36px rgba(61,31,122,.105);
+  --kkg-blur:14px;
+}
+
+/* ── FOUNDATION ─────────────────────────────────────────────────────── */
+html,body{background:var(--kkg-bg)!important}
+body{position:relative}
+body::before{
+  background:
+    radial-gradient(ellipse 55% 42% at 4% 8%,rgba(98,64,176,.075),transparent 68%),
+    radial-gradient(ellipse 48% 38% at 96% 18%,rgba(74,169,217,.065),transparent 68%),
+    radial-gradient(ellipse 48% 44% at 72% 100%,rgba(201,151,42,.045),transparent 72%)!important;
+  opacity:1!important;
+}
+
+/* ── HEADER ────────────────────────────────────────────────────────── */
+header{
+  height:70px!important;
+  margin:10px 10px 0!important;
+  padding:0 14px!important;
+  border:1px solid rgba(255,255,255,.86)!important;
+  border-bottom-color:var(--kkg-line)!important;
+  border-radius:18px 18px 14px 14px!important;
+  background:rgba(255,255,255,.76)!important;
+  box-shadow:var(--kkg-shadow),inset 0 1px 0 rgba(255,255,255,.92)!important;
+  backdrop-filter:blur(var(--kkg-blur))!important;
+  -webkit-backdrop-filter:blur(var(--kkg-blur))!important;
+}
+header::after{
+  left:12%!important;right:12%!important;bottom:-1px!important;
+  background:linear-gradient(90deg,transparent,rgba(98,64,176,.18),rgba(74,169,217,.14),transparent)!important;
+}
+.h-logo{gap:8px!important}
+.h-logo-img-wrap,.h-logo-img-wrap img{width:40px!important;height:40px!important}
+.h-logo-text{font-size:14px!important;letter-spacing:.06em!important}
+.h-center{padding:0 24px!important}
+.cmd-bar{
+  max-width:620px!important;
+  min-height:42px!important;
+  border:1px solid rgba(98,64,176,.12)!important;
+  border-radius:14px!important;
+  background:rgba(248,248,252,.72)!important;
+  box-shadow:inset 0 1px 2px rgba(61,31,122,.025),0 2px 10px rgba(61,31,122,.025)!important;
+  backdrop-filter:blur(8px)!important;
+  -webkit-backdrop-filter:blur(8px)!important;
+}
+.cmd-bar:focus{background:#fff!important;border-color:rgba(98,64,176,.34)!important;box-shadow:0 0 0 4px rgba(98,64,176,.075)!important}
+.h-right{gap:7px!important}
+.h-settings,.hamburger{
+  width:38px!important;height:38px!important;border-radius:12px!important;
+  background:rgba(255,255,255,.68)!important;border-color:var(--kkg-line)!important;
+}
+.sign-in-btn{border-radius:12px!important;background:linear-gradient(135deg,#6540bf,#7353cf)!important;box-shadow:0 6px 18px rgba(98,64,176,.16)!important}
+.founder-badge{background:var(--kkg-gold-soft)!important;color:#936a18!important}
+
+/* ── SHELL ─────────────────────────────────────────────────────────── */
+.studio-body{gap:10px!important;padding:0 10px 10px!important}
+.sidebar{
+  width:238px!important;
+  margin:0!important;
+  border:1px solid rgba(255,255,255,.84)!important;
+  border-radius:18px!important;
+  background:rgba(255,255,255,.72)!important;
+  box-shadow:var(--kkg-shadow),inset 0 1px 0 rgba(255,255,255,.92)!important;
+  backdrop-filter:blur(var(--kkg-blur))!important;
+  -webkit-backdrop-filter:blur(var(--kkg-blur))!important;
+}
+.sidebar-section{padding:9px 8px!important;border-bottom-color:rgba(89,68,145,.08)!important}
+.sidebar-label{padding:7px 9px 5px!important;color:#9b94ab!important}
+.mod-btn{
+  min-height:40px!important;margin:2px 0!important;padding:8px 10px!important;
+  border-left:2px solid transparent!important;border-radius:11px!important;
+}
+.mod-btn:hover{background:rgba(98,64,176,.065)!important;border-left-color:rgba(98,64,176,.32)!important}
+.mod-btn.active{
+  background:linear-gradient(90deg,rgba(98,64,176,.12),rgba(98,64,176,.035))!important;
+  border-left-color:var(--kkg-violet)!important;
+  box-shadow:inset 0 0 0 1px rgba(98,64,176,.035)!important;
+}
+.mod-btn.active .mod-label{color:var(--kkg-violet)!important}
+.mod-icon{width:25px!important}
+
+/* ── MAIN SURFACES ─────────────────────────────────────────────────── */
+.main-content{min-width:0!important}
+.display-area{
+  margin:0 0 8px!important;
+  border:1px solid var(--kkg-line)!important;
+  border-radius:16px!important;
+  background:linear-gradient(135deg,rgba(255,255,255,.72),rgba(244,241,252,.68))!important;
+  box-shadow:var(--kkg-shadow),inset 0 1px 0 rgba(255,255,255,.9)!important;
+}
+.module-area{
+  border:1px solid var(--kkg-line)!important;
+  border-radius:18px!important;
+  background:rgba(255,255,255,.54)!important;
+  box-shadow:var(--kkg-shadow),inset 0 1px 0 rgba(255,255,255,.8)!important;
+  overflow:hidden!important;
+  backdrop-filter:blur(8px)!important;
+  -webkit-backdrop-filter:blur(8px)!important;
+}
+.module-tabs{
+  min-height:50px!important;height:50px!important;padding:7px 12px!important;
+  background:rgba(255,255,255,.66)!important;
+  border-bottom:1px solid var(--kkg-line)!important;
+  backdrop-filter:blur(10px)!important;
+  -webkit-backdrop-filter:blur(10px)!important;
+}
+.module-content{padding:20px!important}
+
+/* ── COMMON GLASS CARDS ────────────────────────────────────────────── */
+.home-glass-panel,.card,.panel,.section-card,.tool-panel,.settings-panel,.settings-sheet{
+  background:var(--kkg-white-strong)!important;
+  border:1px solid rgba(255,255,255,.9)!important;
+  box-shadow:var(--kkg-shadow),inset 0 1px 0 rgba(255,255,255,.96)!important;
+  backdrop-filter:blur(10px)!important;
+  -webkit-backdrop-filter:blur(10px)!important;
+}
+.home-glass-panel{border-radius:18px!important}
+
+/* Existing Home/Studio cards become closer to the supplied reference without
+ * requiring new DOM or changing click handlers. */
+.home-model-row{
+  min-height:42px!important;border-radius:12px!important;
+  background:rgba(255,255,255,.64)!important;
+  border-color:var(--kkg-line)!important;
+}
+.home-director-grid{gap:10px!important}
+.home-mini-thumb{border-radius:12px!important}
+
+/* ── CONTROLS ──────────────────────────────────────────────────────── */
+.btn,.button{border-radius:11px!important;min-height:38px!important}
+.btn-primary{
+  background:linear-gradient(135deg,#6540bf,#7557d3)!important;
+  border-color:transparent!important;
+  box-shadow:0 6px 18px rgba(98,64,176,.14)!important;
+}
+.btn-primary:hover{box-shadow:0 9px 24px rgba(98,64,176,.20)!important}
+.btn-outline{background:rgba(255,255,255,.70)!important;border-color:var(--kkg-line-strong)!important}
+input:not([type="range"]),textarea,select{
+  background:rgba(255,255,255,.78)!important;
+  border-color:var(--kkg-line)!important;
+  border-radius:11px!important;
+}
+
+/* ── RESULT / GENERATION SURFACES ─────────────────────────────────── */
+.ig-chat-shell,.ig-input-shell,.ig-bubble-assistant,.ig-bubble-loading{
+  background:rgba(255,255,255,.72)!important;
+  border-color:var(--kkg-line)!important;
+  box-shadow:var(--kkg-shadow),inset 0 1px 0 rgba(255,255,255,.92)!important;
+  backdrop-filter:blur(10px)!important;
+  -webkit-backdrop-filter:blur(10px)!important;
+}
+.ig-input-shell{border-radius:18px!important}
+.vc-result-icon-btn,.ig-icon-btn,.ig-tool-btn{
+  background:rgba(255,255,255,.72)!important;border-color:var(--kkg-line)!important;
+}
+
+/* ── OVERLAYS ─────────────────────────────────────────────────────── */
+.modal-overlay{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+.modal,.modal-content{
+  background:rgba(255,255,255,.96)!important;
+  border:1px solid rgba(255,255,255,.94)!important;
+  border-radius:20px!important;
+  box-shadow:0 24px 70px rgba(35,22,67,.20),inset 0 1px 0 rgba(255,255,255,.98)!important;
+}
+
+/* ── MOBILE: same design language, different geometry ───────────────── */
+@media (max-width:700px){
+  header{margin:8px 8px 0!important;border-radius:15px!important;height:62px!important}
+  .studio-body{padding:0 8px 8px!important;gap:0!important}
+  .sidebar{
+    top:70px!important;bottom:8px!important;left:8px!important;
+    width:min(292px,calc(100vw - 16px))!important;
+    border-radius:18px!important;
+  }
+  .sidebar-overlay{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:rgba(30,20,55,.18)!important}
+  .display-area{border-radius:14px!important;margin-bottom:6px!important}
+  .module-area{border-radius:15px!important}
+  .module-content{padding:14px!important}
+}
+
+/* ── DARK MODE: preserve the same material hierarchy ───────────────── */
+html[data-theme="dark"]{
+  --kkg-bg:#0e0b16;
+  --kkg-white:rgba(27,21,39,.76);
+  --kkg-white-strong:rgba(27,21,39,.91);
+  --kkg-white-solid:#1b1527;
+  --kkg-line:rgba(195,174,250,.15);
+  --kkg-line-strong:rgba(195,174,250,.23);
+}
+html[data-theme="dark"] body::before{
+  background:
+    radial-gradient(ellipse 55% 42% at 4% 8%,rgba(120,80,210,.13),transparent 68%),
+    radial-gradient(ellipse 48% 38% at 96% 18%,rgba(60,170,220,.09),transparent 68%)!important;
+}
+html[data-theme="dark"] header,
+html[data-theme="dark"] .sidebar,
+html[data-theme="dark"] .module-area,
+html[data-theme="dark"] .module-tabs,
+html[data-theme="dark"] .display-area,
+html[data-theme="dark"] .home-glass-panel,
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .panel,
+html[data-theme="dark"] .section-card,
+html[data-theme="dark"] .tool-panel,
+html[data-theme="dark"] .settings-panel,
+html[data-theme="dark"] .settings-sheet,
+html[data-theme="dark"] .ig-chat-shell,
+html[data-theme="dark"] .ig-input-shell{
+  background:var(--kkg-white-strong)!important;
+  border-color:var(--kkg-line)!important;
+  box-shadow:0 10px 34px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.035)!important;
+}
+html[data-theme="dark"] .cmd-bar{background:rgba(27,21,39,.72)!important;border-color:var(--kkg-line)!important}
+html[data-theme="dark"] .btn-outline,
+html[data-theme="dark"] input:not([type="range"]),
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select{background:rgba(27,21,39,.82)!important;color:#f1ecfb!important}
+
+/* Accessibility / reduced motion */
+:where(button,a,input,select,textarea,[tabindex]):focus-visible{outline:2px solid rgba(98,64,176,.72)!important;outline-offset:2px!important}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
