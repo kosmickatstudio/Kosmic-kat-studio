@@ -9,6 +9,16 @@
   if(window.__kosmicVideoSettingsParity)return;
   window.__kosmicVideoSettingsParity=true;
 
+  // Phase 8 UI is loaded here because this helper is already a guaranteed,
+  // post-main-script global loader. The stylesheet itself is presentation-only.
+  if(!document.querySelector('link[data-kosmic-ui-v2-phase="8"]')){
+    const css=document.createElement("link");
+    css.rel="stylesheet";
+    css.href="ui-v2-phase8.css";
+    css.dataset.kosmicUiV2Phase="8";
+    document.head.appendChild(css);
+  }
+
   function parityToggle(){
     const panel=document.getElementById("vcSettingsPanel");
     const backdrop=document.getElementById("vcSettingsBackdrop");
