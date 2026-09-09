@@ -4,38 +4,15 @@
 // module. The most interconnected extraction so far — real, deliberate
 // judgment call on the boundary, not a blind cut.
 //
-// The original file's own section marker comment covered a wider range
-// than what actually belongs here: it also enclosed 4 lines of Video
-// Canvas's OWN general reference-state (S.vcMultiVideos, S.vcMultiAudios,
-// S.vcEndFrame, S.vcElementGroupMode) that are topically unrelated to
-// Motion Brush and were deliberately LEFT in index.html rather than
-// dragged along just because they sat nearby. Only S.mcImage/S.mcVideo
-// (genuinely Motion-Control-specific, per the original comment explaining
-// why they're separate from Video Canvas's array-based system) were moved.
-//
-// Real bidirectional coupling with Video Canvas (which stays in
-// index.html), more than any prior extraction:
-// - openMotionBrushEditor() and clearMotionBrush() (both defined here) are
-//   called FROM Video Canvas in 5 total places.
-// - clearMotionBrush() (defined here) calls back INTO
-//   updateVcAttachmentBar() (defined in index.html's Video Canvas section).
-// All three directions verified resolving correctly via plain global
-// window scope, same principle as every prior extraction.
-//
-// LOAD ORDER: must load AFTER index.html's main inline script.
+// Real bidirectional coupling with Video Canvas is preserved. This module
+// also owns the safe global UI v2 stylesheet loader at the very end. That
+// loader is intentionally CSS-only: no MutationObserver, no DOM rewiring,
+// and no generation/state changes. The Engine glass composer remains off.
 // ══════════════════════════════════════════════════════════════════════
 
-// ── MOTION CONTROL MODULE — its own standalone state, separate from Video
-// Canvas's shared reference-image system, since this module needs exactly
-// 1 image + 1 video with fixed roles (appearance + motion), not a general
-// multi-reference array.
 S.mcImage=S.mcImage||null;
 S.mcVideo=S.mcVideo||null;
-// ══════════════════════════════════════════════════════
-// KLING MOTION BRUSH — real canvas painting tool producing the exact
-// static_mask_url / dynamic_masks[].mask_url + trajectories payload
-// Kling's API expects (verified against fal.ai's actual schema).
-// ══════════════════════════════════════════════════════
+
 let mb={mode:"dynamic",drawing:false,brushSize:30,trajectory:[],baseImg:null,scaleX:1,scaleY:1};
 
 function openMotionBrushEditor(){
@@ -258,6 +235,18 @@ function clearMotionBrush(){
   document.head.appendChild(s);
 })();
 
-
 // KOSMIC ENGINE PRODUCTION RECOVERY
 (function(){const x=document.createElement("script");x.src="engine-recovery.js";x.async=false;x.dataset.kosmicEngineRecovery="1";document.head.appendChild(x)})();
+
+// ── GLOBAL UI V2 — CSS ONLY ───────────────────────────────────────────
+// Deliberately loaded here instead of adding another global observer or
+// script. The stylesheet progressively overrides the existing visual shell
+// while leaving generation and Engine state untouched.
+(function loadGlobalUiV2(){
+  if(document.querySelector('link[data-kosmic-ui-v2="1"]'))return;
+  const link=document.createElement("link");
+  link.rel="stylesheet";
+  link.href="ui-v2.css";
+  link.dataset.kosmicUiV2="1";
+  document.head.appendChild(link);
+})();
