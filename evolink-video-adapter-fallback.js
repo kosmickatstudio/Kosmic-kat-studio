@@ -1,7 +1,7 @@
 /* KOSMIC KAT — EvoLink adapter fallback
  * Defines the unified async video adapter only when the existing application
- * has not already provided one. This avoids duplicate providers and preserves
- * the app's established generation implementation.
+ * has not already provided one. This is generation infrastructure only; the
+ * existing Video Canvas remains the single playground UI.
  */
 (function installEvoLinkAdapterFallback(){
   "use strict";
@@ -42,6 +42,7 @@
       if(route.mode==="image"&&!body.image_urls?.length)throw new Error("This Image-to-Video route requires at least one image URL");
       if(route.mode==="reference"&&!body.image_urls?.length&&!body.video_urls?.length&&!body.audio_urls?.length)throw new Error("This Reference-to-Video route requires at least one reference asset");
       if(route.mode==="edit"&&!body.video_urls?.length)throw new Error("This Video Edit route requires one source video URL");
+      if(route.mode==="extend"&&!body.video_urls?.length)throw new Error("This Video Extend route requires one source video URL");
 
       const createRes=await fetch(endpoint,{method:"POST",headers:authHeaders(),body:JSON.stringify({model,...body})});
       const createData=await readJson(createRes);
@@ -66,9 +67,4 @@
   if(!boot()){
     let tries=0;const t=setInterval(()=>{if(boot()||++tries>120)clearInterval(t);},50);
   }
-  const loadR2V=()=>{
-    if(document.querySelector('script[data-kosmic-seedance25-r2v="1"]'))return;
-    const s=document.createElement("script");s.src="evolink-seedance25-r2v.js";s.async=false;s.dataset.kosmicSeedance25R2v="1";document.head.appendChild(s);
-  };
-  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",loadR2V,{once:true});else loadR2V();
 })();
