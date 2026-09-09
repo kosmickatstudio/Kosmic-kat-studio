@@ -3,9 +3,23 @@
  * without changing its toggle, tab, picker, or generation handlers.
  */
 
-/* Force the existing sheet to have an actual viewport. The previous styling
- * made the surface visible in the cascade but did not guarantee that its
- * original off-canvas positioning was overridden. */
+/* The settings panel is created inside the active workspace. Some workspace
+ * shells use overflow/stacking contexts for their glass layout, which can
+ * clip a fixed descendant even when its z-index is higher than the backdrop.
+ * When the sheet is open, temporarily release only the relevant shells. */
+body:has(#vcSettingsPanel.open) .studio-body,
+body:has(#vcSettingsPanel.open) .main-content,
+body:has(#vcSettingsPanel.open) .module-content{
+  overflow:visible!important;
+}
+body:has(#vcSettingsPanel.open) .module-content{
+  transform:none!important;
+  filter:none!important;
+  perspective:none!important;
+  contain:none!important;
+}
+
+/* Force the existing sheet to have an actual viewport. */
 .ig-settings-sheet{
   box-sizing:border-box!important;
   width:min(680px,100vw)!important;
@@ -25,45 +39,43 @@
   visibility:visible!important;
 }
 
-/* The application opens this exact panel by adding .open. Explicitly anchor
- * the open state to the viewport so inherited transform/bottom/position rules
- * cannot leave the Settings sheet underneath or outside the Video workspace. */
+/* The application opens this exact panel by adding .open. Anchor it directly
+ * to the viewport and reset every common off-canvas property. */
 .ig-settings-sheet.open{
   position:fixed!important;
-  left:50%!important;
-  right:auto!important;
-  bottom:0!important;
-  top:auto!important;
+  inset:auto auto 0 50%!important;
   width:min(680px,100vw)!important;
   max-width:100vw!important;
+  height:auto!important;
   max-height:min(86vh,780px)!important;
+  min-height:220px!important;
+  margin:0!important;
+  padding-bottom:env(safe-area-inset-bottom)!important;
   transform:translateX(-50%) translateY(0)!important;
   visibility:visible!important;
   opacity:1!important;
   display:flex!important;
-  z-index:401!important;
+  z-index:2147483001!important;
 }
 
-/* Compatibility for any pre-existing active/show state without changing the
- * application's normal closed state. */
+/* Compatibility for any pre-existing active/show state. */
 .ig-settings-sheet.active,
 .ig-settings-sheet.show,
 .ig-settings-sheet.is-open{
   position:fixed!important;
-  left:50%!important;
-  right:auto!important;
-  bottom:0!important;
-  top:auto!important;
+  inset:auto auto 0 50%!important;
+  margin:0!important;
   transform:translateX(-50%) translateY(0)!important;
   visibility:visible!important;
   opacity:1!important;
-  z-index:401!important;
+  display:flex!important;
+  z-index:2147483001!important;
 }
 
 #vcSettingsBackdrop{
   position:fixed!important;
   inset:0!important;
-  z-index:390!important;
+  z-index:2147483000!important;
 }
 #vcSettingsBackdrop.show{
   display:block!important;
@@ -140,8 +152,6 @@
   box-shadow:0 4px 14px rgba(61,31,122,.08)!important;
 }
 
-/* Do not globally unhide tab panels, because the existing JS deliberately
- * hides inactive tabs. Only active/ARIA-selected panels receive layout. */
 .ig-settings-sheet [role="tabpanel"]:not([hidden]),
 .ig-settings-sheet .tab-panel.active,
 .ig-settings-sheet .tab-content.active,
@@ -151,8 +161,6 @@
   opacity:1!important;
 }
 
-/* The actual Video Settings markup uses a direct padded content wrapper.
- * Make that wrapper scroll without changing its existing visibility state. */
 .ig-settings-sheet > .ig-sheet-header + div{
   box-sizing:border-box!important;
   min-height:0!important;
@@ -205,6 +213,7 @@
   .ig-settings-sheet.show,
   .ig-settings-sheet.is-open{
     left:0!important;
+    right:auto!important;
     width:100vw!important;
     max-width:100vw!important;
     max-height:90vh!important;
