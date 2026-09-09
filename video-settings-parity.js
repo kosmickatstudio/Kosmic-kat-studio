@@ -12,8 +12,8 @@
   function parityToggle(){
     const panel=document.getElementById("vcSettingsPanel");
     const backdrop=document.getElementById("vcSettingsBackdrop");
-    if(panel && panel.parentElement!==document.body)document.body.appendChild(panel);
     if(backdrop && backdrop.parentElement!==document.body)document.body.appendChild(backdrop);
+    if(panel && panel.parentElement!==document.body)document.body.appendChild(panel);
     return window.__kosmicOriginalToggleVcSettings.apply(this,arguments);
   }
 
