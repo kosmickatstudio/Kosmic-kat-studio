@@ -1,10 +1,9 @@
 /* KOSMIC KAT — EvoLink Video Playground
  * Phase 11: complete model + route + schema explorer.
  *
- * Non-destructive: this surface is an inspector/picker for the existing
- * playground. It does not replace the generator, settings sheet, or native
- * model routing. Selecting a route syncs an existing model <select> when one
- * is present; otherwise it changes inspector state only.
+ * The playground is mounted directly inside Video Studio when a video
+ * workspace is present. It keeps the existing generator/routing/settings
+ * intact and exposes the complete EvoLink model/route surface in-place.
  */
 (function installEvoLinkPlaygroundComplete(){
   "use strict";
@@ -12,6 +11,7 @@
   window.__kosmicEvoPlaygroundComplete=true;
 
   const esc=s=>String(s??"").replace(/[&<>\"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[m]));
+  const VIDEO_WORKSPACE_SELECTORS=[".vc-chat-shell",".video-studio",".video-canvas",".motion-control",".topic-reel",".edit-video"];
 
   function selectedRoute(){
     const api=window.KOSMIC_EVOLINK_VIDEO;
@@ -69,14 +69,12 @@
     finally{if(btn){btn.disabled=false;btn.textContent="Generate →";}}
   }
 
-  function openPlayground(){
-    document.getElementById("evoVideoPlaygroundModal")?.remove();
-    const api=window.KOSMIC_EVOLINK_VIDEO;if(!api?.catalog?.length)return;
-    const modal=document.createElement("div");modal.id="evoVideoPlaygroundModal";
-    modal.innerHTML=`<div class="evo-playground-backdrop" onclick="window.__evoClosePlayground()"></div><div class="evo-playground-sheet"><div class="evo-playground-head"><div><div class="evo-kicker">EVOLINK VIDEO</div><div class="evo-title">Unified Video Playground</div><div class="evo-subtitle">All ${api.catalog.length} live EvoLink video model cards, with route-aware playground controls.</div></div><button class="btn btn-ghost btn-sm" onclick="window.__evoClosePlayground()">✕</button></div><form id="evoPlaygroundForm"><div class="evo-field-grid"><label class="f-group"><span class="f-label">Model</span><select id="evoPgModel" class="f-select"></select></label><label class="f-group"><span class="f-label">Route</span><select id="evoPgRoute" class="f-select"></select></label></div><div id="evoPgControls"></div><label class="f-group"><span class="f-label">Prompt</span><textarea id="evoPgPrompt" class="f-input" rows="4" placeholder="Describe the shot, motion, camera, environment and subject behavior…"></textarea></label><div class="evo-actions"><button id="evoPgGenerate" type="button" class="btn btn-primary">Generate →</button><div class="evo-api-note">Uses your existing <b>api_evolink</b> setting. API keys stay browser-local.</div></div></form><div id="evoPgResult" class="evo-result">Choose a model to inspect its schema.</div></div>`;
-    document.body.appendChild(modal);
+  function playgroundMarkup(api){
+    return `<section id="evoVideoPlaygroundInline" class="evo-playground-inline" aria-label="EvoLink Video Playground"><div class="evo-playground-head"><div><div class="evo-kicker">EVOLINK VIDEO</div><div class="evo-title">Unified Video Playground</div><div class="evo-subtitle">All ${api.catalog.length} live EvoLink video model cards, with route-aware playground controls.</div></div><div class="evo-inline-badge">Video Studio</div></div><form id="evoPlaygroundForm"><div class="evo-field-grid"><label class="f-group"><span class="f-label">Model</span><select id="evoPgModel" class="f-select"></select></label><label class="f-group"><span class="f-label">Route</span><select id="evoPgRoute" class="f-select"></select></label></div><div id="evoPgControls"></div><label class="f-group"><span class="f-label">Prompt</span><textarea id="evoPgPrompt" class="f-input" rows="4" placeholder="Describe the shot, motion, camera, environment and subject behavior…"></textarea></label><div class="evo-actions"><button id="evoPgGenerate" type="button" class="btn btn-primary">Generate →</button><div class="evo-api-note">Uses your existing <b>api_evolink</b> setting. API keys stay browser-local.</div></div></form><div id="evoPgResult" class="evo-result">Choose a model to inspect its schema.</div></section>`;
+  }
 
-    const modelSel=modal.querySelector("#evoPgModel"),routeSel=modal.querySelector("#evoPgRoute"),groups={};
+  function fillPlayground(host,api){
+    const modelSel=host.querySelector("#evoPgModel"),routeSel=host.querySelector("#evoPgRoute"),groups={};
     api.catalog.forEach(m=>(groups[m.group]||(groups[m.group]=[])).push(m));
     Object.entries(groups).forEach(([g,models])=>{const og=document.createElement("optgroup");og.label=g;models.forEach(m=>{const op=document.createElement("option");op.value=m.routes[0]?.id||m.id;op.textContent=`${m.name} · ${m.provider}`;og.appendChild(op);});modelSel.appendChild(og);});
 
@@ -84,15 +82,49 @@
       const route=api.index[modelSel.value];if(!route)return;
       routeSel.innerHTML=route.model.routes.map(r=>`<option value="${esc(r.id)}">${esc(r.label||r.mode||r.id)}</option>`).join("");
       routeSel.value=route.id;
-      modal.querySelector("#evoPgControls").innerHTML=renderSchemaControls(route);
+      host.querySelector("#evoPgControls").innerHTML=renderSchemaControls(route);
     }
     modelSel.onchange=refresh;
     routeSel.onchange=()=>{modelSel.value=routeSel.value;refresh();};
     refresh();
-    modal.querySelector("#evoPgGenerate").onclick=submitPlayground;
+    host.querySelector("#evoPgGenerate").onclick=submitPlayground;
+  }
+
+  function mountInline(){
+    const api=window.KOSMIC_EVOLINK_VIDEO;if(!api?.catalog?.length)return false;
+    const module=document.getElementById("moduleContent");if(!module)return false;
+    if(!VIDEO_WORKSPACE_SELECTORS.some(sel=>module.querySelector(sel)))return false;
+    const existing=document.getElementById("evoVideoPlaygroundInline");
+    if(existing){
+      if(existing.parentElement!==module)module.appendChild(existing);
+      return true;
+    }
+    const host=document.createElement("div");
+    host.innerHTML=playgroundMarkup(api);
+    const playground=host.firstElementChild;
+    module.appendChild(playground);
+    fillPlayground(playground,api);
+    return true;
+  }
+
+  function openPlayground(){
+    return mountInline();
   }
 
   window.__evoAddUrl=addUrlRow;
   window.__evoOpenPlayground=openPlayground;
-  window.__evoClosePlayground=()=>document.getElementById("evoVideoPlaygroundModal")?.remove();
+  window.__evoClosePlayground=()=>document.getElementById("evoVideoPlaygroundInline")?.remove();
+
+  function observeVideoStudio(){
+    const module=document.getElementById("moduleContent");
+    if(!module)return setTimeout(observeVideoStudio,500);
+    const tryMount=()=>mountInline();
+    tryMount();
+    const observer=new MutationObserver(()=>{
+      if(!document.getElementById("evoVideoPlaygroundInline"))tryMount();
+    });
+    observer.observe(module,{childList:true,subtree:true});
+    window.__kosmicEvoPlaygroundObserver=observer;
+  }
+  observeVideoStudio();
 })();
