@@ -1,8 +1,6 @@
-/* KOSMIC KAT — Video Settings structural parity
- * The Image Settings sheet is a page-level sibling; Video Settings is created
- * inside the Video chat shell. Reparent the Video sheet/backdrop to <body>
- * before the existing toggle runs so it uses the same document-level layer.
- * Existing controls and toggle logic remain untouched.
+/* KOSMIC KAT — Video Settings structural parity + EvoLink ecosystem loader
+ * Settings are kept in a document-level layer. EvoLink catalog, current route
+ * corrections, and the route/schema expansion load in deterministic order.
  */
 (function installVideoSettingsParity(){
   "use strict";
@@ -11,8 +9,7 @@
 
   const loadCss=(href,attr,value)=>{
     if(document.querySelector(`link[${attr}="${value}"]`))return;
-    const css=document.createElement("link");
-    css.rel="stylesheet";css.href=href;css.setAttribute(attr,value);document.head.appendChild(css);
+    const css=document.createElement("link");css.rel="stylesheet";css.href=href;css.setAttribute(attr,value);document.head.appendChild(css);
   };
   loadCss("ui-v2-phase8.css","data-kosmic-ui-v2-phase","8");
   loadCss("ui-v2-evolink-video.css","data-kosmic-evo-video-css","1");
@@ -21,9 +18,14 @@
   const loadScript=(src,marker,callback)=>{
     const existing=document.querySelector(`script[${marker}]`);
     if(existing){if(callback)existing.addEventListener("load",callback,{once:true});return;}
-    const s=document.createElement("script");s.src=src;s.async=false;s.setAttribute(marker,"");if(callback)s.onload=callback;document.head.appendChild(s);
+    const s=document.createElement("script");s.src=src;s.async=false;s.setAttribute(marker,"");
+    if(callback)s.onload=callback;document.head.appendChild(s);
   };
-  loadScript("evolink-video.js","data-kosmic-evo-video",()=>loadScript("evolink-video-current.js","data-kosmic-evo-video-current"));
+  loadScript("evolink-video.js","data-kosmic-evo-video",()=>{
+    loadScript("evolink-video-current.js","data-kosmic-evo-video-current",()=>{
+      loadScript("evolink-video-expansion.js","data-kosmic-evo-video-expansion");
+    });
+  });
   loadScript("settings-layer-guard.js","data-kosmic-settings-layer-guard");
 
   function parityToggle(){
