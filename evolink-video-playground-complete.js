@@ -32,14 +32,13 @@
       "sora-2-preview":[4,8,12],"sora-2-image-to-video":[4,8,12],"kling-v3-motion-control":[3,4,5,6,7,8,9,10,11,12,13,14,15],
       "MiniMax-Hailuo-2.3-Fast":[6,10],"MiniMax-Hailuo-2.3":[6,10],"MiniMax-Hailuo-02":[6,10]
     };
-    const durationOptions=duration?(discrete[route.id]||Array.from({length:Math.max(0,Math.min(30,duration[1])-duration[0]+1)},(_,i)=>duration[0]+i)):
-      [];
+    const durationOptions=duration?(discrete[route.id]||Array.from({length:Math.max(0,Math.min(30,duration[1])-duration[0]+1)},(_,i)=>duration[0]+i)):[];
     return `
       <div class="evo-field-grid">
         <label class="f-group"><span class="f-label">Aspect Ratio</span>${aspects.length?`<select id="evoPgAspect" class="f-select">${aspects.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join("")}</select>`:`<div class="evo-static-field">Provider controlled</div>`}</label>
         <label class="f-group"><span class="f-label">Duration</span>${duration?`<select id="evoPgDuration" class="f-select">${durationOptions.map(v=>`<option value="${v}">${v}s</option>`).join("")}${!durationOptions.length?`<option value="auto">Auto</option>`:""}</select>`:`<div class="evo-static-field">Provider controlled</div>`}</label>
         <label class="f-group"><span class="f-label">Quality</span>${qualities.length?`<select id="evoPgQuality" class="f-select">${qualities.map(q=>`<option value="${esc(q)}">${esc(q)}</option>`).join("")}</select>`:`<div class="evo-static-field">Provider default</div>`}</label>
-        <label class="f-group"><span class="f-label">Output</span><select id="evoPgFormat" class="f-select"><option value="mp4">MP4</option><option value="mov">MOV</option></select></label>
+        <div class="evo-static-field">MP4 output</div>
       </div>
       <div class="evo-toggle-row">${s.audio?`<label><input type="checkbox" id="evoPgAudio" checked> Generate Audio</label>`:""}${s.webSearch?`<label><input type="checkbox" id="evoPgWeb"> Web Search</label>`:""}</div>
       ${mode==="motion"?`<div class="evo-advanced-grid"><label class="f-group"><span class="f-label">Character Orientation</span><select id="evoPgOrientation" class="f-select"><option value="image">Image</option><option value="video">Video</option></select></label><label><input type="checkbox" id="evoPgKeepSound" checked> Keep source sound</label></div>`:""}
@@ -57,7 +56,7 @@
     if(!model||!route)return;if(btn){btn.disabled=true;btn.textContent="Generating…";}
     resultEl.innerHTML='<div class="evo-status">Submitting EvoLink task…</div>';
     try{
-      const opts={aspect_ratio:document.getElementById("evoPgAspect")?.value,duration:document.getElementById("evoPgDuration")?.value,quality:document.getElementById("evoPgQuality")?.value,output_format:document.getElementById("evoPgFormat")?.value,generate_audio:document.getElementById("evoPgAudio")?.checked,web_search:document.getElementById("evoPgWeb")?.checked,image_urls:selectedUrls("evoPgImages","image_urls"),video_urls:selectedUrls("evoPgVideos","video_urls"),audio_urls:selectedUrls("evoPgAudios","audio_urls"),audio_url:document.getElementById("evoPgAudioUrl")?.value.trim(),model_params:{}};
+      const opts={aspect_ratio:document.getElementById("evoPgAspect")?.value,duration:document.getElementById("evoPgDuration")?.value,quality:document.getElementById("evoPgQuality")?.value,generate_audio:document.getElementById("evoPgAudio")?.checked,web_search:document.getElementById("evoPgWeb")?.checked,image_urls:selectedUrls("evoPgImages","image_urls"),video_urls:selectedUrls("evoPgVideos","video_urls"),audio_urls:selectedUrls("evoPgAudios","audio_urls"),audio_url:document.getElementById("evoPgAudioUrl")?.value.trim(),model_params:{}};
       if(document.getElementById("evoPgUpscale"))opts.model_params.upscale_factor=document.getElementById("evoPgUpscale").value;
       if(document.getElementById("evoPgOrientation"))opts.model_params.character_orientation=document.getElementById("evoPgOrientation").value;
       if(document.getElementById("evoPgAutoMask"))opts.model_params.auto_mask=document.getElementById("evoPgAutoMask").checked;
