@@ -1,0 +1,25 @@
+/* KOSMIC KAT — modal/layer arbiter
+ * Feature overlays must not become permanently trapped under Settings.
+ * Settings remains above the ordinary studio, while the explicit EvoLink
+ * playground gets the next modal band so its model/route/schema controls are
+ * usable whenever the playground is open.
+ */
+.ig-settings-backdrop{z-index:2147481000!important}
+.ig-settings-sheet,
+.ig-settings-sheet.open,
+.ig-settings-sheet.active,
+.ig-settings-sheet.show,
+.ig-settings-sheet.is-open{z-index:2147481001!important}
+#evoVideoPlaygroundModal{z-index:2147482000!important}
+#evoVideoPlaygroundModal .evo-playground-sheet{position:relative;z-index:2!important;isolation:isolate}
+#evoVideoPlaygroundModal .evo-playground-backdrop{z-index:0!important}
+#evoVideoPlaygroundModal select,
+#evoVideoPlaygroundModal input,
+#evoVideoPlaygroundModal textarea,
+#evoVideoPlaygroundModal button,
+#evoVideoPlaygroundModal [role="tab"],
+#evoVideoPlaygroundModal [role="button"]{position:relative;z-index:3}
+/* Prevent old page-level filters from creating a new stacking context over the modal. */
+#evoVideoPlaygroundModal,
+#evoVideoPlaygroundModal .evo-playground-sheet{filter:none!important;-webkit-filter:none!important}
+@media(prefers-reduced-motion:reduce){#evoVideoPlaygroundModal .evo-playground-backdrop{backdrop-filter:none}}
