@@ -120,6 +120,7 @@
     api.catalog=api.liveCatalog.slice();
     api.index=routeIndex(api.catalog);
     api.liveVideoCardCount=api.catalog.length;
+    api.liveRouteCount=Object.keys(api.index).length;
     api.routeRevision="2026-09-10-live";
     api.catalogSource="https://evolink.ai/models";
     api.resolveRoute=id=>api.index?.[id]||null;
@@ -127,8 +128,6 @@
     api.getRoutes=()=>Object.values(api.index||{});
     window.KOSMIC_EVOLINK_VIDEO=api;
 
-    // Feed the existing Node Canvas capability tables without assuming they
-    // exist at load time. This is additive only.
     try{
       if(typeof VIDEO_MODEL_CAPABILITIES!=="undefined"){
         Object.values(api.index).forEach(r=>{
@@ -138,12 +137,17 @@
         });
       }
       if(typeof VIDEO_MODEL_DURATIONS!=="undefined"){
+        const discrete={
+          "veo-3.1-fast-generate-preview":[4,6,8],"veo-3.1-generate-preview":[4,6,8],"veo3.1-fast-extend":[4,6,8],
+          "sora-2-preview":[4,8,12],"sora-2-image-to-video":[4,8,12],"kling-v3-motion-control":[3,4,5,6,7,8,9,10,11,12,13,14,15],
+          "MiniMax-Hailuo-2.3-Fast":[6,10],"MiniMax-Hailuo-2.3":[6,10],"MiniMax-Hailuo-02":[6,10]
+        };
         api.catalog.forEach(card=>{
           const d=card.schema?.duration;
           if(Array.isArray(d)&&d.length===2){
             const [min,max]=d;
-            const options=[];for(let n=min;n<=Math.min(max,30);n++)options.push(n);
-            card.routes.forEach(r=>{VIDEO_MODEL_DURATIONS[r.id]={min,max,options};});
+            const fallback=[];for(let n=min;n<=Math.min(max,30);n++)fallback.push(n);
+            card.routes.forEach(r=>{VIDEO_MODEL_DURATIONS[r.id]={min,max,options:discrete[r.id]||fallback};});
           }
         });
       }
