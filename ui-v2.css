@@ -1,3 +1,5 @@
+@import url("ui-v2-phase1.css");
+
 /*
  * KOSMICKAT STUDIO UI V2
  * Global visual system only. No generation state, routing, observers or DOM rewrites.
@@ -28,12 +30,10 @@
   --ui2-sidebar:244px;
 }
 
-/* App foundation */
 html,body{background:var(--ui2-bg)}
 body{color:var(--ui2-text)}
 body::before{opacity:.55}
 
-/* Header: three intentional zones, not a decorative strip */
 header{
   height:var(--ui2-header)!important;
   padding:0 18px!important;
@@ -60,7 +60,9 @@ header::after{height:1px!important;background:linear-gradient(90deg,transparent 
   backdrop-filter:none!important;
 }
 .cmd-bar:focus{background:#fff!important;border-color:rgba(91,59,182,.48)!important;box-shadow:0 0 0 3px rgba(91,59,182,.09)!important}
+.cmd-bar::placeholder{color:var(--ui2-faint)}
 .h-right{gap:7px}
+.h-right-top,.h-right-bottom{display:flex;align-items:center;gap:8px}
 .h-settings,.hamburger{
   width:38px!important;height:38px!important;
   border:1px solid var(--ui2-line)!important;
@@ -72,7 +74,6 @@ header::after{height:1px!important;background:linear-gradient(90deg,transparent 
 .sign-in-btn:hover{transform:translateY(-1px);box-shadow:0 7px 18px rgba(91,59,182,.18)!important}
 .founder-badge{background:#f9f1dc!important;color:#916514!important;box-shadow:none!important}
 
-/* Sidebar: quieter, denser, easier to scan */
 .sidebar{
   width:var(--ui2-sidebar)!important;
   background:rgba(255,255,255,.97)!important;
@@ -97,7 +98,6 @@ header::after{height:1px!important;background:linear-gradient(90deg,transparent 
 .mod-label{font-size:12px;color:#645d76!important}
 .mod-badge{font-size:8px!important}
 
-/* Main content */
 .main-content{background:transparent}
 .display-area{
   height:112px!important;
@@ -106,7 +106,6 @@ header::after{height:1px!important;background:linear-gradient(90deg,transparent 
 }
 .display-area.expanded{height:260px!important}
 
-/* Common surfaces already used throughout the product */
 .card,.panel,.section-card,.home-glass-panel,.modal,.settings-panel,.settings-sheet,.tool-panel{
   border-color:var(--ui2-line)!important;
   box-shadow:var(--ui2-shadow)!important;
@@ -119,14 +118,12 @@ header::after{height:1px!important;background:linear-gradient(90deg,transparent 
   box-shadow:var(--ui2-shadow)!important;
 }
 
-/* Buttons: one hierarchy */
 .btn,.button{border-radius:10px!important;min-height:38px}
 .btn-primary{background:var(--ui2-primary)!important;border-color:var(--ui2-primary)!important;box-shadow:none!important}
 .btn-primary:hover{background:#4f32a1!important;box-shadow:0 7px 18px rgba(91,59,182,.16)!important}
 .btn-outline{background:#fff!important;border-color:var(--ui2-line-strong)!important;color:var(--ui2-text)!important}
 .btn-outline:hover{background:#f7f5fc!important;border-color:#c9bce6!important;color:var(--ui2-primary)!important}
 
-/* Inputs and selects */
 input:not([type="range"]),textarea,select{
   border-color:var(--ui2-line)!important;
   border-radius:10px!important;
@@ -139,29 +136,22 @@ input:not([type="range"]):focus,textarea:focus,select:focus{
   outline:none!important;
 }
 
-/* Tabs and segmented controls */
 .tab,.tabs button,[role="tab"]{border-radius:9px!important}
 .tab.active,.tabs button.active,[role="tab"][aria-selected="true"]{background:#f0ecfa!important;color:var(--ui2-primary)!important}
 
-/* Dialogs and overlays: clean surfaces, no full-screen blur */
 .modal-overlay{background:rgba(18,15,29,.42)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 .modal,.modal-content{background:#fff!important;border:1px solid var(--ui2-line)!important;border-radius:18px!important;box-shadow:0 24px 70px rgba(20,14,40,.22)!important}
-
-/* Feedback states */
 .toast{border-radius:11px!important;box-shadow:0 10px 28px rgba(20,14,40,.15)!important}
 
-/* Accessibility: visible keyboard focus without changing mouse aesthetics */
 :where(button,a,input,select,textarea,[tabindex]):focus-visible{
   outline:2px solid rgba(91,59,182,.72)!important;
   outline-offset:2px!important;
 }
 
-/* Reduce motion for people who request it */
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
 }
 
-/* Tablet / mobile shell */
 @media (max-width:900px){
   :root{--ui2-sidebar:228px}
   .h-center{padding:0 10px}
@@ -179,13 +169,11 @@ input:not([type="range"]):focus,textarea:focus,select:focus{
   .studio-body{position:relative}
   .sidebar{position:fixed!important;top:62px;bottom:0;left:0;z-index:80;transform:translateX(-105%);box-shadow:12px 0 35px rgba(20,14,40,.14)}
   .sidebar.open{transform:translateX(0)}
-  .hamburger{display:flex!important}
   .main-content{width:100%}
   .display-area{height:92px!important}
   .display-area.expanded{height:210px!important}
 }
 
-/* Dark theme keeps the same information architecture while switching materials. */
 html[data-theme="dark"]{
   --ui2-bg:#0e0b16;
   --ui2-surface:#171221;
@@ -216,7 +204,6 @@ html[data-theme="dark"] .btn-outline{background:#171221!important;color:var(--ui
 html[data-theme="dark"] input:not([type="range"]),html[data-theme="dark"] textarea,html[data-theme="dark"] select{background:#171221!important;color:var(--ui2-text)!important;border-color:var(--ui2-line)!important}
 html[data-theme="dark"] .modal,html[data-theme="dark"] .modal-content{background:#171221!important;border-color:var(--ui2-line)!important}
 
-/* Safety: the global redesign must never introduce another observer/blur failure mode. */
 @media (max-width:700px){
   html[data-theme="dark"] .sidebar{box-shadow:12px 0 35px rgba(0,0,0,.4)}
 }
