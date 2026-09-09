@@ -7,7 +7,6 @@
   if(window.__kosmicHomePremiumV2)return;
   window.__kosmicHomePremiumV2=true;
 
-  const BRAIN=window.KOSMIC_HOME_LLM_CATALOG||{};
   const VIDEO=[
     {id:"seedance-2.5-text-to-video",label:"Seedance 2.5",meta:"T2V · 4–30s · 480/720/1080"},
     {id:"seedance-2.0-text-to-video",label:"Seedance 2.0",meta:"T2V/I2V/R2V · 4–15s"},
@@ -44,7 +43,7 @@
     ["fal-ai/nano-banana-2","Nano Banana 2 (fal)"],["fal-ai/nano-banana-pro","Nano Banana Pro (fal)"],["openai/gpt-image-2","GPT Image 2 (fal)"]
   ];
 
-  function esc(v){return String(v).replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\\":"&#92;","\"":"&quot;"}[c]));}
+  function esc(v){return String(v).replace(/[&<>\\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\\":"&#92;","\"":"&quot;"}[c]));}
   function readyFor(id){
     if(id.indexOf("fal-ai/")===0)return !!(typeof gs==="function"&&gs("api_falai",""));
     if(id.indexOf("gpt-")===0||id.indexOf("openai/")===0)return !!(typeof gs==="function"&&gs("api_openai",""));
@@ -58,30 +57,26 @@
       '<span class="home-model-meta">'+esc(meta||"Ready")+'</span>'+(readyFor(id)?'<span class="home-model-status is-ready">Ready</span>':'<span class="home-model-status">API key needed</span>')+'</button>';
   }
   function brainCards(){
-    return Object.entries(BRAIN).flatMap(([provider,models])=>models.slice(0,9).map(m=>({provider,label:m.label,id:m.id})));
+    const catalog=window.KOSMIC_HOME_LLM_CATALOG||{};
+    return Object.entries(catalog).flatMap(([provider,models])=>models.slice(0,9).map(m=>({provider,label:m.label,id:m.id})));
   }
-  function findPanels(){
-    return Array.from(document.querySelectorAll(".home-glass-panel"));
-  }
+  function findPanels(){return Array.from(document.querySelectorAll(".home-glass-panel"));}
   function enhanceModelSelection(){
     const panel=findPanels().find(p=>/Model Selection/i.test(p.textContent||""));
     if(!panel)return false;
-    if(panel.dataset.premiumV2==="1")return true;
     const title=panel.querySelector(".panel-title");
-    if(title){
-      title.innerHTML='<span class="home-section-icon">✦</span><span>Model Selection</span><span class="home-live-pill">CURRENT</span>';
-    }
+    if(title)title.innerHTML='<span class="home-section-icon">✦</span><span>Model Selection</span><span class="home-live-pill">CURRENT</span>';
     const grids=panel.querySelectorAll("[style*='grid-template-columns']");
     const grid=grids[0];
     if(!grid)return false;
     const cols=grid.children;
     if(cols.length<3)return false;
-    const imageBody=cols[0].querySelector("div:nth-child(2)");
-    const videoBody=cols[1].querySelector("div:nth-child(2)");
-    const brainBody=cols[2].querySelector("div:nth-child(2)");
-    if(imageBody)imageBody.innerHTML=IMAGE.map(x=>card(x[0],x[1],"Image generation", "image")).join("");
-    if(videoBody)videoBody.innerHTML=VIDEO.map(x=>card(x.id,x.label,x.meta,"video")).join("");
-    if(brainBody)brainBody.innerHTML=brainCards().map(m=>'<button type="button" class="home-brain-card '+((typeof gs==="function"&&gs("ai_model","")===m.provider)?"is-active":"")+'" onclick="setBrainModelQuick(\''+esc(m.provider)+'\')"><span>'+esc(m.label)+'</span><small>'+esc(m.provider.toUpperCase())+'</small></button>').join("");
+    const imageBody=cols[0].querySelector("div:nth-child(2)"),videoBody=cols[1].querySelector("div:nth-child(2)"),brainBody=cols[2].querySelector("div:nth-child(2)");
+    if(imageBody&&!imageBody.dataset.premiumV2)imageBody.innerHTML=IMAGE.map(x=>card(x[0],x[1],"Image generation","image")).join("");
+    if(videoBody&&!videoBody.dataset.premiumV2)videoBody.innerHTML=VIDEO.map(x=>card(x.id,x.label,x.meta,"video")).join("");
+    if(brainBody){brainBody.innerHTML=brainCards().map(m=>'<button type="button" class="home-brain-card '+((typeof gs==="function"&&gs("ai_model","")===m.provider)?"is-active":"")+'" onclick="setBrainModelQuick(\''+esc(m.provider)+'\')"><span>'+esc(m.label)+'</span><small>'+esc(m.provider.toUpperCase())+'</small></button>').join("");}
+    if(imageBody)imageBody.dataset.premiumV2="1";
+    if(videoBody)videoBody.dataset.premiumV2="1";
     panel.dataset.premiumV2="1";
     return true;
   }
@@ -91,7 +86,6 @@
     document.querySelectorAll("#aiModelSelectTrigger,#brainSubModelSelectTrigger").forEach(x=>x.classList.add("home-premium-select"));
   }
   let tries=0;
-  const timer=setInterval(()=>{enhance();if(++tries>100)clearInterval(timer);},100);
-  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",enhance,{once:true});
-  else setTimeout(enhance,0);
+  const timer=setInterval(()=>{enhance();if(++tries>120)clearInterval(timer);},100);
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",enhance,{once:true});else setTimeout(enhance,0);
 })();
