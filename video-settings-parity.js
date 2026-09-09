@@ -2,7 +2,9 @@
  * Settings are kept in a document-level layer. EvoLink catalog, current route
  * corrections, route/schema expansion, integrity normalization, specialized
  * route safety, adapter fallback, and the EXISTING Video Canvas EvoLink adapter
- * load deterministically. No second video playground is created here.
+ * load deterministically. Home's current LLM catalog is also loaded here as a
+ * small runtime data layer so the deployed page never needs build-time source
+ * mutation. No second video playground is created here.
  */
 (function installVideoSettingsParity(){
   "use strict";
@@ -23,6 +25,8 @@
     const s=document.createElement("script");s.src=src;s.async=false;s.setAttribute(marker,"");
     if(callback)s.onload=callback;document.head.appendChild(s);
   };
+
+  loadScript("home-models-current.js","data-kosmic-home-models-current");
   loadScript("evolink-video.js","data-kosmic-evo-video",()=>{
     loadScript("evolink-video-current.js","data-kosmic-evo-video-current",()=>{
       loadScript("evolink-video-expansion.js","data-kosmic-evo-video-expansion",()=>{
