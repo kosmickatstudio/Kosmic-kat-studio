@@ -53,6 +53,8 @@
   };
 
   window.KOSMIC_HOME_LLM_CATALOG=CATALOG;
+  let previousRefresh=null;
+  let previousUpdate=null;
 
   function applyCatalog(){
     if(typeof BRAIN_SUBMODELS==="undefined")return false;
@@ -98,17 +100,33 @@
     return updatePicker();
   }
 
-  window.refreshCurrentLlmUI=function(){
-    refresh();
-    if(typeof renderModelTrigger==="function"&&document.getElementById("aiModelSelect")){
-      renderModelTrigger("aiModelSelect","brain");
+  function installOverrides(){
+    if(!window.updateBrainSubModelVisibility||window.updateBrainSubModelVisibility===window.__kosmicHomeCurrentUpdate)return;
+    previousUpdate=window.updateBrainSubModelVisibility;
+    const updateOverride=function(){return refresh();};
+    window.__kosmicHomeCurrentUpdate=updateOverride;
+    window.updateBrainSubModelVisibility=updateOverride;
+
+    if(window.refreshCurrentLlmUI!==window.__kosmicHomeCurrentRefresh){
+      previousRefresh=window.refreshCurrentLlmUI;
+      const refreshOverride=function(){
+        refresh();
+        if(typeof renderModelTrigger==="function"&&document.getElementById("aiModelSelect")){
+          renderModelTrigger("aiModelSelect","brain");
+        }
+      };
+      window.__kosmicHomeCurrentRefresh=refreshOverride;
+      window.refreshCurrentLlmUI=refreshOverride;
     }
-  };
-  window.updateBrainSubModelVisibility=function(){refresh();};
+  }
 
   let tries=0;
   const timer=setInterval(()=>{
-    if(refresh()||++tries>=80)clearInterval(timer);
+    if(applyCatalog()){
+      installOverrides();
+      refresh();
+    }
+    if(++tries>=120)clearInterval(timer);
   },50);
   if(document.readyState==="loading"){
     document.addEventListener("DOMContentLoaded",refresh,{once:true});
