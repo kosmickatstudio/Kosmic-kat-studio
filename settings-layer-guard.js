@@ -1,30 +1,25 @@
 /* KOSMIC KAT — SETTINGS LAYER GUARD
  * Presentation/DOM-layer hardening for every bottom-sheet settings surface.
  *
- * Why this exists:
- *   Settings sheets were historically created inside module/chat containers.
- *   Glass effects and later feature overlays can create stacking/containing
- *   contexts that place a backdrop above the sheet body, making the controls
- *   look "blurred away" even though the sheet itself is open.
+ * Settings sheets can be created inside module/chat containers that also use
+ * glass blur, transforms, filters or stacking contexts. A normal fixed sheet
+ * can then be trapped under its backdrop, producing a large blurred veil over
+ * the controls. This guard moves the sheet/backdrop to <body> and gives them
+ * one dedicated topmost layer.
  *
- * Policy:
- *   1. Any .ig-settings-sheet is promoted to <body>.
- *   2. Its matching .ig-settings-backdrop is promoted to <body> first.
- *   3. Backdrop and sheet use a dedicated topmost z-index band.
- *   4. No blur/filter is allowed on the settings backdrop itself.
- *   5. This layer never changes application state, auth, generation, or saves.
- *
- * Intentionally event-driven. No broad MutationObserver is used, because the
- * studio performs frequent DOM updates during generation and a permanent
- * subtree observer previously caused avoidable work/freezes.
+ * Intentionally event-driven. No broad MutationObserver is used because the
+ * studio performs frequent DOM updates during generation.
  */
 (function installSettingsLayerGuard(){
   "use strict";
   if(window.__kosmicSettingsLayerGuard)return;
   window.__kosmicSettingsLayerGuard=true;
 
-  const Z_BACKDROP=2147483644;
-  const Z_SHEET=2147483645;
+  const Z_BACKDROP=2147483646;
+  const Z_SHEET=2147483647;
+  const OPEN_STATES=["open","active","show","is-open"];
+
+  const isOpen=sheet=>OPEN_STATES.some(state=>sheet.classList.contains(state));
 
   function relatedBackdrop(sheet){
     if(!sheet)return null;
@@ -44,7 +39,8 @@
     if(!sheet||!sheet.classList.contains("ig-settings-sheet"))return;
     const backdrop=relatedBackdrop(sheet);
 
-    // Backdrop first, sheet second. This is the critical DOM ordering.
+    // Backdrop first, sheet second. This ordering plus z-index is the hard
+    // boundary that prevents future feature overlays from covering the sheet.
     if(backdrop){
       if(backdrop.parentElement!==document.body)document.body.appendChild(backdrop);
       backdrop.style.zIndex=String(Z_BACKDROP);
@@ -52,36 +48,31 @@
       backdrop.style.webkitFilter="none";
       backdrop.style.backdropFilter="none";
       backdrop.style.webkitBackdropFilter="none";
-      backdrop.style.opacity="1";
     }
     if(sheet.parentElement!==document.body)document.body.appendChild(sheet);
     sheet.style.zIndex=String(Z_SHEET);
     sheet.style.filter="none";
     sheet.style.webkitFilter="none";
-    sheet.style.transform=window.innerWidth<=700?"translateY(0)":"translateX(-50%) translateY(0)";
-    sheet.style.visibility="visible";
-    sheet.style.opacity="1";
-    sheet.style.pointerEvents="auto";
+
+    // Only touch geometry/visibility while the sheet is actually open. Closed
+    // sheets keep their original transition/hidden state from the app.
+    if(isOpen(sheet)){
+      sheet.style.visibility="visible";
+      sheet.style.opacity="1";
+      sheet.style.pointerEvents="auto";
+      sheet.style.transform=window.innerWidth<=700?"translateY(0)":"translateX(-50%) translateY(0)";
+    }
   }
 
-  function promoteAll(){
-    document.querySelectorAll(".ig-settings-sheet").forEach(promote);
-  }
+  function promoteAll(){document.querySelectorAll(".ig-settings-sheet").forEach(promote);}
 
   function runForIds(){
-    [
-      "toggleIgSettings",
-      "toggleVcSettings",
-      "toggleCsSettings",
-      "openDirSheet"
-    ].forEach(name=>{
+    ["toggleIgSettings","toggleVcSettings","toggleCsSettings","openDirSheet"].forEach(name=>{
       const fn=window[name];
       if(typeof fn!=="function"||fn.__kosmicSettingsGuardWrapped)return;
       const wrapped=function(){
         promoteAll();
         const result=fn.apply(this,arguments);
-        // The toggle may create its panel during the call, so repair once
-        // immediately after the DOM has been updated and once on the next task.
         promoteAll();
         setTimeout(promoteAll,0);
         return result;
@@ -92,8 +83,8 @@
     });
   }
 
-  // Protect click-driven openings even if a future implementation renames or
-  // replaces one of the global toggle functions.
+  // Covers click-driven settings launchers even if a future implementation
+  // changes the global function name.
   document.addEventListener("click",function(event){
     const target=event.target&&event.target.closest?event.target.closest("[onclick]"):null;
     if(!target)return;
@@ -111,8 +102,6 @@
     if(++tries>80)clearInterval(timer);
   },50);
 
-  // A final lightweight initial pass covers sheets already present when this
-  // guard is loaded.
   promoteAll();
   window.__kosmicPromoteSettingsSheets=promoteAll;
 })();
