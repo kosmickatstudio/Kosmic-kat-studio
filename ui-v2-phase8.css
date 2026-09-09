@@ -1,0 +1,174 @@
+/* KOSMIC KAT UI V2 — PHASE 8
+ * Media & Assets + Post Production presentation layer.
+ * Visual-only. Existing asset storage, gallery actions, editor sequencing,
+ * upscaling, downloads, collections and handlers remain untouched.
+ */
+
+/* Shared workspace surface */
+#moduleContent:has(#assetUploadInput),
+#moduleContent:has(.grid-gallery),
+#moduleContent:has(#upSourceSelect),
+#moduleContent:has(#timelineStrip){
+  min-width:0!important;
+  padding:18px 20px 24px!important;
+}
+
+#moduleContent:has(#assetUploadInput) > div:first-child,
+#moduleContent:has(.grid-gallery) > div:first-child,
+#moduleContent:has(#upSourceSelect) > .panel:first-child,
+#moduleContent:has(#timelineStrip) > .panel:first-child{
+  border:1px solid rgba(98,64,176,.10)!important;
+  border-radius:20px!important;
+  background:linear-gradient(145deg,rgba(255,255,255,.94),rgba(249,247,253,.86))!important;
+  box-shadow:0 12px 30px rgba(61,31,122,.055),inset 0 1px 0 rgba(255,255,255,.96)!important;
+}
+
+/* Asset Library */
+#moduleContent:has(#assetUploadInput) .grid3{gap:14px!important}
+#moduleContent:has(#assetUploadInput) .card{
+  position:relative!important;
+  overflow:hidden!important;
+  padding:10px!important;
+  border:1px solid rgba(98,64,176,.10)!important;
+  border-radius:17px!important;
+  background:rgba(255,255,255,.88)!important;
+  box-shadow:0 8px 24px rgba(61,31,122,.055)!important;
+  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease!important;
+}
+#moduleContent:has(#assetUploadInput) .card:hover{
+  transform:translateY(-2px)!important;
+  border-color:rgba(98,64,176,.18)!important;
+  box-shadow:0 14px 30px rgba(61,31,122,.09)!important;
+}
+#moduleContent:has(#assetUploadInput) .card img,
+#moduleContent:has(#assetUploadInput) .card video{
+  border-radius:12px!important;
+  display:block!important;
+}
+
+/* Asset filters / gallery filters */
+#moduleContent:has(#assetUploadInput) > div button,
+#moduleContent:has(.grid-gallery) > div button{
+  min-height:34px!important;
+  border-radius:10px!important;
+}
+
+/* Gallery */
+#moduleContent:has(.grid-gallery) .grid-gallery{
+  display:grid!important;
+  grid-template-columns:repeat(auto-fill,minmax(210px,1fr))!important;
+  gap:14px!important;
+}
+#moduleContent:has(.grid-gallery) .grid-gallery > .card{
+  min-width:0!important;
+  padding:9px!important;
+  border:1px solid rgba(98,64,176,.10)!important;
+  border-radius:17px!important;
+  background:linear-gradient(145deg,rgba(255,255,255,.94),rgba(249,247,253,.84))!important;
+  box-shadow:0 9px 25px rgba(61,31,122,.055)!important;
+  overflow:hidden!important;
+}
+#moduleContent:has(.grid-gallery) .grid-gallery > .card img,
+#moduleContent:has(.grid-gallery) .grid-gallery > .card video{
+  width:100%!important;
+  display:block!important;
+  border-radius:12px!important;
+  background:#f1eff6!important;
+}
+#moduleContent:has(.grid-gallery) .grid-gallery > .card audio{width:100%!important}
+#moduleContent:has(.grid-gallery) .grid-gallery > .card button{min-height:30px!important}
+
+/* Upscaler */
+#moduleContent:has(#upSourceSelect){max-width:1180px!important;margin:0 auto!important}
+#moduleContent:has(#upSourceSelect) .panel{
+  border:1px solid rgba(98,64,176,.10)!important;
+  border-radius:18px!important;
+  background:linear-gradient(145deg,rgba(255,255,255,.94),rgba(249,247,253,.88))!important;
+  box-shadow:0 10px 28px rgba(61,31,122,.055)!important;
+}
+#moduleContent:has(#upSourceSelect) .f-group{margin-bottom:13px!important}
+#moduleContent:has(#upSourceSelect) .f-label{font-size:10px!important;font-weight:750!important;letter-spacing:.04em!important}
+#moduleContent:has(#upSourceSelect) .f-input,
+#moduleContent:has(#upSourceSelect) .f-select{
+  min-height:42px!important;
+  border-radius:11px!important;
+}
+#moduleContent:has(#upSourceSelect) #upGenBtn{min-height:44px!important;border-radius:12px!important}
+#moduleContent:has(#upSourceSelect) .grid3{gap:12px!important}
+#moduleContent:has(#upSourceSelect) .grid3 .card{
+  border-radius:14px!important;
+  border:1px solid rgba(98,64,176,.10)!important;
+  overflow:hidden!important;
+  background:rgba(255,255,255,.84)!important;
+}
+
+/* Video Editor / sequencer */
+#moduleContent:has(#timelineStrip) .panel{padding:18px!important}
+#moduleContent:has(#timelineStrip) #timelineStrip{
+  height:52px!important;
+  border:1px solid rgba(98,64,176,.10)!important;
+  border-radius:13px!important;
+  box-shadow:inset 0 1px 2px rgba(61,31,122,.04)!important;
+}
+#moduleContent:has(#timelineStrip) [id^="seqCard_"]{
+  border:1px solid rgba(98,64,176,.09)!important;
+  border-radius:15px!important;
+  background:rgba(249,248,253,.82)!important;
+  box-shadow:0 6px 18px rgba(61,31,122,.04)!important;
+}
+#moduleContent:has(#timelineStrip) [id^="seqCard_"] video{border-radius:8px!important}
+#moduleContent:has(#timelineStrip) .f-row{gap:12px!important}
+#moduleContent:has(#timelineStrip) input[type="range"]{accent-color:var(--violet,#6240b0)!important}
+#moduleContent:has(#timelineStrip) #seqVideoEl{border-radius:15px!important;box-shadow:0 12px 30px rgba(20,14,40,.10)!important}
+
+/* Empty states become deliberate, quiet surfaces rather than dead space. */
+#moduleContent:has(#assetUploadInput) .empty-state,
+#moduleContent:has(.grid-gallery) .empty-state,
+#moduleContent:has(#upSourceSelect) .empty-state,
+#moduleContent:has(#timelineStrip) .empty-state{
+  padding:44px 20px!important;
+  border:1px dashed rgba(98,64,176,.18)!important;
+  border-radius:18px!important;
+  background:rgba(255,255,255,.55)!important;
+}
+
+/* Dark mode */
+html[data-theme="dark"] #moduleContent:has(#assetUploadInput) .card,
+html[data-theme="dark"] #moduleContent:has(.grid-gallery) .grid-gallery > .card,
+html[data-theme="dark"] #moduleContent:has(#upSourceSelect) .panel,
+html[data-theme="dark"] #moduleContent:has(#timelineStrip) .panel{
+  background:linear-gradient(145deg,rgba(30,24,43,.94),rgba(22,18,33,.88))!important;
+  border-color:rgba(195,174,250,.14)!important;
+  box-shadow:0 12px 32px rgba(0,0,0,.22)!important;
+}
+html[data-theme="dark"] #moduleContent:has(#timelineStrip) [id^="seqCard_"]{
+  background:rgba(25,21,38,.82)!important;
+  border-color:rgba(195,174,250,.12)!important;
+}
+html[data-theme="dark"] #moduleContent:has(#assetUploadInput) .empty-state,
+html[data-theme="dark"] #moduleContent:has(.grid-gallery) .empty-state,
+html[data-theme="dark"] #moduleContent:has(#upSourceSelect) .empty-state,
+html[data-theme="dark"] #moduleContent:has(#timelineStrip) .empty-state{
+  background:rgba(25,21,38,.60)!important;
+  border-color:rgba(195,174,250,.18)!important;
+}
+
+/* Mobile */
+@media(max-width:760px){
+  #moduleContent:has(#assetUploadInput),
+  #moduleContent:has(.grid-gallery),
+  #moduleContent:has(#upSourceSelect),
+  #moduleContent:has(#timelineStrip){padding:10px!important}
+  #moduleContent:has(.grid-gallery) .grid-gallery{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}
+  #moduleContent:has(#assetUploadInput) .grid3{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}
+  #moduleContent:has(#upSourceSelect){max-width:none!important}
+  #moduleContent:has(#timelineStrip) .f-row{flex-direction:column!important;gap:0!important}
+  #moduleContent:has(#timelineStrip) .panel{padding:13px!important}
+}
+@media(max-width:420px){
+  #moduleContent:has(.grid-gallery) .grid-gallery,
+  #moduleContent:has(#assetUploadInput) .grid3{grid-template-columns:1fr!important}
+}
+@media(prefers-reduced-motion:reduce){
+  #moduleContent:has(#assetUploadInput) .card{transition:none!important}
+}
