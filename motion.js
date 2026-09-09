@@ -249,4 +249,9 @@ function clearMotionBrush(){
   link.href="ui-v2.css";
   link.dataset.kosmicUiV2="1";
   document.head.appendChild(link);
+  const phase1=document.createElement("link");
+  phase1.rel="stylesheet";
+  phase1.href="ui-v2-phase1.css";
+  phase1.dataset.kosmicUiV2Phase="1";
+  document.head.appendChild(phase1);
 })();
