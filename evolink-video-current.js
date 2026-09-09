@@ -60,6 +60,24 @@
     if(veo)veo.schema=Object.assign({},veo.schema,{quality:["720p"],duration:[8,8],aspect:["16:9","9:16"],audio:true});
 
     reindex();
+
+    // Ensure genViaFal is also intercepted when it is the available video
+    // entry point, even if the base adapter wrapped another global first.
+    const originalFal=window.genViaFal;
+    if(typeof originalFal==="function"&&!originalFal.__kosmicEvoCurrentWrapped){
+      const wrappedFal=async function(){
+        const args=[...arguments],model=args[2];
+        if(api.index[model]&&typeof window.generateEvoLinkVideo==="function"){
+          const result=await window.generateEvoLinkVideo(model,args[0]||"",{aspect_ratio:args[3]||"16:9",duration:args[4],image_urls:args[5]||[],video_urls:args[6]||[],audio_urls:args[7]||[]});
+          return {url:result.url};
+        }
+        return originalFal.apply(this,args);
+      };
+      wrappedFal.__kosmicEvoCurrentWrapped=true;
+      wrappedFal.__kosmicOriginal=originalFal;
+      window.genViaFal=wrappedFal;
+    }
+
     window.KOSMIC_EVOLINK_VIDEO.currentRouteRevision="2026-09-09";
     return true;
   };
