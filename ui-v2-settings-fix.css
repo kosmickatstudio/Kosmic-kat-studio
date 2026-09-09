@@ -3,8 +3,9 @@
  * without changing its toggle, tab, picker, or generation handlers.
  */
 
-/* The existing sheet can inherit restrictive overflow/flex rules from the
- * global glass shell. Give the sheet a real viewport and stacking context. */
+/* Force the existing sheet to have an actual viewport. The previous styling
+ * made the surface visible in the cascade but did not guarantee that its
+ * original off-canvas positioning was overridden. */
 .ig-settings-sheet{
   box-sizing:border-box!important;
   width:min(680px,100vw)!important;
@@ -24,15 +25,56 @@
   visibility:visible!important;
 }
 
-/* Preserve the application's open/closed state. These rules only ensure
- * an already-open sheet is painted above the Video workspace. */
-.ig-settings-sheet.open,
+/* The application opens this exact panel by adding .open. Explicitly anchor
+ * the open state to the viewport so inherited transform/bottom/position rules
+ * cannot leave the Settings sheet underneath or outside the Video workspace. */
+.ig-settings-sheet.open{
+  position:fixed!important;
+  left:50%!important;
+  right:auto!important;
+  bottom:0!important;
+  top:auto!important;
+  width:min(680px,100vw)!important;
+  max-width:100vw!important;
+  max-height:min(86vh,780px)!important;
+  transform:translateX(-50%) translateY(0)!important;
+  visibility:visible!important;
+  opacity:1!important;
+  display:flex!important;
+  z-index:401!important;
+}
+
+/* Compatibility for any pre-existing active/show state without changing the
+ * application's normal closed state. */
 .ig-settings-sheet.active,
 .ig-settings-sheet.show,
 .ig-settings-sheet.is-open{
+  position:fixed!important;
+  left:50%!important;
+  right:auto!important;
+  bottom:0!important;
+  top:auto!important;
+  transform:translateX(-50%) translateY(0)!important;
   visibility:visible!important;
   opacity:1!important;
-  z-index:400!important;
+  z-index:401!important;
+}
+
+#vcSettingsBackdrop{
+  position:fixed!important;
+  inset:0!important;
+  z-index:390!important;
+}
+#vcSettingsBackdrop.show{
+  display:block!important;
+  visibility:visible!important;
+  opacity:1!important;
+}
+
+/* Settings header stays pinned while the controls below it scroll. */
+.ig-settings-sheet .ig-sheet-handle,
+.ig-settings-sheet .ig-sheet-header{
+  flex:0 0 auto!important;
 }
 
 /* Catch tab implementations that use class names, role=tablist, or a plain
@@ -109,7 +151,19 @@
   opacity:1!important;
 }
 
-/* The sheet body needs a scrollable region. */
+/* The actual Video Settings markup uses a direct padded content wrapper.
+ * Make that wrapper scroll without changing its existing visibility state. */
+.ig-settings-sheet > .ig-sheet-header + div{
+  box-sizing:border-box!important;
+  min-height:0!important;
+  flex:1 1 auto!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  width:100%!important;
+  max-width:100%!important;
+  color:var(--text,#20182d)!important;
+}
+
 .ig-settings-sheet .settings-content,
 .ig-settings-sheet .settings-body,
 .ig-settings-sheet .ig-settings-content,
@@ -127,18 +181,11 @@
   color:var(--text,#20182d)!important;
 }
 
-/* Generic direct-content fallback for the existing sheet markup when it has
- * no named body wrapper. It does not alter display:none state. */
-.ig-settings-sheet > .ig-sheet-handle ~ *{
-  min-width:0!important;
-  max-width:100%!important;
-}
+.ig-settings-sheet > .ig-sheet-handle ~ *{min-width:0!important;max-width:100%!important}
 
 .ig-settings-sheet label,
 .ig-settings-sheet .f-label,
-.ig-settings-sheet .setting-label{
-  color:var(--text,#20182d)!important;
-}
+.ig-settings-sheet .setting-label{color:var(--text,#20182d)!important}
 
 .ig-settings-sheet select,
 .ig-settings-sheet input:not([type="range"]),
@@ -152,17 +199,17 @@
   color:var(--text,#20182d)!important;
 }
 
-/* Video-specific sheet IDs, if present, must beat sticky composer layers. */
-[id*="vcSettings"],
-[id*="VcSettings"]{isolation:isolate}
-#vcSettingsBackdrop{z-index:390!important}
-#vcSettingsPanel{z-index:401!important}
-
 @media(max-width:700px){
-  .ig-settings-sheet{
+  .ig-settings-sheet.open,
+  .ig-settings-sheet.active,
+  .ig-settings-sheet.show,
+  .ig-settings-sheet.is-open{
+    left:0!important;
     width:100vw!important;
+    max-width:100vw!important;
     max-height:90vh!important;
     min-height:240px!important;
+    transform:translateY(0)!important;
     border-radius:20px 20px 0 0!important;
   }
   .ig-settings-sheet [role="tablist"],
@@ -174,12 +221,6 @@
   .ig-settings-sheet [class*="tabbar"] button,
   .ig-settings-sheet [class*="tabs"] button,
   .ig-settings-sheet button[class*="tab"]{min-height:38px!important;padding:7px 11px!important}
-  .ig-settings-sheet .settings-content,
-  .ig-settings-sheet .settings-body,
-  .ig-settings-sheet .ig-settings-content,
-  .ig-settings-sheet .ig-settings-body,
-  .ig-settings-sheet .tab-content,
-  .ig-settings-sheet [role="tabpanel"]{padding:10px 11px 18px!important}
 }
 
 html[data-theme="dark"] .ig-settings-sheet [role="tab"],
