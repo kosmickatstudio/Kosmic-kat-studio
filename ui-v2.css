@@ -1,0 +1,222 @@
+/*
+ * KOSMICKAT STUDIO UI V2
+ * Global visual system only. No generation state, routing, observers or DOM rewrites.
+ * Designed as a progressive enhancement layer over the existing Studio shell.
+ * Performance rule: solid/near-solid surfaces first, restrained effects, no filters
+ * or animation loops. Existing Engine logic remains untouched.
+ */
+:root{
+  --ui2-bg:#f7f8fc;
+  --ui2-surface:#ffffff;
+  --ui2-surface-soft:#fbfbfe;
+  --ui2-line:#e7e6ef;
+  --ui2-line-strong:#d8d5e5;
+  --ui2-text:#171426;
+  --ui2-muted:#706a82;
+  --ui2-faint:#9892a7;
+  --ui2-primary:#5b3bb6;
+  --ui2-primary-2:#7454d0;
+  --ui2-ice:#3999c7;
+  --ui2-gold:#b88320;
+  --ui2-green:#159a72;
+  --ui2-red:#d84d55;
+  --ui2-shadow:0 8px 30px rgba(34,25,63,.07);
+  --ui2-shadow-hover:0 14px 42px rgba(34,25,63,.11);
+  --ui2-radius:16px;
+  --ui2-radius-sm:11px;
+  --ui2-header:68px;
+  --ui2-sidebar:244px;
+}
+
+/* App foundation */
+html,body{background:var(--ui2-bg)}
+body{color:var(--ui2-text)}
+body::before{opacity:.55}
+
+/* Header: three intentional zones, not a decorative strip */
+header{
+  height:var(--ui2-header)!important;
+  padding:0 18px!important;
+  background:rgba(255,255,255,.94)!important;
+  border-bottom:1px solid var(--ui2-line)!important;
+  box-shadow:0 1px 0 rgba(35,26,66,.03),0 5px 20px rgba(35,26,66,.035)!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+header::after{height:1px!important;background:linear-gradient(90deg,transparent 5%,rgba(91,59,182,.22),rgba(57,153,199,.16),transparent 95%)!important}
+.h-logo{gap:9px}
+.h-logo-img-wrap,.h-logo-img-wrap img{width:42px;height:42px}
+.h-logo-text{font-size:14px;color:var(--ui2-primary)}
+.h-logo-sub{font-size:8px;color:var(--ui2-faint)}
+.h-center{padding:0 28px}
+.cmd-bar{
+  max-width:620px!important;
+  min-height:40px;
+  padding:9px 17px!important;
+  background:#f7f7fb!important;
+  border:1px solid var(--ui2-line)!important;
+  border-radius:12px!important;
+  box-shadow:inset 0 1px 2px rgba(35,26,66,.025)!important;
+  backdrop-filter:none!important;
+}
+.cmd-bar:focus{background:#fff!important;border-color:rgba(91,59,182,.48)!important;box-shadow:0 0 0 3px rgba(91,59,182,.09)!important}
+.h-right{gap:7px}
+.h-settings,.hamburger{
+  width:38px!important;height:38px!important;
+  border:1px solid var(--ui2-line)!important;
+  background:#fff!important;color:var(--ui2-muted)!important;
+  border-radius:11px!important;
+}
+.h-settings:hover,.hamburger:hover{background:#f5f2fc!important;border-color:#d8cff0!important;color:var(--ui2-primary)!important}
+.sign-in-btn{background:var(--ui2-primary)!important;box-shadow:none!important;border-radius:11px!important;padding:9px 15px!important}
+.sign-in-btn:hover{transform:translateY(-1px);box-shadow:0 7px 18px rgba(91,59,182,.18)!important}
+.founder-badge{background:#f9f1dc!important;color:#916514!important;box-shadow:none!important}
+
+/* Sidebar: quieter, denser, easier to scan */
+.sidebar{
+  width:var(--ui2-sidebar)!important;
+  background:rgba(255,255,255,.97)!important;
+  border-right:1px solid var(--ui2-line)!important;
+  box-shadow:4px 0 22px rgba(34,25,63,.025);
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+.sidebar-section{padding:9px 8px!important;border-bottom:1px solid #f0eef5!important}
+.sidebar-label{padding:7px 9px 5px!important;color:#9a94a8!important;font-size:9px!important;letter-spacing:.12em!important}
+.mod-btn{
+  min-height:40px;
+  padding:8px 10px!important;
+  border-left:2px solid transparent!important;
+  border-radius:10px!important;
+  margin:1px 0;
+}
+.mod-btn:hover{background:#f5f3fa!important;border-left-color:#c7b8e9!important}
+.mod-btn.active{background:#f1edfa!important;border-left-color:var(--ui2-primary)!important}
+.mod-btn.active .mod-label{color:var(--ui2-primary)!important}
+.mod-icon{width:25px;font-size:16px}
+.mod-label{font-size:12px;color:#645d76!important}
+.mod-badge{font-size:8px!important}
+
+/* Main content */
+.main-content{background:transparent}
+.display-area{
+  height:112px!important;
+  background:linear-gradient(180deg,#fbfbfe 0%,#f3f3f8 100%)!important;
+  border-bottom:1px solid var(--ui2-line)!important;
+}
+.display-area.expanded{height:260px!important}
+
+/* Common surfaces already used throughout the product */
+.card,.panel,.section-card,.home-glass-panel,.modal,.settings-panel,.settings-sheet,.tool-panel{
+  border-color:var(--ui2-line)!important;
+  box-shadow:var(--ui2-shadow)!important;
+}
+.home-glass-panel{
+  background:#fff!important;
+  border:1px solid var(--ui2-line)!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+  box-shadow:var(--ui2-shadow)!important;
+}
+
+/* Buttons: one hierarchy */
+.btn,.button{border-radius:10px!important;min-height:38px}
+.btn-primary{background:var(--ui2-primary)!important;border-color:var(--ui2-primary)!important;box-shadow:none!important}
+.btn-primary:hover{background:#4f32a1!important;box-shadow:0 7px 18px rgba(91,59,182,.16)!important}
+.btn-outline{background:#fff!important;border-color:var(--ui2-line-strong)!important;color:var(--ui2-text)!important}
+.btn-outline:hover{background:#f7f5fc!important;border-color:#c9bce6!important;color:var(--ui2-primary)!important}
+
+/* Inputs and selects */
+input:not([type="range"]),textarea,select{
+  border-color:var(--ui2-line)!important;
+  border-radius:10px!important;
+  background:#fff!important;
+  color:var(--ui2-text)!important;
+}
+input:not([type="range"]):focus,textarea:focus,select:focus{
+  border-color:rgba(91,59,182,.5)!important;
+  box-shadow:0 0 0 3px rgba(91,59,182,.08)!important;
+  outline:none!important;
+}
+
+/* Tabs and segmented controls */
+.tab,.tabs button,[role="tab"]{border-radius:9px!important}
+.tab.active,.tabs button.active,[role="tab"][aria-selected="true"]{background:#f0ecfa!important;color:var(--ui2-primary)!important}
+
+/* Dialogs and overlays: clean surfaces, no full-screen blur */
+.modal-overlay{background:rgba(18,15,29,.42)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+.modal,.modal-content{background:#fff!important;border:1px solid var(--ui2-line)!important;border-radius:18px!important;box-shadow:0 24px 70px rgba(20,14,40,.22)!important}
+
+/* Feedback states */
+.toast{border-radius:11px!important;box-shadow:0 10px 28px rgba(20,14,40,.15)!important}
+
+/* Accessibility: visible keyboard focus without changing mouse aesthetics */
+:where(button,a,input,select,textarea,[tabindex]):focus-visible{
+  outline:2px solid rgba(91,59,182,.72)!important;
+  outline-offset:2px!important;
+}
+
+/* Reduce motion for people who request it */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+
+/* Tablet / mobile shell */
+@media (max-width:900px){
+  :root{--ui2-sidebar:228px}
+  .h-center{padding:0 10px}
+  .cmd-bar{max-width:420px!important}
+}
+@media (max-width:700px){
+  header{height:62px!important;padding:0 10px!important}
+  .h-logo-img-wrap,.h-logo-img-wrap img{width:36px;height:36px}
+  .h-logo-text{font-size:12px}
+  .h-logo-sub{display:none}
+  .h-center{display:none}
+  .h-right{margin-left:auto}
+  .founder-badge{display:none}
+  .sign-in-btn:not(.sign-in-btn-avatar){padding:8px 11px!important;font-size:11px!important}
+  .studio-body{position:relative}
+  .sidebar{position:fixed!important;top:62px;bottom:0;left:0;z-index:80;transform:translateX(-105%);box-shadow:12px 0 35px rgba(20,14,40,.14)}
+  .sidebar.open{transform:translateX(0)}
+  .hamburger{display:flex!important}
+  .main-content{width:100%}
+  .display-area{height:92px!important}
+  .display-area.expanded{height:210px!important}
+}
+
+/* Dark theme keeps the same information architecture while switching materials. */
+html[data-theme="dark"]{
+  --ui2-bg:#0e0b16;
+  --ui2-surface:#171221;
+  --ui2-surface-soft:#1d1729;
+  --ui2-line:#30283e;
+  --ui2-line-strong:#403651;
+  --ui2-text:#f1ecfb;
+  --ui2-muted:#b3a8c8;
+  --ui2-faint:#817595;
+  --ui2-primary:#b69cf4;
+  --ui2-primary-2:#9674e8;
+  --ui2-ice:#72d9fa;
+  --ui2-gold:#e9c36f;
+  --ui2-shadow:0 10px 34px rgba(0,0,0,.25);
+  --ui2-shadow-hover:0 16px 44px rgba(0,0,0,.34);
+}
+html[data-theme="dark"] header{background:rgba(20,15,29,.97)!important;border-color:var(--ui2-line)!important;box-shadow:0 1px 0 rgba(255,255,255,.025)!important}
+html[data-theme="dark"] .cmd-bar{background:#181321!important;border-color:var(--ui2-line)!important;color:var(--ui2-text)!important}
+html[data-theme="dark"] .cmd-bar:focus{background:#1d1729!important;border-color:#6f55ae!important}
+html[data-theme="dark"] .h-settings,html[data-theme="dark"] .hamburger{background:#1a1524!important;border-color:var(--ui2-line)!important;color:var(--ui2-muted)!important}
+html[data-theme="dark"] .sidebar{background:rgba(19,15,27,.98)!important;border-color:var(--ui2-line)!important}
+html[data-theme="dark"] .sidebar-section{border-color:#272133!important}
+html[data-theme="dark"] .mod-btn:hover{background:#211a30!important}
+html[data-theme="dark"] .mod-btn.active{background:#2a2140!important}
+html[data-theme="dark"] .display-area{background:linear-gradient(180deg,#171221,#120e1b)!important;border-color:var(--ui2-line)!important}
+html[data-theme="dark"] .home-glass-panel{background:#171221!important;border-color:var(--ui2-line)!important}
+html[data-theme="dark"] .btn-outline{background:#171221!important;color:var(--ui2-text)!important;border-color:var(--ui2-line-strong)!important}
+html[data-theme="dark"] input:not([type="range"]),html[data-theme="dark"] textarea,html[data-theme="dark"] select{background:#171221!important;color:var(--ui2-text)!important;border-color:var(--ui2-line)!important}
+html[data-theme="dark"] .modal,html[data-theme="dark"] .modal-content{background:#171221!important;border-color:var(--ui2-line)!important}
+
+/* Safety: the global redesign must never introduce another observer/blur failure mode. */
+@media (max-width:700px){
+  html[data-theme="dark"] .sidebar{box-shadow:12px 0 35px rgba(0,0,0,.4)}
+}
