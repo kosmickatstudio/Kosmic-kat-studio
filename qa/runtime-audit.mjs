@@ -67,8 +67,68 @@ async function auditSettings(page, screenshotName) {
     if (state.sheet.visibility !== 'visible' || state.sheet.opacity === '0' || state.sheet.display === 'none') fail('Settings sheet exists but is not visibly open', JSON.stringify(state.sheet));
     if (!state.contentText) warn('Settings sheet opened with no readable text content');
     await page.screenshot({ path: `${OUT}/${screenshotName}`, fullPage: false }).catch(() => {});
+
+    const closed = await page.evaluate(() => {
+      try {
+        if (typeof toggleIgSettings === 'function') { toggleIgSettings(); return true; }
+      } catch (_) {}
+      return false;
+    });
+    await sleep(150);
+    if (!closed) warn('Settings close call could not be executed');
   } else warn('Image Settings sheet was not found at runtime');
   return state;
+}
+
+async function auditEvoLink(page) {
+  const snapshot = await page.evaluate(() => {
+    const api = window.KOSMIC_EVOLINK_VIDEO;
+    if (!api) return { present: false };
+    const cards = Array.isArray(api.catalog) ? api.catalog : [];
+    const routeIds = cards.flatMap((card) => (card?.routes || []).map((route) => route?.id).filter(Boolean));
+    const duplicateRoutes = [...new Set(routeIds.filter((id, i) => routeIds.indexOf(id) !== i))];
+    const specialized = ['topaz-video-upscale', 'kling-v3-motion-control', 'omnihuman-1.5'];
+    return {
+      present: true,
+      cardCount: cards.length,
+      routeCount: routeIds.length,
+      indexedRouteCount: Object.keys(api.index || {}).length,
+      duplicateRoutes,
+      revision: api.routeRevision || null,
+      source: api.catalogSource || null,
+      specializedIndexed: specialized.map((id) => ({ id, present: !!api.index?.[id] })),
+      keyRoutes: [
+        'seedance-2.5-video-edit', 'seedance-2.5-video-extend',
+        'gemini-omni-1.1-flash-video-edit', 'gemini-omni-1.1-flash-video-extend',
+        'wan3.0-reference-to-video', 'wan3.0-prime-reference-video',
+        'kling-o3-reference-to-video', 'sora-2-pro-preview', 'omnihuman-1.5'
+      ].map((id) => ({ id, present: !!api.index?.[id], mode: api.index?.[id]?.mode || null }))
+    };
+  });
+
+  if (!snapshot.present) {
+    fail('EvoLink runtime catalog is missing');
+    return snapshot;
+  }
+  if (snapshot.cardCount < 25) fail('EvoLink runtime catalog unexpectedly small', String(snapshot.cardCount));
+  if (snapshot.indexedRouteCount !== snapshot.routeCount - snapshot.duplicateRoutes.length) warn('EvoLink route index differs from route declaration count', `${snapshot.indexedRouteCount} indexed vs ${snapshot.routeCount} declared`);
+  if (snapshot.duplicateRoutes.length) fail('Duplicate EvoLink route IDs detected', snapshot.duplicateRoutes.join(', '));
+  for (const item of snapshot.keyRoutes) if (!item.present) fail('Required EvoLink route missing', item.id);
+  if (snapshot.specializedIndexed.some((x) => !x.present)) warn('Specialized EvoLink route missing from index', JSON.stringify(snapshot.specializedIndexed));
+
+  const routeUi = await page.evaluate(() => {
+    const sel = document.getElementById('vcModel');
+    return {
+      selectPresent: !!sel,
+      optionCount: sel ? sel.options.length : 0,
+      evoOptionCount: sel ? [...sel.options].filter((o) => String(o.value || '').startsWith('seedance-') || String(o.value || '').includes('kling') || String(o.value || '').includes('wan3') || String(o.value || '').includes('sora-2') || String(o.value || '').includes('gemini-omni')).length : 0,
+      hudPresent: !!document.querySelector('.evo-route-hud')
+    };
+  });
+  if (!routeUi.selectPresent) warn('Existing Video Canvas model select not found');
+  else if (routeUi.optionCount < 10) fail('Video Canvas model list is suspiciously small', String(routeUi.optionCount));
+  if (!routeUi.hudPresent) warn('EvoLink route/schema HUD not visible yet');
+  return { ...snapshot, routeUi };
 }
 
 async function main() {
@@ -88,7 +148,7 @@ async function main() {
   if (!response) fail('Initial navigation returned no response');
   else if (response.status() >= 400) fail('Initial navigation failed', `${response.status()} ${response.url()}`);
   await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
-  await sleep(1500);
+  await sleep(1800);
 
   const title = await page.title();
   if (!/KosmicKat/i.test(title)) warn('Unexpected page title', title);
@@ -101,24 +161,26 @@ async function main() {
   }));
   if (!modelSnapshot.providerKeys.length) warn('BRAIN_SUBMODELS is not exposed at runtime');
 
+  const evoSnapshot = await auditEvoLink(page);
   const settingsState = await auditSettings(page, 'kosmic-settings-desktop.png');
   await page.screenshot({ path: `${OUT}/kosmic-home-desktop.png`, fullPage: true }).catch(() => {});
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
   await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
-  await sleep(1000);
+  await sleep(1400);
   const mobile = await page.evaluate(() => {
     const sheet = document.querySelector('.ig-settings-sheet');
     const handle = sheet?.querySelector('.ig-sheet-handle');
     if (!sheet || !handle) return { found: false };
     const ss = getComputedStyle(sheet); const hs = getComputedStyle(handle);
-    return { found: true, viewport: { width: innerWidth, height: innerHeight }, sheet: { position: ss.position, width: ss.width, maxWidth: ss.maxWidth }, handle: { touchAction: hs.touchAction, pointerEvents: hs.pointerEvents } };
+    return { found: true, viewport: { width: innerWidth, height: innerHeight }, sheet: { position: ss.position, width: ss.width, maxWidth: ss.maxWidth, transform: ss.transform }, handle: { touchAction: hs.touchAction, pointerEvents: hs.pointerEvents } };
   });
   if (mobile.found) {
     if (mobile.handle.touchAction === 'auto') warn('Mobile settings handle touch-action is not overridden', mobile.handle.touchAction);
     if (mobile.handle.pointerEvents === 'none') fail('Mobile settings handle cannot receive input');
   }
+  const mobileEvo = await auditEvoLink(page);
   const mobileSettingsState = await auditSettings(page, 'kosmic-settings-mobile.png');
   await page.screenshot({ path: `${OUT}/kosmic-home-mobile.png`, fullPage: true }).catch(() => {});
 
@@ -130,7 +192,7 @@ async function main() {
   const report = {
     site: SITE_URL, checkedAt: new Date().toISOString(), navigation: response ? { status: response.status(), url: response.url() } : null,
     title, failures, warnings, consoleErrors, pageErrors, requestFailures, badResponses,
-    modelSnapshot, settingsState, mobileSettingsState, mobile,
+    modelSnapshot, evoSnapshot, mobileEvo, settingsState, mobileSettingsState, mobile,
   };
   fs.writeFileSync(`${OUT}/kosmic-runtime-report.json`, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
