@@ -1,8 +1,8 @@
 /* KOSMIC KAT — Video Settings structural parity + EvoLink ecosystem loader
  * Settings are kept in a document-level layer. EvoLink catalog, current route
  * corrections, route/schema expansion, integrity normalization, specialized
- * route safety, adapter fallback, playground surface, and modal layering load
- * deterministically.
+ * route safety, adapter fallback, Seedance 2.5 R2V schema, playground surface,
+ * and modal layering load deterministically.
  */
 (function installVideoSettingsParity(){
   "use strict";
@@ -31,7 +31,9 @@
         loadScript("evolink-video-integrity.js","data-kosmic-evo-video-integrity",()=>{
           loadScript("evolink-video-adapter-fallback.js","data-kosmic-evo-video-adapter-fallback",()=>{
             loadScript("evolink-video-safety.js","data-kosmic-evo-video-safety",()=>{
-              loadScript("evolink-video-playground-complete.js","data-kosmic-evo-video-playground-complete");
+              loadScript("evolink-video-playground-complete.js","data-kosmic-evo-video-playground-complete",()=>{
+                loadScript("evolink-seedance25-r2v.js","data-kosmic-seedance25-r2v");
+              });
             });
           });
         });
