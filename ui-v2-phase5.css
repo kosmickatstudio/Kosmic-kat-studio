@@ -1,0 +1,122 @@
+/* KOSMIC KAT UI V2 — PHASE 5: AUDIO STUDIO + ACCOUNT VISIBILITY FIXES
+ * Audio presentation layer only. Existing ElevenLabs routing, voice library,
+ * cloning, translation, generation and storage logic remain untouched.
+ * Also restores visibility of existing Settings/account controls that the
+ * progressive shell can visually suppress. No auth implementation is replaced.
+ */
+
+/* ── Audio Studio workspace ─────────────────────────────────────────── */
+.module-content:has(#audioGenerateAnchor),
+.module-content:has(#audioVoiceCloneAnchor){min-width:0!important}
+.module-content:has(#audioGenerateAnchor){padding:18px 20px 22px!important;background:transparent!important}
+.module-content:has(#audioGenerateAnchor) .panel{
+  border-radius:18px!important;
+  background:linear-gradient(145deg,rgba(255,255,255,.93),rgba(249,247,253,.90))!important;
+  border:1px solid rgba(98,64,176,.10)!important;
+  box-shadow:0 12px 30px rgba(61,31,122,.06),inset 0 1px 0 rgba(255,255,255,.98)!important;
+}
+#audioGenerateAnchor{padding:18px!important}
+#audioResultPanel,#audioVoiceCloneAnchor{padding:17px!important}
+
+/* Audio form hierarchy */
+.module-content:has(#audioGenerateAnchor) .f-group{margin-bottom:13px!important}
+.module-content:has(#audioGenerateAnchor) .f-label{font-size:10px!important;font-weight:750!important;letter-spacing:.04em!important;color:#776d89!important}
+.module-content:has(#audioGenerateAnchor) .f-input,
+.module-content:has(#audioGenerateAnchor) .f-textarea,
+.module-content:has(#audioGenerateAnchor) .f-select,
+#audioVoiceTrigger,#audioModelTrigger{
+  border-radius:12px!important;
+  border:1px solid rgba(98,64,176,.11)!important;
+  background:rgba(249,248,252,.90)!important;
+  box-shadow:inset 0 1px 1px rgba(61,31,122,.025)!important;
+}
+#audioText{min-height:104px!important;padding:12px!important;line-height:1.55!important}
+#audioVoiceTrigger,#audioModelTrigger{min-height:48px!important}
+#audioGenBtn{min-height:44px!important;border-radius:12px!important}
+
+/* Voice picker and clone surfaces */
+#voicePickerOverlay{z-index:500!important;background:rgba(25,15,45,.28)!important}
+#voicePickerOverlay .picker-sheet{
+  max-height:min(78vh,720px)!important;
+  border:1px solid rgba(98,64,176,.12)!important;
+  border-radius:22px 22px 0 0!important;
+  background:rgba(255,255,255,.98)!important;
+  box-shadow:0 -18px 55px rgba(35,22,67,.18)!important;
+  overflow:hidden!important;
+}
+#voicePickerOverlay .picker-sheet>div:first-child{background:rgba(255,255,255,.97)!important}
+#audioVoiceCloneAnchor input[type="file"]+button{border-radius:11px!important}
+
+/* ── Global Settings/account visibility ────────────────────────────── */
+/* The existing header controls are functional controls, not decoration.
+ * Keep them visible above the glass shell at every desktop width. */
+header .h-settings{display:flex!important;visibility:visible!important;opacity:1!important;position:relative!important;z-index:3!important;flex-shrink:0!important}
+header .sign-in-btn{visibility:visible!important;opacity:1!important;position:relative!important;z-index:3!important;flex-shrink:0!important}
+header .sign-in-btn-avatar{display:flex!important;align-items:center!important;justify-content:center!important;width:38px!important;height:38px!important;min-width:38px!important;padding:0!important;border-radius:50%!important;overflow:hidden!important;background:#fff!important}
+header .sign-in-btn-avatar img{display:block!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:cover!important;border-radius:50%!important;visibility:visible!important;opacity:1!important}
+header .sign-in-btn-avatar>span{display:flex!important;width:100%!important;height:100%!important;align-items:center!important;justify-content:center!important;border-radius:50%!important}
+
+/* Existing Video/Image/Kat Films settings triggers use the app's generic
+ * settings-sheet implementation. Make the triggers consistently visible. */
+button[onclick*="toggleVcSettings"],
+button[onclick*="toggleIgSettings"],
+button[onclick*="toggleCsSettings"]{
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  min-width:36px!important;min-height:36px!important;
+  border-radius:11px!important;
+  background:rgba(255,255,255,.90)!important;
+  border:1px solid rgba(98,64,176,.11)!important;
+  color:#655a78!important;
+  visibility:visible!important;opacity:1!important;
+  position:relative!important;z-index:25!important;
+  box-shadow:0 5px 14px rgba(61,31,122,.06)!important;
+}
+button[onclick*="toggleVcSettings"]:hover,
+button[onclick*="toggleIgSettings"]:hover,
+button[onclick*="toggleCsSettings"]:hover{background:#fff!important;color:var(--violet)!important;border-color:rgba(98,64,176,.24)!important}
+
+/* Settings bottom sheets */
+.ig-settings-backdrop{z-index:390!important}
+.ig-settings-sheet{
+  z-index:400!important;
+  border-radius:22px 22px 0 0!important;
+  border:1px solid rgba(98,64,176,.12)!important;
+  background:rgba(255,255,255,.98)!important;
+  box-shadow:0 -20px 65px rgba(35,22,67,.18)!important;
+}
+.ig-sheet-handle{background:rgba(98,64,176,.18)!important;border-radius:99px!important}
+
+/* ── Audio responsive ───────────────────────────────────────────────── */
+@media (min-width:1000px){.module-content:has(#audioGenerateAnchor){max-width:1180px!important;margin:0 auto!important}}
+@media (max-width:700px){
+  .module-content:has(#audioGenerateAnchor){padding:10px!important}
+  #audioGenerateAnchor,#audioResultPanel,#audioVoiceCloneAnchor{padding:13px!important;border-radius:16px!important}
+  .module-content:has(#audioGenerateAnchor) .f-row{flex-direction:column!important;gap:0!important}
+  #audioText{min-height:92px!important}
+  header .sign-in-btn-avatar{width:34px!important;height:34px!important;min-width:34px!important}
+  header .h-settings{width:36px!important;height:36px!important;min-width:36px!important}
+  .ig-settings-sheet{border-radius:18px 18px 0 0!important}
+}
+
+/* ── Dark mode ──────────────────────────────────────────────────────── */
+html[data-theme="dark"] .module-content:has(#audioGenerateAnchor) .panel,
+html[data-theme="dark"] #voicePickerOverlay .picker-sheet,
+html[data-theme="dark"] .ig-settings-sheet{
+  background:rgba(30,24,43,.97)!important;
+  border-color:rgba(195,174,250,.13)!important;
+  box-shadow:0 18px 55px rgba(0,0,0,.30)!important;
+}
+html[data-theme="dark"] #audioVoiceTrigger,html[data-theme="dark"] #audioModelTrigger,
+html[data-theme="dark"] .module-content:has(#audioGenerateAnchor) .f-input,
+html[data-theme="dark"] .module-content:has(#audioGenerateAnchor) .f-textarea,
+html[data-theme="dark"] .module-content:has(#audioGenerateAnchor) .f-select,
+html[data-theme="dark"] button[onclick*="toggleVcSettings"],
+html[data-theme="dark"] button[onclick*="toggleIgSettings"],
+html[data-theme="dark"] button[onclick*="toggleCsSettings"]{
+  background:rgba(22,18,33,.94)!important;
+  color:#f1ecfb!important;
+  border-color:rgba(195,174,250,.14)!important;
+}
+html[data-theme="dark"] header .sign-in-btn-avatar{background:#171221!important;border-color:rgba(195,174,250,.15)!important}
+
+@media (prefers-reduced-motion:reduce){button[onclick*="toggleVcSettings"],button[onclick*="toggleIgSettings"],button[onclick*="toggleCsSettings"]{transition:none!important}}
