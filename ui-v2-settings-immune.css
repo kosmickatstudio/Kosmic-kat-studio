@@ -1,11 +1,12 @@
 /* KOSMIC KAT — SETTINGS IMMUNITY LAYER
- * Loaded after feature CSS. Keeps settings above ordinary app overlays and
- * prevents accidental blur/filter inheritance from future UI layers.
+ * Loaded after feature CSS. Protects settings from accidental blur/filter
+ * inheritance without overriding the sheet's native swipe/close mechanics.
+ * Nested pickers/modals receive a separate higher interaction band.
  */
 .ig-settings-backdrop{
   position:fixed!important;
   inset:0!important;
-  z-index:2147483646!important;
+  z-index:2147481000!important;
   filter:none!important;
   -webkit-filter:none!important;
   backdrop-filter:none!important;
@@ -14,7 +15,7 @@
 .ig-settings-backdrop.show{display:block!important;visibility:visible!important;opacity:1!important}
 .ig-settings-sheet{
   position:fixed!important;
-  z-index:2147483647!important;
+  z-index:2147481001!important;
   filter:none!important;
   -webkit-filter:none!important;
   isolation:isolate!important;
@@ -23,7 +24,7 @@
 .ig-settings-sheet.active,
 .ig-settings-sheet.show,
 .ig-settings-sheet.is-open{
-  z-index:2147483647!important;
+  z-index:2147481001!important;
   filter:none!important;
   -webkit-filter:none!important;
   opacity:1!important;
@@ -42,6 +43,14 @@
   opacity:1!important;
   visibility:visible!important;
 }
+.ig-settings-sheet .ig-sheet-handle{
+  touch-action:none!important;
+  -webkit-user-select:none!important;
+  user-select:none!important;
+  cursor:grab!important;
+  pointer-events:auto!important;
+}
+.ig-settings-sheet .ig-sheet-handle:active{cursor:grabbing!important}
 body:has(.ig-settings-sheet.open) .studio-body,
 body:has(.ig-settings-sheet.open) .main-content,
 body:has(.ig-settings-sheet.open) .module-content,
@@ -51,9 +60,36 @@ body:has(.ig-settings-sheet.active) .module-content{
   filter:none!important;
   -webkit-filter:none!important;
 }
+
+/* Secondary UI launched from Settings must appear above the sheet instead of
+ * creating an interaction trap underneath it. Only active picker/modal
+ * surfaces are promoted, never the settings sheet itself. */
+body:has(.ig-settings-sheet.open) .picker-overlay,
+body:has(.ig-settings-sheet.open) .picker-modal,
+body:has(.ig-settings-sheet.open) .visual-picker-overlay,
+body:has(.ig-settings-sheet.open) .modal-overlay,
+body:has(.ig-settings-sheet.open) .modal-backdrop,
+body:has(.ig-settings-sheet.open) [role="dialog"]:not(.ig-settings-sheet),
+body:has(.ig-settings-sheet.open) [id*="PickerOverlay"],
+body:has(.ig-settings-sheet.open) [id*="pickerOverlay"],
+body:has(.ig-settings-sheet.open) [id*="ModelPicker"],
+body:has(.ig-settings-sheet.open) [id*="modelPicker"],
+body:has(.ig-settings-sheet.open) [id*="ResolutionPicker"],
+body:has(.ig-settings-sheet.open) [id*="resolutionPicker"],
+body:has(.ig-settings-sheet.open) [id*="RatioPicker"],
+body:has(.ig-settings-sheet.open) [id*="ratioPicker"]{
+  z-index:2147482000!important;
+}
+
 @media(max-width:700px){
   .ig-settings-sheet.open,
   .ig-settings-sheet.active,
   .ig-settings-sheet.show,
-  .ig-settings-sheet.is-open{left:0!important;right:auto!important;bottom:0!important;transform:translateY(0)!important;width:100vw!important;max-width:100vw!important}
+  .ig-settings-sheet.is-open{
+    left:0!important;
+    right:auto!important;
+    bottom:0!important;
+    width:100vw!important;
+    max-width:100vw!important;
+  }
 }
