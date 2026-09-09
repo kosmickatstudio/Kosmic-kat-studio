@@ -9,13 +9,14 @@
   if(window.__kosmicVideoSettingsParity)return;
   window.__kosmicVideoSettingsParity=true;
 
-  const loadCss=(href,marker)=>{
-    if(document.querySelector(`link[${marker}]`))return;
-    const css=document.createElement("link");css.rel="stylesheet";css.href=href;css.setAttribute(marker,"");document.head.appendChild(css);
+  const loadCss=(href,attr,value)=>{
+    if(document.querySelector(`link[${attr}="${value}"]`))return;
+    const css=document.createElement("link");
+    css.rel="stylesheet";css.href=href;css.setAttribute(attr,value);document.head.appendChild(css);
   };
-  loadCss("ui-v2-phase8.css","data-kosmic-ui-v2-phase=\"8\"");
-  loadCss("ui-v2-evolink-video.css","data-kosmic-evo-video-css=\"1\"");
-  loadCss("ui-v2-settings-immune.css","data-kosmic-settings-immune=\"1\"");
+  loadCss("ui-v2-phase8.css","data-kosmic-ui-v2-phase","8");
+  loadCss("ui-v2-evolink-video.css","data-kosmic-evo-video-css","1");
+  loadCss("ui-v2-settings-immune.css","data-kosmic-settings-immune","1");
 
   const loadScript=(src,marker,callback)=>{
     const existing=document.querySelector(`script[${marker}]`);
