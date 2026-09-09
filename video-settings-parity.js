@@ -1,10 +1,6 @@
-/* KOSMIC KAT — Video Settings structural parity + EvoLink ecosystem loader
- * Settings are kept in a document-level layer. EvoLink catalog, current route
- * corrections, route/schema expansion, integrity normalization, specialized
- * route safety, adapter fallback, and the EXISTING Video Canvas EvoLink adapter
- * load deterministically. Home's current LLM catalog is also loaded here as a
- * small runtime data layer so the deployed page never needs build-time source
- * mutation. No second video playground is created here.
+/* KOSMIC KAT — Video Settings parity + deterministic ecosystem loaders
+ * Keeps settings in a document-level layer and loads the existing Video Canvas
+ * integration stack without creating a second playground.
  */
 (function installVideoSettingsParity(){
   "use strict";
@@ -18,6 +14,7 @@
   loadCss("ui-v2-phase8.css","data-kosmic-ui-v2-phase","8");
   loadCss("ui-v2-settings-immune.css","data-kosmic-settings-immune","1");
   loadCss("ui-v2-layer-arbiter.css","data-kosmic-layer-arbiter","1");
+  loadCss("ui-v2-evolink-route.css","data-kosmic-evolink-route-ui","1");
 
   const loadScript=(src,marker,callback)=>{
     const existing=document.querySelector(`script[${marker}]`);
@@ -33,7 +30,11 @@
         loadScript("evolink-video-integrity.js","data-kosmic-evo-video-integrity",()=>{
           loadScript("evolink-video-adapter-fallback.js","data-kosmic-evo-video-adapter-fallback",()=>{
             loadScript("evolink-video-safety.js","data-kosmic-evo-video-safety",()=>{
-              loadScript("evolink-video-canvas-adapter.js","data-kosmic-evo-video-canvas-adapter");
+              loadScript("evolink-video-canvas-adapter.js","data-kosmic-evo-video-canvas-adapter",()=>{
+                loadScript("evolink-video-final-guard.js","data-kosmic-evo-video-final-guard",()=>{
+                  loadScript("evolink-video-route-hud.js","data-kosmic-evo-video-route-hud");
+                });
+              });
             });
           });
         });
