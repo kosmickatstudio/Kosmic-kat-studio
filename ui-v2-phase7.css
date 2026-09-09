@@ -1,0 +1,461 @@
+/* KOSMIC KAT UI V2 — PHASE 7
+ * Production + Review presentation layer.
+ * Visual-only: preserves production pipeline generation, approvals,
+ * recovery/resume, QA, editor handoff and all application handlers.
+ */
+
+/* ── Production / review workspace shells ─────────────────────────── */
+.module-content:has([onclick*="approveEpisodeStage"]),
+.module-content:has([onclick*="rejectEpisodeStage"]),
+.module-content:has([onclick*="finalizeProductionToEditor"]),
+.module-content:has(.production-pipeline),
+.module-content:has(.production-stage),
+.module-content:has(.review-workspace),
+.module-content:has(.asset-review),
+.module-content:has(.qa-review){
+  min-width:0!important;
+  color:var(--text,#20182d);
+}
+
+.module-content:has([onclick*="approveEpisodeStage"]),
+.module-content:has(.production-pipeline),
+.module-content:has(.review-workspace){
+  padding:18px 20px 24px!important;
+}
+
+.module-content:has([onclick*="approveEpisodeStage"]) > *,
+.module-content:has(.production-pipeline) > *,
+.module-content:has(.review-workspace) > *{
+  min-width:0;
+}
+
+/* ── Generic glass cards used by production/review renderers ───────── */
+.module-content:has([onclick*="approveEpisodeStage"]) .card,
+.module-content:has([onclick*="approveEpisodeStage"]) .panel,
+.module-content:has([onclick*="rejectEpisodeStage"]) .card,
+.module-content:has([onclick*="rejectEpisodeStage"]) .panel,
+.module-content:has(.production-pipeline) .card,
+.module-content:has(.production-pipeline) .panel,
+.module-content:has(.production-stage) .card,
+.module-content:has(.production-stage) .panel,
+.module-content:has(.review-workspace) .card,
+.module-content:has(.review-workspace) .panel,
+.module-content:has(.asset-review) .card,
+.module-content:has(.asset-review) .panel,
+.module-content:has(.qa-review) .card,
+.module-content:has(.qa-review) .panel{
+  border:1px solid rgba(98,64,176,.10)!important;
+  border-radius:18px!important;
+  background:linear-gradient(145deg,rgba(255,255,255,.93),rgba(249,247,253,.82))!important;
+  box-shadow:0 10px 28px rgba(61,31,122,.055),inset 0 1px 0 rgba(255,255,255,.96)!important;
+}
+
+/* ── Pipeline header / stepper ─────────────────────────────────────── */
+.module-content:has([onclick*="approveEpisodeStage"]) .panel-title,
+.module-content:has(.production-pipeline) .panel-title,
+.module-content:has(.production-stage) .panel-title,
+.module-content:has(.review-workspace) .panel-title{
+  color:var(--violet,#6d28d9)!important;
+  font-weight:780!important;
+  letter-spacing:.01em!important;
+}
+
+.module-content:has(.production-pipeline) .step,
+.module-content:has(.production-pipeline) .stage,
+.module-content:has(.production-pipeline) .production-step,
+.module-content:has(.production-stage) .step,
+.module-content:has(.production-stage) .stage{
+  position:relative;
+  border:1px solid rgba(98,64,176,.09)!important;
+  border-radius:15px!important;
+  background:rgba(255,255,255,.72)!important;
+  padding:10px 12px!important;
+}
+
+.module-content:has(.production-pipeline) .active,
+.module-content:has(.production-pipeline) .current,
+.module-content:has(.production-stage) .active,
+.module-content:has(.production-stage) .current{
+  border-color:rgba(124,58,237,.22)!important;
+  box-shadow:0 0 0 2px rgba(124,58,237,.055),0 9px 22px rgba(61,31,122,.07)!important;
+}
+
+/* ── Episode / scene / task rows ───────────────────────────────────── */
+.module-content:has(.production-pipeline) .scene,
+.module-content:has(.production-pipeline) .scene-row,
+.module-content:has(.production-pipeline) .episode,
+.module-content:has(.production-pipeline) .episode-row,
+.module-content:has(.production-pipeline) .task,
+.module-content:has(.production-pipeline) .task-row,
+.module-content:has(.production-stage) .scene,
+.module-content:has(.production-stage) .scene-row,
+.module-content:has(.production-stage) .task,
+.module-content:has(.production-stage) .task-row{
+  border:1px solid rgba(98,64,176,.08)!important;
+  border-radius:14px!important;
+  background:rgba(255,255,255,.68)!important;
+  box-shadow:0 5px 16px rgba(61,31,122,.035)!important;
+}
+
+/* ── Status badges / progress / recovery ───────────────────────────── */
+.module-content:has(.production-pipeline) .badge,
+.module-content:has(.production-stage) .badge,
+.module-content:has(.review-workspace) .badge,
+.module-content:has(.qa-review) .badge{
+  border-radius:999px!important;
+  font-weight:700!important;
+  letter-spacing:.01em!important;
+}
+
+.module-content:has(.production-pipeline) .progress,
+.module-content:has(.production-pipeline) .progress-bar,
+.module-content:has(.production-stage) .progress,
+.module-content:has(.production-stage) .progress-bar{
+  border-radius:999px!important;
+  overflow:hidden!important;
+}
+
+.module-content:has(.production-pipeline) [class*="recover"],
+.module-content:has(.production-stage) [class*="recover"],
+.module-content:has(.review-workspace) [class*="recover"]{
+  border-radius:15px!important;
+  border:1px solid rgba(234,179,8,.18)!important;
+  background:linear-gradient(145deg,rgba(255,251,235,.96),rgba(255,247,220,.78))!important;
+  box-shadow:0 8px 20px rgba(120,86,12,.06)!important;
+}
+
+/* ── Review media cards ────────────────────────────────────────────── */
+.module-content:has(.review-workspace) img,
+.module-content:has(.review-workspace) video,
+.module-content:has(.asset-review) img,
+.module-content:has(.asset-review) video,
+.module-content:has(.qa-review) img,
+.module-content:has(.qa-review) video{
+  display:block;
+  max-width:100%;
+  border-radius:14px!important;
+}
+
+.module-content:has(.review-workspace) .review-card,
+.module-content:has(.review-workspace) .asset-card,
+.module-content:has(.asset-review) .review-card,
+.module-content:has(.asset-review) .asset-card,
+.module-content:has(.qa-review) .review-card,
+.module-content:has(.qa-review) .asset-card{
+  overflow:hidden!important;
+  border:1px solid rgba(98,64,176,.10)!important;
+  border-radius:17px!important;
+  background:rgba(255,255,255,.88)!important;
+  box-shadow:0 9px 25px rgba(61,31,122,.055)!important;
+}
+
+/* Keep action controls visible, compact and touch-friendly. */
+.module-content:has(.review-workspace) button,
+.module-content:has(.asset-review) button,
+.module-content:has(.qa-review) button,
+.module-content:has(.production-pipeline) button{
+  min-height:34px;
+  border-radius:10px!important;
+}
+
+.module-content:has(.review-workspace) button[onclick*="approve"],
+.module-content:has(.asset-review) button[onclick*="approve"],
+.module-content:has(.qa-review) button[onclick*="approve"],
+.module-content:has(.production-pipeline) button[onclick*="approve"]{
+  box-shadow:0 5px 14px rgba(34,197,94,.08)!important;
+}
+
+/* ── Production controls / finalize action ─────────────────────────── */
+.module-content:has(.production-pipeline) select,
+.module-content:has(.production-pipeline) input:not([type="range"]),
+.module-content:has(.production-pipeline) textarea,
+.module-content:has(.production-stage) select,
+.module-content:has(.production-stage) input:not([type="range"]),
+.module-content:has(.production-stage) textarea,
+.module-content:has(.review-workspace) select,
+.module-content:has(.review-workspace) input:not([type="range"]),
+.module-content:has(.review-workspace) textarea{
+  min-height:40px!important;
+  border-radius:11px!important;
+  background:rgba(249,248,252,.90)!important;
+  border-color:rgba(98,64,176,.10)!important;
+}
+
+.module-content:has(.production-pipeline) textarea,
+.module-content:has(.review-workspace) textarea{
+  min-height:74px!important;
+}
+
+/* ── Video Generation Settings: fix the sheet's internal tabs/content ─ */
+/* Phase 5 made the shared sheet visible. This phase gives its internal
+ * navigation and scroll body an explicit layout so tabs cannot collapse,
+ * clip, inherit transparent text, or sit behind the sheet surface. */
+.ig-settings-sheet{
+  display:flex!important;
+  flex-direction:column!important;
+  max-height:min(82vh,760px)!important;
+  overflow:hidden!important;
+  isolation:isolate;
+}
+
+.ig-settings-sheet > *{
+  min-width:0;
+}
+
+.ig-settings-sheet .ig-sheet-handle{
+  flex:0 0 auto!important;
+}
+
+/* Common tab-strip patterns used by the existing settings sheets. */
+.ig-settings-sheet [role="tablist"],
+.ig-settings-sheet .settings-tabs,
+.ig-settings-sheet .settings-tabbar,
+.ig-settings-sheet .ig-settings-tabs,
+.ig-settings-sheet .tabs,
+.ig-settings-sheet [class*="settings-tab"]{
+  position:relative!important;
+  z-index:3!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:6px!important;
+  flex:0 0 auto!important;
+  min-height:42px!important;
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+  padding:5px!important;
+  border-bottom:1px solid rgba(98,64,176,.10)!important;
+  scrollbar-width:none;
+}
+
+.ig-settings-sheet [role="tablist"]::-webkit-scrollbar,
+.ig-settings-sheet .settings-tabs::-webkit-scrollbar,
+.ig-settings-sheet .settings-tabbar::-webkit-scrollbar,
+.ig-settings-sheet .ig-settings-tabs::-webkit-scrollbar,
+.ig-settings-sheet .tabs::-webkit-scrollbar{display:none}
+
+.ig-settings-sheet [role="tablist"] button,
+.ig-settings-sheet .settings-tabs button,
+.ig-settings-sheet .settings-tabbar button,
+.ig-settings-sheet .ig-settings-tabs button,
+.ig-settings-sheet .tabs button,
+.ig-settings-sheet button[class*="tab"]{
+  flex:0 0 auto!important;
+  min-width:max-content!important;
+  min-height:34px!important;
+  padding:7px 11px!important;
+  border:1px solid transparent!important;
+  border-radius:10px!important;
+  background:transparent!important;
+  color:var(--muted,#71677f)!important;
+  font-size:12px!important;
+  font-weight:700!important;
+  white-space:nowrap!important;
+}
+
+.ig-settings-sheet [role="tablist"] button:hover,
+.ig-settings-sheet .settings-tabs button:hover,
+.ig-settings-sheet .settings-tabbar button:hover,
+.ig-settings-sheet .ig-settings-tabs button:hover,
+.ig-settings-sheet .tabs button:hover,
+.ig-settings-sheet button[class*="tab"]:hover{
+  background:rgba(124,58,237,.055)!important;
+  color:var(--violet,#6d28d9)!important;
+}
+
+.ig-settings-sheet [role="tablist"] button[aria-selected="true"],
+.ig-settings-sheet .settings-tabs button.active,
+.ig-settings-sheet .settings-tabbar button.active,
+.ig-settings-sheet .ig-settings-tabs button.active,
+.ig-settings-sheet .tabs button.active,
+.ig-settings-sheet button[class*="tab"].active{
+  color:var(--violet,#6d28d9)!important;
+  background:rgba(124,58,237,.09)!important;
+  border-color:rgba(124,58,237,.12)!important;
+  box-shadow:0 4px 12px rgba(61,31,122,.05)!important;
+}
+
+/* Settings content must be allowed to scroll inside the sheet. */
+.ig-settings-sheet [role="tabpanel"],
+.ig-settings-sheet .settings-content,
+.ig-settings-sheet .settings-body,
+.ig-settings-sheet .ig-settings-content,
+.ig-settings-sheet .ig-settings-body,
+.ig-settings-sheet .tab-content,
+.ig-settings-sheet .settings-panel-content{
+  position:relative!important;
+  z-index:1!important;
+  flex:1 1 auto!important;
+  min-height:0!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  padding:12px 14px 18px!important;
+  color:var(--text,#20182d)!important;
+  scrollbar-width:thin;
+}
+
+/* Some existing settings markup has no named content wrapper. Keep the
+ * sheet's direct content visible without changing display/hidden state. */
+.ig-settings-sheet > .ig-sheet-handle ~ div:not([class*="backdrop"]){
+  min-width:0;
+}
+
+.ig-settings-sheet label,
+.ig-settings-sheet .label,
+.ig-settings-sheet .field-label,
+.ig-settings-sheet .setting-label{
+  color:var(--text,#20182d)!important;
+  font-weight:650!important;
+}
+
+.ig-settings-sheet select,
+.ig-settings-sheet input:not([type="range"]),
+.ig-settings-sheet textarea{
+  min-height:40px!important;
+  border-radius:11px!important;
+  background:rgba(249,248,252,.92)!important;
+  border:1px solid rgba(98,64,176,.11)!important;
+  color:var(--text,#20182d)!important;
+}
+
+.ig-settings-sheet input[type="range"]{accent-color:var(--violet,#7c3aed)}
+
+/* Explicitly keep the Video Canvas sheet above sticky workspace controls. */
+#vcSettingsBackdrop,
+#vcSettingsPanel{
+  position:fixed!important;
+}
+#vcSettingsBackdrop{z-index:390!important}
+#vcSettingsPanel{z-index:400!important}
+
+/* ── Dark mode ─────────────────────────────────────────────────────── */
+html[data-theme="dark"] .module-content:has([onclick*="approveEpisodeStage"]) .card,
+html[data-theme="dark"] .module-content:has([onclick*="approveEpisodeStage"]) .panel,
+html[data-theme="dark"] .module-content:has([onclick*="rejectEpisodeStage"]) .card,
+html[data-theme="dark"] .module-content:has([onclick*="rejectEpisodeStage"]) .panel,
+html[data-theme="dark"] .module-content:has(.production-pipeline) .card,
+html[data-theme="dark"] .module-content:has(.production-pipeline) .panel,
+html[data-theme="dark"] .module-content:has(.production-stage) .card,
+html[data-theme="dark"] .module-content:has(.production-stage) .panel,
+html[data-theme="dark"] .module-content:has(.review-workspace) .card,
+html[data-theme="dark"] .module-content:has(.review-workspace) .panel,
+html[data-theme="dark"] .module-content:has(.asset-review) .card,
+html[data-theme="dark"] .module-content:has(.asset-review) .panel,
+html[data-theme="dark"] .module-content:has(.qa-review) .card,
+html[data-theme="dark"] .module-content:has(.qa-review) .panel{
+  background:linear-gradient(145deg,rgba(30,24,43,.94),rgba(22,18,33,.90))!important;
+  border-color:rgba(195,174,250,.13)!important;
+  box-shadow:0 12px 32px rgba(0,0,0,.20),inset 0 1px 0 rgba(255,255,255,.04)!important;
+}
+
+html[data-theme="dark"] .module-content:has(.production-pipeline) .step,
+html[data-theme="dark"] .module-content:has(.production-pipeline) .stage,
+html[data-theme="dark"] .module-content:has(.production-stage) .step,
+html[data-theme="dark"] .module-content:has(.production-stage) .stage,
+html[data-theme="dark"] .module-content:has(.production-pipeline) .scene,
+html[data-theme="dark"] .module-content:has(.production-pipeline) .scene-row,
+html[data-theme="dark"] .module-content:has(.production-pipeline) .task,
+html[data-theme="dark"] .module-content:has(.production-pipeline) .task-row{
+  background:rgba(30,24,43,.72)!important;
+  border-color:rgba(195,174,250,.10)!important;
+}
+
+html[data-theme="dark"] .module-content:has(.production-pipeline) select,
+html[data-theme="dark"] .module-content:has(.production-pipeline) input:not([type="range"]),
+html[data-theme="dark"] .module-content:has(.production-pipeline) textarea,
+html[data-theme="dark"] .module-content:has(.review-workspace) select,
+html[data-theme="dark"] .module-content:has(.review-workspace) input:not([type="range"]),
+html[data-theme="dark"] .module-content:has(.review-workspace) textarea,
+html[data-theme="dark"] .ig-settings-sheet select,
+html[data-theme="dark"] .ig-settings-sheet input:not([type="range"]),
+html[data-theme="dark"] .ig-settings-sheet textarea{
+  background:rgba(22,18,33,.94)!important;
+  color:#f1ecfb!important;
+  border-color:rgba(195,174,250,.14)!important;
+}
+
+html[data-theme="dark"] .ig-settings-sheet [role="tablist"],
+html[data-theme="dark"] .ig-settings-sheet .settings-tabs,
+html[data-theme="dark"] .ig-settings-sheet .settings-tabbar,
+html[data-theme="dark"] .ig-settings-sheet .ig-settings-tabs,
+html[data-theme="dark"] .ig-settings-sheet .tabs{
+  border-bottom-color:rgba(195,174,250,.12)!important;
+}
+html[data-theme="dark"] .ig-settings-sheet [role="tablist"] button,
+html[data-theme="dark"] .ig-settings-sheet .settings-tabs button,
+html[data-theme="dark"] .ig-settings-sheet .settings-tabbar button,
+html[data-theme="dark"] .ig-settings-sheet .ig-settings-tabs button,
+html[data-theme="dark"] .ig-settings-sheet .tabs button,
+html[data-theme="dark"] .ig-settings-sheet button[class*="tab"]{
+  color:#aaa0bd!important;
+}
+html[data-theme="dark"] .ig-settings-sheet [role="tablist"] button[aria-selected="true"],
+html[data-theme="dark"] .ig-settings-sheet .settings-tabs button.active,
+html[data-theme="dark"] .ig-settings-sheet .settings-tabbar button.active,
+html[data-theme="dark"] .ig-settings-sheet .ig-settings-tabs button.active,
+html[data-theme="dark"] .ig-settings-sheet .tabs button.active,
+html[data-theme="dark"] .ig-settings-sheet button[class*="tab"].active{
+  color:#d9c8ff!important;
+  background:rgba(124,58,237,.18)!important;
+  border-color:rgba(195,174,250,.16)!important;
+}
+html[data-theme="dark"] .ig-settings-sheet [role="tabpanel"],
+html[data-theme="dark"] .ig-settings-sheet .settings-content,
+html[data-theme="dark"] .ig-settings-sheet .settings-body,
+html[data-theme="dark"] .ig-settings-sheet .ig-settings-content,
+html[data-theme="dark"] .ig-settings-sheet .ig-settings-body,
+html[data-theme="dark"] .ig-settings-sheet .tab-content,
+html[data-theme="dark"] .ig-settings-sheet .settings-panel-content,
+html[data-theme="dark"] .ig-settings-sheet label,
+html[data-theme="dark"] .ig-settings-sheet .label,
+html[data-theme="dark"] .ig-settings-sheet .field-label,
+html[data-theme="dark"] .ig-settings-sheet .setting-label{
+  color:#f1ecfb!important;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media (min-width:1000px){
+  .module-content:has(.production-pipeline),
+  .module-content:has(.review-workspace){max-width:1320px!important;margin:0 auto!important}
+}
+
+@media (min-width:701px) and (max-width:999px){
+  .module-content:has([onclick*="approveEpisodeStage"]),
+  .module-content:has(.production-pipeline),
+  .module-content:has(.review-workspace){padding:14px!important}
+}
+
+@media (max-width:700px){
+  .module-content:has([onclick*="approveEpisodeStage"]),
+  .module-content:has(.production-pipeline),
+  .module-content:has(.review-workspace){padding:10px!important}
+  .module-content:has([onclick*="approveEpisodeStage"]) .card,
+  .module-content:has([onclick*="approveEpisodeStage"]) .panel,
+  .module-content:has(.production-pipeline) .card,
+  .module-content:has(.production-pipeline) .panel,
+  .module-content:has(.review-workspace) .card,
+  .module-content:has(.review-workspace) .panel{border-radius:15px!important}
+  .ig-settings-sheet{max-height:88vh!important;border-radius:20px 20px 0 0!important}
+  .ig-settings-sheet [role="tablist"],
+  .ig-settings-sheet .settings-tabs,
+  .ig-settings-sheet .settings-tabbar,
+  .ig-settings-sheet .ig-settings-tabs,
+  .ig-settings-sheet .tabs{padding:4px 2px!important}
+  .ig-settings-sheet [role="tablist"] button,
+  .ig-settings-sheet .settings-tabs button,
+  .ig-settings-sheet .settings-tabbar button,
+  .ig-settings-sheet .ig-settings-tabs button,
+  .ig-settings-sheet .tabs button,
+  .ig-settings-sheet button[class*="tab"]{min-height:36px!important;padding:7px 10px!important}
+  .ig-settings-sheet [role="tabpanel"],
+  .ig-settings-sheet .settings-content,
+  .ig-settings-sheet .settings-body,
+  .ig-settings-sheet .ig-settings-content,
+  .ig-settings-sheet .ig-settings-body,
+  .ig-settings-sheet .tab-content,
+  .ig-settings-sheet .settings-panel-content{padding:10px 11px 16px!important}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .module-content:has(.production-pipeline) *,
+  .module-content:has(.review-workspace) *{scroll-behavior:auto!important;transition:none!important}
+}
