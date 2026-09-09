@@ -1,6 +1,6 @@
 /* KOSMIC KAT — SETTINGS IMMUNITY LAYER
- * Loaded after feature CSS. Keeps settings above every ordinary app overlay
- * and prevents accidental blur/filter inheritance from future UI layers.
+ * Loaded after feature CSS. Keeps settings above ordinary app overlays and
+ * prevents accidental blur/filter inheritance from future UI layers.
  */
 .ig-settings-backdrop{
   position:fixed!important;
@@ -18,8 +18,6 @@
   filter:none!important;
   -webkit-filter:none!important;
   isolation:isolate!important;
-  opacity:1!important;
-  visibility:visible!important;
 }
 .ig-settings-sheet.open,
 .ig-settings-sheet.active,
@@ -44,9 +42,6 @@
   opacity:1!important;
   visibility:visible!important;
 }
-/* Never let an application's blur layer become the visual ancestor of a
- * settings sheet again. These properties matter when CSS changes create a
- * containing/stacking context around a supposedly fixed element. */
 body:has(.ig-settings-sheet.open) .studio-body,
 body:has(.ig-settings-sheet.open) .main-content,
 body:has(.ig-settings-sheet.open) .module-content,
