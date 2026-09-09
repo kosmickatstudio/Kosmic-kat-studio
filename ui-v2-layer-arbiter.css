@@ -1,7 +1,7 @@
 /* KOSMIC KAT — modal/layer arbiter
- * Settings is above the ordinary studio, while feature playgrounds and any
- * secondary picker/dialog launched from Settings receive a higher modal band.
- * The existing sheet gesture system remains untouched.
+ * Settings is above the ordinary studio. Secondary picker/dialog surfaces
+ * launched from Settings receive a higher modal band. Video Canvas remains
+ * the single video playground; no EvoLink-specific modal layer exists.
  */
 .ig-settings-backdrop{z-index:2147481000!important}
 .ig-settings-sheet,
@@ -9,16 +9,6 @@
 .ig-settings-sheet.active,
 .ig-settings-sheet.show,
 .ig-settings-sheet.is-open{z-index:2147481001!important}
-
-#evoVideoPlaygroundModal{z-index:2147483000!important}
-#evoVideoPlaygroundModal .evo-playground-sheet{position:relative;z-index:2!important;isolation:isolate}
-#evoVideoPlaygroundModal .evo-playground-backdrop{z-index:0!important}
-#evoVideoPlaygroundModal select,
-#evoVideoPlaygroundModal input,
-#evoVideoPlaygroundModal textarea,
-#evoVideoPlaygroundModal button,
-#evoVideoPlaygroundModal [role="tab"],
-#evoVideoPlaygroundModal [role="button"]{position:relative;z-index:3}
 
 /* A picker/dialog opened from a Settings control is a second modal, not part
  * of the Settings sheet. Give common existing picker/dialog surfaces a higher
@@ -40,10 +30,3 @@ body:has(.ig-settings-sheet.open) [id*="RatioPicker"],
 body:has(.ig-settings-sheet.open) [id*="ratioPicker"]{
   z-index:2147482000!important;
 }
-
-/* Prevent old page-level filters from creating a new stacking context over the
- * feature modal. */
-#evoVideoPlaygroundModal,
-#evoVideoPlaygroundModal .evo-playground-sheet{filter:none!important;-webkit-filter:none!important}
-
-@media(prefers-reduced-motion:reduce){#evoVideoPlaygroundModal .evo-playground-backdrop{backdrop-filter:none}}
