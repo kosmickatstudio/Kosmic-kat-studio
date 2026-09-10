@@ -131,10 +131,11 @@
     try{
       if(!String(typeof gs==="function"?gs("api_evolink",""):"").trim())throw new Error("Add an EvoLink API key in Settings first");
       const refs=await resolveRefsForEvoLink();
-      const opts={aspect_ratio:ratio,duration,quality,generate_audio:!!cap.schema?.audio,image_urls:refs.images,video_urls:refs.videos,audio_urls:refs.audios,model_params:{}};
+      let opts={aspect_ratio:ratio,duration,quality,generate_audio:!!cap.schema?.audio,image_urls:refs.images,video_urls:refs.videos,audio_urls:refs.audios,model_params:{}};
+      if(typeof window.__kosmicSeedanceBuildRequest==="function")opts=window.__kosmicSeedanceBuildRequest(opts);
       const result=await window.generateEvoLinkVideo(model,prompt,opts);
-      const asset=typeof createVideoAsset==="function"?createVideoAsset(result.url,prompt,"",{model,providerLabel:"EvoLink",aspectRatio:ratio}):null;
-      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:result.url,meta:{providerLabel:`EvoLink · ${route.model.name}`,prompt,assetId:asset?.id,model,resolution:quality||""}});
+      const asset=typeof createVideoAsset==="function"?createVideoAsset(result.url,prompt,"",{model,providerLabel:"EvoLink",aspectRatio:opts.aspect_ratio}):null;
+      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:result.url,meta:{providerLabel:`EvoLink · ${route.model.name}`,prompt,assetId:asset?.id,model,resolution:opts.quality||""}});
       if(typeof logCost==="function")logCost(model,prompt.slice(0,60));
       toast(`✨ ${route.model.name} video ready!`,"success");
       if(input){input.value="";if(typeof renderVcChatHighlight==="function")renderVcChatHighlight();}
