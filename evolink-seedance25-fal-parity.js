@@ -22,6 +22,27 @@
 
   function currentModel(){return $("vcModel")?.value||"";}
 
+  function findCanvasAnchor(){
+    const model=$("vcModel");
+    if(!model)return null;
+    return model.closest(".f-group,.vc-model-wrap,.model-control,.control-group,[data-video-canvas-control]")||model.parentElement||null;
+  }
+
+  function ensurePanel(){
+    let panel=$("evoSeedanceSchemaPanel");
+    const anchor=findCanvasAnchor();
+    if(!anchor)return false;
+    if(!panel){
+      panel=document.createElement("section");
+      panel.id="evoSeedanceSchemaPanel";
+      panel.className="evo-seedance-schema-panel evo-seedance25-parity";
+    }
+    if(panel.parentElement!==anchor.parentElement || panel.previousElementSibling!==anchor){
+      anchor.insertAdjacentElement("afterend",panel);
+    }
+    return true;
+  }
+
   function removeLegacyFalSeed25(){
     const legacyModel=v=>/^(fal-ai\/|bytedance\/).*seedance-2\.5/i.test(String(v||""));
     document.querySelectorAll("select option").forEach(o=>{
@@ -76,8 +97,8 @@
   }
 
   function render(){
+    if(!ensurePanel())return;
     const panel=$("evoSeedanceSchemaPanel");
-    if(!panel)return;
     const route=currentModel();
     if(!isSeed25(route)){panel.hidden=true;return;}
     const s=state();captureBeforeRender(s,panel);s.route=route;
@@ -122,10 +143,19 @@
 
   let last="";
   function tick(){
-    removeLegacyFalSeed25();updateRefCounts();
-    const m=currentModel();const panel=$("evoSeedanceSchemaPanel");
-    if(m!==last){last=m;if(isSeed25(m))render();else if(panel)panel.hidden=true;setTimeout(bind,0);}
-    else if(isSeed25(m)&&panel&&!panel.classList.contains("evo-seedance25-parity")){render();bind();}
+    removeLegacyFalSeed25();
+    const m=currentModel();
+    if(isSeed25(m)){
+      ensurePanel();
+      updateRefCounts();
+      if(m!==last){last=m;render();setTimeout(bind,0);}
+      else if($("evoSeedanceSchemaPanel")&&!$("evoSeedanceSchemaPanel").classList.contains("evo-seedance25-parity")){render();bind();}
+      else bind();
+    }else{
+      last=m;
+      const panel=$("evoSeedanceSchemaPanel");
+      if(panel)panel.hidden=true;
+    }
   }
   let tries=0;const timer=setInterval(()=>{tick();if(++tries>240)clearInterval(timer);},100);
   tick();
