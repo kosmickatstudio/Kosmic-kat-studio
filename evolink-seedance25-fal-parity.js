@@ -21,13 +21,12 @@
   const state=()=>window.__kosmicSeedance25ParityState||(window.__kosmicSeedance25ParityState={route:"seedance-2.5-text-to-video",duration:5,quality:"720p",aspect:"16:9",audio:true,content:true,refs:{images:0,videos:0,audios:0}});
 
   function currentModel(){return $("vcModel")?.value||"";}
-  function isSeed25Active(){return isSeed25(currentModel());}
 
   function removeLegacyFalSeed25(){
     const legacyModel=v=>/^(fal-ai\/|bytedance\/).*seedance-2\.5/i.test(String(v||""));
     document.querySelectorAll("select option").forEach(o=>{
       const value=o.value||"",text=o.textContent||"";
-      if(legacyModel(value)||(\/seedance\s*2\.5/i.test(text)&&/(fal\.ai|fal-ai|bytedance)/i.test(text)))o.remove();
+      if(legacyModel(value)||(/seedance\s*2\.5/i.test(text)&&/(fal\.ai|fal-ai|bytedance)/i.test(text)))o.remove();
     });
     document.querySelectorAll("[data-model],[data-route],[data-playground-model],button,a").forEach(el=>{
       const value=el.getAttribute("data-model")||el.getAttribute("data-route")||el.getAttribute("data-playground-model")||"";
@@ -78,7 +77,7 @@
 
   function render(){
     const panel=$("evoSeedanceSchemaPanel");
-    if(!panel){return;}
+    if(!panel)return;
     const route=currentModel();
     if(!isSeed25(route)){panel.hidden=true;return;}
     const s=state();captureBeforeRender(s,panel);s.route=route;
