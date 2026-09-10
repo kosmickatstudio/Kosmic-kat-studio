@@ -18,16 +18,14 @@
   const IDS=Object.keys(ROUTES);
   const $=id=>document.getElementById(id);
   const isSeed25=id=>IDS.includes(String(id||""));
-  const state=()=>window.__kosmicSeedance25ParityState||(window.__kosmicSeedance25ParityState={route:"seedance-2.5-text-to-video",duration:5,quality:"720p",aspect:"16:9",audio:true,content:true,refs:{images:0,videos:0,audios:0}});
+  const state=()=>window.__kosmicSeedance25ParityState||(window.__kosmicSeedance25ParityState={route:"seedance-2.5-text-to-video",duration:5,quality:"720p",aspect:"16:9",audio:true,content:true,webSearch:false,refs:{images:0,videos:0,audios:0}});
 
   function currentModel(){return $("vcModel")?.value||"";}
-
   function findCanvasAnchor(){
     const model=$("vcModel");
     if(!model)return null;
     return model.closest(".f-group,.vc-model-wrap,.model-control,.control-group,[data-video-canvas-control]")||model.parentElement||null;
   }
-
   function ensurePanel(){
     let panel=$("evoSeedanceSchemaPanel");
     const anchor=findCanvasAnchor();
@@ -42,7 +40,6 @@
     }
     return true;
   }
-
   function removeLegacyFalSeed25(){
     const legacyModel=v=>/^(fal-ai\/|bytedance\/).*seedance-2\.5/i.test(String(v||""));
     document.querySelectorAll("select option").forEach(o=>{
@@ -60,13 +57,11 @@
       if(/seedance\s*2\.5/i.test(el.textContent||"")){el.hidden=true;el.setAttribute("aria-hidden","true");}
     });
   }
-
   function syncNativeControls(s){
     if($("vcDuration"))$("vcDuration").value=String(s.duration);
     if($("vcRes"))$("vcRes").value=s.quality;
     if($("vcRatio"))$("vcRatio").value=s.aspect;
   }
-
   function setRoute(route){
     if(!isSeed25(route))return;
     const s=state();s.route=route;
@@ -76,34 +71,27 @@
     syncNativeControls(s);render();
     const input=$("vcChatInput");if(input)input.focus({preventScroll:true});
   }
-
   function captureBeforeRender(s,panel){
-    const dur=Number($("evo25DurationNumber")?.value);
-    if(Number.isFinite(dur))s.duration=Math.max(4,Math.min(30,dur));
+    const dur=Number($("evo25DurationNumber")?.value);if(Number.isFinite(dur))s.duration=Math.max(4,Math.min(30,dur));
     const q=$("evo25Quality")?.value;if(q)s.quality=q;
     const a=panel?.querySelector?.(".evo25-pill.active")?.getAttribute("data-evo25-aspect");if(a)s.aspect=a;
     const audio=$("evo25Audio");if(audio)s.audio=!!audio.checked;
     const content=$("evo25Content");if(content)s.content=!!content.checked;
+    const web=$("evo25WebSearch");if(web)s.webSearch=!!web.checked;
   }
-
   function updateRefCounts(){
     const s=window.S||{};const st=state();
     st.refs={images:Array.isArray(s.vcMultiImages)?s.vcMultiImages.length:0,videos:Array.isArray(s.vcMultiVideos)?s.vcMultiVideos.length:0,audios:Array.isArray(s.vcMultiAudios)?s.vcMultiAudios.length:0};
     const panel=$("evoSeedanceSchemaPanel");if(!panel)return;
     const b=panel.querySelectorAll("[data-evo25-ref-count]");
-    if(b[0])b[0].textContent=st.refs.images+" loaded";
-    if(b[1])b[1].textContent=st.refs.videos+" loaded";
-    if(b[2])b[2].textContent=st.refs.audios+" loaded";
+    if(b[0])b[0].textContent=st.refs.images+" loaded";if(b[1])b[1].textContent=st.refs.videos+" loaded";if(b[2])b[2].textContent=st.refs.audios+" loaded";
   }
-
   function render(){
     if(!ensurePanel())return;
-    const panel=$("evoSeedanceSchemaPanel");
-    const route=currentModel();
+    const panel=$("evoSeedanceSchemaPanel"),route=currentModel();
     if(!isSeed25(route)){panel.hidden=true;return;}
     const s=state();captureBeforeRender(s,panel);s.route=route;
-    const info=ROUTES[route];
-    panel.hidden=false;panel.classList.add("evo-seedance25-parity");
+    const info=ROUTES[route];panel.hidden=false;panel.classList.add("evo-seedance25-parity");
     const dur=Math.max(4,Math.min(30,Number(s.duration)||5));
     const quality=["480p","720p","1080p"].includes(s.quality)?s.quality:"720p";s.quality=quality;
     const aspect=(route==="seedance-2.5-video-edit"||route==="seedance-2.5-video-extend")?"adaptive":(["adaptive","16:9","9:16","1:1","4:3","3:4","21:9"].includes(s.aspect)?s.aspect:"16:9");s.aspect=aspect;
@@ -114,11 +102,10 @@
         <section class="evo25-card"><div class="evo25-label"><span>Generation mode</span><small>${info.short}</small></div><div class="evo25-modes">${IDS.map(id=>`<button type="button" class="evo25-mode ${id===route?"active":""}" data-evo25-route="${id}">${ROUTES[id].label}<span>${ROUTES[id].short}</span></button>`).join("")}</div></section>
         <section class="evo25-card"><div class="evo25-label"><span>Generation settings</span><small>4–30 seconds</small></div><div class="evo25-grid"><label class="evo25-field"><span>Duration <b>4–30s</b></span><div class="evo25-duration"><input id="evo25DurationRange" type="range" min="4" max="30" step="1" value="${dur}"><input id="evo25DurationNumber" type="number" min="4" max="30" step="1" value="${dur}"></div></label><label class="evo25-field"><span>Resolution</span><select id="evo25Quality">${["480p","720p","1080p"].map(x=>`<option value="${x}" ${x===quality?"selected":""}>${x}</option>`).join("")}</select></label><div class="evo25-field"><span>Aspect ratio</span><div class="evo25-pills">${["adaptive","16:9","9:16","1:1","4:3","3:4","21:9"].map(x=>`<button type="button" class="evo25-pill ${x===aspect?"active":""}" data-evo25-aspect="${x}">${x}</button>`).join("")}</div></div></div></section>
         <section class="evo25-card"><div class="evo25-label"><span>Reference inputs</span><small>up to 50 total media refs</small></div><div class="evo25-refs"><div class="evo25-ref"><strong>Images</strong><span>1–2 for I2V · up to 30 for R2V</span><b data-evo25-ref-count>${s.refs?.images||0} loaded</b></div><div class="evo25-ref"><strong>Videos</strong><span>Required for Edit / Extend</span><b data-evo25-ref-count>${s.refs?.videos||0} loaded</b></div><div class="evo25-ref"><strong>Audio</strong><span>Reference audio tracks</span><b data-evo25-ref-count>${s.refs?.audios||0} loaded</b></div></div></section>
-        <section class="evo25-card"><div class="evo25-label"><span>Output options</span><small>sent directly to EvoLink</small></div><div class="evo25-switches"><label class="evo25-toggle"><span>Generated audio</span><input id="evo25Audio" type="checkbox" ${s.audio?"checked":""}><i class="evo25-switch"></i></label><label class="evo25-toggle"><span>Content filter</span><input id="evo25Content" type="checkbox" ${s.content?"checked":""}><i class="evo25-switch"></i></label><div class="evo25-toggle"><span>Web search</span><input type="checkbox" disabled><i class="evo25-switch"></i></div></div><p class="evo25-note"><strong>Route behavior:</strong> Edit and Extend force <b>adaptive</b> aspect ratio. The existing Video Canvas reference tray remains the source of uploaded media. No provider key or storage path is changed.</p></section>
+        <section class="evo25-card"><div class="evo25-label"><span>Output options</span><small>sent directly to EvoLink</small></div><div class="evo25-switches"><label class="evo25-toggle"><span>Generated audio</span><input id="evo25Audio" type="checkbox" ${s.audio?"checked":""}><i class="evo25-switch"></i></label><label class="evo25-toggle"><span>Content filter</span><input id="evo25Content" type="checkbox" ${s.content?"checked":""}><i class="evo25-switch"></i></label><label class="evo25-toggle"><span>Web search</span><input id="evo25WebSearch" type="checkbox" ${s.webSearch?"checked":""} ${route==="seedance-2.5-text-to-video"?"":"disabled"}><i class="evo25-switch"></i></label></div><p class="evo25-note"><strong>Route behavior:</strong> Edit and Extend force <b>adaptive</b> aspect ratio. The existing Video Canvas reference tray remains the source of uploaded media. Seedance 2.5 uses EvoLink directly.</p></section>
       </div>`;
     syncNativeControls(s);
   }
-
   function bind(){
     const panel=$("evoSeedanceSchemaPanel");if(!panel||panel.dataset.evo25ParityBound)return;
     panel.dataset.evo25ParityBound="1";
@@ -138,25 +125,17 @@
       if(e.target?.id==="evo25Quality"){s.quality=e.target.value;syncNativeControls(s);}
       if(e.target?.id==="evo25Audio")s.audio=!!e.target.checked;
       if(e.target?.id==="evo25Content")s.content=!!e.target.checked;
+      if(e.target?.id==="evo25WebSearch")s.webSearch=!!e.target.checked;
     });
   }
-
   let last="";
   function tick(){
     removeLegacyFalSeed25();
     const m=currentModel();
     if(isSeed25(m)){
-      ensurePanel();
-      updateRefCounts();
-      if(m!==last){last=m;render();setTimeout(bind,0);}
-      else if($("evoSeedanceSchemaPanel")&&!$("evoSeedanceSchemaPanel").classList.contains("evo-seedance25-parity")){render();bind();}
-      else bind();
-    }else{
-      last=m;
-      const panel=$("evoSeedanceSchemaPanel");
-      if(panel)panel.hidden=true;
-    }
+      ensurePanel();updateRefCounts();
+      if(m!==last){last=m;render();setTimeout(bind,0);}else if($("evoSeedanceSchemaPanel")&&!$("evoSeedanceSchemaPanel").classList.contains("evo-seedance25-parity")){render();bind();}else bind();
+    }else{last=m;const panel=$("evoSeedanceSchemaPanel");if(panel)panel.hidden=true;}
   }
-  let tries=0;const timer=setInterval(()=>{tick();if(++tries>240)clearInterval(timer);},100);
-  tick();
+  let tries=0;const timer=setInterval(()=>{tick();if(++tries>240)clearInterval(timer);},100);tick();
 })();
