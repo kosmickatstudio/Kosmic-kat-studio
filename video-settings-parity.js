@@ -37,14 +37,10 @@
               loadScript("evolink-video-adapter-fallback.js","data-kosmic-evo-video-adapter-fallback",()=>{
                 loadScript("evolink-video-safety.js","data-kosmic-evo-video-safety",()=>{
                   loadScript("evolink-video-canvas-adapter.js","data-kosmic-evo-video-canvas-adapter",()=>{
-                    loadScript("evolink-seedance-playground-schema.js","data-kosmic-evo-seedance-schema",()=>{
-                      loadScript("evolink-seedance-visibility-fix.js","data-kosmic-evo-seedance-visibility-fix",()=>{
-                        loadScript("evolink-seedance25-fal-parity.js","data-kosmic-evo-seedance25-fal-parity",()=>{
-                          loadScript("evolink-seedance25-request-bridge.js","data-kosmic-evo-seedance25-request-bridge",()=>{
-                            loadScript("evolink-video-final-guard.js","data-kosmic-evo-video-final-guard",()=>{
-                              loadScript("evolink-video-route-hud.js","data-kosmic-evo-video-route-hud");
-                            });
-                          });
+                    loadScript("evolink-seedance25-fal-parity.js","data-kosmic-evo-seedance25-fal-parity",()=>{
+                      loadScript("evolink-seedance25-request-bridge.js","data-kosmic-evo-seedance25-request-bridge",()=>{
+                        loadScript("evolink-video-final-guard.js","data-kosmic-evo-video-final-guard",()=>{
+                          loadScript("evolink-video-route-hud.js","data-kosmic-evo-video-route-hud");
                         });
                       });
                     });
