@@ -40,8 +40,10 @@
                     loadScript("evolink-seedance-playground-schema.js","data-kosmic-evo-seedance-schema",()=>{
                       loadScript("evolink-seedance-visibility-fix.js","data-kosmic-evo-seedance-visibility-fix",()=>{
                         loadScript("evolink-seedance25-fal-parity.js","data-kosmic-evo-seedance25-fal-parity",()=>{
-                          loadScript("evolink-video-final-guard.js","data-kosmic-evo-video-final-guard",()=>{
-                            loadScript("evolink-video-route-hud.js","data-kosmic-evo-video-route-hud");
+                          loadScript("evolink-seedance25-request-bridge.js","data-kosmic-evo-seedance25-request-bridge",()=>{
+                            loadScript("evolink-video-final-guard.js","data-kosmic-evo-video-final-guard",()=>{
+                              loadScript("evolink-video-route-hud.js","data-kosmic-evo-video-route-hud");
+                            });
                           });
                         });
                       });
