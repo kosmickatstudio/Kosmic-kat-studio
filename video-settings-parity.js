@@ -32,13 +32,15 @@
       loadScript("evolink-video-expansion.js","data-kosmic-evo-video-expansion",()=>{
         loadScript("evolink-video-integrity.js","data-kosmic-evo-video-integrity",()=>{
           loadScript("evolink-video-pricing.js","data-kosmic-evo-video-pricing",()=>{
-            loadScript("evolink-video-adapter-fallback.js","data-kosmic-evo-video-adapter-fallback",()=>{
-              loadScript("evolink-video-safety.js","data-kosmic-evo-video-safety",()=>{
-                loadScript("evolink-video-canvas-adapter.js","data-kosmic-evo-video-canvas-adapter",()=>{
-                  loadScript("evolink-seedance-playground-schema.js","data-kosmic-evo-seedance-schema",()=>{
-                    loadScript("evolink-seedance-visibility-fix.js","data-kosmic-evo-seedance-visibility-fix",()=>{
-                      loadScript("evolink-video-final-guard.js","data-kosmic-evo-video-final-guard",()=>{
-                        loadScript("evolink-video-route-hud.js","data-kosmic-evo-video-route-hud");
+            loadScript("evolink-video-final-route-fix.js","data-kosmic-evo-video-final-route-fix",()=>{
+              loadScript("evolink-video-adapter-fallback.js","data-kosmic-evo-video-adapter-fallback",()=>{
+                loadScript("evolink-video-safety.js","data-kosmic-evo-video-safety",()=>{
+                  loadScript("evolink-video-canvas-adapter.js","data-kosmic-evo-video-canvas-adapter",()=>{
+                    loadScript("evolink-seedance-playground-schema.js","data-kosmic-evo-seedance-schema",()=>{
+                      loadScript("evolink-seedance-visibility-fix.js","data-kosmic-evo-seedance-visibility-fix",()=>{
+                        loadScript("evolink-video-final-guard.js","data-kosmic-evo-video-final-guard",()=>{
+                          loadScript("evolink-video-route-hud.js","data-kosmic-evo-video-route-hud");
+                        });
                       });
                     });
                   });
