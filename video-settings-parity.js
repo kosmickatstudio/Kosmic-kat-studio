@@ -15,7 +15,6 @@
   loadCss("ui-v2-settings-immune.css","data-kosmic-settings-immune","1");
   loadCss("ui-v2-layer-arbiter.css","data-kosmic-layer-arbiter","1");
   loadCss("ui-v2-evolink-route.css","data-kosmic-evolink-route-ui","1");
-  loadCss("ui-v2-evolink-seedance-schema.css","data-kosmic-evolink-seedance-schema","1");
   loadCss("evolink-seedance25-fal-parity.css","data-kosmic-evolink-seedance25-fal-parity","1");
   loadCss("ui-v2-home-premium.css","data-kosmic-home-premium-v2","1");
 
