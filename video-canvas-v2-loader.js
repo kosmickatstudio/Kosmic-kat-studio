@@ -15,7 +15,9 @@
       load("evolink-video-expansion.js","data-kosmic-evo-v2-expansion",()=>
         load("evolink-video-integrity.js","data-kosmic-evo-v2-integrity",()=>
           load("evolink-video-pricing.js","data-kosmic-evo-v2-pricing",()=>
-            load("video-canvas-v2.js","data-kosmic-video-v2")
+            load("video-canvas-v2.js","data-kosmic-video-v2",()=>
+              load("video-canvas-v2-state-fix.js","data-kosmic-video-v2-state-fix")
+            )
           )
         )
       )
