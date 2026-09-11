@@ -1,6 +1,6 @@
 /* KOSMIC KAT — Seedance 2.5 parity request bridge
- * Keeps the new Fal-style controls authoritative for Seedance 2.5 only.
- * Mirrors the newer playground control IDs into the legacy bridge IDs so the
+ * Keeps the new Seedance 2.5 controls authoritative for Seedance 2.5 only.
+ * Mirrors the newer playground controls into the legacy bridge IDs so the
  * functional EvoLink adapter cannot overwrite a user's visible selections.
  */
 (function installSeedance25ParityRequestBridge(){
@@ -33,24 +33,25 @@
     check("evoSeedanceWebSearch","evo25WebSearch");
   }
   function bindNewControls(){
-    if(document.documentElement.dataset.seed25ParityControlsBound)return;
-    document.documentElement.dataset.seed25ParityControlsBound="1";
     const ids=["evoSeedanceDuration","evoSeedanceQuality","evoSeedanceAspect","evoSeedanceAudio","evoSeedanceContentFilter","evoSeedanceWebSearch"];
     ids.forEach(id=>{
-      const el=$(id);if(!el)return;
+      const el=$(id);if(!el||el.dataset.seed25ParityBound)return;
       el.addEventListener("input",mirrorNewControls);
       el.addEventListener("change",mirrorNewControls);
+      el.dataset.seed25ParityBound="1";
     });
-    document.addEventListener("click",e=>{
-      const button=e.target?.closest?.("#evoSeedanceSchemaPanel [data-evo25-aspect]");
-      if(button){setTimeout(()=>{
-        const value=button.getAttribute("data-evo25-aspect")||"";
-        const select=$("evoSeedanceAspect");if(select&&value)select.value=value;
-        const vc=$("vcRatio");if(vc&&value)vc.value=value;
-        const old=$("evo25Quality");if(old&&$("evoSeedanceQuality"))old.value=$("evoSeedanceQuality").value;
-        mirrorNewControls();
-      },0);}
-    });
+    if(!document.documentElement.dataset.seed25ParityAspectBound){
+      document.addEventListener("click",e=>{
+        const button=e.target?.closest?.("#evoSeedanceSchemaPanel [data-evo25-aspect]");
+        if(button){setTimeout(()=>{
+          const value=button.getAttribute("data-evo25-aspect")||"";
+          const select=$("evoSeedanceAspect");if(select&&value)select.value=value;
+          const vc=$("vcRatio");if(vc&&value)vc.value=value;
+          mirrorNewControls();
+        },0);}
+      });
+      document.documentElement.dataset.seed25ParityAspectBound="1";
+    }
     mirrorNewControls();
   }
   window.__kosmicSeedanceBuildRequest=function(base={}){
