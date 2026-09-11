@@ -71,23 +71,59 @@
 
   function validate(mode){
     const r=refs();
-    if(mode==="image"&&!r.images.length)throw new Error("Image to Video needs 1 image, or 2 images for first + last frame.");
-    if((mode==="edit"||mode==="extend")&&!r.videos.length)throw new Error((mode==="edit"?"Video Edit":"Video Extend")+" needs a source video in the Video Canvas reference tray.");
-    if(mode==="reference"&&(r.images.length+r.videos.length+r.audios.length)>50)throw new Error("Seedance 2.5 allows at most 50 reference assets total.");
+    if(mode==="image"){
+      if(!r.images.length)throw new Error("Image to Video needs 1 image, or 2 images for first + last frame.");
+      if(r.images.length>2)throw new Error("Image to Video accepts at most 2 images for Seedance 2.5.");
+    }
+    if(mode==="edit"||mode==="extend"){
+      if(!r.videos.length)throw new Error((mode==="edit"?"Video Edit":"Video Extend")+" needs a source video in the Video Canvas reference tray.");
+      if(r.videos.length>1)throw new Error((mode==="edit"?"Video Edit":"Video Extend")+" accepts one source video for Seedance 2.5.");
+    }
+    if(mode==="reference"){
+      if(r.images.length>30)throw new Error("Seedance 2.5 Reference to Video accepts at most 30 images.");
+      if(r.videos.length>10)throw new Error("Seedance 2.5 Reference to Video accepts at most 10 videos.");
+      if(r.audios.length>10)throw new Error("Seedance 2.5 Reference to Video accepts at most 10 audio tracks.");
+      if(r.images.length+r.videos.length+r.audios.length>50)throw new Error("Seedance 2.5 allows at most 50 reference assets total.");
+      if(!r.images.length&&!r.videos.length&&!r.audios.length)throw new Error("Reference to Video needs at least one image, video, or audio reference.");
+    }
+  }
+
+  function readValue(ids){
+    for(const id of ids){
+      const el=$(id);
+      if(el&&el.value!==undefined&&el.value!=="")return el.value;
+    }
+    return "";
+  }
+  function readChecked(ids,fallback){
+    for(const id of ids){
+      const el=$(id);
+      if(el)return !!el.checked;
+    }
+    return fallback;
+  }
+  function readActiveAspect(){
+    const buttons=[...document.querySelectorAll("#evoSeedanceSchemaPanel [data-evo25-aspect]")];
+    const active=buttons.find(b=>b.classList.contains("active"))?.getAttribute("data-evo25-aspect");
+    if(active)return active;
+    const select=$("evoSeedanceAspect");
+    if(select?.value)return select.value;
+    return "";
   }
 
   function readControls(){
-    const s=state(),route=s.route||currentModel();
-    let duration=Number($("evo25DurationNumber")?.value||$("vcDuration")?.value||s.duration||5);
+    const s=state();
+    const route=currentModel()||s.route||"seedance-2.5-text-to-video";
+    let duration=Number(readValue(["evo25DurationNumber","evoSeedanceDuration","vcDuration"])||s.duration||5);
     if(!Number.isFinite(duration))duration=5;
     duration=Math.max(4,Math.min(30,Math.round(duration)));
-    const quality=["480p","720p","1080p"].includes($("evo25Quality")?.value)?$("evo25Quality").value:(s.quality||"720p");
-    const aspectButtons=[...document.querySelectorAll("#evoSeedanceSchemaPanel [data-evo25-aspect]")];
-    const activeAspect=aspectButtons.find(b=>b.classList.contains("active"))?.getAttribute("data-evo25-aspect");
+    const qualityValue=readValue(["evo25Quality","evoSeedanceQuality","vcRes"]);
+    const quality=["480p","720p","1080p"].includes(qualityValue)?qualityValue:(s.quality||"720p");
+    const activeAspect=readActiveAspect()||readValue(["evoSeedanceAspect","vcRatio"]);
     const aspect=(route==="seedance-2.5-video-edit"||route==="seedance-2.5-video-extend")?"adaptive":(activeAspect||s.aspect||"16:9");
-    const audio=$("evo25Audio")?!!$("evo25Audio").checked:s.audio!==false;
-    const content=$("evo25Content")?!!$("evo25Content").checked:s.content!==false;
-    const webSearch=$("evo25WebSearch")?!!$("evo25WebSearch").checked:!!s.webSearch;
+    const audio=readChecked(["evo25Audio","evoSeedanceAudio"],s.audio!==false);
+    const content=readChecked(["evo25Content","evoSeedanceContentFilter"],s.content!==false);
+    const webSearch=readChecked(["evo25WebSearch","evoSeedanceWebSearch"],!!s.webSearch);
     Object.assign(s,{route,duration,quality,aspect,audio,content,webSearch});
     return s;
   }
@@ -96,6 +132,15 @@
     if($("vcDuration"))$("vcDuration").value=String(s.duration);
     if($("vcRes"))$("vcRes").value=s.quality;
     if($("vcRatio"))$("vcRatio").value=s.aspect;
+    if($("evoSeedanceDuration"))$("evoSeedanceDuration").value=String(s.duration);
+    if($("evoSeedanceQuality"))$("evoSeedanceQuality").value=s.quality;
+    if($("evoSeedanceAspect"))$("evoSeedanceAspect").value=s.aspect;
+    if($("evo25DurationNumber"))$("evo25DurationNumber").value=String(s.duration);
+    if($("evo25DurationRange"))$("evo25DurationRange").value=String(s.duration);
+    if($("evo25Quality"))$("evo25Quality").value=s.quality;
+    ["evo25Audio","evoSeedanceAudio"].forEach(id=>{const el=$(id);if(el)el.checked=s.audio;});
+    ["evo25Content","evoSeedanceContentFilter"].forEach(id=>{const el=$(id);if(el)el.checked=s.content;});
+    ["evo25WebSearch","evoSeedanceWebSearch"].forEach(id=>{const el=$(id);if(el)el.checked=s.webSearch;});
   }
 
   function cleanFalWarnings(){
