@@ -211,19 +211,7 @@ function clearMotionBrush(){
   updateVcAttachmentBar();
 }
 
-// ── KOSMIC ENGINE GLASS COMPOSER ─────────────────────────────────────
-// TEMPORARILY DISABLED while the Engine core is isolated and verified.
-// The previous implementation attached a broad document observer and
-// performed DOM rewiring inside a dynamic script loader. Because a user
-// action on Kosmic Engine is freezing the whole page, this presentation
-// layer must not be allowed to execute until the core path is proven stable.
-// Engine generation, state, auth, API keys and model routing do not depend
-// on this optional presentation layer.
-
-// KOSMIC ENGINE GRANULAR ASSET REVIEW
 (function(){const x=document.createElement("script");x.src="engine-asset-review.js";x.async=false;x.dataset.kosmicEngineReview="1";document.head.appendChild(x)})();
-
-// KOSMIC ENGINE MOBILE REVIEW UX
 (function(){const x=document.createElement("script");x.src="engine-mobile-review.js";x.async=false;x.dataset.kosmicEngineMobileReview="1";document.head.appendChild(x)})();
 (function loadEngineStrategyUi(){
   const src="engine-strategy-ui.js";
@@ -234,27 +222,18 @@ function clearMotionBrush(){
   s.dataset.kosmicEngineStrategy="1";
   document.head.appendChild(s);
 })();
-
-// KOSMIC ENGINE PRODUCTION RECOVERY
 (function(){const x=document.createElement("script");x.src="engine-recovery.js";x.async=false;x.dataset.kosmicEngineRecovery="1";document.head.appendChild(x)})();
 
-// VIDEO SETTINGS STRUCTURAL PARITY
-// Video Settings is nested inside the Video chat shell, while Image Settings
-// is a page-level sibling. Load the tiny parity helper so the Video sheet is
-// moved to the same DOM layer before the existing toggle runs.
-(function loadVideoSettingsParity(){
-  if(document.querySelector('script[data-kosmic-video-settings-parity="1"]'))return;
+// VIDEO CANVAS V2 — single canonical playground loader
+(function loadVideoCanvasV2(){
+  if(document.querySelector('script[data-kosmic-video-canvas-v2-loader="1"]'))return;
   const s=document.createElement("script");
-  s.src="video-settings-parity.js";
+  s.src="video-canvas-v2-loader.js";
   s.async=false;
-  s.dataset.kosmicVideoSettingsParity="1";
+  s.dataset.kosmicVideoCanvasV2Loader="1";
   document.head.appendChild(s);
 })();
 
-// ── GLOBAL UI V2 — CSS ONLY ───────────────────────────────────────────
-// Deliberately loaded here instead of adding another global observer or
-// script. The stylesheet progressively overrides the existing visual shell
-// while leaving generation and Engine state untouched.
 (function loadGlobalUiV2(){
   if(document.querySelector('link[data-kosmic-ui-v2="1"]'))return;
   const link=document.createElement("link");
