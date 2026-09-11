@@ -22,7 +22,9 @@
           load("evolink-video-pricing.js","data-kosmic-evo-v3-pricing",()=>
             load("video-canvas-v3.js","data-kosmic-video-v3",()=>
               load("video-chat-state.js","data-kosmic-video-chat-state",()=>
-                load("video-chat-shell.js","data-kosmic-video-chat-shell")
+                load("video-chat-shell.js","data-kosmic-video-chat-shell",()=>
+                  load("video-chat-generation.js","data-kosmic-video-chat-generation")
+                )
               )
             )
           )
