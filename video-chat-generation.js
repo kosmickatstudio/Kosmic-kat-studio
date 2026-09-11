@@ -10,6 +10,8 @@
   const st=()=>window.__kosmicVideoChatState;
   const esc=v=>String(v??"").replace(/[&<>\"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[m]));
   let running=false;
+  let tappedAdapter=null;
+  let lastAdapterResult=null;
 
   function css(){
     if(document.getElementById("kk-video-output-css"))return;
@@ -46,6 +48,19 @@
     return {route,model:item?.model?.name||item?.name||route,duration:v.duration??null,quality:v.quality??null,aspect:v.aspect??null,audio:v.audio!==false};
   }
 
+  function installAdapterTap(){
+    if(tappedAdapter||typeof window.generateEvoLinkVideo!=="function")return;
+    const original=window.generateEvoLinkVideo;
+    const wrapped=async function(...args){
+      const result=await original.apply(this,args);
+      lastAdapterResult=result||null;
+      return result;
+    };
+    wrapped.__kosmicVideoChatWrapped=true;
+    window.generateEvoLinkVideo=wrapped;
+    tappedAdapter=wrapped;
+  }
+
   function waitForV3(baseline){
     return new Promise((resolve,reject)=>{
       const started=Date.now();
@@ -76,17 +91,19 @@
     if(!button)throw new Error("Video Canvas V3 generation control is not mounted yet.");
 
     running=true;
+    lastAdapterResult=null;
     const meta=currentMeta();
     const baseline=Array.isArray(v.history)?v.history.length:0;
     q.setActiveGeneration({status:"generating",prompt,route:meta.route,model:meta.model,startedAt:Date.now(),taskId:null});
     const pending=q.addMessage("assistant","Working on your video…",{generationPending:true});
     render();
     try{
+      installAdapterTap();
       v.prompt=prompt;
-      v.busy=false;
       button.click();
       const result=await waitForV3(baseline);
-      const output={id:"vout_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),prompt,route:result.route||meta.route,model:result.model||meta.model,duration:result.duration??meta.duration,quality:result.quality??meta.quality,aspect:result.aspect??meta.aspect,audio:meta.audio,references:q.references.map(r=>({id:r.id,kind:r.kind,name:r.name,url:r.url})),taskId:null,resultUrl:result.url,timestamp:Date.now(),status:"completed"};
+      const taskId=lastAdapterResult?.taskId||null;
+      const output={id:"vout_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),prompt,route:result.route||meta.route,model:result.model||meta.model,duration:result.duration??meta.duration,quality:result.quality??meta.quality,aspect:result.aspect??meta.aspect,audio:meta.audio,references:q.references.map(r=>({id:r.id,kind:r.kind,name:r.name,url:r.url})),taskId,resultUrl:result.url,timestamp:Date.now(),status:"completed"};
       q.messages=q.messages.filter(m=>m.id!==pending.id);
       q.addMessage("assistant","Your video is ready.",{output});
       q.outputs=Array.isArray(q.outputs)?q.outputs:[];q.outputs.unshift(output);q.outputs=q.outputs.slice(0,30);
@@ -96,7 +113,7 @@
     }catch(err){
       q.messages=q.messages.filter(m=>m.id!==pending.id);
       q.addMessage("assistant",err?.message||String(err),{generationError:true});
-      q.setActiveGeneration({status:"error",prompt,route:meta.route,model:meta.model,error:err?.message||String(err),finishedAt:Date.now()});
+      q.setActiveGeneration({status:"error",prompt,route:meta.route,model:meta.model,error:err?.message||String(err),finishedAt:Date.now(),taskId:lastAdapterResult?.taskId||null});
       render();
       throw err;
     }finally{running=false;}
@@ -104,6 +121,7 @@
 
   function submit(){
     const q=st(),input=document.getElementById("kkvcInput");if(!input)return;
+    if(running||q.activeGeneration?.status==="generating")return;
     const text=input.value.trim();if(!text&&!q.references.length)return;
     const refs=q.references.map(r=>({id:r.id,url:r.url,name:r.name,kind:r.kind}));
     q.addMessage("user",text||"Use these references for the next generation.",{references:refs});
