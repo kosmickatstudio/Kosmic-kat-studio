@@ -58,6 +58,7 @@
     previousParent=host.parentNode;previousNext=host.nextSibling;
     document.getElementById("kkvcDirectorHost").appendChild(host);
     opened=true;
+    const note=document.getElementById("kkvcDirectorNote");if(note)note.style.display="none";
     const b=document.getElementById("kkvcDirectorBackdrop");b.classList.add("open");
     const q=state();if(q){q.directorOpen=true;q.touch();}
     const btn=document.getElementById("kkvcSettings");if(btn)btn.setAttribute("aria-expanded","true");
@@ -71,6 +72,7 @@
       else previousParent.appendChild(host);
     }
     opened=false;
+    const note=document.getElementById("kkvcDirectorNote");if(note)note.style.display="none";
     const b=document.getElementById("kkvcDirectorBackdrop");if(b)b.classList.remove("open");
     const q=state();if(q){q.directorOpen=false;q.touch();}
     const btn=document.getElementById("kkvcSettings");if(btn)btn.setAttribute("aria-expanded","false");
