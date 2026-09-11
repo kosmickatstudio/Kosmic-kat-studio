@@ -12,6 +12,7 @@
   let opened=false;
   let previousParent=null;
   let previousNext=null;
+  let restoreFocus=null;
 
   function css(){
     if(document.getElementById("kk-video-director-css"))return;
@@ -26,7 +27,7 @@
       .kkvc-director-sub{font-size:8px;color:var(--texts,#9488ae);margin-top:2px}
       .kkvc-director-close{margin-left:auto;width:34px;height:34px;border:1px solid rgba(61,31,122,.1);border-radius:11px;background:rgba(255,255,255,.68);color:var(--textm,#5a4880);font-size:18px;line-height:1;cursor:pointer}
       .kkvc-director-host{min-height:0;flex:1;overflow:hidden}
-      .kkvc-director-host>#kkVideoCanvasV3{width:100%;height:100%;min-height:0}
+      .kkvc-director-host>.kkv3,.kkvc-director-host>#kkVideoCanvasV3{width:100%;height:100%;min-height:0}
       @media(max-width:700px){
         .kkvc-director-drawer{inset:0;width:100%;height:100%;border-radius:0}
         .kkvc-director-bar{padding-top:calc(9px + env(safe-area-inset-top));height:calc(54px + env(safe-area-inset-top))}
@@ -39,29 +40,36 @@
   function ensureUi(){
     if(document.getElementById("kkvcDirectorBackdrop"))return;
     const b=document.createElement("div");b.id="kkvcDirectorBackdrop";b.className="kkvc-director-backdrop";
-    b.innerHTML=`<div class="kkvc-director-drawer" role="dialog" aria-modal="true" aria-label="Video Director controls"><div class="kkvc-director-bar"><div class="kkvc-director-mark">✦</div><div><div class="kkvc-director-title">Video Director</div><div class="kkvc-director-sub">Advanced shot, reference and storyboard controls</div></div><button type="button" class="kkvc-director-close" id="kkvcDirectorClose" aria-label="Close Director controls">×</button></div><div class="kkvc-director-host" id="kkvcDirectorHost"></div></div>`;
+    b.innerHTML=`<div class="kkvc-director-drawer" role="dialog" aria-modal="true" aria-labelledby="kkvcDirectorTitle"><div class="kkvc-director-bar"><div class="kkvc-director-mark" aria-hidden="true">✦</div><div><div class="kkvc-director-title" id="kkvcDirectorTitle">Video Director</div><div class="kkvc-director-sub">Advanced shot, reference and storyboard controls</div></div><button type="button" class="kkvc-director-close" id="kkvcDirectorClose" aria-label="Close Director controls">×</button></div><div class="kkvc-director-host" id="kkvcDirectorHost"></div></div>`;
     document.body.appendChild(b);
     b.addEventListener("click",e=>{if(e.target===b)close();});
     b.querySelector("#kkvcDirectorClose").addEventListener("click",close);
-    document.addEventListener("keydown",e=>{if(e.key==="Escape"&&opened)close();});
+    document.addEventListener("keydown",e=>{if(e.key==="Escape"&&opened){e.preventDefault();close();}});
   }
 
   function findV3(){
-    return document.getElementById("kkVideoCanvasV3")||document.querySelector(".kk-video-v3-host");
+    return document.getElementById("kkVideoCanvasV3")||document.querySelector(".kkv3")||document.querySelector(".kk-video-v3-host");
   }
+
+  function lockScroll(){document.documentElement.dataset.kkvcDirectorScroll=document.documentElement.style.overflow||"";document.body.dataset.kkvcDirectorScroll=document.body.style.overflow||"";document.documentElement.style.overflow="hidden";document.body.style.overflow="hidden";}
+  function unlockScroll(){document.documentElement.style.overflow=document.documentElement.dataset.kkvcDirectorScroll||"";document.body.style.overflow=document.body.dataset.kkvcDirectorScroll||"";delete document.documentElement.dataset.kkvcDirectorScroll;delete document.body.dataset.kkvcDirectorScroll;}
 
   function open(){
     if(opened)return;
     ensureUi();css();
     const host=findV3();
     if(!host)throw new Error("Video Canvas V3 is not mounted yet.");
-    previousParent=host.parentNode;previousNext=host.nextSibling;
-    document.getElementById("kkvcDirectorHost").appendChild(host);
+    const target=document.getElementById("kkvcDirectorHost");
+    if(!target)throw new Error("Video Director host is unavailable.");
+    previousParent=host.parentNode;previousNext=host.nextSibling;restoreFocus=document.activeElement&&typeof document.activeElement.focus==="function"?document.activeElement:null;
+    target.appendChild(host);
     opened=true;
     const note=document.getElementById("kkvcDirectorNote");if(note)note.style.display="none";
     const b=document.getElementById("kkvcDirectorBackdrop");b.classList.add("open");
+    lockScroll();
     const q=state();if(q){q.directorOpen=true;q.touch();}
     const btn=document.getElementById("kkvcSettings");if(btn)btn.setAttribute("aria-expanded","true");
+    requestAnimationFrame(()=>document.getElementById("kkvcDirectorClose")?.focus());
   }
 
   function close(){
@@ -74,16 +82,19 @@
     opened=false;
     const note=document.getElementById("kkvcDirectorNote");if(note)note.style.display="none";
     const b=document.getElementById("kkvcDirectorBackdrop");if(b)b.classList.remove("open");
+    unlockScroll();
     const q=state();if(q){q.directorOpen=false;q.touch();}
     const btn=document.getElementById("kkvcSettings");if(btn)btn.setAttribute("aria-expanded","false");
+    const focusTarget=restoreFocus;restoreFocus=null;
     previousParent=null;previousNext=null;
+    if(focusTarget&&document.contains(focusTarget))requestAnimationFrame(()=>focusTarget.focus());
   }
 
   function toggle(){try{if(opened)close();else open();}catch(err){const q=state();if(q)q.addMessage("assistant",err?.message||String(err),{generationError:true});}}
 
   function boot(){
     ensureUi();css();
-    window.addEventListener("kosmic:video-director-toggle",e=>{const want=!!e.detail?.open;if(want&&!opened)toggle();else if(!want&&opened)toggle();});
+    window.addEventListener("kosmic:video-director-toggle",e=>{const want=!!e.detail?.open;if(want&&!opened)open();else if(!want&&opened)close();});
     window.__kosmicVideoDirector={open,close,toggle};
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();
