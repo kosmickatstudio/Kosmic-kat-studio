@@ -10,7 +10,7 @@
   const S=window.S||(window.S={});
   const existing=window.__kosmicVideoChatState||{};
   const state=window.__kosmicVideoChatState=Object.assign({
-    version:2,
+    version:3,
     conversationId:null,
     messages:[],
     references:[],
@@ -33,13 +33,20 @@
   };
   state.setActiveGeneration=function(payload){state.activeGeneration=payload?Object.assign({},payload):null;state.touch();};
   state.addReference=function(ref){
-    const item=Object.assign({id:"vref_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),createdAt:Date.now()},ref||{});
+    const incoming=ref||{};
+    const url=String(incoming.url||incoming.dataUrl||"").trim();
+    const kind=String(incoming.kind||"image");
+    if(url){
+      const existingRef=state.references.find(x=>x.kind===kind&&String(x.url||x.dataUrl||"").trim()===url);
+      if(existingRef){Object.assign(existingRef,incoming,{kind,url});state.touch();state.syncLegacy&&state.syncLegacy();return existingRef;}
+    }
+    const item=Object.assign({id:"vref_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),createdAt:Date.now()},incoming,{kind,url:incoming.url||incoming.dataUrl||""});
     state.references.push(item);state.touch();state.syncLegacy&&state.syncLegacy();return item;
   };
   state.removeReference=function(id){state.references=state.references.filter(x=>x.id!==id);state.touch();state.syncLegacy&&state.syncLegacy();};
   state.clearReferences=function(){state.references=[];state.touch();state.syncLegacy&&state.syncLegacy();};
 
-  const pick=kind=>state.references.filter(r=>r.kind===kind).map(r=>({url:r.url,name:r.name||"Reference",dataUrl:r.url}));
+  const pick=kind=>state.references.filter(r=>r.kind===kind&&r.url).map(r=>({url:r.url,name:r.name||"Reference",dataUrl:r.url}));
 
   /* Keep the existing V2/V3 states as execution-facing state. Chat remains the
    * conversational source of truth while the existing execution layer consumes
@@ -56,4 +63,5 @@
       S.vcMultiAudios=audios.map(x=>({dataUrl:x.url,name:x.name}));
     }
   };
+  state.syncLegacy();
 })();
