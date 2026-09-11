@@ -1,16 +1,16 @@
 /* KOSMIC KAT — Video Chat Shell
- * Phase 2: chat becomes the default Video surface while the existing generation
- * engine remains behind a compatibility mount. No provider request is created here.
+ * Chat becomes the default Video surface while the existing generation
+ * engine remains behind a compatibility mount. Generation is owned by
+ * video-chat-generation.js; this file owns only the chat UI shell.
  */
 (function installKosmicVideoChatShell(){
   "use strict";
   if(window.__kosmicVideoChatShellInstalled)return;
   window.__kosmicVideoChatShellInstalled=true;
 
-  const S=window.S||(window.S={});
   const st=()=>window.__kosmicVideoChatState;
   const esc=v=>String(v??"").replace(/[&<>\"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[m]));
-  const icons={send:"➤",plus:"＋",settings:"⚙",video:"▶",close:"×",image:"▧"};
+  const icons={send:"➤",plus:"＋",settings:"⚙",video:"▶"};
   let originalRender=null;
   let installed=false;
 
@@ -34,7 +34,7 @@
       .kkvc-tool{width:37px;height:37px;flex:0 0 auto;border:1px solid var(--glass-brd,rgba(61,31,122,.12));border-radius:12px;background:rgba(255,255,255,.55);color:var(--textm,#5a4880);display:grid;place-items:center;cursor:pointer;transition:.18s}.kkvc-tool:hover{transform:translateY(-1px);background:rgba(98,64,176,.08);color:var(--violet,#3d1f7a)}
       .kkvc-send{width:39px;height:39px;border:0;border-radius:13px;background:linear-gradient(135deg,var(--violet,#3d1f7a),var(--ice,#4aa9d9));color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 7px 18px rgba(61,31,122,.2)}.kkvc-send:disabled{opacity:.45;cursor:not-allowed}
       .kkvc-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 4px 1px;font-size:8px;color:var(--texts,#9488ae)}.kkvc-meta strong{color:var(--textm,#5a4880)}.kkvc-file{display:none}
-      .kkvc-director-note{display:none;position:absolute;top:64px;right:14px;z-index:8;padding:9px 11px;border-radius:12px;background:var(--glass-solid,#fff);border:1px solid var(--glass-brd,rgba(61,31,122,.14));box-shadow:0 10px 30px rgba(61,31,122,.14);font-size:9px;color:var(--textm,#5a4880)}
+      .kkvc-director-note{display:none}
       .kk-video-legacy-mount{position:fixed;left:-100000px;top:-100000px;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}
       @media(max-width:700px){.kkvc-head{padding:11px 12px}.kkvc-model{max-width:120px}.kkvc-title{font-size:14px}.kkvc-thread{padding:14px 10px 132px}.kkvc-msg{max-width:93%}.kkvc-welcome h2{font-size:23px}.kkvc-composer-wrap{padding:8px 8px 10px}.kkvc-composer{border-radius:18px}.kkvc-meta{font-size:7.5px}.kkvc-tool{width:35px;height:35px}.kkvc-send{width:37px;height:37px}}
     `;
@@ -75,10 +75,10 @@
           <div class="kkvc-mark">${icons.video}</div>
           <div><div class="kkvc-title">Video</div><div class="kkvc-sub">Describe the shot. Refine it conversationally.</div></div>
           <div class="kkvc-model" id="kkvcModel">${esc(routeLabel())}</div>
-          <button class="kkvc-tool" type="button" id="kkvcSettings" title="Director controls" aria-label="Open Director controls">${icons.settings}</button>
+          <button class="kkvc-tool" type="button" id="kkvcSettings" title="Director controls" aria-label="Open Director controls" aria-expanded="false">${icons.settings}</button>
         </div>
         <div class="kkvc-thread" id="kkvcThread" aria-live="polite"></div>
-        <div class="kkvc-director-note" id="kkvcDirectorNote">Director controls will be mounted here in Phase 4. Existing Video Canvas remains the execution surface underneath.</div>
+        <div class="kkvc-director-note" id="kkvcDirectorNote"></div>
         <div class="kkvc-composer-wrap">
           <div class="kkvc-composer">
             <div class="kkvc-preview" id="kkvcPreview"></div>
@@ -116,22 +116,8 @@
     attach.addEventListener("click",()=>file.click());
     file.addEventListener("change",async()=>{for(const f of [...file.files||[]]){if(!f.type.startsWith("image/"))continue;const url=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(f);});q.addReference({kind:"image",url,name:f.name});}file.value="";renderRefs();q.syncLegacy&&q.syncLegacy();input.focus();});
     send.disabled=!input.value.trim();
-    send.addEventListener("click",()=>submit());
-    settings.addEventListener("click",()=>{q.directorOpen=!q.directorOpen;q.touch();const n=document.getElementById("kkvcDirectorNote");if(n)n.style.display=q.directorOpen?"block":"none";if(typeof window.dispatchEvent==="function")window.dispatchEvent(new CustomEvent("kosmic:video-director-toggle",{detail:{open:q.directorOpen,state:q}}));});
+    settings.addEventListener("click",()=>{q.directorOpen=!q.directorOpen;q.touch();if(typeof window.dispatchEvent==="function")window.dispatchEvent(new CustomEvent("kosmic:video-director-toggle",{detail:{open:q.directorOpen,state:q}}));});
     renderRefs();
-  }
-
-  function submit(){
-    const q=st(),input=document.getElementById("kkvcInput"),text=input?.value.trim()||"";if(!text&&!q.references.length)return;
-    const refs=q.references.map(r=>({id:r.id,url:r.url,name:r.name,kind:r.kind}));
-    q.addMessage("user",text||"Use these references for the next generation.",{references:refs});
-    q.composerDraft="";input.value="";input.style.height="auto";
-    q.syncLegacy&&q.syncLegacy();
-    renderMessages();renderRefs();
-    const legacyInput=document.getElementById("vcChatInput"),legacySend=document.getElementById("vcSendBtn");
-    if(legacyInput){legacyInput.value=text;legacyInput.dispatchEvent(new Event("input",{bubbles:true}));}
-    if(legacySend){legacySend.click();q.setActiveGeneration({status:"submitting",prompt:text,startedAt:Date.now(),route:(window.__kosmicVideoV3State||window.__kosmicVideoV2State||{}).route||"seedance-2.5-text-to-video"});}
-    else q.addMessage("assistant","The conversation shell is ready, but the existing Video generation control is not mounted yet. No request was sent.");
   }
 
   function installWrapper(){
@@ -151,8 +137,6 @@
   function boot(){
     injectCss();
     if(!installWrapper()){setTimeout(boot,100);return;}
-    /* Do not call the renderer automatically here. The main router remains
-     * authoritative for when the Video module is entered. */
   }
 
   window.__kosmicVideoChatBoot=boot;
