@@ -1,7 +1,6 @@
 /* KOSMIC KAT — EvoLink adapter fallback
  * Defines the unified async video adapter only when the existing application
- * has not already provided one. This is generation infrastructure only; the
- * existing Video Canvas remains the single playground UI.
+ * has not already provided one. Seedance 2.5 uses EvoLink only.
  */
 (function installEvoLinkAdapterFallback(){
   "use strict";
@@ -20,11 +19,25 @@
     };
     const readJson=async res=>res.json().catch(()=>({}));
     const extractUrl=data=>{
-      const list=[data?.video_url,data?.download_url,data?.url,data?.output?.video_url,data?.output?.url,data?.result?.video_url,data?.result?.url];
-      return list.find(v=>typeof v==="string"&&/^https?:\/\//i.test(v))||null;
+      const candidates=[];
+      const add=v=>{if(typeof v==="string"&&/^https?:\/\//i.test(v))candidates.push(v);};
+      add(data?.video_url);add(data?.download_url);add(data?.url);
+      add(data?.output?.video_url);add(data?.output?.url);
+      add(data?.result?.video_url);add(data?.result?.url);
+      add(data?.results?.video_url);add(data?.results?.url);
+      const arrays=[data?.results,data?.result,data?.output?.results,data?.data?.results,data?.data?.output];
+      arrays.forEach(list=>{
+        if(Array.isArray(list))list.forEach(item=>{add(item);add(item?.url);add(item?.video_url);add(item?.download_url);});
+      });
+      return candidates[0]||null;
     };
     const getTaskId=data=>data?.id||data?.task_id||data?.task?.id||data?.data?.id||null;
     const statusOf=data=>String(data?.status||data?.state||data?.task_info?.status||"").toLowerCase();
+    const errorMessage=data=>{
+      const e=data?.error;
+      if(typeof e==="string")return e;
+      return e?.message||e?.detail||data?.message||data?.detail||data?.task_info?.error?.message||data?.task_info?.error||null;
+    };
 
     window.generateEvoLinkVideo=async function(model,prompt,options={}){
       const route=api.index[model];
@@ -41,26 +54,30 @@
       }
       if(route.mode==="image"&&!body.image_urls?.length)throw new Error("This Image-to-Video route requires at least one image URL");
       if(route.mode==="reference"&&!body.image_urls?.length&&!body.video_urls?.length&&!body.audio_urls?.length)throw new Error("This Reference-to-Video route requires at least one reference asset");
-      if(route.mode==="edit"&&!body.video_urls?.length)throw new Error("This Video Edit route requires one source video URL");
-      if(route.mode==="extend"&&!body.video_urls?.length)throw new Error("This Video Extend route requires one source video URL");
+      if((route.mode==="edit"||route.mode==="extend")&&!body.video_urls?.length)throw new Error(`This ${route.mode===`edit`?`Video Edit`:`Video Extend`} route requires one source video URL`);
 
       const createRes=await fetch(endpoint,{method:"POST",headers:authHeaders(),body:JSON.stringify({model,...body})});
       const createData=await readJson(createRes);
-      if(!createRes.ok)throw new Error(createData?.error?.message||createData?.message||`EvoLink HTTP ${createRes.status}`);
+      if(!createRes.ok)throw new Error(errorMessage(createData)||`EvoLink HTTP ${createRes.status}`);
       const taskId=getTaskId(createData);if(!taskId)throw new Error("EvoLink did not return a task ID");
 
       const deadline=Date.now()+900000;
       while(Date.now()<deadline){
         const taskRes=await fetch(taskEndpoint+encodeURIComponent(taskId),{method:"GET",headers:authHeaders()});
         const taskData=await readJson(taskRes);
-        if(!taskRes.ok)throw new Error(taskData?.error?.message||taskData?.message||`EvoLink task HTTP ${taskRes.status}`);
+        if(!taskRes.ok)throw new Error(errorMessage(taskData)||`EvoLink task HTTP ${taskRes.status}`);
         const url=extractUrl(taskData);if(url)return {url,taskId,raw:taskData,model};
         const status=statusOf(taskData);
-        if(["failed","error","cancelled","canceled"].includes(status))throw new Error(taskData?.error?.message||taskData?.message||"EvoLink video task failed");
-        if(["completed","complete","succeeded","success","done"].includes(status))throw new Error("EvoLink completed the task without returning a video URL");
+        if(["failed","error","cancelled","canceled"].includes(status)){
+          const detail=errorMessage(taskData)||"EvoLink video task failed";
+          throw new Error(`${detail} [task ${taskId}]`);
+        }
+        if(["completed","complete","succeeded","success","done"].includes(status)){
+          throw new Error(`EvoLink task ${taskId} completed but no video URL was returned. Inspect the task response/results.`);
+        }
         await new Promise(r=>setTimeout(r,2500));
       }
-      throw new Error("EvoLink task timed out");
+      throw new Error(`EvoLink task ${taskId} timed out`);
     };
     return true;
   };
