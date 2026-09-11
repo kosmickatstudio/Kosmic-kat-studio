@@ -1,6 +1,6 @@
 /* KOSMIC KAT — Video conversational state bridge
- * Phase 2 foundation only. No provider requests, no API-key storage.
- * CHAT = intent/context. V3 will consume this same state in Phase 4.
+ * Shared source of truth for chat intent, references, and generation context.
+ * No provider requests and no API-key storage.
  */
 (function installKosmicVideoChatState(){
   "use strict";
@@ -10,10 +10,11 @@
   const S=window.S||(window.S={});
   const existing=window.__kosmicVideoChatState||{};
   const state=window.__kosmicVideoChatState=Object.assign({
-    version:1,
+    version:2,
     conversationId:null,
     messages:[],
     references:[],
+    outputs:[],
     activeGeneration:null,
     directorOpen:false,
     composerDraft:"",
@@ -23,6 +24,7 @@
 
   if(!Array.isArray(state.messages))state.messages=[];
   if(!Array.isArray(state.references))state.references=[];
+  if(!Array.isArray(state.outputs))state.outputs=[];
 
   state.touch=function(){state.updatedAt=Date.now();return state;};
   state.addMessage=function(role,content,meta={}){
@@ -32,18 +34,26 @@
   state.setActiveGeneration=function(payload){state.activeGeneration=payload?Object.assign({},payload):null;state.touch();};
   state.addReference=function(ref){
     const item=Object.assign({id:"vref_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),createdAt:Date.now()},ref||{});
-    state.references.push(item);state.touch();return item;
+    state.references.push(item);state.touch();state.syncLegacy&&state.syncLegacy();return item;
   };
-  state.removeReference=function(id){state.references=state.references.filter(x=>x.id!==id);state.touch();};
-  state.clearReferences=function(){state.references=[];state.touch();};
+  state.removeReference=function(id){state.references=state.references.filter(x=>x.id!==id);state.touch();state.syncLegacy&&state.syncLegacy();};
+  state.clearReferences=function(){state.references=[];state.touch();state.syncLegacy&&state.syncLegacy();};
 
-  /* Keep the existing Video/V3 states as execution-facing state, not a second
-   * source of truth for chat history. This is intentionally shallow. */
+  const pick=kind=>state.references.filter(r=>r.kind===kind).map(r=>({url:r.url,name:r.name||"Reference",dataUrl:r.url}));
+
+  /* Keep the existing V2/V3 states as execution-facing state. Chat remains the
+   * conversational source of truth while the existing execution layer consumes
+   * mirrored references in its established image/video/audio arrays. */
   state.syncLegacy=function(){
     const v2=window.__kosmicVideoV2State;
     const v3=window.__kosmicVideoV3State;
-    if(v2){v2.prompt=state.composerDraft||v2.prompt||"";v2.images=state.references.filter(r=>r.kind==="image").map(r=>({url:r.url,name:r.name||"Reference"}));}
-    if(v3){v3.prompt=state.composerDraft||v3.prompt||"";v3.images=state.references.filter(r=>r.kind==="image").map(r=>({url:r.url,name:r.name||"Reference"}));}
-    if(window.S){S.vcMultiImages=state.references.filter(r=>r.kind==="image").map(r=>({dataUrl:r.url,name:r.name||"Reference"}));}
+    const images=pick("image"),videos=pick("video"),audios=pick("audio");
+    if(v2){v2.prompt=state.composerDraft||v2.prompt||"";v2.images=images;v2.videos=videos;v2.audios=audios;}
+    if(v3){v3.prompt=state.composerDraft||v3.prompt||"";v3.images=images;v3.videos=videos;v3.audios=audios;}
+    if(window.S){
+      S.vcMultiImages=images.map(x=>({dataUrl:x.url,name:x.name}));
+      S.vcMultiVideos=videos.map(x=>({dataUrl:x.url,name:x.name}));
+      S.vcMultiAudios=audios.map(x=>({dataUrl:x.url,name:x.name}));
+    }
   };
 })();
