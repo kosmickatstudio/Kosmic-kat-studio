@@ -1,13 +1,13 @@
-/* KOSMIC KAT — EVO LINK VIDEO PRICING HINTS
- * Current public entry-rate hints, verified 2026-09-10. These are display
- * hints only: full resolution/input/reference billing remains provider-owned.
+/* KOSMIC KAT — EVO LINK VIDEO PRICING
+ * Seedance 2.5 uses a live playground estimate rather than a single hard-coded
+ * entry price because cost varies by route, duration, resolution and video-input billing.
  */
 (function installEvoLinkVideoPricing(){
   "use strict";
   if(window.__kosmicEvoLinkPricing)return;
   window.__kosmicEvoLinkPricing=true;
   const P={
-    "seedance-2.5-reference-to-video":{from:0.085,unit:"input + output sec"},
+    "seedance-2.5-reference-to-video":{live:true,label:"Live estimate",rates:{output:{"480p":0.138,"720p":0.296,"1080p":0.532},videoInput:{"480p":0.084,"720p":0.180,"1080p":0.324}},billing:"duration + resolution + input-video aware"},
     "seedance-2.0-reference-to-video":{from:0.057,unit:"input + output sec"},
     "seedance-2.0-fast-reference-to-video":{from:0.034,unit:"input + output sec"},
     "seedance-2.0-mini-reference-to-video":{from:0.012,unit:"output sec"},
@@ -45,7 +45,9 @@
     api.catalog.forEach(card=>{
       const first=card.routes?.find(r=>P[r.id]);
       const p=first&&P[first.id];
-      if(p){card.priceHint=p.from!==undefined?`from $${p.from<0.01?p.from.toFixed(4):p.from.toFixed(3)} / ${p.unit}`:"Live provider rate";}
+      if(p){
+        card.priceHint=p.live?"Live estimate in playground":`from $${p.from<0.01?p.from.toFixed(4):p.from.toFixed(3)} / ${p.unit}`;
+      }
       (card.routes||[]).forEach(route=>{if(P[route.id])route.price=P[route.id];});
     });
     return true;
