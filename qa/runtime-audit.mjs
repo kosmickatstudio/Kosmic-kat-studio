@@ -10,6 +10,7 @@ const failures = [];
 const warnings = [];
 const consoleErrors = [];
 const pageErrors = [];
+const scriptErrors = [];
 const requestFailures = [];
 const badResponses = [];
 
@@ -102,7 +103,6 @@ async function auditEvoLink(page) {
   else if (routeUi.optionCount < 10) fail('Video Canvas model list is suspiciously small', String(routeUi.optionCount));
   if (!routeUi.hudPresent) warn('EvoLink route/schema HUD not visible yet');
 
-  // Activate Video Canvas where the application exposes a module launcher so the Seedance 2.5 playground can be audited.
   const activated = await page.evaluate(() => {
     const launchers = [...document.querySelectorAll('[onclick],button,a')];
     const hit = launchers.find((el) => /video\s*(canvas|studio)/i.test((el.textContent || '').trim()) || /video(canvas|studio)/i.test(el.getAttribute('onclick') || ''));
@@ -132,6 +132,19 @@ async function main() {
   const page = await context.newPage();
   page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
   page.on('pageerror', (err) => pageErrors.push(String(err?.stack || err)));
+  await page.evaluateOnNewDocument(() => {
+    window.__kosmicQaScriptErrors = [];
+    window.addEventListener('error', (event) => {
+      if (event?.filename || event?.lineno || event?.colno) {
+        window.__kosmicQaScriptErrors.push({
+          message: String(event.message || event.error || 'Script error'),
+          filename: String(event.filename || ''),
+          lineno: Number(event.lineno || 0),
+          colno: Number(event.colno || 0)
+        });
+      }
+    });
+  });
   page.on('requestfailed', (req) => requestFailures.push(`${req.method()} ${req.url()} :: ${req.failure()?.errorText || 'unknown'}`));
   page.on('response', (res) => { if (res.status() >= 500) badResponses.push(`${res.status()} ${res.request().method()} ${res.url()}`); });
 
@@ -142,6 +155,9 @@ async function main() {
   else if (response.status() >= 400) fail('Initial navigation failed', `${response.status()} ${response.url()}`);
   await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
   await sleep(1800);
+
+  const browserScriptErrors = await page.evaluate(() => window.__kosmicQaScriptErrors || []);
+  scriptErrors.push(...browserScriptErrors);
 
   const title = await page.title();
   if (!/KosmicKat/i.test(title)) warn('Unexpected page title', title);
@@ -166,16 +182,19 @@ async function main() {
     return { found: true, viewport: { width: innerWidth, height: innerHeight }, sheet: { position: ss.position, width: ss.width, maxWidth: ss.maxWidth, transform: ss.transform }, handle: { touchAction: hs.touchAction, pointerEvents: hs.pointerEvents } };
   });
   if (mobile.found) { if (mobile.handle.touchAction === 'auto') warn('Mobile settings handle touch-action is not overridden', mobile.handle.touchAction); if (mobile.handle.pointerEvents === 'none') fail('Mobile settings handle cannot receive input'); }
+  const mobileScriptErrors = await page.evaluate(() => window.__kosmicQaScriptErrors || []);
+  for (const error of mobileScriptErrors) scriptErrors.push({ ...error, viewport: 'mobile' });
   const mobileEvo = await auditEvoLink(page);
   const mobileSettingsState = await auditSettings(page, 'kosmic-settings-mobile.png');
   await page.screenshot({ path: `${OUT}/kosmic-home-mobile.png`, fullPage: true }).catch(() => {});
 
+  if (scriptErrors.length) fail('Browser script errors detected', scriptErrors.slice(0, 20).map((e) => `${e.message} @ ${e.filename}:${e.lineno}:${e.colno}`).join(' | '));
   if (pageErrors.length) fail('Runtime page errors detected', pageErrors.slice(0, 20).join(' | '));
   if (badResponses.length) fail('HTTP 5xx responses detected', badResponses.slice(0, 20).join(' | '));
   if (requestFailures.length) warn('Network requests failed', requestFailures.slice(0, 20).join(' | '));
   if (consoleErrors.length) warn('Console errors detected', consoleErrors.slice(0, 20).join(' | '));
 
-  const report = { site: SITE_URL, checkedAt: new Date().toISOString(), navigation: response ? { status: response.status(), url: response.url() } : null, title, failures, warnings, consoleErrors, pageErrors, requestFailures, badResponses, modelSnapshot, evoSnapshot, mobileEvo, settingsState, mobileSettingsState, mobile };
+  const report = { site: SITE_URL, checkedAt: new Date().toISOString(), navigation: response ? { status: response.status(), url: response.url() } : null, title, failures, warnings, consoleErrors, pageErrors, scriptErrors, requestFailures, badResponses, modelSnapshot, evoSnapshot, mobileEvo, settingsState, mobileSettingsState, mobile };
   fs.writeFileSync(`${OUT}/kosmic-runtime-report.json`, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
   await browser.close();
