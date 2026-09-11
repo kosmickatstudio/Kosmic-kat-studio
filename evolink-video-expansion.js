@@ -129,20 +129,29 @@
       refs:{images:7},multiImage:true,audio:true
     });
 
-    /* Current public catalog exposes these as distinct live video entries. */
+    /* Seedance 2.5 is a live EvoLink family, not a TBC/coming-soon route. */
     upsert("seedance-2.5-reference-to-video",{
       id:"seedance-2.5-reference-to-video",name:"Seedance 2.5",provider:"BytePlus",group:"Seedance",
-      availability:"coming_soon",routes:[
+      availability:"live",routes:[
         {id:"seedance-2.5-text-to-video",mode:"text",label:"Text to Video"},
         {id:"seedance-2.5-image-to-video",mode:"image",label:"Image to Video"},
         {id:"seedance-2.5-reference-to-video",mode:"reference",label:"Reference to Video"},
         {id:"seedance-2.5-video-edit",mode:"edit",label:"Video Edit"},
         {id:"seedance-2.5-video-extend",mode:"extend",label:"Video Extend"}
-      ],schema:{duration:[4,30],quality:["TBC"],aspect:["TBC"],refs:{multimodal:50},audio:"TBC"}
+      ],
+      schema:{
+        duration:[4,30],
+        quality:["480p","720p","1080p"],
+        aspect:["adaptive","16:9","9:16","1:1","4:3","3:4","21:9"],
+        refs:{images:30,videos:10,audios:10,total:50},
+        audio:true,
+        contentFilter:true,
+        webSearch:false
+      }
     });
 
     reindex();
-    api.routeRevision="2026-09-10";
+    api.routeRevision="2026-09-11";
     window.KOSMIC_EVOLINK_VIDEO=api;
     return true;
   };
