@@ -4,16 +4,15 @@ import { chromium } from 'playwright';
 const SITE_URL = process.env.KOSMIC_SITE_URL || 'https://kosmickat.art/';
 const OUT = process.env.KOSMIC_QA_DIR || 'qa-artifacts';
 fs.mkdirSync(OUT, { recursive: true });
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const failures = [], warnings = [], consoleErrors = [], pageErrors = [], scriptErrors = [], requestFailures = [], badResponses = [];
 function fail(m,d=''){ failures.push(d ? `${m}: ${d}` : m); }
 function warn(m,d=''){ warnings.push(d ? `${m}: ${d}` : m); }
 async function visible(page, selector){ const l=page.locator(selector).first(); return await l.count()>0 && await l.isVisible().catch(()=>false); }
 async function clickVideoModule(page){
   const candidates = [
-    page.locator('.mod-btn').filter({hasText:/^\\s*🎬?\\s*Video\\s*$/i}).first(),
-    page.locator('.mod-btn').filter({hasText:/\\bVideo\\b/i}).first(),
-    page.getByRole('button', {name:/\\bVideo\\b/i}).first(),
+    page.locator('.mod-btn').filter({hasText:/^\s*🎬?\s*Video\s*$/i}).first(),
+    page.locator('.mod-btn').filter({hasText:/\bVideo\b/i}).first(),
+    page.getByRole('button', {name:/\bVideo\b/i}).first(),
     page.getByText(/^Video$/i).first(),
   ];
   for(const c of candidates){
@@ -21,13 +20,16 @@ async function clickVideoModule(page){
   }
   return false;
 }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function auditVideoChat(page){
   const shell = await visible(page, '#kkVideoChat');
   const composer = await visible(page, '#kkvcInput');
+  const attach = await visible(page, '#kkvcAttach');
   const send = await visible(page, '#kkvcSend');
   const settings = await visible(page, '#kkvcSettings');
   if(!shell)fail('Video Chat surface is not visible after opening Video module');
   if(!composer)fail('Video Chat composer input is missing/invisible');
+  if(!attach)fail('Video Chat reference attachment control is missing/invisible');
   if(!send)fail('Video Chat Generate button is missing/invisible');
   if(!settings)fail('Video Chat Director/Settings button is missing/invisible');
   const legacyVisible = await page.evaluate(()=>{
@@ -37,35 +39,40 @@ async function auditVideoChat(page){
     return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0';
   }).catch(()=>false);
   if(legacyVisible)fail('Legacy Video UI is visibly mounted alongside Chat UI');
-  const falWarning = await page.evaluate(()=>[...document.querySelectorAll('body *')].some(e=>/add\\s+a\\s+fal(?:\\.ai|-ai)?\\s+api\\s+key\\s+in\\s+settings/i.test((e.textContent||'').trim())&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden')).catch(()=>false);
+  const falWarning = await page.evaluate(()=>[...document.querySelectorAll('body *')].some(e=>/add\s+a\s+fal(?:\.ai|-ai)?\s+api\s+key\s+in\s+settings/i.test((e.textContent||'').trim())&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden')).catch(()=>false);
   if(falWarning)fail('Visible Fal.ai API-key warning remains in Video UI');
-  const director = await page.locator('#kkv3Generate').count()>0;
-  if(!director)warn('V3 Generate control not found in DOM before Director drawer opens');
-  return {shell,composer,send,settings,legacyVisible,falWarning,directorControlInDom:director};
+  const directorControlInDom = await page.locator('#kkvcSettings').count()>0;
+  return {shell,composer,attach,send,settings,legacyVisible,falWarning,directorControlInDom};
 }
 async function auditDirector(page){
   const settings=page.locator('#kkvcSettings').first();
   if(!(await settings.count())) return {available:false};
-  await settings.click(); await sleep(500);
-  const drawer=await visible(page,'#kk-video-director');
-  const v3=await visible(page,'#kkVideoCanvasV3');
-  const close=await visible(page,'[data-kk-video-director-close]');
-  if(!drawer)fail('Director drawer did not open');
-  if(!v3)fail('V3 host is not visible inside/opened through Director drawer');
-  if(!close)warn('Director close control not found');
-  if(close)await page.locator('[data-kk-video-director-close]').first().click().catch(()=>{});
-  return {available:true,drawer,v3,close};
+  await settings.scrollIntoViewIfNeeded().catch(()=>{});
+  await settings.click({force:true});
+  const drawer = page.locator('#kkvcDirectorBackdrop').first();
+  try{ await drawer.waitFor({state:'visible',timeout:5000}); }catch{}
+  const drawerVisible = await drawer.isVisible().catch(()=>false);
+  const v3Visible = await visible(page, '#kkvcDirectorBackdrop #kkVideoCanvasV3, #kkvcDirectorHost #kkVideoCanvasV3');
+  const close = page.locator('#kkvcDirectorClose').first();
+  const closeVisible = await close.count()>0 && await close.isVisible().catch(()=>false);
+  if(!drawerVisible)fail('Director drawer did not open');
+  if(!v3Visible)fail('V3 host is not visible inside/opened through Director drawer');
+  if(!closeVisible)fail('Director close control is missing');
+  if(closeVisible){
+    await close.click({force:true}).catch(()=>{});
+    try{ await drawer.waitFor({state:'hidden',timeout:5000}); }catch{}
+    if(await drawer.isVisible().catch(()=>false))fail('Director drawer did not close');
+  }
+  return {available:true,drawer:drawerVisible,v3:v3Visible,close:closeVisible};
 }
 async function auditEvoLink(page){
   const snapshot=await page.evaluate(()=>{const api=window.KOSMIC_EVOLINK_VIDEO;if(!api)return{present:false};const cards=Array.isArray(api.catalog)?api.catalog:[];const ids=cards.flatMap(c=>(c?.routes||[]).map(r=>r?.id).filter(Boolean));return{present:true,cardCount:cards.length,routeCount:ids.length,indexedRouteCount:Object.keys(api.index||{}).length,revision:api.routeRevision||null,seed25:['seedance-2.5-text-to-video','seedance-2.5-image-to-video','seedance-2.5-reference-to-video','seedance-2.5-video-edit','seedance-2.5-video-extend'].map(id=>({id,present:!!api.index?.[id]}))};});
   if(!snapshot.present)fail('EvoLink runtime catalog is missing');
   if(snapshot.cardCount<25)fail('EvoLink runtime catalog unexpectedly small',String(snapshot.cardCount));
   for(const x of snapshot.seed25||[])if(!x.present)fail('Required Seedance 2.5 route missing',x.id);
-  const ui=await page.evaluate(()=>{const s=document.getElementById('vcModel');return{modelSelect:!!s,seed25Option:!!s&&[...s.options].some(o=>o.value==='seedance-2.5-text-to-video'),parity:!!document.querySelector('#evoSeedanceSchemaPanel.evo-seedance25-parity'),falWarning:[...document.querySelectorAll('body *')].some(e=>/add\\s+a\\s+fal(?:\\.ai|-ai)?\\s+api\\s+key\\s+in\\s+settings/i.test((e.textContent||'').trim())&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden')};});
-  if(!ui.modelSelect)warn('V3 model select is not directly visible, which is expected when Director is closed');
-  if(!ui.seed25Option)warn('Seedance 2.5 T2V option not found in V3 DOM');
-  if(ui.falWarning)fail('Visible Fal.ai API-key warning remains on Video UI');
-  return {...snapshot,ui};
+  const falWarning = await page.evaluate(()=>[...document.querySelectorAll('body *')].some(e=>/add\s+a\s+fal(?:\.ai|-ai)?\s+api\s+key\s+in\s+settings/i.test((e.textContent||'').trim())&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden')).catch(()=>false);
+  if(falWarning)fail('Visible Fal.ai API-key warning remains on Video UI');
+  return {...snapshot,ui:{modelSelect:!!document.getElementById('vcModel'),seed25Option:false,parity:false,falWarning}};
 }
 async function main(){
   const browser=await chromium.launch({headless:true});
