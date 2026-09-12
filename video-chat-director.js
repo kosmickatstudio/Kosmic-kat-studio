@@ -47,6 +47,19 @@
     document.addEventListener("keydown",e=>{if(e.key==="Escape"&&opened){e.preventDefault();close();}});
   }
 
+  function closeLegacyVideoSettings(){
+    // The migrated Video surface must not leave the retired V2 settings sheet
+    // over the Director drawer. Close it defensively if another legacy layer
+    // happened to be mounted by the broader application shell.
+    const panel=document.getElementById("vcSettingsPanel");
+    const backdrop=document.getElementById("vcSettingsBackdrop");
+    panel?.classList.remove("open","active","show","is-open");
+    backdrop?.classList.remove("open","active","show","is-open");
+    document.body.classList.remove("kkv2-settings-open");
+    if(panel)panel.setAttribute("aria-hidden","true");
+    if(backdrop)backdrop.setAttribute("aria-hidden","true");
+  }
+
   function findV3(){
     return document.getElementById("kkVideoCanvasV3")||document.querySelector(".kkv3")||document.querySelector(".kk-video-v3-host");
   }
@@ -56,16 +69,16 @@
 
   function open(){
     if(opened)return;
-    ensureUi();css();
+    ensureUi();css();closeLegacyVideoSettings();
     const host=findV3();
-    if(!host)throw new Error("Video Canvas V3 is not mounted yet.");
+    if(!host)throw new Error("Video Director is still loading. Please wait a moment and try again.");
     const target=document.getElementById("kkvcDirectorHost");
     if(!target)throw new Error("Video Director host is unavailable.");
     previousParent=host.parentNode;previousNext=host.nextSibling;restoreFocus=document.activeElement&&typeof document.activeElement.focus==="function"?document.activeElement:null;
     target.appendChild(host);
     opened=true;
     const note=document.getElementById("kkvcDirectorNote");if(note)note.style.display="none";
-    const b=document.getElementById("kkvcDirectorBackdrop");b.classList.add("open");
+    const b=document.getElementById("kkvcDirectorBackdrop");b.classList.add("open");b.setAttribute("aria-hidden","false");
     lockScroll();
     const q=state();if(q){q.directorOpen=true;q.touch();}
     const btn=document.getElementById("kkvcSettings");if(btn)btn.setAttribute("aria-expanded","true");
@@ -81,7 +94,7 @@
     }
     opened=false;
     const note=document.getElementById("kkvcDirectorNote");if(note)note.style.display="none";
-    const b=document.getElementById("kkvcDirectorBackdrop");if(b)b.classList.remove("open");
+    const b=document.getElementById("kkvcDirectorBackdrop");if(b){b.classList.remove("open");b.setAttribute("aria-hidden","true");}
     unlockScroll();
     const q=state();if(q){q.directorOpen=false;q.touch();}
     const btn=document.getElementById("kkvcSettings");if(btn)btn.setAttribute("aria-expanded","false");
