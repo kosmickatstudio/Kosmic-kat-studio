@@ -1,7 +1,8 @@
 /* KOSMIC KAT — Video V3 interaction hardening
  * Keeps the existing V3 engine intact while removing misleading controls,
- * preventing no-op storyboard actions, preserving stateful UI affordances,
- * and improving keyboard/accessibility behavior after V3 re-renders.
+ * preventing no-op storyboard actions, adding real shot reordering,
+ * preserving stateful UI affordances, and improving keyboard/accessibility
+ * behavior after V3 re-renders.
  */
 (function installKosmicVideoV3Hardening(){
   "use strict";
@@ -17,12 +18,18 @@
       #kkVideoCanvasV3 button:disabled{opacity:.42;cursor:not-allowed;filter:none;transform:none!important}
       #kkVideoCanvasV3 .kkv3-shot-actions{flex-wrap:wrap}
       #kkVideoCanvasV3 .kkv3-shot-actions button[disabled]{pointer-events:none}
+      #kkVideoCanvasV3 .kkv3-reorder{display:inline-flex;align-items:center;justify-content:center;min-width:34px}
       @media(max-width:700px){#kkVideoCanvasV3 .kkv3-shot-actions button{min-height:34px}}
     `;
     document.head.appendChild(s);
   };
 
   function v3(){return document.getElementById("kkVideoCanvasV3");}
+  function rerender(){
+    const root=v3();
+    const tab=root?.querySelector('[data-workspace]');
+    if(tab)tab.click();
+  }
 
   function harden(){
     const root=v3();if(!root)return;
@@ -68,6 +75,21 @@
         copy.title=first?"There is no previous shot to copy.":"Copy the previous shot's prompt";
         copy.setAttribute("aria-disabled",first?"true":"false");
       }
+
+      let reorder=row.querySelector(".kkv3-reorder-wrap");
+      if(!reorder){
+        reorder=document.createElement("span");reorder.className="kkv3-reorder-wrap";reorder.style.cssText="display:inline-flex;gap:6px";
+        const up=document.createElement("button");up.type="button";up.className="kkv3-reorder";up.textContent="↑";up.title="Move shot up";up.setAttribute("aria-label","Move shot up");up.dataset.kkReorder="up";
+        const down=document.createElement("button");down.type="button";down.className="kkv3-reorder";down.textContent="↓";down.title="Move shot down";down.setAttribute("aria-label","Move shot down");down.dataset.kkReorder="down";
+        reorder.append(up,down);
+        row.querySelector(".kkv3-shot-actions")?.appendChild(reorder);
+        up.addEventListener("click",()=>moveShot(index,-1));
+        down.addEventListener("click",()=>moveShot(index,1));
+      }
+      const up=reorder.querySelector('[data-kk-reorder="up"]');
+      const down=reorder.querySelector('[data-kk-reorder="down"]');
+      if(up)up.disabled=index===0;
+      if(down)down.disabled=index===shots.length-1;
     });
 
     const activePrompt=root.querySelector("#kkv3Prompt");
@@ -81,11 +103,19 @@
     });
   }
 
+  function moveShot(index,delta){
+    const state=window.__kosmicVideoV3State;if(!state||!Array.isArray(state.storyboard))return;
+    const next=index+delta;if(next<0||next>=state.storyboard.length)return;
+    const [shot]=state.storyboard.splice(index,1);
+    state.storyboard.splice(next,0,shot);
+    rerender();
+  }
+
   function boot(){
     css();
-    const root=document.getElementById("kkVideoCanvasV3")||document.body;
+    const target=document.getElementById("kkVideoCanvasV3")||document.body;
     const mo=new MutationObserver(()=>{if(document.getElementById("kkVideoCanvasV3"))harden();});
-    mo.observe(root,{childList:true,subtree:true});
+    mo.observe(target,{childList:true,subtree:true});
     window.__kosmicVideoV3HardeningObserver=mo;
     harden();
   }
