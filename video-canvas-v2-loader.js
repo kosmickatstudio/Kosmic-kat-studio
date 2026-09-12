@@ -24,7 +24,9 @@
               load("video-chat-state.js","data-kosmic-video-chat-state",()=>
                 load("video-chat-shell.js","data-kosmic-video-chat-shell",()=>
                   load("video-chat-generation.js","data-kosmic-video-chat-generation",()=>
-                    load("video-chat-director.js","data-kosmic-video-chat-director")
+                    load("video-chat-director.js","data-kosmic-video-chat-director",()=>
+                      load("video-chat-primary.js","data-kosmic-video-chat-primary")
+                    )
                   )
                 )
               )
