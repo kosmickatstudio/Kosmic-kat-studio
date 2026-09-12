@@ -3,18 +3,19 @@
   "use strict";
   if(window.__kosmicVideoCanvasV3Loader)return;
   window.__kosmicVideoCanvasV3Loader=true;
+  const V="20260912-chat3";
 
   const load=(src,marker,next)=>{
     const q=`script[${marker}="1"]`,old=document.querySelector(q);
     if(old){next&&next();return;}
     const s=document.createElement("script");
-    s.src=src;s.async=false;s.setAttribute(marker,"1");
+    s.src=`${src}?v=${V}`;s.async=false;s.setAttribute(marker,"1");
     if(next)s.onload=next;
+    s.onerror=()=>console.error(`Kosmic Video loader failed: ${src}`);
     document.head.appendChild(s);
   };
 
-  /* The app already owns API keys and API slots in its global Settings.
-   * Video Canvas does not create, replace, or duplicate that system. */
+  /* Global Settings remains the sole owner of API credentials/API slots. */
   load("evolink-video.js","data-kosmic-evo-v3-catalog",()=>
     load("evolink-video-current.js","data-kosmic-evo-v3-current",()=>
       load("evolink-video-expansion.js","data-kosmic-evo-v3-expansion",()=>
