@@ -3,7 +3,7 @@
   "use strict";
   if(window.__kosmicVideoCanvasV3Loader)return;
   window.__kosmicVideoCanvasV3Loader=true;
-  const V="20260912-chat3";
+  const V="20260912-chat4";
 
   const load=(src,marker,next)=>{
     const q=`script[${marker}="1"]`,old=document.querySelector(q);
@@ -26,7 +26,9 @@
                 load("video-chat-shell.js","data-kosmic-video-chat-shell",()=>
                   load("video-chat-generation.js","data-kosmic-video-chat-generation",()=>
                     load("video-chat-director.js","data-kosmic-video-chat-director",()=>
-                      load("video-chat-primary.js","data-kosmic-video-chat-primary")
+                      load("video-chat-primary.js","data-kosmic-video-chat-primary",()=>
+                        load("video-v3-interaction-hardening.js","data-kosmic-video-v3-hardening")
+                      )
                     )
                   )
                 )
