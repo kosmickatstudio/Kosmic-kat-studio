@@ -52,6 +52,10 @@
   }
   function routeAllowed(model){
     if(!routeIsSeed25(model))return;
+    const activeRoute=currentRoute();
+    if(routeIsSeed25(activeRoute)&&activeRoute!==String(model)){
+      throw new Error(`Generation blocked: the selected Seedance 2.5 route changed from ${activeRoute} to ${model} before the request started. Please generate again from the current route.`);
+    }
     if(inFlight)throw new Error("Generation already in progress. Duplicate paid requests are blocked until the current request finishes.");
     if(!consumeArm())throw new Error("Generation blocked for safety: start the video generation from the visible Generate control. This prevents accidental or programmatic paid requests.");
     budgetAllows();
@@ -97,7 +101,6 @@
       let tries=0;const timer=setInterval(()=>{if(guardAdapter()||++tries>240)clearInterval(timer);},50);
     }
     window.__kosmicVideoSafety={
-      arm:source=>armGeneration(source||"manual"),
       disarm:()=>{arm=null;window.__kosmicVideoGenerationArm=null;},
       status:()=>({armed:!!arm&&arm.expiresAt>Date.now(),expiresAt:arm?.expiresAt||0,route:currentRoute(),inFlight})
     };
