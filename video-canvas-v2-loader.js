@@ -3,7 +3,7 @@
   "use strict";
   if(window.__kosmicVideoCanvasV3Loader)return;
   window.__kosmicVideoCanvasV3Loader=true;
-  const V="20260913-chat5";
+  const V="20260914-chat6";
 
   const load=(src,marker,next)=>{
     const q=`script[${marker}="1"]`,old=document.querySelector(q);
