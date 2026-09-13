@@ -3,21 +3,28 @@
   "use strict";
   if(window.__kosmicVideoCanvasV3Loader)return;
   window.__kosmicVideoCanvasV3Loader=true;
-  const V="20260914-chat7";
+  const V="20260914-chat8";
+
+  const videoActive=()=>window.S?.mod==="videocanvas"||!!document.querySelector('.mod-btn[data-mod="videocanvas"].active');
 
   const load=(src,marker,next)=>{
     const q=`script[${marker}="1"]`,old=document.querySelector(q);
-    if(old){next&&next();return;}
+    const advance=()=>{
+      if(videoActive()){next&&next();}
+      else window.__kosmicVideoStackLoading=false;
+    };
+    if(old){advance();return;}
     const s=document.createElement("script");
     s.src=`${src}?v=${V}`;s.async=false;s.setAttribute(marker,"1");
-    if(next)s.onload=next;
-    s.onerror=()=>console.error(`Kosmic Video loader failed: ${src}`);
+    if(next)s.onload=advance;
+    s.onerror=()=>{window.__kosmicVideoStackLoading=false;console.error(`Kosmic Video loader failed: ${src}`);};
     document.head.appendChild(s);
   };
 
   /* Global Settings remains the sole owner of API credentials/API slots. */
   const loadStack=()=>{
-    if(window.__kosmicVideoStackLoaded||window.__kosmicVideoStackLoading)return;
+    if(!videoActive())return false;
+    if(window.__kosmicVideoStackLoaded||window.__kosmicVideoStackLoading)return true;
     window.__kosmicVideoStackLoading=true;
     load("evolink-video.js","data-kosmic-evo-v3-catalog",()=>
       load("evolink-video-current.js","data-kosmic-evo-v3-current",()=>
@@ -49,13 +56,10 @@
         )
       )
     );
+    return true;
   };
 
   window.__kosmicEnsureVideoStack=loadStack;
-
-  function videoActive(){
-    return window.S?.mod==="videocanvas"||!!document.querySelector('.mod-btn[data-mod="videocanvas"].active');
-  }
 
   function hookSwitch(){
     if(typeof window.switchMod!=="function"||window.switchMod.__kosmicVideoLazyHook)return;
@@ -63,6 +67,7 @@
     const wrapped=function(mod,el){
       const out=original.apply(this,arguments);
       if(String(mod)==="videocanvas")loadStack();
+      else if(window.__kosmicVideoStackLoading&&!videoActive())window.__kosmicVideoStackLoading=false;
       return out;
     };
     wrapped.__kosmicVideoLazyHook=true;
@@ -74,7 +79,7 @@
   const hookTimer=setInterval(()=>{
     hookSwitch();
     if(videoActive())loadStack();
-    if(window.__kosmicVideoStackLoaded)clearInterval(hookTimer);
+    if(window.__kosmicVideoStackLoaded||(!videoActive()&&!window.__kosmicVideoStackLoading))clearInterval(hookTimer);
   },150);
 
   document.addEventListener("click",e=>{
