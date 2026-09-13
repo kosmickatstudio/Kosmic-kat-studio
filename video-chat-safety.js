@@ -1,6 +1,7 @@
 /* KOSMIC KAT — Video generation safety gate
  * Prevents accidental paid Seedance 2.5 requests, adds a browser-local
- * budget-cap guard, and keeps retired credential/provider UI out of Video.
+ * budget-cap guard, serializes paid requests, and keeps retired
+ * credential/provider UI out of Video.
  * This is a client-side safety layer only; provider credentials remain owned
  * by Global Settings and no secret is persisted here.
  */
@@ -18,6 +19,7 @@
   ]);
   const ARM_TTL=30_000;
   let arm=null;
+  let inFlight=false;
 
   function routeIsSeed25(id){return SEED25.has(String(id||""));}
   function currentRoute(){return String(window.__kosmicVideoV3State?.route||"");}
@@ -34,14 +36,14 @@
   function eventIsTrusted(e){return !!e&&e.isTrusted===true;}
   function userAction(e){
     if(!eventIsTrusted(e))return;
-    const t=e.target?.closest?.("#kkv3Generate,#kkvcSend");
-    if(t)armGeneration(t.id||"video-generate");
+    const t=e.target?.closest?.("#kkv3Generate,#kkvcSend,[data-history-action='regenerate']");
+    if(t)armGeneration(t.dataset?.historyAction==="regenerate"?"history-regenerate":(t.id||"video-generate"));
   }
   function userKeyAction(e){
     if(!eventIsTrusted(e))return;
     if(e.key!=="Enter"&&e.key!==" ")return;
-    const t=e.target?.closest?.("#kkv3Generate,#kkvcSend,#kkvcInput");
-    if(t)armGeneration(t.id||"video-keyboard-generate");
+    const t=e.target?.closest?.("#kkv3Generate,#kkvcSend,#kkvcInput,[data-history-action='regenerate']");
+    if(t)armGeneration(t.dataset?.historyAction==="regenerate"?"history-regenerate":(t.id||"video-keyboard-generate"));
   }
   function budgetAllows(){
     const cap=parseFloat(typeof gs==="function"?gs("budget_cap","0"):"0")||0;
@@ -50,8 +52,10 @@
   }
   function routeAllowed(model){
     if(!routeIsSeed25(model))return;
+    if(inFlight)throw new Error("Generation already in progress. Duplicate paid requests are blocked until the current request finishes.");
     if(!consumeArm())throw new Error("Generation blocked for safety: start the video generation from the visible Generate control. This prevents accidental or programmatic paid requests.");
     budgetAllows();
+    inFlight=true;
   }
   function guardAdapter(){
     const api=window.KOSMIC_EVOLINK_VIDEO,original=window.generateEvoLinkVideo;
@@ -59,7 +63,11 @@
     if(original.__kosmicPaidSafetyGuard)return true;
     const guarded=async function(model,prompt,options={}){
       routeAllowed(model);
-      return original.apply(this,arguments);
+      try{
+        return await original.apply(this,arguments);
+      }finally{
+        if(routeIsSeed25(model))inFlight=false;
+      }
     };
     guarded.__kosmicPaidSafetyGuard=true;
     guarded.__kosmicOriginal=original;
@@ -91,7 +99,7 @@
     window.__kosmicVideoSafety={
       arm:source=>armGeneration(source||"manual"),
       disarm:()=>{arm=null;window.__kosmicVideoGenerationArm=null;},
-      status:()=>({armed:!!arm&&arm.expiresAt>Date.now(),expiresAt:arm?.expiresAt||0,route:currentRoute()})
+      status:()=>({armed:!!arm&&arm.expiresAt>Date.now(),expiresAt:arm?.expiresAt||0,route:currentRoute(),inFlight})
     };
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();
