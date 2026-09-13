@@ -1,20 +1,33 @@
-/* KOSMIC KAT — Video V3 interaction hardening
- * Keeps the existing V3 engine intact while removing misleading controls,
- * preventing no-op storyboard actions, adding real shot reordering,
- * preserving stateful UI affordances, and improving keyboard/accessibility
- * behavior after V3 re-renders.
- *
- * IMPORTANT: this layer is deliberately defensive. It must never become a
- * second storyboard engine. The authoritative storyboard remains
- * window.__kosmicVideoV3State.storyboard; this file only hardens the UI around it.
+/* KOSMIC KAT — Video V3 production interaction hardening
+ * Post-render integrity layer for the existing V3 surface.
+ * Does not create a second engine, provider, credential store, or renderer.
+ * It only validates and repairs the existing V3 state/DOM after V3 renders.
  */
 (function installKosmicVideoV3Hardening(){
   "use strict";
   if(window.__kosmicVideoV3InteractionHardening)return;
   window.__kosmicVideoV3InteractionHardening=true;
 
-  const css=()=>{
-    if(document.getElementById("kk-v3-hardening-css"))return;
+  const SEED25=[
+    "seedance-2.5-text-to-video",
+    "seedance-2.5-image-to-video",
+    "seedance-2.5-reference-to-video",
+    "seedance-2.5-video-edit",
+    "seedance-2.5-video-extend"
+  ];
+  const $=id=>document.getElementById(id);
+  const v3=()=>$("kkVideoCanvasV3")||document.querySelector(".kkv3");
+  const state=()=>window.__kosmicVideoV3State;
+  const catalog=()=>window.KOSMIC_EVOLINK_VIDEO?.index||{};
+  const route=()=>catalog()[state()?.route]||null;
+  const schema=()=>route()?.model?.schema||route()?.schema||{};
+  const modeOf=r=>String(r?.mode||r?.id||"").includes("reference")?"reference":String(r?.mode||r?.id||"").includes("extend")?"extend":String(r?.mode||r?.id||"").includes("edit")?"edit":String(r?.mode||r?.id||"").includes("image")?"image":"text";
+  const limits=()=>schema()?.refs||{};
+  const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
+  const toast=(msg,type)=>{try{if(typeof window.toast==="function")window.toast(msg,type||"error");}catch(_){}};
+
+  function css(){
+    if($("kk-v3-hardening-css"))return;
     const s=document.createElement("style");s.id="kk-v3-hardening-css";
     s.textContent=`
       #kkVideoCanvasV3 .kkv3-tab[aria-selected="true"]{outline:2px solid rgba(98,64,176,.16);outline-offset:-2px}
@@ -23,150 +36,208 @@
       #kkVideoCanvasV3 .kkv3-shot-actions{flex-wrap:wrap}
       #kkVideoCanvasV3 .kkv3-shot-actions button[disabled]{pointer-events:none}
       #kkVideoCanvasV3 .kkv3-reorder{display:inline-flex;align-items:center;justify-content:center;min-width:34px}
+      #kkVideoCanvasV3 .kkv3-history-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:7px}
+      #kkVideoCanvasV3 .kkv3-history-actions button{width:100%;margin:0}
       @media(max-width:700px){#kkVideoCanvasV3 .kkv3-shot-actions button{min-height:34px}}
     `;
     document.head.appendChild(s);
-  };
-
-  function v3(){return document.getElementById("kkVideoCanvasV3");}
+  }
 
   function rerender(){
     const root=v3();
-    if(!root)return;
-    // The V3 renderer already owns workspace rendering. Clicking the active
-    // workspace is the least invasive way to request a fresh render without
-    // introducing a duplicate renderer or reaching into private functions.
-    const active=root.querySelector('[data-workspace][aria-selected="true"]')||root.querySelector('[data-workspace]');
-    if(active){active.click();return;}
-    // If the renderer temporarily has no workspace button during a mount,
-    // simply let its existing MutationObserver cycle call harden() again.
-    harden();
+    const tab=root?.querySelector('[data-workspace]');
+    if(tab){tab.click();return;}
+    const event=new Event("kk-v3-hardening-rerender");window.dispatchEvent(event);
   }
 
-  function harden(){
-    const root=v3();if(!root)return;
+  function normalizeState(){
+    const s=state(),r=route(),sc=schema();
+    if(!s||!r)return false;
+    const min=Number(sc.duration?.[0]??4),max=Number(sc.duration?.[1]??30);
+    const qualities=Array.isArray(sc.quality)&&sc.quality.length?sc.quality:["720p"];
+    const aspects=Array.isArray(sc.aspect)&&sc.aspect.length?sc.aspect.map(v=>v==="auto"?"adaptive":v):["16:9","9:16"];
+    const before=JSON.stringify({d:s.duration,q:s.quality,a:s.aspect});
+    s.duration=clamp(Number(s.duration)||min,min,max);
+    if(!qualities.includes(s.quality))s.quality=qualities.includes("720p")?"720p":qualities[0];
+    if(!aspects.includes(s.aspect))s.aspect=aspects.includes("16:9")?"16:9":aspects[0];
+    const lim=limits();
+    if(Array.isArray(s.images)&&Number.isFinite(Number(lim.images)))s.images=s.images.slice(0,Number(lim.images));
+    if(Array.isArray(s.videos)&&Number.isFinite(Number(lim.videos)))s.videos=s.videos.slice(0,Number(lim.videos));
+    if(Array.isArray(s.audios)&&Number.isFinite(Number(lim.audios)))s.audios=s.audios.slice(0,Number(lim.audios));
+    return before!==JSON.stringify({d:s.duration,q:s.quality,a:s.aspect});
+  }
 
-    // "Popular" was previously a decorative control with no behavior. Remove it
-    // rather than leaving a button that lies to the user about being interactive.
-    root.querySelector("#kkv3Popular")?.remove();
-
-    root.querySelectorAll("[data-workspace]").forEach(btn=>{
-      const active=btn.dataset.workspace===window.__kosmicVideoV3State?.workspace;
-      btn.setAttribute("aria-selected",active?"true":"false");
-      btn.setAttribute("role","tab");
-      btn.tabIndex=active?0:-1;
+  function enforceRouteRequirements(){
+    const root=v3(),s=state(),r=route();if(!root||!s||!r)return;
+    const m=modeOf(r),lim=limits();
+    const reqImage=(m==="image"||m==="reference")&&Number(lim.images||0)>0;
+    const reqVideo=(m==="edit"||m==="extend")&&Number(lim.videos||0)>0;
+    const genButtons=root.querySelectorAll("#kkv3Generate,#kkv3GenerateMobile");
+    const prompt=String(root.querySelector("#kkv3Prompt")?.value||s.prompt||"").trim();
+    const hasInput=(!reqImage||s.images?.length>0)&&(!reqVideo||s.videos?.length>0);
+    genButtons.forEach(btn=>{
+      const blocked=!prompt||!hasInput||!!s.busy;
+      btn.disabled=blocked;
+      if(!prompt)btn.title="Write a shot prompt first.";
+      else if(!hasInput)btn.title=m==="image"||m==="reference"?"Add the required image reference first.":"Add the required video reference first.";
+      else btn.removeAttribute("title");
+      btn.setAttribute("aria-disabled",blocked?"true":"false");
     });
+  }
 
+  function enforceRouteButtons(){
+    const root=v3(),s=state();if(!root||!s)return;
     root.querySelectorAll("[data-route]").forEach(btn=>{
-      const active=btn.dataset.route===window.__kosmicVideoV3State?.route;
+      const active=btn.dataset.route===s.route;
       btn.setAttribute("aria-selected",active?"true":"false");
     });
+  }
 
-    root.querySelectorAll("[data-quality],[data-aspect]").forEach(btn=>{
-      const state=window.__kosmicVideoV3State||{};
-      const active=(btn.dataset.quality!=null&&btn.dataset.quality===state.quality)||(btn.dataset.aspect!=null&&btn.dataset.aspect===state.aspect);
-      btn.setAttribute("aria-pressed",active?"true":"false");
-    });
-
-    // The first storyboard shot is the anchor shot. It must never expose
-    // Remove or Copy as an apparently available operation. Remove is allowed
-    // only for shots after the first; Copy is allowed only when a predecessor
-    // exists. The storyboard itself is still required to contain at least one
-    // shot, so a one-shot board also keeps Remove disabled everywhere.
-    const fields=Array.from(root.querySelectorAll("[data-story-prompt]"));
+  function enforceShotActions(){
+    const root=v3(),s=state();if(!root||!s||!Array.isArray(s.storyboard))return;
+    const fields=root.querySelectorAll("[data-story-prompt]");
     fields.forEach((field,index)=>{
       const row=field.closest(".kkv3-shot");if(!row)return;
       const remove=row.querySelector("[data-story-remove]");
       const copy=row.querySelector("[data-story-copy]");
-      const first=index===0;
-      const only=fields.length===1;
-
       if(remove){
-        const disabled=first||only;
-        remove.disabled=disabled;
-        remove.title=disabled
-          ? (first?"The first shot is the storyboard anchor.":"The storyboard needs at least one shot.")
-          : "Remove this shot";
-        remove.setAttribute("aria-disabled",disabled?"true":"false");
+        const only=fields.length===1;
+        remove.disabled=only;
+        remove.title=only?"The storyboard needs at least one shot.":"Remove this shot";
+        remove.setAttribute("aria-disabled",only?"true":"false");
       }
       if(copy){
+        const first=index===0;
         copy.disabled=first;
         copy.title=first?"There is no previous shot to copy.":"Copy the previous shot's prompt";
         copy.setAttribute("aria-disabled",first?"true":"false");
       }
-
       let reorder=row.querySelector(".kkv3-reorder-wrap");
       if(!reorder){
-        reorder=document.createElement("span");
-        reorder.className="kkv3-reorder-wrap";
-        reorder.style.cssText="display:inline-flex;gap:6px";
-        const up=document.createElement("button");
-        up.type="button";up.className="kkv3-reorder";up.textContent="↑";
-        up.title="Move shot up";up.setAttribute("aria-label","Move shot up");
-        up.dataset.kkReorder="up";
-        const down=document.createElement("button");
-        down.type="button";down.className="kkv3-reorder";down.textContent="↓";
-        down.title="Move shot down";down.setAttribute("aria-label","Move shot down");
-        down.dataset.kkReorder="down";
-        reorder.append(up,down);
-        row.querySelector(".kkv3-shot-actions")?.appendChild(reorder);
-
-        // Do not capture the original numeric index. The DOM can be reordered
-        // or re-rendered after every move. Resolve the field's current index at
-        // click time so the button can never act on a stale position.
-        up.addEventListener("click",()=>{
-          const currentRoot=v3();
-          const currentFields=Array.from(currentRoot?.querySelectorAll("[data-story-prompt]")||[]);
-          const currentIndex=currentFields.indexOf(field);
-          if(currentIndex>=0)moveShot(currentIndex,-1);
-        });
-        down.addEventListener("click",()=>{
-          const currentRoot=v3();
-          const currentFields=Array.from(currentRoot?.querySelectorAll("[data-story-prompt]")||[]);
-          const currentIndex=currentFields.indexOf(field);
-          if(currentIndex>=0)moveShot(currentIndex,1);
-        });
+        reorder=document.createElement("span");reorder.className="kkv3-reorder-wrap";reorder.style.cssText="display:inline-flex;gap:6px";
+        const up=document.createElement("button");up.type="button";up.className="kkv3-reorder";up.textContent="↑";up.title="Move shot up";up.setAttribute("aria-label","Move shot up");up.dataset.kkReorder="up";
+        const down=document.createElement("button");down.type="button";down.className="kkv3-reorder";down.textContent="↓";down.title="Move shot down";down.setAttribute("aria-label","Move shot down");down.dataset.kkReorder="down";
+        reorder.append(up,down);row.querySelector(".kkv3-shot-actions")?.appendChild(reorder);
+        up.addEventListener("click",()=>moveShotById(field));
+        down.addEventListener("click",()=>moveShotById(field));
       }
-
-      const up=reorder.querySelector('[data-kk-reorder="up"]');
-      const down=reorder.querySelector('[data-kk-reorder="down"]');
-      if(up)up.disabled=first;
+      const up=reorder.querySelector('[data-kk-reorder="up"]'),down=reorder.querySelector('[data-kk-reorder="down"]');
+      if(up)up.disabled=index===0;
       if(down)down.disabled=index===fields.length-1;
-      if(up)up.setAttribute("aria-disabled",first?"true":"false");
-      if(down)down.setAttribute("aria-disabled",index===fields.length-1?"true":"false");
-    });
-
-    const activePrompt=root.querySelector("#kkv3Prompt");
-    if(activePrompt){
-      activePrompt.setAttribute("aria-label","Video shot prompt");
-      activePrompt.setAttribute("autocomplete","off");
-    }
-
-    root.querySelectorAll("button").forEach(btn=>{
-      if(!btn.getAttribute("type"))btn.setAttribute("type","button");
     });
   }
 
-  function moveShot(index,delta){
-    const state=window.__kosmicVideoV3State;
-    if(!state||!Array.isArray(state.storyboard))return;
-    const next=index+delta;
-    if(!Number.isInteger(index)||!Number.isInteger(delta)||next<0||next>=state.storyboard.length)return;
-    if(index===0&&delta<0)return;
-    if(index===state.storyboard.length-1&&delta>0)return;
+  function moveShotById(field){
+    const s=state();if(!s||!Array.isArray(s.storyboard))return;
+    const row=field?.closest(".kkv3-shot");
+    const prompt=row?.querySelector("[data-story-prompt]");
+    const id=prompt?.dataset?.storyId||row?.dataset?.storyId;
+    let index=id?s.storyboard.findIndex(x=>String(x.id)===String(id)):-1;
+    if(index<0){
+      const all=Array.from(v3()?.querySelectorAll("[data-story-prompt]")||[]);index=all.indexOf(prompt||field);
+    }
+    if(index<0)return;
+    const delta=event?.currentTarget?.dataset?.kkReorder==="up"?-1:1;
+    const next=index+delta;if(next<0||next>=s.storyboard.length)return;
+    const [shot]=s.storyboard.splice(index,1);s.storyboard.splice(next,0,shot);rerender();
+  }
 
-    const [shot]=state.storyboard.splice(index,1);
-    if(!shot)return;
-    state.storyboard.splice(next,0,shot);
-    rerender();
+  function normalizeRefsBeforeGenerate(){
+    const s=state(),lim=limits();if(!s)return;
+    const imageMax=Number(lim.images),videoMax=Number(lim.videos),audioMax=Number(lim.audios);
+    if(Number.isFinite(imageMax)&&Array.isArray(s.images)&&s.images.length>imageMax){s.images=s.images.slice(0,imageMax);toast(`Only ${imageMax} image reference${imageMax===1?"":"s"} are allowed on this route.`);}
+    if(Number.isFinite(videoMax)&&Array.isArray(s.videos)&&s.videos.length>videoMax){s.videos=s.videos.slice(0,videoMax);toast(`Only ${videoMax} video reference${videoMax===1?"":"s"} are allowed on this route.`);}
+    if(Number.isFinite(audioMax)&&Array.isArray(s.audios)&&s.audios.length>audioMax){s.audios=s.audios.slice(0,audioMax);toast(`Only ${audioMax} audio reference${audioMax===1?"":"s"} are allowed on this route.`);}
+  }
+
+  function guardFileInputs(){
+    const root=v3();if(!root||root.__kkRefGuard)return;
+    root.__kkRefGuard=true;
+    root.addEventListener("change",e=>{
+      const input=e.target;if(!(input instanceof HTMLInputElement)||input.type!=="file")return;
+      const s=state(),lim=limits();if(!s)return;
+      const kind=input.id.includes("Images")?"images":input.id.includes("Videos")?"videos":input.id.includes("Audios")?"audios":null;
+      if(!kind)return;
+      const max=Number(lim[kind]);
+      if(Number.isFinite(max)&&input.files&&input.files.length>max){
+        e.preventDefault();e.stopImmediatePropagation();input.value="";toast(`This route accepts at most ${max} ${kind.slice(0,-1)} reference${max===1?"":"s"}.`);return;
+      }
+      setTimeout(()=>{normalizeRefsBeforeGenerate();enforceRouteRequirements();},0);
+    },true);
+  }
+
+  function addHistoryActions(){
+    const root=v3(),s=state();if(!root||!s)return;
+    root.querySelectorAll("[data-use-history]").forEach(btn=>{
+      if(btn.parentElement?.querySelector(".kkv3-history-actions"))return;
+      const i=Number(btn.dataset.useHistory),item=s.history?.[i];if(!item||item.error)return;
+      btn.style.display="none";
+      const wrap=document.createElement("div");wrap.className="kkv3-history-actions";
+      const actions=[
+        ["Use as reference","reference"],["Edit","edit"],["Extend","extend"],["Regenerate","regenerate"],["Download","download"]
+      ];
+      actions.forEach(([label,action])=>{
+        const b=document.createElement("button");b.type="button";b.className="kkv3-secondary";b.textContent=label;b.dataset.historyAction=action;b.dataset.historyIndex=String(i);wrap.appendChild(b);
+      });
+      btn.parentElement?.appendChild(wrap);
+    });
+  }
+
+  async function useHistoryAction(action,index){
+    const s=state(),item=s?.history?.[index];if(!item)return;
+    if(action==="download"){
+      if(!/^https?:\/\//i.test(String(item.url||""))){toast("This generated result has no downloadable URL.");return;}
+      try{if(typeof window.downloadWithName==="function")await window.downloadWithName(item.url,`kosmic-kat-${Date.now()}.mp4`);else{const a=document.createElement("a");a.href=item.url;a.download=`kosmic-kat-${Date.now()}.mp4`;a.target="_blank";a.rel="noopener";document.body.appendChild(a);a.click();a.remove();}}catch(e){toast(e?.message||"Download failed.");}
+      return;
+    }
+    if(action==="regenerate"){
+      s.prompt=String(item.prompt||"");s.workspace="shot";rerender();setTimeout(()=>$("kkv3Generate")?.click(),50);return;
+    }
+    if(action==="edit"||action==="extend"){
+      const target=Object.values(catalog()).find(x=>x.mode===action&&String(x.model?.name||"").toLowerCase().includes("seedance 2.5"))||Object.values(catalog()).find(x=>x.mode===action);
+      if(!target){toast(`No ${action} video route is currently available.`);return;}
+      s.route=target.id;s.videos=[{url:item.url,name:"Generated video"}];s.images=[];s.audios=[];s.prompt=String(item.prompt||"");s.workspace="shot";normalizeState();rerender();return;
+    }
+    if(action==="reference"){
+      s.route="seedance-2.5-reference-to-video";s.videos=[{url:item.url,name:"Generated video reference"}];s.prompt=String(item.prompt||"");s.workspace="shot";normalizeState();rerender();return;
+    }
+  }
+
+  function bindHistoryActions(){
+    const root=v3();if(!root||root.__kkHistoryBound)return;
+    root.__kkHistoryBound=true;
+    root.addEventListener("click",e=>{
+      const b=e.target.closest?.("[data-history-action]");if(!b)return;
+      e.preventDefault();e.stopPropagation();useHistoryAction(b.dataset.historyAction,Number(b.dataset.historyIndex));
+    });
+  }
+
+  function harden(){
+    const root=v3();if(!root)return;
+    const s=state();if(!s)return;
+    normalizeState();normalizeRefsBeforeGenerate();enforceRouteButtons();enforceShotActions();enforceRouteRequirements();guardFileInputs();addHistoryActions();bindHistoryActions();
+    root.querySelectorAll("button").forEach(btn=>{if(!btn.getAttribute("type"))btn.setAttribute("type","button");});
+    const prompt=root.querySelector("#kkv3Prompt");if(prompt){prompt.setAttribute("aria-label","Video shot prompt");prompt.setAttribute("autocomplete","off");}
+  }
+
+  function guardLegacyLayers(){
+    const panel=$("vcSettingsPanel"),backdrop=$("vcSettingsBackdrop");
+    if(panel&&panel.classList.contains("open")){panel.classList.remove("open","active","show","is-open");panel.setAttribute("aria-hidden","true");}
+    if(backdrop&&backdrop.classList.contains("open")){backdrop.classList.remove("open","active","show","is-open");backdrop.setAttribute("aria-hidden","true");}
+    document.body.classList.remove("kkv2-settings-open");
+    const legacyRoutes=document.querySelectorAll("#vcSettingsPanel [data-provider],#vcSettingsPanel [data-route]");
+    legacyRoutes.forEach(el=>{if(el.closest("#vcSettingsPanel"))el.setAttribute("aria-hidden","true");});
   }
 
   function boot(){
     css();
-    const target=v3()||document.body;
-    const mo=new MutationObserver(()=>{if(v3())harden();});
-    mo.observe(target,{childList:true,subtree:true});
+    const observerTarget=$("kkVideoCanvasV3")||document.body;
+    const mo=new MutationObserver(()=>{guardLegacyLayers();if($("kkVideoCanvasV3")||document.querySelector(".kkv3"))harden();});
+    mo.observe(observerTarget,{childList:true,subtree:true});
     window.__kosmicVideoV3HardeningObserver=mo;
+    document.addEventListener("click",()=>setTimeout(()=>{guardLegacyLayers();harden();},0),true);
+    document.addEventListener("input",e=>{if(e.target?.id==="kkv3Prompt")setTimeout(()=>enforceRouteRequirements(),0);},true);
+    document.addEventListener("change",e=>{if(e.target?.dataset?.route||e.target?.dataset?.quality||e.target?.dataset?.aspect)setTimeout(()=>{normalizeState();rerender();},0);},true);
     harden();
   }
 
