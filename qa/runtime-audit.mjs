@@ -41,8 +41,7 @@ async function auditVideoChat(page){
   if(legacyVisible)fail('Legacy Video UI is visibly mounted alongside Chat UI');
   const falWarning = await page.evaluate(()=>[...document.querySelectorAll('body *')].some(e=>/add\s+a\s+fal(?:\.ai|-ai)?\s+api\s+key\s+in\s+settings/i.test((e.textContent||'').trim())&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden')).catch(()=>false);
   if(falWarning)fail('Visible Fal.ai API-key warning remains in Video UI');
-  const directorControlInDom = await page.locator('#kkvcSettings').count()>0;
-  return {shell,composer,attach,send,settings,legacyVisible,falWarning,directorControlInDom};
+  return {shell,composer,attach,send,settings,legacyVisible,falWarning};
 }
 async function auditDirector(page){
   const settings=page.locator('#kkvcSettings').first();
@@ -70,9 +69,15 @@ async function auditEvoLink(page){
   if(!snapshot.present)fail('EvoLink runtime catalog is missing');
   if(snapshot.cardCount<25)fail('EvoLink runtime catalog unexpectedly small',String(snapshot.cardCount));
   for(const x of snapshot.seed25||[])if(!x.present)fail('Required Seedance 2.5 route missing',x.id);
-  const falWarning = await page.evaluate(()=>[...document.querySelectorAll('body *')].some(e=>/add\s+a\s+fal(?:\.ai|-ai)?\s+api\s+key\s+in\s+settings/i.test((e.textContent||'').trim())&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden')).catch(()=>false);
-  if(falWarning)fail('Visible Fal.ai API-key warning remains on Video UI');
-  return {...snapshot,ui:{modelSelect:!!document.getElementById('vcModel'),seed25Option:false,parity:false,falWarning}};
+  const safety=await page.evaluate(()=>{const s=window.__kosmicVideoSafety;const status=typeof s?.status==='function'?s.status():null;return{installed:!!s,status,legacyArmApi:typeof s?.arm==='function'}}).catch(()=>({installed:false,status:null,legacyArmApi:false}));
+  if(!safety.installed)fail('Video generation safety layer is not installed on the live page');
+  if(safety.legacyArmApi)fail('Legacy public generation-arm API is still exposed');
+  const emptyGenerate=await page.evaluate(()=>{const b=document.querySelector('#kkvcSend,#kkv3Generate');if(!b)return null;return{disabled:!!b.disabled,ariaDisabled:b.getAttribute('aria-disabled')==='true',label:(b.textContent||'').trim()}}).catch(()=>null);
+  if(emptyGenerate&&!emptyGenerate.disabled&&!emptyGenerate.ariaDisabled){
+    const prompt=await page.locator('#kkvcInput,#kkvcChatInput').first().inputValue().catch(()=> '');
+    if(!prompt.trim())warn('Video Generate control is enabled while the current chat prompt is empty',JSON.stringify(emptyGenerate));
+  }
+  return {...snapshot, safety, ui:{modelSelect:!!document.getElementById('vcModel'),seed25Option:false,parity:false}};
 }
 async function main(){
   const browser=await chromium.launch({headless:true});
