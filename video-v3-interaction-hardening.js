@@ -3,6 +3,10 @@
  * preventing no-op storyboard actions, adding real shot reordering,
  * preserving stateful UI affordances, and improving keyboard/accessibility
  * behavior after V3 re-renders.
+ *
+ * IMPORTANT: this layer is deliberately defensive. It must never become a
+ * second storyboard engine. The authoritative storyboard remains
+ * window.__kosmicVideoV3State.storyboard; this file only hardens the UI around it.
  */
 (function installKosmicVideoV3Hardening(){
   "use strict";
@@ -25,10 +29,18 @@
   };
 
   function v3(){return document.getElementById("kkVideoCanvasV3");}
+
   function rerender(){
     const root=v3();
-    const tab=root?.querySelector('[data-workspace]');
-    if(tab)tab.click();
+    if(!root)return;
+    // The V3 renderer already owns workspace rendering. Clicking the active
+    // workspace is the least invasive way to request a fresh render without
+    // introducing a duplicate renderer or reaching into private functions.
+    const active=root.querySelector('[data-workspace][aria-selected="true"]')||root.querySelector('[data-workspace]');
+    if(active){active.click();return;}
+    // If the renderer temporarily has no workspace button during a mount,
+    // simply let its existing MutationObserver cycle call harden() again.
+    harden();
   }
 
   function harden(){
@@ -56,21 +68,28 @@
       btn.setAttribute("aria-pressed",active?"true":"false");
     });
 
-    // The first storyboard shot cannot be removed or copied from a predecessor.
-    // Disable those actions rather than letting a click appear to do nothing.
-    const shots=root.querySelectorAll("[data-story-prompt]");
-    shots.forEach((field,index)=>{
+    // The first storyboard shot is the anchor shot. It must never expose
+    // Remove or Copy as an apparently available operation. Remove is allowed
+    // only for shots after the first; Copy is allowed only when a predecessor
+    // exists. The storyboard itself is still required to contain at least one
+    // shot, so a one-shot board also keeps Remove disabled everywhere.
+    const fields=Array.from(root.querySelectorAll("[data-story-prompt]"));
+    fields.forEach((field,index)=>{
       const row=field.closest(".kkv3-shot");if(!row)return;
       const remove=row.querySelector("[data-story-remove]");
       const copy=row.querySelector("[data-story-copy]");
+      const first=index===0;
+      const only=fields.length===1;
+
       if(remove){
-        const only=shots.length===1;
-        remove.disabled=only;
-        remove.title=only?"The storyboard needs at least one shot.":"Remove this shot";
-        remove.setAttribute("aria-disabled",only?"true":"false");
+        const disabled=first||only;
+        remove.disabled=disabled;
+        remove.title=disabled
+          ? (first?"The first shot is the storyboard anchor.":"The storyboard needs at least one shot.")
+          : "Remove this shot";
+        remove.setAttribute("aria-disabled",disabled?"true":"false");
       }
       if(copy){
-        const first=index===0;
         copy.disabled=first;
         copy.title=first?"There is no previous shot to copy.":"Copy the previous shot's prompt";
         copy.setAttribute("aria-disabled",first?"true":"false");
@@ -78,18 +97,43 @@
 
       let reorder=row.querySelector(".kkv3-reorder-wrap");
       if(!reorder){
-        reorder=document.createElement("span");reorder.className="kkv3-reorder-wrap";reorder.style.cssText="display:inline-flex;gap:6px";
-        const up=document.createElement("button");up.type="button";up.className="kkv3-reorder";up.textContent="↑";up.title="Move shot up";up.setAttribute("aria-label","Move shot up");up.dataset.kkReorder="up";
-        const down=document.createElement("button");down.type="button";down.className="kkv3-reorder";down.textContent="↓";down.title="Move shot down";down.setAttribute("aria-label","Move shot down");down.dataset.kkReorder="down";
+        reorder=document.createElement("span");
+        reorder.className="kkv3-reorder-wrap";
+        reorder.style.cssText="display:inline-flex;gap:6px";
+        const up=document.createElement("button");
+        up.type="button";up.className="kkv3-reorder";up.textContent="↑";
+        up.title="Move shot up";up.setAttribute("aria-label","Move shot up");
+        up.dataset.kkReorder="up";
+        const down=document.createElement("button");
+        down.type="button";down.className="kkv3-reorder";down.textContent="↓";
+        down.title="Move shot down";down.setAttribute("aria-label","Move shot down");
+        down.dataset.kkReorder="down";
         reorder.append(up,down);
         row.querySelector(".kkv3-shot-actions")?.appendChild(reorder);
-        up.addEventListener("click",()=>moveShot(index,-1));
-        down.addEventListener("click",()=>moveShot(index,1));
+
+        // Do not capture the original numeric index. The DOM can be reordered
+        // or re-rendered after every move. Resolve the field's current index at
+        // click time so the button can never act on a stale position.
+        up.addEventListener("click",()=>{
+          const currentRoot=v3();
+          const currentFields=Array.from(currentRoot?.querySelectorAll("[data-story-prompt]")||[]);
+          const currentIndex=currentFields.indexOf(field);
+          if(currentIndex>=0)moveShot(currentIndex,-1);
+        });
+        down.addEventListener("click",()=>{
+          const currentRoot=v3();
+          const currentFields=Array.from(currentRoot?.querySelectorAll("[data-story-prompt]")||[]);
+          const currentIndex=currentFields.indexOf(field);
+          if(currentIndex>=0)moveShot(currentIndex,1);
+        });
       }
+
       const up=reorder.querySelector('[data-kk-reorder="up"]');
       const down=reorder.querySelector('[data-kk-reorder="down"]');
-      if(up)up.disabled=index===0;
-      if(down)down.disabled=index===shots.length-1;
+      if(up)up.disabled=first;
+      if(down)down.disabled=index===fields.length-1;
+      if(up)up.setAttribute("aria-disabled",first?"true":"false");
+      if(down)down.setAttribute("aria-disabled",index===fields.length-1?"true":"false");
     });
 
     const activePrompt=root.querySelector("#kkv3Prompt");
@@ -104,17 +148,23 @@
   }
 
   function moveShot(index,delta){
-    const state=window.__kosmicVideoV3State;if(!state||!Array.isArray(state.storyboard))return;
-    const next=index+delta;if(next<0||next>=state.storyboard.length)return;
+    const state=window.__kosmicVideoV3State;
+    if(!state||!Array.isArray(state.storyboard))return;
+    const next=index+delta;
+    if(!Number.isInteger(index)||!Number.isInteger(delta)||next<0||next>=state.storyboard.length)return;
+    if(index===0&&delta<0)return;
+    if(index===state.storyboard.length-1&&delta>0)return;
+
     const [shot]=state.storyboard.splice(index,1);
+    if(!shot)return;
     state.storyboard.splice(next,0,shot);
     rerender();
   }
 
   function boot(){
     css();
-    const target=document.getElementById("kkVideoCanvasV3")||document.body;
-    const mo=new MutationObserver(()=>{if(document.getElementById("kkVideoCanvasV3"))harden();});
+    const target=v3()||document.body;
+    const mo=new MutationObserver(()=>{if(v3())harden();});
     mo.observe(target,{childList:true,subtree:true});
     window.__kosmicVideoV3HardeningObserver=mo;
     harden();
