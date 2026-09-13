@@ -10,7 +10,7 @@
   const S=window.S||(window.S={});
   const existing=window.__kosmicVideoChatState||{};
   const state=window.__kosmicVideoChatState=Object.assign({
-    version:3,
+    version:4,
     conversationId:null,
     messages:[],
     references:[],
@@ -18,6 +18,7 @@
     activeGeneration:null,
     directorOpen:false,
     composerDraft:"",
+    execution:{route:"seedance-2.5-text-to-video",duration:5,quality:"720p",aspect:"16:9",audio:true},
     createdAt:Date.now(),
     updatedAt:Date.now()
   },existing);
@@ -25,8 +26,11 @@
   if(!Array.isArray(state.messages))state.messages=[];
   if(!Array.isArray(state.references))state.references=[];
   if(!Array.isArray(state.outputs))state.outputs=[];
+  if(!state.execution||typeof state.execution!=="object")state.execution={route:"seedance-2.5-text-to-video",duration:5,quality:"720p",aspect:"16:9",audio:true};
 
-  state.touch=function(){state.updatedAt=Date.now();return state;};
+  const listeners=new Set();
+  state.touch=function(){state.updatedAt=Date.now();listeners.forEach(fn=>{try{fn(state);}catch(err){console.error("Kosmic video state listener failed",err);}});return state;};
+  state.subscribe=function(fn){if(typeof fn!=="function")return()=>{};listeners.add(fn);return()=>listeners.delete(fn);};
   state.addMessage=function(role,content,meta={}){
     const item={id:"vmsg_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),role,content:String(content||""),meta:Object.assign({},meta),createdAt:Date.now()};
     state.messages.push(item);state.touch();return item;
@@ -49,20 +53,47 @@
   state.clearReferences=function(){state.references=[];state.touch();state.syncLegacy&&state.syncLegacy();};
 
   const pick=kind=>state.references.filter(r=>r.kind===kind).map(r=>({url:r.url,name:r.name||"Reference",dataUrl:r.url}));
+  const cleanRoute=v=>String(v||"seedance-2.5-text-to-video");
 
-  /* Keep the existing V2/V3 states as execution-facing state. Chat remains the
-   * conversational source of truth while the existing execution layer consumes
-   * mirrored references in its established image/video/audio arrays. */
+  /* Pull execution controls from the authoritative V3 state before any chat
+   * operation. This prevents stale Chat metadata after Director edits. */
+  state.syncFromV3=function(){
+    const v3=window.__kosmicVideoV3State;
+    if(!v3)return state;
+    const next={
+      route:cleanRoute(v3.route),
+      duration:v3.duration??state.execution.duration,
+      quality:v3.quality??state.execution.quality,
+      aspect:v3.aspect??state.execution.aspect,
+      audio:v3.audio!==false
+    };
+    state.execution=next;
+    return state;
+  };
+
+  /* Keep existing V2/V3 states as execution-facing state while Chat remains
+   * the conversational source of truth for prompt and references. */
   state.syncLegacy=function(){
     const v2=window.__kosmicVideoV2State;
     const v3=window.__kosmicVideoV3State;
     const images=pick("image"),videos=pick("video"),audios=pick("audio");
     if(v2){v2.prompt=state.composerDraft||v2.prompt||"";v2.images=images;v2.videos=videos;v2.audios=audios;}
-    if(v3){v3.prompt=state.composerDraft||v3.prompt||"";v3.images=images;v3.videos=videos;v3.audios=audios;}
+    if(v3){
+      v3.prompt=state.composerDraft||v3.prompt||"";
+      v3.images=images;v3.videos=videos;v3.audios=audios;
+      state.execution={route:cleanRoute(v3.route),duration:v3.duration??state.execution.duration,quality:v3.quality??state.execution.quality,aspect:v3.aspect??state.execution.aspect,audio:v3.audio!==false};
+    }
     if(window.S){
       S.vcMultiImages=images.map(x=>({dataUrl:x.url,name:x.name}));
       S.vcMultiVideos=videos.map(x=>({dataUrl:x.url,name:x.name}));
       S.vcMultiAudios=audios.map(x=>({dataUrl:x.url,name:x.name}));
     }
+    state.touch();
   };
+
+  state.syncFromV3();
+  window.addEventListener("kosmic:video-director-toggle",e=>{
+    state.directorOpen=!!e.detail?.open;
+    state.syncFromV3();
+  });
 })();
