@@ -77,7 +77,8 @@ async function auditEvoLink(page){
     const prompt=await page.locator('#kkvcInput,#kkvcChatInput').first().inputValue().catch(()=> '');
     if(!prompt.trim())warn('Video Generate control is enabled while the current chat prompt is empty',JSON.stringify(emptyGenerate));
   }
-  return {...snapshot, safety, ui:{modelSelect:!!document.getElementById('vcModel'),seed25Option:false,parity:false}};
+  const ui=await page.evaluate(()=>({modelSelect:!!document.getElementById('vcModel'),videoChatModel:!!document.getElementById('kkvcModel')}));
+  return {...snapshot, safety, ui:{...ui,seed25Option:false,parity:false}};
 }
 async function main(){
   const browser=await chromium.launch({headless:true});
