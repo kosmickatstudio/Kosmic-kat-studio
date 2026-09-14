@@ -3,7 +3,7 @@
   "use strict";
   if(window.__kosmicVideoCanvasV3Loader)return;
   window.__kosmicVideoCanvasV3Loader=true;
-  const V="20260914-chat11";
+  const V="20260914-chat12";
 
   const videoActive=()=>window.S?.mod==="videocanvas"||!!document.querySelector('.mod-btn[data-mod="videocanvas"].active');
   const markV3Pending=()=>document.documentElement.classList.add("kk-video-v3-pending");
@@ -23,13 +23,12 @@
     document.head.appendChild(s);
   };
 
-  /* Install the DOM compatibility layer BEFORE the legacy catalog schedules
-     its delayed enhancer. This prevents optgroup.options runtime failures. */
   const loadStack=()=>{
     if(!videoActive())return false;
     markV3Pending();
     if(window.__kosmicVideoStackLoaded||window.__kosmicVideoStackLoading)return true;
     window.__kosmicVideoStackLoading=true;
+    /* Compatibility must precede the EvoLink catalog. */
     load("evolink-video-compat-fix.js","data-kosmic-evo-v3-compat",()=>
       load("evolink-video.js","data-kosmic-evo-v3-catalog",()=>
         load("evolink-video-current.js","data-kosmic-evo-v3-current",()=>
@@ -45,13 +44,11 @@
                             load("video-v3-interaction-hardening.js","data-kosmic-video-v3-hardening",()=>
                               load("video-chat-safety.js","data-kosmic-video-safety",()=>
                                 load("video-v3-ux-fixes.js","data-kosmic-video-v3-ux-fixes",()=>
-                                  load("video-v3-ui-overrides.js","data-kosmic-video-v3-ui-overrides",()=>
-                                    load("video-v3-final-fixes.js","data-kosmic-video-v3-final-fixes",()=>{
-                                      window.__kosmicVideoStackLoaded=true;
-                                      window.__kosmicVideoStackLoading=false;
-                                      clearV3Pending();
-                                    })
-                                  )
+                                  load("video-v3-final-fixes.js","data-kosmic-video-v3-final-fixes",()=>{
+                                    window.__kosmicVideoStackLoaded=true;
+                                    window.__kosmicVideoStackLoading=false;
+                                    clearV3Pending();
+                                  })
                                 )
                               )
                             )
