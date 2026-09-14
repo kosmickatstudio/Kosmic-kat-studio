@@ -2,9 +2,8 @@
  * Single-prompt composer, settings-owned references, Gallery action,
  * and hard module-boundary cleanup. No provider/credential logic.
  *
- * IMPORTANT: this layer is event-driven. It must never observe the whole
- * document while also modifying it, because #moduleContent is shared by
- * every studio module and a DOM feedback loop can freeze the UI.
+ * This layer deliberately observes only the Video roots. It disconnects
+ * before repairing those roots, preventing a mutation-feedback freeze.
  */
 (function installKosmicVideoV3UxFixes(){
   "use strict";
@@ -14,10 +13,20 @@
   const $=id=>document.getElementById(id);
   const videoIsActive=()=>window.S?.mod==="videocanvas"||!!document.querySelector('.mod-btn[data-mod="videocanvas"].active');
   const v3=()=>$("kkVideoCanvasV3");
+  const chat=()=>$("kkVideoChat");
   let switchWrapped=false;
+  let v3Observer=null;
+  let chatObserver=null;
+
+  function stopObservers(){
+    try{v3Observer?.disconnect?.();}catch(_){ }
+    try{chatObserver?.disconnect?.();}catch(_){ }
+    v3Observer=null;chatObserver=null;
+  }
 
   function cleanupOutsideVideo(){
     if(videoIsActive())return;
+    stopObservers();
     $("kkVideoCanvasV3")?.remove();
     $("kkVideoChat")?.remove();
     $("kk-video-legacy-mount")?.remove();
@@ -114,11 +123,27 @@
     ensureGalleryAction();
   }
 
-  function scheduleEnforce(){
-    if(!videoIsActive())return;
-    [0,80,220,500].forEach(delay=>setTimeout(()=>{
-      if(videoIsActive())enforce();
-    },delay));
+  function watchRoot(root,type){
+    if(!root)return;
+    const target=type==="v3"?v3Observer:chatObserver;
+    if(target)return;
+    const observer=new MutationObserver(()=>{
+      if(!videoIsActive())return;
+      observer.disconnect();
+      try{enforce();}finally{observer.observe(root,{childList:true,subtree:true});}
+    });
+    observer.observe(root,{childList:true,subtree:true});
+    if(type==="v3")v3Observer=observer;else chatObserver=observer;
+  }
+
+  function refreshObservers(){
+    if(!videoIsActive()){
+      cleanupOutsideVideo();
+      return;
+    }
+    enforce();
+    watchRoot(v3(),"v3");
+    watchRoot(chat(),"chat");
   }
 
   function wrapSwitchMod(){
@@ -128,7 +153,7 @@
       const out=original.apply(this,arguments);
       if(String(mod)==="videocanvas"){
         window.__kosmicVideoModuleActive=true;
-        scheduleEnforce();
+        [0,80,220,500].forEach(delay=>setTimeout(()=>refreshObservers(),delay));
       }else{
         window.__kosmicVideoModuleActive=false;
         cleanupOutsideVideo();
@@ -142,8 +167,7 @@
   function boot(){
     css();
     wrapSwitchMod();
-    scheduleEnforce();
-    if(!videoIsActive())cleanupOutsideVideo();
+    refreshObservers();
   }
 
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});
