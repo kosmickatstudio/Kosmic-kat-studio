@@ -3,7 +3,7 @@
   "use strict";
   if(window.__kosmicVideoCanvasV3Loader)return;
   window.__kosmicVideoCanvasV3Loader=true;
-  const V="20260914-chat8";
+  const V="20260914-chat9";
 
   const videoActive=()=>window.S?.mod==="videocanvas"||!!document.querySelector('.mod-btn[data-mod="videocanvas"].active');
 
@@ -40,10 +40,12 @@
                           load("video-chat-primary.js","data-kosmic-video-chat-primary",()=>
                             load("video-v3-interaction-hardening.js","data-kosmic-video-v3-hardening",()=>
                               load("video-chat-safety.js","data-kosmic-video-safety",()=>
-                                load("video-v3-ux-fixes.js","data-kosmic-video-v3-ux-fixes",()=>{
-                                  window.__kosmicVideoStackLoaded=true;
-                                  window.__kosmicVideoStackLoading=false;
-                                })
+                                load("video-v3-ux-fixes.js","data-kosmic-video-v3-ux-fixes",()=>
+                                  load("video-v3-ui-overrides.js","data-kosmic-video-v3-ui-overrides",()=>{
+                                    window.__kosmicVideoStackLoaded=true;
+                                    window.__kosmicVideoStackLoading=false;
+                                  })
+                                )
                               )
                             )
                           )
