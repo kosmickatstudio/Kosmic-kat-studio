@@ -1,28 +1,44 @@
 /* KOSMIC KAT — EvoLink video DOM compatibility shim
- * The native HTMLSelectElement exposes .options, but HTMLOptGroupElement
- * does not consistently expose an iterable .options collection. The legacy
- * EvoLink enhancer expects one, so normalize that tiny DOM contract here
- * before its scheduled enhancer runs.
+ * The legacy EvoLink enhancer iterates optgroup.options even though option
+ * groups do not expose the same .options collection as HTMLSelectElement in
+ * all browsers. Normalize that small DOM contract before the enhancer timers.
  */
 (function installKosmicEvoVideoCompat(){
   "use strict";
   if(window.__kosmicEvoVideoCompatFix)return;
-  window.__kosmicEvoVideoCompatFix=true;
-  try{
-    const proto=window.HTMLOptGroupElement?.prototype;
-    if(!proto)return;
-    const desc=Object.getOwnPropertyDescriptor(proto,"options");
-    const sample=desc?.get?Object.create(proto):null;
-    let needsFix=!desc;
-    if(desc?.get&&sample){
-      try{needsFix=!Symbol.iterator||!(sample.options&&typeof sample.options[Symbol.iterator]==="function");}catch(_){needsFix=true;}
-    }
-    if(needsFix){
+
+  function install(proto){
+    if(!proto)return false;
+    try{
+      const own=Object.getOwnPropertyDescriptor(proto,"options");
+      if(own?.get)return true;
       Object.defineProperty(proto,"options",{
         configurable:true,
         enumerable:false,
-        get(){return this.querySelectorAll("option");}
+        get(){return this?.tagName==="OPTGROUP"?this.querySelectorAll("option"):undefined;}
       });
+      return true;
+    }catch(_){return false;}
+  }
+
+  if(install(window.HTMLOptGroupElement?.prototype)){
+    window.__kosmicEvoVideoCompatFix=true;
+    return;
+  }
+
+  try{
+    const element=window.Element?.prototype;
+    if(element){
+      const current=Object.getOwnPropertyDescriptor(element,"options");
+      if(!current||current.configurable){
+        Object.defineProperty(element,"options",{
+          configurable:true,
+          enumerable:false,
+          get(){return this?.tagName==="OPTGROUP"?this.querySelectorAll("option"):undefined;}
+        });
+      }
     }
-  }catch(err){console.warn("Kosmic EvoLink optgroup compatibility shim skipped",err);}
+  }catch(err){console.warn("Kosmic EvoLink optgroup compatibility fallback skipped",err);}
+
+  window.__kosmicEvoVideoCompatFix=true;
 })();
