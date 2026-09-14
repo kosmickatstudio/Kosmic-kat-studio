@@ -27,22 +27,24 @@
     if(window.__kosmicVideoStackLoaded||window.__kosmicVideoStackLoading)return true;
     window.__kosmicVideoStackLoading=true;
     load("evolink-video.js","data-kosmic-evo-v3-catalog",()=>
-      load("evolink-video-current.js","data-kosmic-evo-v3-current",()=>
-        load("evolink-video-expansion.js","data-kosmic-evo-v3-expansion",()=>
-          load("evolink-video-integrity.js","data-kosmic-evo-v3-integrity",()=>
-            load("evolink-video-pricing.js","data-kosmic-evo-v3-pricing",()=>
-              load("video-canvas-v3.js","data-kosmic-video-v3",()=>
-                load("video-chat-state.js","data-kosmic-video-chat-state",()=>
-                  load("video-chat-shell.js","data-kosmic-video-chat-shell",()=>
-                    load("video-chat-generation.js","data-kosmic-video-chat-generation",()=>
-                      load("video-chat-director.js","data-kosmic-video-chat-director",()=>
-                        load("video-chat-primary.js","data-kosmic-video-chat-primary",()=>
-                          load("video-v3-interaction-hardening.js","data-kosmic-video-v3-hardening",()=>
-                            load("video-chat-safety.js","data-kosmic-video-safety",()=>
-                              load("video-v3-ux-fixes.js","data-kosmic-video-v3-ux-fixes",()=>{
-                                window.__kosmicVideoStackLoaded=true;
-                                window.__kosmicVideoStackLoading=false;
-                              })
+      load("evolink-video-compat-fix.js","data-kosmic-evo-v3-compat",()=>
+        load("evolink-video-current.js","data-kosmic-evo-v3-current",()=>
+          load("evolink-video-expansion.js","data-kosmic-evo-v3-expansion",()=>
+            load("evolink-video-integrity.js","data-kosmic-evo-v3-integrity",()=>
+              load("evolink-video-pricing.js","data-kosmic-evo-v3-pricing",()=>
+                load("video-canvas-v3.js","data-kosmic-video-v3",()=>
+                  load("video-chat-state.js","data-kosmic-video-chat-state",()=>
+                    load("video-chat-shell.js","data-kosmic-video-chat-shell",()=>
+                      load("video-chat-generation.js","data-kosmic-video-chat-generation",()=>
+                        load("video-chat-director.js","data-kosmic-video-chat-director",()=>
+                          load("video-chat-primary.js","data-kosmic-video-chat-primary",()=>
+                            load("video-v3-interaction-hardening.js","data-kosmic-video-v3-hardening",()=>
+                              load("video-chat-safety.js","data-kosmic-video-safety",()=>
+                                load("video-v3-ux-fixes.js","data-kosmic-video-v3-ux-fixes",()=>{
+                                  window.__kosmicVideoStackLoaded=true;
+                                  window.__kosmicVideoStackLoading=false;
+                                })
+                              )
                             )
                           )
                         )
