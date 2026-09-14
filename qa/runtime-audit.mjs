@@ -3,7 +3,6 @@ import { chromium } from 'playwright';
 
 const SITE_URL = process.env.KOSMIC_SITE_URL || 'https://kosmickat.art/';
 const OUT = process.env.KOSMIC_QA_DIR || 'qa-artifacts';
-fs.mkdirSync(OUT, { recursive: true });
 const failures = [], warnings = [], consoleErrors = [], pageErrors = [], scriptErrors = [], requestFailures = [], badResponses = [];
 function fail(m,d=''){ failures.push(d ? `${m}: ${d}` : m); }
 function warn(m,d=''){ warnings.push(d ? `${m}: ${d}` : m); }
@@ -29,16 +28,18 @@ async function auditVideoChat(page){
   const settings = await visible(page, '#kkvcSettings');
   if(!shell)fail('Video Chat surface is not visible after opening Video module');
   if(!composer)fail('Video Chat composer input is missing/invisible');
-  if(!attach)fail('Video Chat reference attachment control is missing/invisible');
+  if(attach)fail('Obsolete Video Chat reference attachment control is still visible');
   if(!send)fail('Video Chat Generate button is missing/invisible');
   if(!settings)fail('Video Chat Director/Settings button is missing/invisible');
   const legacyVisible = await page.evaluate(()=>{
-    const m=document.getElementById('kk-video-legacy-mount');
-    if(!m)return false;
-    const r=m.getBoundingClientRect(),s=getComputedStyle(m);
-    return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0';
+    const selectors=['.video-canvas','.video-studio','#vcModel','#vcSettingsPanel','#vcSettingsBackdrop','#vcGalleryView'];
+    return selectors.some(sel=>[...document.querySelectorAll(sel)].some(el=>{
+      if(el.closest('#kkVideoCanvasV3')||el.closest('#kkVideoChat'))return false;
+      const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+      return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0';
+    }));
   }).catch(()=>false);
-  if(legacyVisible)fail('Legacy Video UI is visibly mounted alongside Chat UI');
+  if(legacyVisible)fail('Legacy Video UI is visibly mounted alongside the current Video surface');
   const falWarning = await page.evaluate(()=>[...document.querySelectorAll('body *')].some(e=>/add\s+a\s+fal(?:\.ai|-ai)?\s+api\s+key\s+in\s+settings/i.test((e.textContent||'').trim())&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden')).catch(()=>false);
   if(falWarning)fail('Visible Fal.ai API-key warning remains in Video UI');
   return {shell,composer,attach,send,settings,legacyVisible,falWarning};
@@ -57,12 +58,48 @@ async function auditDirector(page){
   if(!drawerVisible)fail('Director drawer did not open');
   if(!v3Visible)fail('V3 host is not visible inside/opened through Director drawer');
   if(!closeVisible)fail('Director close control is missing');
+
+  const desktopLayout=await page.evaluate(()=>{
+    const root=document.querySelector('#kkVideoCanvasV3');
+    const main=root?.querySelector('.kkv3-main');
+    if(!root||!main)return null;
+    return {root:{w:root.clientWidth,h:root.clientHeight,scrollH:root.scrollHeight},main:{w:main.clientWidth,h:main.clientHeight,scrollH:main.scrollHeight,overflow:getComputedStyle(main).overflowY}};
+  }).catch(()=>null);
+  if(!desktopLayout)fail('V3 layout metrics could not be read');
+  else if(!(desktopLayout.main.h>0 && desktopLayout.main.scrollH>=desktopLayout.main.h && desktopLayout.main.overflow!=='visible'))warn('Desktop V3 main area does not currently report overflow scrolling',JSON.stringify(desktopLayout));
+
+  const duration=await page.evaluate(()=>{const r=document.querySelector('#kkv3Duration');const n=document.querySelector('#kkv3DurationNum');return r&&n?{min:r.min,max:r.max,value:r.value,number:n.value,rect:r.getBoundingClientRect().toJSON()}:null}).catch(()=>null);
+  if(!duration)fail('V3 duration controls are missing');
+  else if(Number(duration.min)>=Number(duration.max))warn('Duration route exposes a fixed min/max range',JSON.stringify(duration));
+
+  const model=await page.evaluate(()=>{const t=document.querySelector('#kkv3ModelTrigger'),m=document.querySelector('#kkv3ModelMenu');return{customTrigger:!!t,menu:!!m,optionCount:m?.querySelectorAll('[data-model-value]').length||0,nativeVisible:!!(document.querySelector('#kkv3Model')&&getComputedStyle(document.querySelector('#kkv3Model')).opacity!=='0')};}).catch(()=>null);
+  if(!model?.customTrigger)fail('V3 custom model picker trigger is missing');
+  if(!model?.menu||model.optionCount<2)fail('V3 model picker menu/options are missing');
+  if(model?.nativeVisible)fail('Native V3 model select remains visibly exposed');
+
+  const referenceRoute=page.locator('#kkVideoCanvasV3 [data-route="seedance-2.5-reference-to-video"]').first();
+  if(await referenceRoute.count()){
+    await referenceRoute.click({force:true}).catch(()=>{});await sleep(200);
+    const refs=await page.evaluate(()=>({images:!!document.querySelector('#kkv3Images'),videos:!!document.querySelector('#kkv3Videos'),audios:!!document.querySelector('#kkv3Audios')}));
+    if(!refs.images||!refs.videos||!refs.audios)fail('Director reference upload controls are incomplete for Seedance 2.5 reference-to-video',JSON.stringify(refs));
+  }
+
   if(closeVisible){
     await close.click({force:true}).catch(()=>{});
     try{ await drawer.waitFor({state:'hidden',timeout:5000}); }catch{}
     if(await drawer.isVisible().catch(()=>false))fail('Director drawer did not close');
   }
-  return {available:true,drawer:drawerVisible,v3:v3Visible,close:closeVisible};
+
+  const galleryBefore=await visible(page,'#kkVideoCanvasV3 [data-kosmic-video-gallery]');
+  if(!galleryBefore)fail('V3 Gallery action is missing beside Generate');
+  else{
+    await page.locator('#kkVideoCanvasV3 [data-kosmic-video-gallery]').click({force:true}).catch(()=>{});await sleep(700);
+    const galleryState=await page.evaluate(()=>({mod:window.S?.mod||null,videoVisible:!!document.querySelector('#kkVideoCanvasV3,#kkVideoChat'),galleryActive:!!document.querySelector('.mod-btn[data-mod="gallery"].active')})).catch(()=>null);
+    if(!galleryState?.galleryActive && galleryState?.mod!=='gallery')fail('V3 Gallery action did not navigate to Gallery',JSON.stringify(galleryState));
+    if(galleryState?.videoVisible)fail('Video UI remained visible after navigating to Gallery');
+  }
+
+  return {available:true,drawer:drawerVisible,v3:v3Visible,close:closeVisible,desktopLayout,duration,model};
 }
 async function auditEvoLink(page){
   const snapshot=await page.evaluate(()=>{const api=window.KOSMIC_EVOLINK_VIDEO;if(!api)return{present:false};const cards=Array.isArray(api.catalog)?api.catalog:[];const ids=cards.flatMap(c=>(c?.routes||[]).map(r=>r?.id).filter(Boolean));return{present:true,cardCount:cards.length,routeCount:ids.length,indexedRouteCount:Object.keys(api.index||{}).length,revision:api.routeRevision||null,seed25:['seedance-2.5-text-to-video','seedance-2.5-image-to-video','seedance-2.5-reference-to-video','seedance-2.5-video-edit','seedance-2.5-video-extend'].map(id=>({id,present:!!api.index?.[id]}))};});
@@ -77,7 +114,7 @@ async function auditEvoLink(page){
     const prompt=await page.locator('#kkvcInput,#kkvcChatInput').first().inputValue().catch(()=> '');
     if(!prompt.trim())warn('Video Generate control is enabled while the current chat prompt is empty',JSON.stringify(emptyGenerate));
   }
-  const ui=await page.evaluate(()=>({modelSelect:!!document.getElementById('vcModel'),videoChatModel:!!document.getElementById('kkvcModel')}));
+  const ui=await page.evaluate(()=>({modelSelect:!!document.getElementById('vcModel'),videoChatModel:!!document.getElementById('kkvcModel'),v3CustomModel:!!document.getElementById('kkv3ModelTrigger'),galleryAction:!!document.querySelector('[data-kosmic-video-gallery]')}));
   return {...snapshot, safety, ui:{...ui,seed25Option:false,parity:false}};
 }
 async function main(){
@@ -100,14 +137,19 @@ async function main(){
   if(!opened)warn('Video module could not be opened by QA selector fallback');
   const chat=await auditVideoChat(page);
   const director=chat.shell?await auditDirector(page):{available:false};
-  const evo=await auditEvoLink(page);
+  if(director.available && director.drawer!==true && director.v3!==true)warn('Director audit could not reach a fully open drawer');
+  await page.setViewportSize({width:390,height:844});await sleep(500);
+  const mobileScroll=await page.evaluate(()=>{const root=document.querySelector('#kkVideoCanvasV3');const main=root?.querySelector('.kkv3-main');if(!root||!main)return null;return{rootH:root.clientHeight,mainH:main.clientHeight,mainScrollH:main.scrollHeight,mainOverflow:getComputedStyle(main).overflowY,bodyOverflow:getComputedStyle(root.querySelector('.kkv3-body'))?.overflowY||null};}).catch(()=>null);
+  if(!mobileScroll)warn('Mobile V3 scroll metrics could not be read'); else if(!(mobileScroll.mainScrollH>mobileScroll.mainH))fail('Mobile V3 main canvas is not vertically scrollable',JSON.stringify(mobileScroll));
+  const reopened=await clickVideoModule(page);if(reopened)warn('Video re-opened by mobile QA selector fallback');
   await page.screenshot({path:`${OUT}/kosmic-live.png`,fullPage:true}).catch(()=>{});
+  scriptErrors.push(...await page.evaluate(()=>window.__kosmicQaScriptErrors||[]));
   if(scriptErrors.length)fail('Browser script errors detected',scriptErrors.slice(0,20).map(e=>`${e.message} @ ${e.filename}:${e.lineno}:${e.colno}`).join(' | '));
   if(pageErrors.length)fail('Runtime page errors detected',pageErrors.slice(0,20).join(' | '));
   if(badResponses.length)fail('HTTP 5xx responses detected',badResponses.slice(0,20).join(' | '));
   if(requestFailures.length)warn('Network requests failed',requestFailures.slice(0,20).join(' | '));
   if(consoleErrors.length)warn('Console errors detected',consoleErrors.slice(0,20).join(' | '));
-  const report={site:SITE_URL,checkedAt:new Date().toISOString(),navigation:response?{status:response.status(),url:response.url()}:null,title,openedVideoModule:opened,videoChat:chat,director,evo,failures,warnings,consoleErrors,pageErrors,scriptErrors,requestFailures,badResponses};
+  const report={site:SITE_URL,checkedAt:new Date().toISOString(),navigation:response?{status:response.status(),url:response.url()}:null,title,openedVideoModule:opened,videoChat:chat,director,mobileScroll,warnings,failures,consoleErrors,pageErrors,scriptErrors,requestFailures,badResponses};
   fs.writeFileSync(`${OUT}/kosmic-runtime-report.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));await browser.close();if(failures.length){console.error(`KOSMIC QA FAILED — ${failures.length} failure(s)`);process.exitCode=1}else console.log(`KOSMIC QA PASSED — ${warnings.length} warning(s)`);
 }
 main().catch(e=>{console.error(e?.stack||e);process.exitCode=1;});
