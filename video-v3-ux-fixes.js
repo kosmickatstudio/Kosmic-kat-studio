@@ -1,6 +1,10 @@
 /* KOSMIC KAT — Video V3 UX / lifecycle fixes
  * Single-prompt composer, settings-owned references, Gallery action,
  * and hard module-boundary cleanup. No provider/credential logic.
+ *
+ * IMPORTANT: this layer is event-driven. It must never observe the whole
+ * document while also modifying it, because #moduleContent is shared by
+ * every studio module and a DOM feedback loop can freeze the UI.
  */
 (function installKosmicVideoV3UxFixes(){
   "use strict";
@@ -10,21 +14,10 @@
   const $=id=>document.getElementById(id);
   const videoIsActive=()=>window.S?.mod==="videocanvas"||!!document.querySelector('.mod-btn[data-mod="videocanvas"].active');
   const v3=()=>$("kkVideoCanvasV3");
-  const chat=()=>$("kkVideoChat");
   let switchWrapped=false;
-  let observer=null;
-
-  function stopVideoObservers(){
-    [window.__kosmicVideoV3HardeningObserver,window.__kosmicVideoChatPrimaryObserver].forEach(o=>{
-      try{o?.disconnect?.();}catch(_){ }
-    });
-    window.__kosmicVideoV3HardeningObserver=null;
-    window.__kosmicVideoChatPrimaryObserver=null;
-  }
 
   function cleanupOutsideVideo(){
     if(videoIsActive())return;
-    stopVideoObservers();
     $("kkVideoCanvasV3")?.remove();
     $("kkVideoChat")?.remove();
     $("kk-video-legacy-mount")?.remove();
@@ -34,24 +27,6 @@
     });
     document.body.classList.remove("kkv2-settings-open");
     window.__kosmicVideoGenerationArm=null;
-  }
-
-  function wrapSwitchMod(){
-    if(switchWrapped||typeof window.switchMod!=="function")return;
-    const original=window.switchMod;
-    window.switchMod=function(mod,el){
-      const out=original.apply(this,arguments);
-      if(String(mod)==="videocanvas"){
-        window.__kosmicVideoModuleActive=true;
-        setTimeout(()=>{window.__kosmicVideoModuleActive=true;},0);
-      }else{
-        window.__kosmicVideoModuleActive=false;
-        cleanupOutsideVideo();
-      }
-      return out;
-    };
-    window.__kosmicVideoModuleOriginalSwitchMod=original;
-    switchWrapped=true;
   }
 
   function bridgePrompt(){
@@ -81,7 +56,9 @@
     const meta=document.querySelector("#kkVideoChat .kkvc-meta");
     if(meta){
       const count=$("kkvcRefCount");
-      meta.innerHTML=`<span><strong id="kkvcRefCount">${count?.textContent||"0"}</strong> references managed in Director settings</span><span>Settings stay global • Director controls live separately</span>`;
+      const value=count?.textContent||"0";
+      const desired=`<span><strong id="kkvcRefCount">${value}</strong> references managed in Director settings</span><span>Settings stay global • Director controls live separately</span>`;
+      if(meta.innerHTML!==desired)meta.innerHTML=desired;
     }
   }
 
@@ -127,7 +104,6 @@
   }
 
   function enforce(){
-    wrapSwitchMod();
     if(!videoIsActive()){
       cleanupOutsideVideo();
       return;
@@ -138,17 +114,36 @@
     ensureGalleryAction();
   }
 
+  function scheduleEnforce(){
+    if(!videoIsActive())return;
+    [0,80,220,500].forEach(delay=>setTimeout(()=>{
+      if(videoIsActive())enforce();
+    },delay));
+  }
+
+  function wrapSwitchMod(){
+    if(switchWrapped||typeof window.switchMod!=="function")return;
+    const original=window.switchMod;
+    window.switchMod=function(mod,el){
+      const out=original.apply(this,arguments);
+      if(String(mod)==="videocanvas"){
+        window.__kosmicVideoModuleActive=true;
+        scheduleEnforce();
+      }else{
+        window.__kosmicVideoModuleActive=false;
+        cleanupOutsideVideo();
+      }
+      return out;
+    };
+    window.__kosmicVideoModuleOriginalSwitchMod=original;
+    switchWrapped=true;
+  }
+
   function boot(){
     css();
-    observer=new MutationObserver(()=>{
-      if(videoIsActive())enforce();
-      else cleanupOutsideVideo();
-    });
-    observer.observe(document.body,{childList:true,subtree:true});
-    window.__kosmicVideoV3UxObserver=observer;
-    enforce();
-    let tries=0;
-    const timer=setInterval(()=>{wrapSwitchMod();enforce();if(++tries>300)clearInterval(timer);},100);
+    wrapSwitchMod();
+    scheduleEnforce();
+    if(!videoIsActive())cleanupOutsideVideo();
   }
 
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});
