@@ -3,7 +3,7 @@
   "use strict";
   if(window.__kosmicVideoCanvasV3Loader)return;
   window.__kosmicVideoCanvasV3Loader=true;
-  const V="20260916-mobile-upload-scroll-1";
+  const V="20260916-mobile-upload-scroll-2";
 
   const videoActive=()=>window.S?.mod==="videocanvas"||!!document.querySelector('.mod-btn[data-mod="videocanvas"].active');
   const markV3Pending=()=>document.documentElement.classList.add("kk-video-v3-pending");
@@ -28,7 +28,6 @@
     markV3Pending();
     if(window.__kosmicVideoStackLoaded||window.__kosmicVideoStackLoading)return true;
     window.__kosmicVideoStackLoading=true;
-    /* Compatibility must precede the EvoLink catalog. */
     load("evolink-video-compat-fix.js","data-kosmic-evo-v3-compat",()=>
       load("evolink-video.js","data-kosmic-evo-v3-catalog",()=>
         load("evolink-video-current.js","data-kosmic-evo-v3-current",()=>
@@ -45,11 +44,13 @@
                               load("video-chat-safety.js","data-kosmic-video-safety",()=>
                                 load("video-v3-ux-fixes.js","data-kosmic-video-v3-ux-fixes",()=>
                                   load("video-v3-final-fixes.js","data-kosmic-video-v3-final-fixes",()=>
-                                    load("video-canvas-mobile-upload-fix.js","data-kosmic-video-mobile-upload-fix",()=>{
-                                      window.__kosmicVideoStackLoaded=true;
-                                      window.__kosmicVideoStackLoading=false;
-                                      clearV3Pending();
-                                    })
+                                    load("video-canvas-mobile-upload-fix.js","data-kosmic-video-mobile-upload-fix",()=>
+                                      load("video-canvas-mobile-upload-fix-v2.js","data-kosmic-video-mobile-upload-fix-v2",()=>{
+                                        window.__kosmicVideoStackLoaded=true;
+                                        window.__kosmicVideoStackLoading=false;
+                                        clearV3Pending();
+                                      })
+                                    )
                                   )
                                 )
                               )
