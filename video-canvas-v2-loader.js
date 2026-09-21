@@ -49,7 +49,6 @@
                                         window.__kosmicVideoStackLoading=false;
                                         clearV3Pending();
                                       })
-                                    )
                                   )
                                 )
                               )
