@@ -63,7 +63,7 @@
       .kkv3-preset-tabs{display:flex;gap:5px;overflow:auto;scrollbar-width:none;margin-bottom:7px}.kkv3-preset-tabs::-webkit-scrollbar{display:none}.kkv3-preset-tab{flex:0 0 auto;border:0;background:transparent;color:var(--texts,#9488ae);padding:6px 8px;font-size:9px;font-weight:800;border-radius:8px}.kkv3-preset-tab.active{background:rgba(98,64,176,.08);color:var(--violet,#3d1f7a)}
       .kkv3-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.kkv3-field label{display:flex;justify-content:space-between;gap:8px;font-size:9px;font-weight:800;color:var(--textm,#5a4880);margin-bottom:6px}.kkv3-field label small{font-size:8px;color:var(--texts,#9488ae);font-weight:650}.kkv3-range{display:grid;grid-template-columns:minmax(0,1fr) 58px;gap:7px;align-items:center}.kkv3-range input[type=range]{width:100%;accent-color:var(--violet,#3d1f7a)}
       .kkv3-pills{display:flex;gap:6px;flex-wrap:wrap}.kkv3-pill{border:1px solid var(--border,rgba(61,31,122,.10));background:var(--pearl2,#f3eff8);color:var(--textm,#5a4880);padding:8px 10px;border-radius:10px;font-size:9px;font-weight:800}.kkv3-pill.active{color:var(--violet,#3d1f7a);background:rgba(98,64,176,.10);border-color:rgba(98,64,176,.18)}
-      .kkv3-dropgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.kkv3-drop{position:relative;min-height:96px;border:1px dashed rgba(98,64,176,.22);border-radius:13px;padding:11px;text-align:center;background:linear-gradient(135deg,rgba(98,64,176,.035),rgba(74,169,217,.035));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}.kkv3-drop strong{font-size:10px}.kkv3-drop span{font-size:8px;color:var(--texts,#9488ae)}.kkv3-drop input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.kkv3-count{font-size:8px;font-weight:800;padding:3px 7px;border-radius:999px;background:rgba(16,185,129,.08);color:#059669}
+      .kkv3-upload-help{font-size:9px;line-height:1.45;color:var(--texts,#9488ae);margin:-2px 0 10px}.kkv3-browser-upload-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.kkv3-browser-upload{min-height:104px;gap:5px}.kkv3-browser-upload .kkv3-upload-icon{font-size:20px;line-height:1}.kkv3-browser-upload strong{font-size:10px}.kkv3-browser-upload span:not(.kkv3-upload-icon){font-size:8px;color:var(--texts,#9488ae)}.kkv3-browser-upload-note{font-size:8px;color:var(--texts,#9488ae);line-height:1.4;margin-top:8px}      .kkv3-dropgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.kkv3-drop{position:relative;min-height:96px;border:1px dashed rgba(98,64,176,.22);border-radius:13px;padding:11px;text-align:center;background:linear-gradient(135deg,rgba(98,64,176,.035),rgba(74,169,217,.035));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}.kkv3-drop strong{font-size:10px}.kkv3-drop span{font-size:8px;color:var(--texts,#9488ae)}.kkv3-drop input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.kkv3-count{font-size:8px;font-weight:800;padding:3px 7px;border-radius:999px;background:rgba(16,185,129,.08);color:#059669}
       .kkv3-assets{display:grid;grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:7px;margin-top:8px}.kkv3-asset{position:relative;min-height:70px;border-radius:10px;overflow:hidden;border:1px solid var(--border,rgba(61,31,122,.10));background:#f4f1f8}.kkv3-asset img,.kkv3-asset video{width:100%;height:70px;object-fit:cover;display:block}.kkv3-asset audio{width:100%;margin-top:26px}.kkv3-remove{position:absolute;top:4px;right:4px;width:20px;height:20px;border:0;border-radius:50%;background:rgba(0,0,0,.58);color:#fff;font-size:11px}
       .kkv3-shot{display:flex;gap:9px;align-items:flex-start}.kkv3-shot-num{width:27px;height:27px;display:grid;place-items:center;border-radius:9px;background:rgba(98,64,176,.10);color:var(--violet,#3d1f7a);font-size:9px;font-weight:900;flex:0 0 auto}.kkv3-shot-main{flex:1;min-width:0}.kkv3-shot-actions{display:flex;gap:6px;margin-top:7px}.kkv3-shot-actions button{border:1px solid var(--border,rgba(61,31,122,.11));background:var(--pearl2,#f3eff8);color:var(--textm,#5a4880);padding:6px 8px;border-radius:9px;font-size:8px;font-weight:800}
       .kkv3-summary{display:grid;grid-template-columns:1fr 1fr;gap:8px}.kkv3-stat{padding:10px;border-radius:12px;background:var(--pearl2,#f3eff8);border:1px solid var(--border,rgba(61,31,122,.07))}.kkv3-stat b{display:block;font-size:16px;color:var(--violet,#3d1f7a)}.kkv3-stat span{font-size:8px;color:var(--texts,#9488ae)}
@@ -72,7 +72,7 @@
       .kkv3-empty{padding:20px 10px;text-align:center;color:var(--texts,#9488ae);font-size:9px;border:1px dashed var(--border,rgba(61,31,122,.10));border-radius:12px}
       .kkv3-mobile-generate{display:none}.kkv3-keyhint{font-size:8px;color:var(--texts,#9488ae);line-height:1.4;padding-top:7px}.kkv3-keyhint strong{color:var(--textm,#5a4880)}
       @media(max-width:920px){.kkv3-body{grid-template-columns:1fr}.kkv3-side{border-left:0;border-top:1px solid var(--border,rgba(61,31,122,.08));max-height:none}.kkv3-mobile-generate{display:block;position:sticky;bottom:8px;z-index:5;margin:2px 0;padding:0 12px}.kkv3-mobile-generate .kkv3-generate{box-shadow:0 12px 30px rgba(61,31,122,.20)}}
-      @media(max-width:620px){.kkv3-head{padding:11px 12px}.kkv3-title{font-size:14px}.kkv3-main,.kkv3-side{padding:10px}.kkv3-grid{grid-template-columns:1fr}.kkv3-dropgrid{grid-template-columns:1fr 1fr}.kkv3-status{display:none}.kkv3-card{border-radius:15px;padding:12px}}
+      @media(max-width:620px){.kkv3-browser-upload-grid{grid-template-columns:1fr}.kkv3-browser-upload{min-height:86px}.kkv3-head{padding:11px 12px}.kkv3-title{font-size:14px}.kkv3-main,.kkv3-side{padding:10px}.kkv3-grid{grid-template-columns:1fr}.kkv3-dropgrid{grid-template-columns:1fr 1fr}.kkv3-status{display:none}.kkv3-card{border-radius:15px;padding:12px}}
       html[data-theme="dark"] .kkv3{background:var(--pearl,#0d0a16)}html[data-theme="dark"] .kkv3-card{background:var(--surface,#191324);border-color:var(--border)}html[data-theme="dark"] .kkv3-select,html[data-theme="dark"] .kkv3-input,html[data-theme="dark"] .kkv3-textarea,html[data-theme="dark"] .kkv3-pill,html[data-theme="dark"] .kkv3-chip,html[data-theme="dark"] .kkv3-route,html[data-theme="dark"] .kkv3-stat{background:var(--surface2,#211a32);color:var(--text)}
     `;
     document.head.appendChild(s);
@@ -204,9 +204,30 @@
   }
 
   function refsSection(){
-    const r=currentRoute(),m=modeOf(r),s=currentSchema();if(m==="text")return "";
-    const imageMax=(s.refs?.images??(m==="image"?1:30));const videoMax=(s.refs?.videos??(m==="edit"||m==="extend"?1:10));const audioMax=(s.refs?.audios??10);
-    return `<section class="kkv3-card"><h3>Reference media <span>${m==="reference"?"multi-reference":"required input"}</span></h3><div class="kkv3-dropgrid">${m==="image"||m==="reference"?`<label class="kkv3-drop">🖼 <strong>${m==="image"?"Start image":"Images"}</strong><span>${imageMax} max</span><input id="kkv3Images" type="file" accept="image/*" multiple></label>`:""}${m==="edit"||m==="extend"||m==="reference"?`<label class="kkv3-drop">🎞 <strong>Video</strong><span>${videoMax} max</span><input id="kkv3Videos" type="file" accept="video/*" multiple></label>`:""}${m==="reference"?`<label class="kkv3-drop">🎧 <strong>Audio</strong><span>${audioMax} max</span><input id="kkv3Audios" type="file" accept="audio/*" multiple></label>`:""}</div>${referencesHtml()?`<div class="kkv3-assets">${referencesHtml()}</div>`:""}</section>`;
+    const r=currentRoute(),m=modeOf(r),s=currentSchema();
+    const imageMax=(s.refs?.images??(m==="image"?1:30));
+    const videoMax=(s.refs?.videos??(m==="edit"||m==="extend"?1:10));
+    const audioMax=(s.refs?.audios??10);
+    return `<section class="kkv3-card kkv3-browser-upload-card" data-kosmic-browser-uploads>
+      <h3>Upload from device <span>Browser files</span></h3>
+      <div class="kkv3-upload-help">Choose reference media directly from your phone or computer. The selected files stay attached to this Video Canvas session and are passed to routes that support them.</div>
+      <div class="kkv3-dropgrid kkv3-browser-upload-grid">
+        <label class="kkv3-drop kkv3-browser-upload">
+          <span class="kkv3-upload-icon">🖼</span><strong>Upload images</strong><span>JPG, PNG, WebP · up to ${imageMax}</span>
+          <input id="kkv3Images" type="file" accept="image/*" multiple aria-label="Upload images from device">
+        </label>
+        <label class="kkv3-drop kkv3-browser-upload">
+          <span class="kkv3-upload-icon">🎞</span><strong>Upload video</strong><span>MP4, WebM, MOV · up to ${videoMax}</span>
+          <input id="kkv3Videos" type="file" accept="video/*" multiple aria-label="Upload video from device">
+        </label>
+        <label class="kkv3-drop kkv3-browser-upload">
+          <span class="kkv3-upload-icon">🎧</span><strong>Upload audio</strong><span>MP3, WAV, M4A · up to ${audioMax}</span>
+          <input id="kkv3Audios" type="file" accept="audio/*" multiple aria-label="Upload audio from device">
+        </label>
+      </div>
+      <div class="kkv3-browser-upload-note">Current route: ${esc(routeLabel(r))}. Unsupported media stays in the workspace and is not sent to the provider.</div>
+      ${referencesHtml()?`<div class="kkv3-assets">${referencesHtml()}</div>`:""}
+    </section>`;
   }
 
   function presetsSection(){
