@@ -90,14 +90,11 @@ async function auditDirector(page){
     if(await drawer.isVisible().catch(()=>false))fail('Director drawer did not close');
   }
 
-  const galleryBefore=await visible(page,'#kkVideoCanvasV3 [data-kosmic-video-gallery]');
-  if(!galleryBefore)fail('V3 Gallery action is missing beside Generate');
-  else{
-    await page.locator('#kkVideoCanvasV3 [data-kosmic-video-gallery]').click({force:true}).catch(()=>{});await sleep(700);
-    const galleryState=await page.evaluate(()=>({mod:window.S?.mod||null,videoVisible:!!document.querySelector('#kkVideoCanvasV3,#kkVideoChat'),galleryActive:!!document.querySelector('.mod-btn[data-mod="gallery"].active')})).catch(()=>null);
-    if(!galleryState?.galleryActive && galleryState?.mod!=='gallery')fail('V3 Gallery action did not navigate to Gallery',JSON.stringify(galleryState));
-    if(galleryState?.videoVisible)fail('Video UI remained visible after navigating to Gallery');
-  }
+  const uploads=await page.evaluate(()=>{const r=document.querySelector('#kkVideoCanvasV3');return{cards:r?.querySelectorAll('[data-kosmic-browser-uploads]').length||0,images:r?.querySelectorAll('#kkv3Images').length||0,videos:r?.querySelectorAll('#kkv3Videos').length||0,audios:r?.querySelectorAll('#kkv3Audios').length||0,accepts:[r?.querySelector('#kkv3Images')?.accept||'',r?.querySelector('#kkv3Videos')?.accept||'',r?.querySelector('#kkv3Audios')?.accept||'']};}).catch(()=>null);
+  if(!uploads||uploads.cards!==1||uploads.images!==1||uploads.videos!==1||uploads.audios!==1)fail('Video Canvas browser upload section is missing or duplicated',JSON.stringify(uploads));
+  else if(uploads.accepts[0]!=='image/*'||uploads.accepts[1]!=='video/*'||uploads.accepts[2]!=='audio/*')fail('Video Canvas browser upload accept types are incorrect',JSON.stringify(uploads.accepts));
+  const galleryCount=await page.evaluate(()=>document.querySelectorAll('#kkVideoCanvasV3 .kkv3-final-gallery,[data-kosmic-video-gallery]').length).catch(()=>0);
+  if(galleryCount)fail('Obsolete injected Gallery control remains inside Video Canvas',String(galleryCount));
 
   return {available:true,drawer:drawerVisible,v3:v3Visible,close:closeVisible,desktopLayout,duration,model};
 }
@@ -139,8 +136,8 @@ async function main(){
   const director=chat.shell?await auditDirector(page):{available:false};
   if(director.available && director.drawer!==true && director.v3!==true)warn('Director audit could not reach a fully open drawer');
   await page.setViewportSize({width:390,height:844});await sleep(500);
-  const mobileScroll=await page.evaluate(()=>{const root=document.querySelector('#kkVideoCanvasV3');const main=root?.querySelector('.kkv3-main');if(!root||!main)return null;return{rootH:root.clientHeight,mainH:main.clientHeight,mainScrollH:main.scrollHeight,mainOverflow:getComputedStyle(main).overflowY,bodyOverflow:getComputedStyle(root.querySelector('.kkv3-body'))?.overflowY||null};}).catch(()=>null);
-  if(!mobileScroll)warn('Mobile V3 scroll metrics could not be read'); else if(!(mobileScroll.mainScrollH>mobileScroll.mainH))fail('Mobile V3 main canvas is not vertically scrollable',JSON.stringify(mobileScroll));
+  const mobileScroll=await page.evaluate(()=>{const root=document.querySelector('#kkVideoCanvasV3');const host=root?.closest('.kkvc-director-host');const body=root?.querySelector('.kkv3-body');const main=root?.querySelector('.kkv3-main');if(!root)return null;const scrollEl=host||document.scrollingElement;return{rootH:root.clientHeight,rootScrollH:root.scrollHeight,hostH:host?.clientHeight||0,hostScrollH:host?.scrollHeight||0,bodyH:body?.clientHeight||0,mainH:main?.clientHeight||0,mainScrollH:main?.scrollHeight||0,hostOverflow:host?getComputedStyle(host).overflowY:'document',bodyOverflow:body?getComputedStyle(body).overflowY:'',documentScrollH:document.scrollingElement?.scrollHeight||0};}).catch(()=>null);
+  if(!mobileScroll)warn('Mobile V3 scroll metrics could not be read'); else if(!((mobileScroll.hostScrollH>mobileScroll.hostH)||(mobileScroll.rootScrollH>mobileScroll.rootH)||(mobileScroll.documentScrollH>window.innerHeight)))fail('Mobile Video Canvas has no vertically scrollable content surface',JSON.stringify(mobileScroll));
   const reopened=await clickVideoModule(page);if(reopened)warn('Video re-opened by mobile QA selector fallback');
   await page.screenshot({path:`${OUT}/kosmic-live.png`,fullPage:true}).catch(()=>{});
   scriptErrors.push(...await page.evaluate(()=>window.__kosmicQaScriptErrors||[]));
