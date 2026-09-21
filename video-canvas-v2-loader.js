@@ -3,7 +3,7 @@
   "use strict";
   if(window.__kosmicVideoCanvasV3Loader)return;
   window.__kosmicVideoCanvasV3Loader=true;
-  const V="20260916-mobile-upload-scroll-2";
+  const V="20260922-canvas-upload-scroll-3";
 
   const videoActive=()=>window.S?.mod==="videocanvas"||!!document.querySelector('.mod-btn[data-mod="videocanvas"].active');
   const markV3Pending=()=>document.documentElement.classList.add("kk-video-v3-pending");
@@ -44,8 +44,7 @@
                               load("video-chat-safety.js","data-kosmic-video-safety",()=>
                                 load("video-v3-ux-fixes.js","data-kosmic-video-v3-ux-fixes",()=>
                                   load("video-v3-final-fixes.js","data-kosmic-video-v3-final-fixes",()=>
-                                    load("video-canvas-mobile-upload-fix.js","data-kosmic-video-mobile-upload-fix",()=>
-                                      load("video-canvas-mobile-upload-fix-v2.js","data-kosmic-video-mobile-upload-fix-v2",()=>{
+                                    load("video-canvas-mobile-upload-fix-v2.js","data-kosmic-video-mobile-upload-fix-v2",()=>{
                                         window.__kosmicVideoStackLoaded=true;
                                         window.__kosmicVideoStackLoading=false;
                                         clearV3Pending();
