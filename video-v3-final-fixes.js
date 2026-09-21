@@ -20,16 +20,15 @@
       /* The Director drawer is a flex column. Give its content a real
          shrinkable height so nested V3 scroll containers can actually scroll. */
       .kkvc-director-drawer{display:flex!important;flex-direction:column!important;min-height:0!important;}
-      .kkvc-director-host{flex:1 1 0!important;height:auto!important;min-height:0!important;overflow:hidden!important;}
-      .kkvc-director-host>#kkVideoCanvasV3{height:100%!important;min-height:0!important;max-height:100%!important;}
-      #kkVideoCanvasV3>.kkv3{height:100%!important;min-height:0!important;max-height:100%!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;}
-      #kkVideoCanvasV3 .kkv3-body{flex:1 1 0!important;min-height:0!important;overflow:hidden!important;}
-      #kkVideoCanvasV3 .kkv3-main{min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;overscroll-behavior:contain;}
-      #kkVideoCanvasV3 .kkv3-side{min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain;}
+      .kkvc-director-host{flex:1 1 auto!important;height:auto!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;}
+      .kkvc-director-host>#kkVideoCanvasV3{height:auto!important;min-height:100%!important;max-height:none!important;overflow:visible!important;}
+      #kkVideoCanvasV3>.kkv3{height:auto!important;min-height:100%;max-height:none!important;display:flex!important;flex-direction:column!important;overflow:visible!important;}
+      #kkVideoCanvasV3 .kkv3-body{flex:0 0 auto!important;min-height:0!important;overflow:visible!important;}
+      #kkVideoCanvasV3 .kkv3-main,#kkVideoCanvasV3 .kkv3-side{min-height:0!important;max-height:none!important;overflow:visible!important;}
       @media(max-width:920px){
-        #kkVideoCanvasV3 .kkv3-body{display:flex!important;flex-direction:column!important;min-height:0!important;}
-        #kkVideoCanvasV3 .kkv3-main{flex:1 1 0!important;min-height:0!important;max-height:none!important;}
-        #kkVideoCanvasV3 .kkv3-side{flex:0 0 auto!important;max-height:38%!important;min-height:0!important;}
+        .kkvc-director-host{overflow-y:auto!important;touch-action:pan-y!important;}
+        #kkVideoCanvasV3 .kkv3-body{display:flex!important;flex-direction:column!important;}
+        #kkVideoCanvasV3 .kkv3-main,#kkVideoCanvasV3 .kkv3-side{flex:0 0 auto!important;}
       }
 
       /* Stable custom model picker. The native select remains in the DOM as
@@ -59,7 +58,7 @@
       #kkVideoCanvasV3 .kkv3-duration-wrap-final{display:grid;grid-template-columns:minmax(0,1fr) 66px;gap:9px;align-items:center;width:100%;}
       #kkVideoCanvasV3 .kkv3-duration-number-final{width:66px!important;text-align:center!important;font-weight:850!important;font-variant-numeric:tabular-nums;}
       #kkVideoCanvasV3 .kkv3-duration-meta-final{display:flex;justify-content:space-between;padding-top:4px;font-size:8px;color:var(--texts,#9488ae);}
-      #kkVideoCanvasV3 .kkv3-final-gallery{min-width:84px!important;white-space:nowrap!important;}
+
     `;
     document.head.appendChild(s);
   }
@@ -120,12 +119,11 @@
   }
 
   function ensureGallery(){
-    const r=root(),g=$("kkv3Generate");if(!r||!g)return;
-    let row=g.parentElement?.querySelector(".kkv3-final-actions");
-    if(!row){row=document.createElement("div");row.className="kkv3-final-actions";row.style.cssText="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:10px";g.parentElement?.insertBefore(row,g);row.appendChild(g);}
-    let b=row.querySelector(".kkv3-final-gallery");if(b)return;
-    b=document.createElement("button");b.type="button";b.className="kkv3-secondary kkv3-final-gallery";b.textContent="Gallery";b.setAttribute("aria-label","Open Gallery");b.addEventListener("click",()=>{try{window.__kosmicVideoDirector?.close?.();}catch(_){} const nav=document.querySelector('.mod-btn[data-mod="gallery"]');if(nav){nav.click();return;}if(typeof window.switchMod==="function")window.switchMod("gallery",null);});row.appendChild(b);
+    // Gallery is a separate library destination. Do not inject a second
+    // floating Gallery control into the generation action row. The Canvas
+    // owns the three real browser upload controls instead.
   }
+
 
   function scrubLegacy(){
     if(!active())return;
