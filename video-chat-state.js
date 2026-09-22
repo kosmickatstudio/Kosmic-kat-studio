@@ -44,13 +44,13 @@
     const existingRef=state.references.find(r=>r.kind===kind&&String(r.url||r.dataUrl||"")===url&&url);
     if(existingRef){
       if(incoming.name&&!existingRef.name)existingRef.name=incoming.name;
-      state.touch();state.syncLegacy&&state.syncLegacy();return existingRef;
+      state.touch();state.syncV3&&state.syncV3();return existingRef;
     }
     const item=Object.assign({id:"vref_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),createdAt:Date.now()},incoming,{kind,url:url||incoming.url});
-    state.references.push(item);state.touch();state.syncLegacy&&state.syncLegacy();return item;
+    state.references.push(item);state.touch();state.syncV3&&state.syncV3();return item;
   };
-  state.removeReference=function(id){state.references=state.references.filter(x=>x.id!==id);state.touch();state.syncLegacy&&state.syncLegacy();};
-  state.clearReferences=function(){state.references=[];state.touch();state.syncLegacy&&state.syncLegacy();};
+  state.removeReference=function(id){state.references=state.references.filter(x=>x.id!==id);state.touch();state.syncV3&&state.syncV3();};
+  state.clearReferences=function(){state.references=[];state.touch();state.syncV3&&state.syncV3();};
 
   const pick=kind=>state.references.filter(r=>r.kind===kind).map(r=>({url:r.url,name:r.name||"Reference",dataUrl:r.url}));
   const cleanRoute=v=>String(v||"seedance-2.5-text-to-video");
@@ -71,13 +71,11 @@
     return state;
   };
 
-  /* Keep existing V2/V3 states as execution-facing state while Chat remains
-   * the conversational source of truth for prompt and references. */
-  state.syncLegacy=function(){
-    const v2=window.__kosmicVideoV2State;
+  /* V3 is the sole Video Canvas execution state. Chat remains the
+   * conversational source of truth for prompt and references. */
+  state.syncV3=function(){
     const v3=window.__kosmicVideoV3State;
     const images=pick("image"),videos=pick("video"),audios=pick("audio");
-    if(v2){v2.prompt=state.composerDraft||v2.prompt||"";v2.images=images;v2.videos=videos;v2.audios=audios;}
     if(v3){
       v3.prompt=state.composerDraft||v3.prompt||"";
       v3.images=images;v3.videos=videos;v3.audios=audios;
