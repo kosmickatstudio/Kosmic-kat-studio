@@ -1,7 +1,6 @@
 /* KOSMIC KAT — Video Chat Primary Bridge
- * Makes the conversational Video surface authoritative even when the legacy
- * router does not expose renderVideoCanvasV2(). It does not create a provider
- * endpoint, generation engine, or credential store.
+ * Makes the conversational Video surface authoritative when Video Canvas V3
+ * is present. No legacy Canvas/V2 compatibility layer is created here.
  */
 (function installKosmicVideoChatPrimaryBridge(){
   "use strict";
@@ -10,20 +9,10 @@
 
   let scheduled=false;
   let running=false;
-  let compatibilityShimInstalled=false;
 
   const moduleHost=()=>document.getElementById("moduleContent")||document.querySelector(".module-content");
   const hasVideoCanvas=()=>!!document.querySelector("#kkVideoCanvasV3,.kkv3,#kkv3Generate");
   const hasChat=()=>!!document.getElementById("kkVideoChat");
-
-  function installCompatibilityShim(){
-    if(typeof window.renderVideoCanvasV2==="function")return false;
-    window.renderVideoCanvasV2=function(){
-      if(typeof window.__kosmicVideoChatBoot==="function")window.__kosmicVideoChatBoot();
-    };
-    compatibilityShimInstalled=true;
-    return true;
-  }
 
   function schedule(){
     if(scheduled||running)return;
@@ -33,16 +22,13 @@
 
   function promote(){
     if(running||hasChat()||!hasVideoCanvas())return;
-    const host=moduleHost();
-    if(!host)return;
+    if(!moduleHost())return;
     running=true;
     try{
-      installCompatibilityShim();
       if(typeof window.__kosmicVideoChatBoot==="function")window.__kosmicVideoChatBoot();
-      if(typeof window.renderVideoCanvasV2==="function")window.renderVideoCanvasV2();
       setTimeout(()=>{
         if(!hasChat()&&hasVideoCanvas()&&typeof window.__kosmicVideoChatBoot==="function"){
-          try{window.__kosmicVideoChatBoot();if(typeof window.renderVideoCanvasV2==="function")window.renderVideoCanvasV2();}
+          try{window.__kosmicVideoChatBoot();}
           catch(err){console.error("Kosmic Video Chat primary retry failed",err);}
         }
       },220);
@@ -61,6 +47,5 @@
     schedule();
   }
 
-  window.__kosmicVideoChatCompatibilityShim=()=>compatibilityShimInstalled;
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();
 })();
