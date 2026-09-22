@@ -49,6 +49,16 @@
   function renderShell(){
     const h=host();if(!h)return;
     const q=st();
+    const v3=document.getElementById("kkVideoCanvasV3");
+    let storage=document.getElementById("kkVideoCanvasV3Storage");
+    if(v3){
+      storage=storage||document.createElement("div");
+      storage.id="kkVideoCanvasV3Storage";
+      storage.setAttribute("aria-hidden","true");
+      Object.assign(storage.style,{position:"fixed",left:"-100000px",top:"-100000px",width:"1px",height:"1px",overflow:"hidden",pointerEvents:"none"});
+      if(!storage.parentNode)document.body.appendChild(storage);
+      storage.appendChild(v3);
+    }
     h.innerHTML=`
       <div class="kk-video-chat" id="kkVideoChat" aria-label="Video conversation workspace">
         <div class="kkvc-head">
