@@ -11,8 +11,6 @@
   const st=()=>window.__kosmicVideoChatState;
   const esc=v=>String(v??"").replace(/[&<>\"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[m]));
   const icons={send:"➤",plus:"＋",settings:"⚙",video:"▶"};
-  let originalRender=null;
-  let installed=false;
 
   function injectCss(){
     if(document.getElementById("kk-video-chat-css"))return;
@@ -35,7 +33,6 @@
       .kkvc-send{width:39px;height:39px;border:0;border-radius:13px;background:linear-gradient(135deg,var(--violet,#3d1f7a),var(--ice,#4aa9d9));color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 7px 18px rgba(61,31,122,.2)}.kkvc-send:disabled{opacity:.45;cursor:not-allowed}
       .kkvc-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 4px 1px;font-size:8px;color:var(--texts,#9488ae)}.kkvc-meta strong{color:var(--textm,#5a4880)}.kkvc-file{display:none}
       .kkvc-director-note{display:none}
-      .kk-video-legacy-mount{position:fixed;left:-100000px;top:-100000px;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}
       @media(max-width:700px){.kkvc-head{padding:11px 12px}.kkvc-model{max-width:120px}.kkvc-title{font-size:14px}.kkvc-thread{padding:14px 10px 132px}.kkvc-msg{max-width:93%}.kkvc-welcome h2{font-size:23px}.kkvc-composer-wrap{padding:8px 8px 10px}.kkvc-composer{border-radius:18px}.kkvc-meta{font-size:7.5px}.kkvc-tool{width:35px;height:35px}.kkvc-send{width:37px;height:37px}}
     `;
     document.head.appendChild(s);
@@ -44,27 +41,10 @@
   function host(){return document.getElementById("moduleContent")||document.querySelector(".module-content");}
   function routeLabel(){
     const v3=window.__kosmicVideoV3State;
-    const v2=window.__kosmicVideoV2State;
-    const route=(v3||v2)?.route||"seedance-2.5-text-to-video";
+    const route=v3?.route||"seedance-2.5-text-to-video";
     const idx=window.KOSMIC_EVOLINK_VIDEO?.index||{};
     const item=idx[route];
     return item?.model?.name||item?.name||item?.label||route;
-  }
-  function createLegacyMount(){
-    let m=document.getElementById("kk-video-legacy-mount");
-    if(!m){m=document.createElement("div");m.id="kk-video-legacy-mount";m.className="kk-video-legacy-mount";document.body.appendChild(m);}
-    return m;
-  }
-  function preserveLegacy(){
-    const h=host();if(!h)return null;
-    const m=createLegacyMount();
-    while(h.firstChild)m.appendChild(h.firstChild);
-    return m;
-  }
-  function restoreLegacyIntoHost(){
-    const h=host(),m=document.getElementById("kk-video-legacy-mount");if(!h||!m)return;
-    while(h.firstChild)h.removeChild(h.firstChild);
-    while(m.firstChild)h.appendChild(m.firstChild);
   }
   function renderShell(){
     const h=host();if(!h)return;
@@ -92,7 +72,7 @@
           </div>
         </div>
       </div>`;
-    bind();renderMessages();q.syncLegacy&&q.syncLegacy();
+    bind();renderMessages();q.syncV3&&q.syncV3();
   }
 
   function renderMessages(){
@@ -106,37 +86,23 @@
     const q=st(),wrap=document.getElementById("kkvcPreview"),count=document.getElementById("kkvcRefCount");if(!wrap)return;
     wrap.classList.toggle("has",q.references.length>0);count&&(count.textContent=q.references.length);
     wrap.innerHTML=q.references.map(r=>`<div class="kkvc-preview-item"><img src="${esc(r.url)}" alt="${esc(r.name||"Reference")}"><button type="button" class="kkvc-preview-remove" data-ref-id="${esc(r.id)}" aria-label="Remove reference">×</button></div>`).join("");
-    wrap.querySelectorAll("[data-ref-id]").forEach(b=>b.addEventListener("click",()=>{q.removeReference(b.dataset.refId);renderRefs();q.syncLegacy&&q.syncLegacy();}));
+    wrap.querySelectorAll("[data-ref-id]").forEach(b=>b.addEventListener("click",()=>{q.removeReference(b.dataset.refId);renderRefs();q.syncV3&&q.syncV3();}));
   }
 
   function bind(){
     const q=st(),input=document.getElementById("kkvcInput"),send=document.getElementById("kkvcSend"),attach=document.getElementById("kkvcAttach"),file=document.getElementById("kkvcFile"),settings=document.getElementById("kkvcSettings");
-    input.addEventListener("input",()=>{q.composerDraft=input.value;q.touch();q.syncLegacy&&q.syncLegacy();input.style.height="auto";input.style.height=Math.min(input.scrollHeight,150)+"px";send.disabled=!input.value.trim()&&q.references.length===0;});
+    input.addEventListener("input",()=>{q.composerDraft=input.value;q.touch();q.syncV3&&q.syncV3();input.style.height="auto";input.style.height=Math.min(input.scrollHeight,150)+"px";send.disabled=!input.value.trim()&&q.references.length===0;});
     input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send.click();}});
     attach.addEventListener("click",()=>file.click());
-    file.addEventListener("change",async()=>{for(const f of [...file.files||[]]){if(!f.type.startsWith("image/"))continue;const url=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(f);});q.addReference({kind:"image",url,name:f.name});}file.value="";renderRefs();q.syncLegacy&&q.syncLegacy();input.focus();});
+    file.addEventListener("change",async()=>{for(const f of [...file.files||[]]){if(!f.type.startsWith("image/"))continue;const url=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(f);});q.addReference({kind:"image",url,name:f.name});}file.value="";renderRefs();q.syncV3&&q.syncV3();input.focus();});
     send.disabled=!input.value.trim();
     settings.addEventListener("click",()=>{q.directorOpen=!q.directorOpen;q.touch();if(typeof window.dispatchEvent==="function")window.dispatchEvent(new CustomEvent("kosmic:video-director-toggle",{detail:{open:q.directorOpen,state:q}}));});
     renderRefs();
   }
 
-  function installWrapper(){
-    if(installed)return true;
-    if(typeof window.renderVideoCanvasV2!=="function")return false;
-    originalRender=window.renderVideoCanvasV2;
-    window.renderVideoCanvasV2=function(){
-      restoreLegacyIntoHost();
-      try{originalRender.apply(this,arguments);}catch(err){console.error("Kosmic Video legacy render failed",err);}
-      preserveLegacy();
-      renderShell();
-    };
-    installed=true;
-    return true;
-  }
-
   function boot(){
     injectCss();
-    if(!installWrapper()){setTimeout(boot,100);return;}
+    renderShell();
   }
 
   window.__kosmicVideoChatBoot=boot;
