@@ -278,8 +278,6 @@
   function mount(){
     injectCss();const mc=$("moduleContent");if(!mc)return false;
     if(mc.querySelector("#kkVideoCanvasV3"))return true;
-    const legacy=mc.querySelector("#vcSettingsPanel,#vcSettingsBackdrop,.vc-chat-shell,.video-canvas,#vcModel,.video-studio,#vcGalleryView");
-    if(!legacy && window.S?.mod!=="videocanvas")return false;
     const host=document.createElement("div");
     host.id="kkVideoCanvasV3";
     host.className="kk-video-v3-host";
