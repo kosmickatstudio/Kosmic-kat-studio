@@ -277,12 +277,20 @@
 
   function mount(){
     injectCss();const mc=$("moduleContent");if(!mc)return false;
-    const active=mc.querySelector("#vcSettingsPanel,#vcSettingsBackdrop,.vc-chat-shell,.video-canvas,#vcModel,.video-studio,#vcGalleryView");
-    if(!active&&!mc.querySelector("#kkVideoCanvasV3"))return false;
     if(mc.querySelector("#kkVideoCanvasV3"))return true;
-    mc.innerHTML='<div id="kkVideoCanvasV3" class="kk-video-v3-host"></div>';render();return true;
+    const legacy=mc.querySelector("#vcSettingsPanel,#vcSettingsBackdrop,.vc-chat-shell,.video-canvas,#vcModel,.video-studio,#vcGalleryView");
+    if(!legacy && window.S?.mod!=="videocanvas")return false;
+    const host=document.createElement("div");
+    host.id="kkVideoCanvasV3";
+    host.className="kk-video-v3-host";
+    mc.appendChild(host);
+    render();
+    return true;
   }
-  function boot(){return !!window.KOSMIC_EVOLINK_VIDEO?.index&&mount();}
+  function boot(){
+    if(!window.KOSMIC_EVOLINK_VIDEO?.index)return false;
+    return mount();
+  }
   let tries=0;const timer=setInterval(()=>{if(boot()||++tries>240)clearInterval(timer);},100);
   const mo=new MutationObserver(()=>{if(mount())mo.disconnect();});mo.observe(document.body,{childList:true,subtree:true});
 })();
