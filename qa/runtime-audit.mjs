@@ -93,8 +93,9 @@ async function auditDirector(page){
   const uploads=await page.evaluate(()=>{const r=document.querySelector('#kkVideoCanvasV3');return{cards:r?.querySelectorAll('[data-kosmic-browser-uploads]').length||0,images:r?.querySelectorAll('#kkv3Images').length||0,videos:r?.querySelectorAll('#kkv3Videos').length||0,audios:r?.querySelectorAll('#kkv3Audios').length||0,accepts:[r?.querySelector('#kkv3Images')?.accept||'',r?.querySelector('#kkv3Videos')?.accept||'',r?.querySelector('#kkv3Audios')?.accept||'']};}).catch(()=>null);
   if(!uploads||uploads.cards!==1||uploads.images!==1||uploads.videos!==1||uploads.audios!==1)fail('Video Canvas browser upload section is missing or duplicated',JSON.stringify(uploads));
   else if(uploads.accepts[0]!=='image/*'||uploads.accepts[1]!=='video/*'||uploads.accepts[2]!=='audio/*')fail('Video Canvas browser upload accept types are incorrect',JSON.stringify(uploads.accepts));
-  const galleryCount=await page.evaluate(()=>document.querySelectorAll('#kkVideoCanvasV3 .kkv3-final-gallery,[data-kosmic-video-gallery]').length).catch(()=>0);
-  if(galleryCount)fail('Obsolete injected Gallery control remains inside Video Canvas',String(galleryCount));
+  const actions=await page.evaluate(()=>{const r=document.querySelector('#kkVideoCanvasV3');return{rows:r?.querySelectorAll('.kkv3-stable-actions').length||0,gallery:r?.querySelectorAll('.kkv3-stable-actions [data-kosmic-video-gallery]').length||0,assets:r?.querySelectorAll('.kkv3-stable-actions [data-kosmic-video-assets]').length||0,legacyGallery:r?.querySelectorAll('.kkv3-final-gallery,[data-kosmic-video-gallery]:not(.kkv3-stable-actions [data-kosmic-video-gallery])').length||0};}).catch(()=>null);
+  if(!actions||actions.rows!==1||actions.gallery!==1||actions.assets!==1)fail('Video Canvas action controls are not stable: expected exactly one Gallery and one Upload from Assets control',JSON.stringify(actions));
+  if(actions?.legacyGallery)fail('Duplicate/legacy Gallery controls remain inside Video Canvas',JSON.stringify(actions));
 
   return {available:true,drawer:drawerVisible,v3:v3Visible,close:closeVisible,desktopLayout,duration,model};
 }
