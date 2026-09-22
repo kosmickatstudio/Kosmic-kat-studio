@@ -1,6 +1,6 @@
 // Network-first service worker. Cache version is bumped whenever deploy-relevant
 // runtime layers change so an offline client does not retain a stale catalog.
-const CACHE_NAME = "kosmic-kat-studio-v34";
+const CACHE_NAME = "kosmic-kat-studio-v35";
 const ASSETS = [
   "/index.html","/audio.js","/adstudio.js","/editor.js","/team.js","/costs.js","/upscaler.js","/display.js","/flow.js","/nodecanvas.js","/motion.js","/assets.js","/gallery.js","/characters.js","/directors.js","/home.js","/home-models-current.js","/kosmicengine.js","/cinemastudio.js",
   "/evolink-video.js","/evolink-video-current.js","/evolink-video-expansion.js","/evolink-video-integrity.js","/evolink-video-pricing.js","/evolink-video-adapter-fallback.js","/evolink-video-safety.js","/evolink-video-canvas-adapter.js","/evolink-video-final-guard.js","/evolink-video-route-hud.js","/video-canvas-v2-loader.js","/video-canvas-mobile-upload-fix.js","/video-canvas-mobile-upload-fix-v2.js","/video-settings-parity.js","/settings-layer-guard.js",
