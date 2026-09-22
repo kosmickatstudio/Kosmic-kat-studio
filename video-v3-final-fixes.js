@@ -127,7 +127,12 @@
 
   function scrubLegacy(){
     if(!active())return;
-    [".video-canvas",".video-studio","#vcModel","#vcSettingsPanel","#vcSettingsBackdrop","#vcGalleryView","#kk-video-legacy-mount"].forEach(sel=>document.querySelectorAll(sel).forEach(el=>{if(el.closest("#kkVideoCanvasV3")||el.closest("#kkVideoChat"))return;el.style.setProperty("display","none","important");el.setAttribute("aria-hidden","true");}));
+    [".video-canvas",".video-studio","#vcModel","#vcSettingsPanel","#vcSettingsBackdrop","#vcGalleryView","#kk-video-legacy-mount"].forEach(sel=>{
+      document.querySelectorAll(sel).forEach(el=>{
+        if(el.closest("#kkVideoCanvasV3")||el.closest("#kkVideoChat"))return;
+        el.remove();
+      });
+    });
   }
 
   function refresh(){
