@@ -45,7 +45,7 @@
       input.__kkSinglePromptBridge=true;
       input.addEventListener("input",()=>{
         v.prompt=input.value||"";
-        if(q){q.composerDraft=input.value||"";q.touch?.();q.syncLegacy?.();}
+        if(q){q.composerDraft=input.value||"";q.touch?.();q.syncV3?.();}
       });
     }
     const wanted=String(v.prompt||q?.composerDraft||"");
@@ -235,6 +235,7 @@
   }
 
   function boot(){
+    window.__kosmicVideoOpenAssetPicker=openAssetPicker;
     css();
     wrapSwitchMod();
     refreshObservers();
