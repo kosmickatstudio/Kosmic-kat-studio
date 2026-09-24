@@ -106,7 +106,7 @@
     attach.addEventListener("click",()=>file.click());
     file.addEventListener("change",async()=>{for(const f of [...file.files||[]]){if(!f.type.startsWith("image/"))continue;const url=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(f);});q.addReference({kind:"image",url,name:f.name});}file.value="";renderRefs();q.syncV3&&q.syncV3();input.focus();});
     send.disabled=!input.value.trim();
-    settings.addEventListener("click",()=>{q.directorOpen=!q.directorOpen;q.touch();if(typeof window.dispatchEvent==="function")window.dispatchEvent(new CustomEvent("kosmic:video-director-toggle",{detail:{open:q.directorOpen,state:q}}));});
+    settings.addEventListener("click",()=>{q.directorOpen=!q.directorOpen;q.touch();const open=!!q.directorOpen;const fire=()=>{if(window.__kosmicVideoDirector){open?window.__kosmicVideoDirector.open():window.__kosmicVideoDirector.close();return true;}return false;};if(!fire()&&open){[40,140,300,600].forEach(ms=>setTimeout(fire,ms));}if(typeof window.dispatchEvent==="function")window.dispatchEvent(new CustomEvent("kosmic:video-director-toggle",{detail:{open,state:q}}));});
     renderRefs();
   }
 
