@@ -71,7 +71,11 @@
     if(opened)return;
     ensureUi();css();closeLegacyVideoSettings();
     const host=findV3();
-    if(!host)throw new Error("Video Director is still loading. Please wait a moment and try again.");
+    if(!host){
+      const q=state();
+      if(q?.directorOpen)setTimeout(()=>{if(!opened&&state()?.directorOpen)open();},120);
+      return;
+    }
     const target=document.getElementById("kkvcDirectorHost");
     if(!target)throw new Error("Video Director host is unavailable.");
     previousParent=host.parentNode;previousNext=host.nextSibling;restoreFocus=document.activeElement&&typeof document.activeElement.focus==="function"?document.activeElement:null;
