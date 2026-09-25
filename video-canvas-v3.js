@@ -210,7 +210,9 @@
 
   function historyHtml(){
     if(!state.history.length)return '<div class="kkv3-empty">Your generated clips will appear here.</div>';
-    return state.history.map((j,i)=>j.error?`<div class="kkv3-error"><b>Generation error</b><br>${esc(j.error)}</div>`:`<article class="kkv3-job"><video src="${esc(j.url)}" controls playsinline></video><div class="kkv3-job-body"><div class="kkv3-job-top"><span>${esc(j.model||j.route||"Video")}${j.shot?` · Shot ${esc(j.shot)}`:""}</span><span>${esc(j.duration)}s · ${esc(j.quality)}</span></div><div class="kkv3-job-prompt">${esc(j.prompt)}</div><button class="kkv3-secondary" data-use-history="${i}">Use prompt</button></div></article>`).join("");
+    return state.history.map((j,i)=>j.error
+      ? '<div class="kkv3-error"><b>Generation error</b><br>'+esc(j.error)+'</div>'
+      : '<article class="kkv3-job"><video src="'+esc(j.url)+'" controls playsinline preload="metadata"></video><div class="kkv3-job-body"><div class="kkv3-job-top"><span>'+esc(j.model||j.route||"Video")+(j.shot?" · Shot "+esc(j.shot):"")+'</span><span>'+esc(j.duration)+'s · '+esc(j.quality)+'</span></div><div class="kkv3-job-prompt">'+esc(j.prompt)+'</div><div class="kkv3-history-actions"><button class="kkv3-secondary" data-history-action="reference" data-history-index="'+i+'">Use as reference</button><button class="kkv3-secondary" data-history-action="edit" data-history-index="'+i+'">Edit</button><button class="kkv3-secondary" data-history-action="extend" data-history-index="'+i+'">Extend</button><button class="kkv3-secondary" data-history-action="regenerate" data-history-index="'+i+'">Regenerate</button><button class="kkv3-secondary" data-history-action="download" data-history-index="'+i+'">Download</button></div></div></article>').join("");
   }
 
   function referencesHtml(){
@@ -271,6 +273,7 @@
     const host=$("kkVideoCanvasV3");if(!host)return;normalize();
     host.innerHTML=`<div class="kkv3-head"><div class="kkv3-brand">✦</div><div><div class="kkv3-title">Video Canvas</div><div class="kkv3-sub">Creator-first generation workspace · EvoLink routes</div></div><div class="kkv3-status"><i></i>Live generation</div></div><div class="kkv3-tabs"><button class="kkv3-tab ${state.workspace==="shot"?"active":""}" data-workspace="shot">Single Shot</button><button class="kkv3-tab ${state.workspace==="storyboard"?"active":""}" data-workspace="storyboard">Storyboard</button></div><div class="kkv3-body">${state.workspace==="storyboard"?storyboardWorkspace():shotWorkspace()}</div>`;
     bind();
+    window.dispatchEvent(new Event("kosmic:video-v3-rendered"));
   }
 
   function bind(){
