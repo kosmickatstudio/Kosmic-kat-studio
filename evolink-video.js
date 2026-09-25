@@ -230,7 +230,7 @@
 
   function enhanceVideoUI(){
     document.querySelectorAll("select").forEach(sel=>{
-      if(sel.dataset.evoEnhanced||sel.id==="evoPgModel"||sel.id==="evoPgRoute")return;
+      if(sel.dataset.evoEnhanced||sel.id==="evoPgModel"||sel.id==="evoPgRoute"||sel.closest("#kkVideoCanvasV3"))return;
       const hasVideoOption=[...sel.options].some(o=>/seedance|kling|veo|sora|hailuo|wan|grok imagine/i.test((o.textContent||o.value||"")));
       if(!hasVideoOption)return;
       let og=sel.querySelector('optgroup[data-evo-video="1"]');
@@ -240,7 +240,7 @@
     });
     if(!document.getElementById("evoVideoPlaygroundLaunch")){
       const host=document.querySelector("#moduleContent");
-      if(host){const text=(host.textContent||"").toLowerCase();if(text.includes("video model")||text.includes("video canvas")||text.includes("video studio")){const b=document.createElement("button");b.id="evoVideoPlaygroundLaunch";b.className="btn btn-outline btn-sm";b.type="button";b.textContent="◎ EvoLink Playground";b.onclick=openPlayground;(host.querySelector(".panel-title")?.parentElement||host.firstElementChild||host).appendChild(b);}}
+      if(host&&!host.querySelector("#kkVideoCanvasV3")){const text=(host.textContent||"").toLowerCase();if(text.includes("video model")||text.includes("video canvas")||text.includes("video studio")){const b=document.createElement("button");b.id="evoVideoPlaygroundLaunch";b.className="btn btn-outline btn-sm";b.type="button";b.textContent="◎ EvoLink Playground";b.onclick=openPlayground;(host.querySelector(".panel-title")?.parentElement||host.firstElementChild||host).appendChild(b);}}
     }
   }
   [0,250,800,1600,3000].forEach(ms=>setTimeout(enhanceVideoUI,ms));
