@@ -3,7 +3,7 @@
   "use strict";
   if(window.__kosmicVideoCanvasV3Loader)return;
   window.__kosmicVideoCanvasV3Loader=true;
-  const V="20260925-v3-video-cleanup-2";
+  const V="20260922-v3-actions-director-8";
 
   const videoActive=()=>window.S?.mod==="videocanvas"||!!document.querySelector('.mod-btn[data-mod="videocanvas"].active');
   const markV3Pending=()=>document.documentElement.classList.add("kk-video-v3-pending");
