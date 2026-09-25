@@ -16,7 +16,8 @@ const oldLoader=path.join(root,'video-canvas-v2-loader.js');
 if(fs.existsSync(oldLoader))fail('Retired loader still exists: video-canvas-v2-loader.js');
 
 const index=fs.existsSync(path.join(root,'index.html'))?fs.readFileSync(path.join(root,'index.html'),'utf8'):'';
-const localSrcs=[...index.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)].map(m=>m[1]).filter(src=>!/^https?:\/\//i.test(src));
+const indexForScriptScan=index.replace(/<!--[\\s\\S]*?-->/g,'');
+const localSrcs=[...indexForScriptScan.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)].map(m=>m[1]).filter(src=>!/^https?:\/\//i.test(src));
 for(const src of localSrcs){
   const clean=src.split('?')[0].split('#')[0];
   if(!clean)continue;
@@ -46,7 +47,7 @@ for(const rel of ['video-canvas-v3-loader.js','video-canvas-v3.js','video-v3-sup
   try{new vm.Script(file,{filename:rel});}catch(e){fail('JavaScript syntax error in '+rel+': '+e.message);}
 }
 
-const scriptBlocks=[...index.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
+const scriptBlocks=[...indexForScriptScan.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
 let inlineCount=0;
 for(const m of scriptBlocks){
   const tag=m[0].slice(0,m[0].indexOf(">")+1);
