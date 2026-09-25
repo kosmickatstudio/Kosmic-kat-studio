@@ -35,28 +35,12 @@
             load("evolink-video-integrity.js","data-kosmic-evo-v3-integrity",()=>
               load("evolink-video-pricing.js","data-kosmic-evo-v3-pricing",()=>
                 load("video-canvas-v3.js","data-kosmic-video-v3",()=>
-                  load("video-chat-state.js","data-kosmic-video-chat-state",()=>
-                    load("video-chat-shell.js","data-kosmic-video-chat-shell",()=>
-                      load("video-chat-generation.js","data-kosmic-video-chat-generation",()=>
-                        load("video-chat-director.js","data-kosmic-video-chat-director",()=>
-                          load("video-chat-primary.js","data-kosmic-video-chat-primary",()=>
-                            load("video-v3-interaction-hardening.js","data-kosmic-video-v3-hardening",()=>
-                              load("video-chat-safety.js","data-kosmic-video-safety",()=>
-                                load("video-v3-ux-fixes.js","data-kosmic-video-v3-ux-fixes",()=>
-                                  load("video-v3-final-fixes.js","data-kosmic-video-v3-final-fixes",()=>
-                                    load("video-canvas-mobile-upload-fix-v2.js","data-kosmic-video-mobile-upload-fix-v2",()=>{
-                                        window.__kosmicVideoStackLoaded=true;
-                                        window.__kosmicVideoStackLoading=false;
-                                        clearV3Pending();
-                                      })
-                                  )
-                                )
-                              )
-                            )
-                          )
-                        )
-                      )
-                    )
+                  load("video-v3-safety.js","data-kosmic-video-v3-safety",()=>
+                    load("video-v3-support.js","data-kosmic-video-v3-support",()=>{
+                      window.__kosmicVideoStackLoaded=true;
+                      window.__kosmicVideoStackLoading=false;
+                      clearV3Pending();
+                    })
                   )
                 )
               )
