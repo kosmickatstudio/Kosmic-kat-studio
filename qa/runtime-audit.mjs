@@ -78,7 +78,7 @@ async function auditCanonicalVideo(page){
     if(!generateDisabled)await action.click({force:true}).catch(e=>warn('Generate click test could not execute',String(e.message||e)));
     await sleep(150);
   }
-  const after=await page.evaluate(()=>({busy:!!window.__kosmicVideoV3State?.busy,history:window.__kosmicVideoV3State?.history?.length||0,arm:window.__kosmicVideoSafety?.status?.()||null}));
+  const after=await page.evaluate(()=>({busy:!!window.__kosmicVideoV3State?.busy,history:Array.isArray(window.S?.assets)?window.S.assets.filter(a=>a?.type==="video"&&a?.url).length:0,arm:window.__kosmicVideoSafety?.status?.()||null}));
   if(!generateDisabled && after.busy)warn('Generate entered busy state during no-key QA; it should fail before provider submission');
   if((after.history-before.history)>0)fail('Generate produced a history entry during no-key QA');
 
