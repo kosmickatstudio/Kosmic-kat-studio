@@ -289,6 +289,7 @@
   }
 
   function bind(){
+    const root=document.getElementById("kkVideoCanvasV3");
     qAll("#kkVideoCanvasV3 [data-workspace]").forEach(b=>b.addEventListener("click",()=>{state.workspace=b.dataset.workspace;render();}));
     $("kkv3Model")?.addEventListener("change",e=>{const r=routes().find(x=>modelId(x)===e.target.value);if(r)setRoute(r.id);});
     qAll("#kkVideoCanvasV3 [data-route]").forEach(b=>b.addEventListener("click",()=>setRoute(b.dataset.route)));
@@ -300,7 +301,7 @@
     qAll("#kkVideoCanvasV3 [data-quality]").forEach(b=>b.addEventListener("click",()=>{state.quality=b.dataset.quality;render();}));
     qAll("#kkVideoCanvasV3 [data-aspect]").forEach(b=>b.addEventListener("click",()=>{state.aspect=b.dataset.aspect;render();}));
     $("kkv3Audio")?.addEventListener("click",()=>{state.audio=!state.audio;render();});
-    $("kkv3Content")?.addEventListener("click",()=>{state.content_filter=state.content_filter===false;render();});
+
     $("kkv3WebSearch")?.addEventListener("click",()=>{state.webSearch=!state.webSearch;render();});
     $("kkv3Images")?.addEventListener("change",e=>addFiles("images",e.target.files));$("kkv3Videos")?.addEventListener("change",e=>addFiles("videos",e.target.files));$("kkv3Audios")?.addEventListener("change",e=>addFiles("audios",e.target.files));
     qAll("#kkVideoCanvasV3 [data-remove-ref]").forEach(b=>b.addEventListener("click",()=>{const [k,i]=b.dataset.removeRef.split(":");removeRef(k,Number(i));}));
