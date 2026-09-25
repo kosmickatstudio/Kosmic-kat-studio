@@ -16,7 +16,7 @@ const oldLoader=path.join(root,'video-canvas-v2-loader.js');
 if(fs.existsSync(oldLoader))fail('Retired loader still exists: video-canvas-v2-loader.js');
 
 const index=fs.existsSync(path.join(root,'index.html'))?fs.readFileSync(path.join(root,'index.html'),'utf8'):'';
-const indexForScriptScan=index.replace(/<!--[\\s\\S]*?-->/g,'');
+const indexForScriptScan=index.replace(/<!--[\s\S]*?-->/g,'');
 const localSrcs=[...indexForScriptScan.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)].map(m=>m[1]).filter(src=>!/^https?:\/\//i.test(src));
 for(const src of localSrcs){
   const clean=src.split('?')[0].split('#')[0];
