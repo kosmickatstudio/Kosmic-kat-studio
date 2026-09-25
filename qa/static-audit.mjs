@@ -41,7 +41,7 @@ const safety=fs.readFileSync(path.join(root,'video-v3-safety.js'),'utf8');
 if(/MutationObserver/.test(support))fail('V3 support module must not use MutationObserver');
 if(/video-chat|kkvcSend/.test(safety))fail('Canonical V3 safety gate contains Chat dependencies');
 
-for(const rel of ['video-canvas-v3-loader.js','video-canvas-v3.js','video-v3-support.js','video-v3-safety.js','runtime-audit.mjs']){
+for(const rel of ['video-canvas-v3-loader.js','video-canvas-v3.js','video-v3-support.js','video-v3-safety.js','qa/runtime-audit.mjs']){
   const file=fs.readFileSync(path.join(root,rel),'utf8');
   try{new vm.Script(file,{filename:rel});}catch(e){fail('JavaScript syntax error in '+rel+': '+e.message);}
 }
