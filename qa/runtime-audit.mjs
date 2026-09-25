@@ -71,7 +71,7 @@ async function auditCanonicalVideo(page){
   if(legacyScripts.length)fail('Retired Video repair/chat scripts were loaded',legacyScripts.join(', '));
 
   const action=page.locator('#kkVideoCanvasV3 [data-stable-generate]').first();
-  const before=await page.evaluate(()=>({busy:!!window.__kosmicVideoV3State?.busy,history:window.__kosmicVideoV3State?.history?.length||0}));
+  const before=await page.evaluate(()=>({busy:!!window.__kosmicVideoV3State?.busy,history:Array.isArray(window.S?.assets)?window.S.assets.filter(a=>a?.type==="video"&&a?.url).length:0}));
   let generateDisabled=true;
   if(await action.isVisible().catch(()=>false)){
     generateDisabled=await action.isDisabled().catch(()=>true);
