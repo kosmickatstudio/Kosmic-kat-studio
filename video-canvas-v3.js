@@ -24,11 +24,14 @@
   };
   const state=window.__kosmicVideoV3State||(window.__kosmicVideoV3State={
     route:"seedance-2.5-text-to-video",duration:5,quality:"720p",aspect:"16:9",
-    audio:true,content_filter:true,webSearch:false,
-    prompt:"",images:[],videos:[],audios:[],history:[],busy:false,
+    audio:true,webSearch:false,
+    prompt:"",images:[],videos:[],audios:[],errors:[],busy:false,
     workspace:"shot",presetTab:"camera",storyboard:[{id:1,prompt:"",duration:5}],
+    chat:{id:"chat_"+Date.now(),title:"New Chat",messages:[]},
     selectedModelFilter:"all"
   });
+  state.chat=state.chat&&typeof state.chat==="object"?state.chat:{id:"chat_"+Date.now(),title:"New Chat",messages:[]};
+  if(!Array.isArray(state.chat.messages))state.chat.messages=[];
   const $=id=>document.getElementById(id);
   const qAll=sel=>Array.from(document.querySelectorAll(sel));
   const esc=v=>String(v??"").replace(/[&<>\"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[m]));
@@ -38,7 +41,7 @@
   const currentCard=()=>currentRoute()?.model||currentRoute()?.card||currentRoute()||{};
   const currentSchema=()=>currentCard()?.schema||currentRoute()?.schema||{};
   const isSeed25=id=>SEED25.includes(id);
-  const modeOf=r=>String(r?.mode||r?.id||"").includes("reference")?"reference":String(r?.mode||r?.id||"").includes("extend")?"extend":String(r?.mode||r?.id||"").includes("edit")?"edit":String(r?.mode||r?.id||"").includes("image")?"image":"text";
+  const modeOf=r=>{const s=String(r?.mode||r?.id||"").toLowerCase();return s.includes("reference")?"reference":s.includes("first_last")?"first_last":s.includes("extend")?"extend":s.includes("edit")?"edit":s.includes("motion")?"motion":s.includes("upscale")?"upscale":s.includes("avatar")?"avatar":s.includes("image")?"image":"text";};
 
   function injectCss(){
     if($("kk-video-v3-css"))return;
@@ -71,8 +74,26 @@
       .kkv3-generate{width:100%;padding:13px;border:0;border-radius:13px;background:linear-gradient(135deg,var(--violet,#3d1f7a),var(--ice,#4aa9d9));color:#fff;font-weight:900;letter-spacing:.02em;box-shadow:0 8px 22px rgba(61,31,122,.18)}.kkv3-generate:disabled{opacity:.48;box-shadow:none;cursor:not-allowed}.kkv3-secondary{width:100%;margin-top:7px;padding:9px;border:1px solid var(--border,rgba(61,31,122,.10));border-radius:11px;background:var(--surface,#fff);color:var(--textm,#5a4880);font-size:9px;font-weight:850}
       .kkv3-history{display:flex;flex-direction:column;gap:9px}.kkv3-job{border:1px solid var(--border,rgba(61,31,122,.10));background:var(--surface,#fff);border-radius:13px;overflow:hidden}.kkv3-job video{width:100%;display:block;background:#09080e}.kkv3-job-body{padding:9px}.kkv3-job-top{display:flex;justify-content:space-between;gap:7px;font-size:8px;color:var(--texts,#9488ae)}.kkv3-job-prompt{font-size:9px;margin-top:5px;line-height:1.4}.kkv3-error{padding:10px;border-radius:10px;background:rgba(239,68,68,.07);color:#b91c1c;font-size:9px;line-height:1.4}
       .kkv3-empty{padding:20px 10px;text-align:center;color:var(--texts,#9488ae);font-size:9px;border:1px dashed var(--border,rgba(61,31,122,.10));border-radius:12px}
+      .kkv3-chat{min-height:0;height:auto;display:flex;flex-direction:column;position:relative;overflow:visible;background:radial-gradient(900px 420px at 15% 0%,rgba(98,64,176,.07),transparent 60%),radial-gradient(900px 420px at 100% 100%,rgba(74,169,217,.06),transparent 62%),var(--pearl,#faf8f5)}
+      .kkv3-chat-head{display:flex;align-items:center;gap:8px;padding:2px 0 12px;border-bottom:1px solid var(--border,rgba(61,31,122,.08))}
+      .kkv3-chat-head-title{min-width:0;flex:1}.kkv3-chat-head-title strong{display:block;font-size:13px}.kkv3-chat-head-title span{display:block;font-size:8px;color:var(--texts,#9488ae);margin-top:2px}
+      .kkv3-chat-new{flex:0 0 auto;border:1px solid var(--border,rgba(61,31,122,.11));background:var(--surface,#fff);color:var(--textm,#5a4880);border-radius:10px;padding:8px 10px;font-size:9px;font-weight:850}
+      .kkv3-chat-thread{flex:0 0 auto;min-height:240px;overflow:visible;padding:14px 3px 12px;display:flex;flex-direction:column;gap:10px}
+      .kkv3-chat-empty{margin:auto;max-width:520px;text-align:center;padding:30px 18px}.kkv3-chat-empty b{display:block;font-size:22px;letter-spacing:-.03em;margin-bottom:7px}.kkv3-chat-empty span{font-size:10px;line-height:1.6;color:var(--textm,#5a4880)}
+      .kkv3-chat-msg{max-width:min(820px,88%);display:flex;gap:8px;align-items:flex-start}.kkv3-chat-msg.user{margin-left:auto;flex-direction:row-reverse}
+      .kkv3-chat-avatar{width:29px;height:29px;display:grid;place-items:center;border-radius:9px;background:rgba(98,64,176,.09);color:var(--violet,#3d1f7a);font-size:11px;flex:0 0 auto}.kkv3-chat-msg.user .kkv3-chat-avatar{background:linear-gradient(135deg,var(--violet,#3d1f7a),var(--ice,#4aa9d9));color:#fff}
+      .kkv3-chat-bubble{padding:10px 12px;border-radius:15px;background:rgba(255,255,255,.72);border:1px solid var(--border,rgba(61,31,122,.10));font-size:11px;line-height:1.55;white-space:pre-wrap;box-shadow:0 7px 22px rgba(61,31,122,.04)}
+      .kkv3-chat-msg.user .kkv3-chat-bubble{background:linear-gradient(135deg,rgba(98,64,176,.11),rgba(74,169,217,.08))}
+      .kkv3-chat-output{margin-top:8px;border:1px solid var(--border,rgba(61,31,122,.10));border-radius:13px;overflow:hidden;background:#0b0811}.kkv3-chat-output video{display:block;width:100%;max-height:420px;background:#09080e}
+      .kkv3-chat-output-meta{padding:8px 9px;background:var(--surface,#fff);font-size:8px;color:var(--texts,#9488ae);display:flex;gap:6px;flex-wrap:wrap}.kkv3-chat-output-meta b{color:var(--textm,#5a4880)}
+      .kkv3-chat-composer{border:1px solid var(--border,rgba(61,31,122,.13));border-radius:16px;background:rgba(255,255,255,.76);padding:8px;box-shadow:0 12px 30px rgba(61,31,122,.08)}
+      .kkv3-chat-refline{display:flex;gap:5px;flex-wrap:wrap;padding:2px 2px 7px}.kkv3-chat-ref{font-size:8px;font-weight:800;border:1px solid var(--border,rgba(61,31,122,.1));background:var(--pearl2,#f3eff8);color:var(--textm,#5a4880);padding:5px 7px;border-radius:9px}
+      .kkv3-chat-row{display:flex;align-items:flex-end;gap:7px}.kkv3-chat-input{min-height:44px;max-height:150px;resize:none;flex:1;border:0;outline:0;background:transparent;color:var(--text,#1e1230);padding:9px 4px;font-size:12px;line-height:1.45}.kkv3-chat-input::placeholder{color:var(--texts,#9488ae)}
+      .kkv3-chat-tool{width:36px;height:36px;flex:0 0 auto;border:1px solid var(--border,rgba(61,31,122,.11));border-radius:11px;background:var(--surface,#fff);color:var(--textm,#5a4880);display:grid;place-items:center;font-size:16px}
+      .kkv3-chat-send{width:38px;height:38px;flex:0 0 auto;border:0;border-radius:12px;background:linear-gradient(135deg,var(--violet,#3d1f7a),var(--ice,#4aa9d9));color:#fff;font-size:14px;box-shadow:0 7px 18px rgba(61,31,122,.17)}.kkv3-chat-send:disabled{opacity:.45;cursor:not-allowed}
+      .kkv3-chat-status{display:flex;justify-content:space-between;gap:8px;padding:6px 3px 1px;font-size:8px;color:var(--texts,#9488ae)}.kkv3-chat-status b{color:var(--textm,#5a4880)}
       .kkv3-mobile-generate{display:none}.kkv3-keyhint{font-size:8px;color:var(--texts,#9488ae);line-height:1.4;padding-top:7px}.kkv3-keyhint strong{color:var(--textm,#5a4880)}
-      @media(max-width:920px){.kkv3-body{grid-template-columns:1fr}.kkv3-side{border-left:0;border-top:1px solid var(--border,rgba(61,31,122,.08));max-height:none}.kkv3-mobile-generate{display:block;position:sticky;bottom:8px;z-index:5;margin:2px 0;padding:0 12px}.kkv3-mobile-generate .kkv3-generate{box-shadow:0 12px 30px rgba(61,31,122,.20)}}
+      @media(max-width:920px){.kkv3{height:auto;min-height:100%;overflow:visible}.kkv3-body{grid-template-columns:1fr}.kkv3-main,.kkv3-side{overflow:visible}.kkv3-side{border-left:0;border-top:1px solid var(--border,rgba(61,31,122,.08));max-height:none}.kkv3-mobile-generate{display:block;position:sticky;bottom:8px;z-index:5;margin:2px 0;padding:0 12px}.kkv3-mobile-generate .kkv3-generate{box-shadow:0 12px 30px rgba(61,31,122,.20)}}
       @media(max-width:620px){.kkv3-browser-upload-grid{grid-template-columns:1fr}.kkv3-browser-upload{min-height:86px}.kkv3-head{padding:11px 12px}.kkv3-title{font-size:14px}.kkv3-main,.kkv3-side{padding:10px}.kkv3-grid{grid-template-columns:1fr}.kkv3-dropgrid{grid-template-columns:1fr 1fr}.kkv3-status{display:none}.kkv3-card{border-radius:15px;padding:12px}}
       html[data-theme="dark"] .kkv3{background:var(--pearl,#0d0a16)}html[data-theme="dark"] .kkv3-card{background:var(--surface,#191324);border-color:var(--border)}html[data-theme="dark"] .kkv3-select,html[data-theme="dark"] .kkv3-input,html[data-theme="dark"] .kkv3-textarea,html[data-theme="dark"] .kkv3-pill,html[data-theme="dark"] .kkv3-chip,html[data-theme="dark"] .kkv3-route,html[data-theme="dark"] .kkv3-stat{background:var(--surface2,#211a32);color:var(--text)}
     `;
@@ -84,17 +105,23 @@
     const d=s.duration||[4,30];
     state.duration=Math.max(Number(d[0]??4),Math.min(Number(d[1]??30),Number(state.duration)||Number(d[0]??4)));
     if(Array.isArray(s.quality)&&s.quality.length&&!s.quality.includes(state.quality))state.quality=s.quality[0];
+    if(s.audio!==true)state.audio=false;
     const aspects=Array.isArray(s.aspect)&&s.aspect.length?s.aspect.map(v=>v==="auto"?"adaptive":v):["16:9","9:16"];
     if(modeOf(currentRoute())!=="text"&&/image|edit|extend/.test(modeOf(currentRoute()))&&aspects.includes("adaptive"))state.aspect="adaptive";
     if(!aspects.includes(state.aspect))state.aspect=aspects[0];
-    if(s.audio===false)state.audio=false;
+
   }
 
   function routes(){return Object.values(catalog()).filter(Boolean).filter(r=>r.id);}
   function routeLabel(r){return r?.label||r?.mode||String(r?.id||"").split("-").pop();}
   function modelLabel(r){return r?.model?.name||r?.name||String(r?.id||"").replace(/-/g," ");}
-  function modelNames(){return [...new Set(routes().map(r=>modelLabel(r)))].sort((a,b)=>a.localeCompare(b));}
-  function sameModelRoutes(){const name=modelLabel(currentRoute());return routes().filter(r=>modelLabel(r)===name);}
+  function modelId(r){return String(r?.model?.id||r?.model?.slug||r?.model?.name||r?.id||"");}
+  function modelNames(){
+    const map=new Map();
+    routes().forEach(r=>{const id=modelId(r);if(id&&!map.has(id))map.set(id,{id,name:modelLabel(r)});});
+    return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  }
+  function sameModelRoutes(){const id=modelId(currentRoute());return routes().filter(r=>modelId(r)===id);}
   function setRoute(id){state.route=id;normalize();render();}
 
   function presetText(kind,value){return value;}
@@ -144,18 +171,34 @@
     return{cost:0,unit:"Provider pricing",detail:"Uses selected route"};
   }
 
+  function routeRequirements(r){
+    const m=modeOf(r),problems=[];
+    if(m==="image"&&!state.images.length)problems.push("Add at least one image reference for this route.");
+    else if(m==="reference"&&!(state.images.length||state.videos.length||state.audios.length))problems.push("Add at least one reference asset for this route.");
+    else if(m==="first_last"&&state.images.length<2)problems.push("Add two image references for first and last frame generation.");
+    else if(m==="edit"||m==="extend"||m==="upscale"){if(!state.videos.length)problems.push("Add at least one video reference for this route.");}
+    else if(m==="motion"){if(!state.images.length||!state.videos.length)problems.push("Add both an image and a motion video reference for this route.");}
+    else if(m==="avatar"){if(!state.images.length)problems.push("Add an image reference for this digital-human route.");if(!state.audios.length)problems.push("Add an audio reference for this digital-human route.");}
+    const lim=currentSchema().refs||{};const total=state.images.length+state.videos.length+state.audios.length;
+    if(lim.total!=null&&total>Number(lim.total))problems.push("Too many references are attached for this route.");
+    return problems;
+  }
+
   async function generateSingle(prompt,shotNo){
     const r=currentRoute();if(!r)throw new Error("Selected video route is unavailable.");
+    const problems=routeRequirements(r);if(problems.length)throw new Error(problems.join(" "));
     const m=modeOf(r);const opts={duration:state.duration,quality:state.quality,aspect_ratio:state.aspect,generate_audio:!!state.audio,content_filter:state.content_filter!==false};
-    if(state.webSearch&&isSeed25(state.route)&&m==="text")opts.model_params={web_search:true};
-    let image_urls=[],video_urls=[],audio_urls=[];
-    if(m==="image"){image_urls=await hosted(state.images.slice(0,1),0);}
-    else if(m==="edit"||m==="extend"){video_urls=await hosted(state.videos.slice(0,1),0);}
-    else if(m==="reference"){image_urls=await hosted(state.images.slice(0,30),0);video_urls=await hosted(state.videos.slice(0,10),30);audio_urls=await hosted(state.audios.slice(0,10),40);}
-    Object.assign(opts,{image_urls,video_urls,audio_urls});
+    if(state.webSearch&&isSeed25(state.route)&&m==="text")opts.web_search=true;
+    if(m==="image")opts.image_urls=await hosted(state.images.slice(0,1),0);
+    else if(["edit","extend","upscale"].includes(m))opts.video_urls=await hosted(state.videos.slice(0,1),0);
+    else if(m==="reference"){opts.image_urls=await hosted(state.images.slice(0,30),0);opts.video_urls=await hosted(state.videos.slice(0,10),30);opts.audio_urls=await hosted(state.audios.slice(0,10),40);}
+    else if(m==="first_last")opts.image_urls=await hosted(state.images.slice(0,2),0);
+    else if(m==="motion"){opts.image_urls=await hosted(state.images.slice(0,1),0);opts.video_urls=await hosted(state.videos.slice(0,1),1);}
+    else if(m==="avatar"){opts.image_urls=await hosted(state.images.slice(0,1),0);opts.audio_url=(await hosted(state.audios.slice(0,1),1))[0];}
     const result=await window.generateEvoLinkVideo(state.route,prompt,opts);
-    state.history.unshift({url:result.url,prompt,route:state.route,model:modelLabel(r),quality:state.quality,duration:state.duration,shot:shotNo||null,created:Date.now()});
-    state.history=state.history.slice(0,18);
+    let asset=null;
+    if(typeof createVideoAsset==="function")asset=createVideoAsset(result.url,prompt,"",{model:state.route,providerLabel:"EvoLink",aspectRatio:state.aspect,resolution:state.quality,duration:String(state.duration)+"s"});
+    const est=pricing();if(typeof logCost==="function"&&est?.cost>0)logCost(state.route,prompt.slice(0,60),1,est.cost);
     return result.url;
   }
 
@@ -166,7 +209,7 @@
     if(!prompt){toast("Write a shot prompt first.","error");return;}
     normalize();state.busy=true;render();
     try{await generateSingle(prompt);state.prompt="";if($("kkv3Prompt"))$("kkv3Prompt").value="";toast("Video generated.","success");}
-    catch(e){state.history.unshift({error:e?.message||String(e),prompt,route:state.route,created:Date.now()});state.history=state.history.slice(0,18);toast("❌ "+(e?.message||String(e)),"error");}
+    catch(e){state.errors.unshift({error:e?.message||String(e),prompt,route:state.route,created:Date.now()});state.errors=state.errors.slice(0,6);toast("❌ "+(e?.message||String(e)),"error");}
     finally{state.busy=false;render();}
   }
 
@@ -176,7 +219,7 @@
     const shots=state.storyboard.filter(s=>s.prompt.trim());if(!shots.length){toast("Add at least one storyboard shot.","error");return;}
     state.busy=true;render();
     try{for(let i=0;i<shots.length;i++){const previous=state.duration;state.duration=Math.max(Number(currentSchema().duration?.[0]??4),Math.min(Number(currentSchema().duration?.[1]??30),Number(shots[i].duration)||previous));normalize();await generateSingle(shots[i].prompt.trim(),i+1);}}
-    catch(e){state.history.unshift({error:e?.message||String(e),prompt:"Storyboard generation",route:state.route,created:Date.now()});toast("❌ "+(e?.message||String(e)),"error");}
+    catch(e){state.errors.unshift({error:e?.message||String(e),prompt:"Storyboard generation",route:state.route,created:Date.now()});state.errors=state.errors.slice(0,6);toast("❌ "+(e?.message||String(e)),"error");}
     finally{state.busy=false;render();}
   }
 
@@ -186,9 +229,23 @@
   function insertPrompt(text){const area=$("kkv3Prompt");if(!area)return;applyPreset(text);area.focus();}
   function copyHistoryPrompt(i){const j=state.history[i];if(!j?.prompt)return;state.prompt=j.prompt;state.workspace="shot";render();}
 
+  function historyItems(){
+    const assets=Array.isArray(window.S?.assets)?window.S.assets:[];
+    return assets.filter(a=>a&&a.type==="video"&&a.url).sort((a,b)=>{
+      const at=Date.parse(a.created||"")||0,bt=Date.parse(b.created||"")||0;
+      return bt-at;
+    }).slice(0,18);
+  }
+
   function historyHtml(){
-    if(!state.history.length)return '<div class="kkv3-empty">Your generated clips will appear here.</div>';
-    return state.history.map((j,i)=>j.error?`<div class="kkv3-error"><b>Generation error</b><br>${esc(j.error)}</div>`:`<article class="kkv3-job"><video src="${esc(j.url)}" controls playsinline></video><div class="kkv3-job-body"><div class="kkv3-job-top"><span>${esc(j.model||j.route||"Video")}${j.shot?` · Shot ${esc(j.shot)}`:""}</span><span>${esc(j.duration)}s · ${esc(j.quality)}</span></div><div class="kkv3-job-prompt">${esc(j.prompt)}</div><button class="kkv3-secondary" data-use-history="${i}">Use prompt</button></div></article>`).join("");
+    const items=historyItems();
+    const errors=Array.isArray(state.errors)?state.errors:[];
+    if(!items.length&&!errors.length)return '<div class="kkv3-empty">Your generated clips will appear here.</div>';
+    const errorHtml=errors.map(j=>'<div class="kkv3-error"><b>Generation error</b><br>'+esc(j.error)+'</div>').join("");
+    const videoHtml=items.map((j,i)=>{
+      return '<article class="kkv3-job"><video src="'+esc(j.url)+'" controls playsinline preload="metadata"></video><div class="kkv3-job-body"><div class="kkv3-job-top"><span>'+esc(j.model||j.providerLabel||"Video")+'</span><span>'+esc(j.duration||"")+(j.duration?"s":"")+' · '+esc(j.resolution||"")+'</span></div><div class="kkv3-job-prompt">'+esc(j.prompt||"")+'</div><div class="kkv3-history-actions"><button class="kkv3-secondary" data-history-action="reference" data-history-index="'+i+'">Use as reference</button><button class="kkv3-secondary" data-history-action="edit" data-history-index="'+i+'">Edit</button><button class="kkv3-secondary" data-history-action="extend" data-history-index="'+i+'">Extend</button><button class="kkv3-secondary" data-history-action="regenerate" data-history-index="'+i+'">Regenerate</button><button class="kkv3-secondary" data-history-action="download" data-history-index="'+i+'">Download</button></div></div></article>';
+    }).join("");
+    return errorHtml+videoHtml;
   }
 
   function referencesHtml(){
@@ -201,7 +258,7 @@
 
   function routeControls(){
     const r=currentRoute(),s=currentSchema();const m=modeOf(r);const qualities=Array.isArray(s.quality)&&s.quality.length?s.quality:["720p"];const aspects=Array.isArray(s.aspect)&&s.aspect.length?s.aspect.map(v=>v==="auto"?"adaptive":v):["16:9","9:16"];const min=Number(s.duration?.[0]??4),max=Number(s.duration?.[1]??30);const lim=limits();
-    return `<section class="kkv3-card"><h3>Shot controls <span>${esc(routeLabel(r))}</span></h3><div class="kkv3-grid"><div class="kkv3-field"><label>Duration <b>${state.duration}s</b></label><div class="kkv3-range"><input id="kkv3Duration" type="range" min="${min}" max="${max}" step="1" value="${state.duration}" ${min===max?"disabled":""}><input class="kkv3-input" id="kkv3DurationNum" type="number" min="${min}" max="${max}" step="1" value="${state.duration}" ${min===max?"disabled":""}></div></div><div class="kkv3-field"><label>Resolution</label><div class="kkv3-pills">${qualities.map(q=>`<button class="kkv3-pill ${state.quality===q?"active":""}" data-quality="${esc(q)}">${esc(q)}</button>`).join("")}</div></div></div><div class="kkv3-field" style="margin-top:10px"><label>Aspect ratio <small>${m!=="text"&&aspects.includes("adaptive")?"Adaptive is used on this route":"Model capability"}</small></label><div class="kkv3-pills">${aspects.map(a=>`<button class="kkv3-pill ${state.aspect===a?"active":""}" data-aspect="${esc(a)}">${esc(a)}</button>`).join("")}</div></div><div class="kkv3-grid" style="margin-top:10px"><div class="kkv3-field"><label>Audio <small>${s.audio===false?"unsupported":"route dependent"}</small></label><button class="kkv3-pill ${state.audio?"active":""}" id="kkv3Audio" ${s.audio===false?"disabled":""}>${state.audio?"On":"Off"}</button></div><div class="kkv3-field"><label>Content filter</label><button class="kkv3-pill ${state.content_filter!==false?"active":""}" id="kkv3Content">${state.content_filter!==false?"On":"Off"}</button></div></div>${s.webSearch||isSeed25(state.route)&&m==="text"?`<div class="kkv3-field" style="margin-top:10px"><label>Web search <small>Seedance 2.5</small></label><button class="kkv3-pill ${state.webSearch?"active":""}" id="kkv3WebSearch">${state.webSearch?"On":"Off"}</button></div>`:""}<div class="kkv3-keyhint"><strong>Reference limits:</strong> ${lim.images??0} images · ${lim.videos??0} videos · ${lim.audios??0} audio${lim.total?` · ${lim.total} total`:""}</div></section>`;
+    return `<section class="kkv3-card"><h3>Shot controls <span>${esc(routeLabel(r))}</span></h3><div class="kkv3-grid"><div class="kkv3-field"><label>Duration <b>${state.duration}s</b></label><div class="kkv3-range"><input id="kkv3Duration" type="range" min="${min}" max="${max}" step="1" value="${state.duration}" ${min===max?"disabled":""}><input class="kkv3-input" id="kkv3DurationNum" type="number" min="${min}" max="${max}" step="1" value="${state.duration}" ${min===max?"disabled":""}></div></div><div class="kkv3-field"><label>Resolution</label><div class="kkv3-pills">${qualities.map(q=>`<button class="kkv3-pill ${state.quality===q?"active":""}" data-quality="${esc(q)}">${esc(q)}</button>`).join("")}</div></div></div><div class="kkv3-field" style="margin-top:10px"><label>Aspect ratio <small>${m!=="text"&&aspects.includes("adaptive")?"Adaptive is used on this route":"Model capability"}</small></label><div class="kkv3-pills">${aspects.map(a=>`<button class="kkv3-pill ${state.aspect===a?"active":""}" data-aspect="${esc(a)}">${esc(a)}</button>`).join("")}</div></div><div class="kkv3-grid" style="margin-top:10px"><div class="kkv3-field"><label>Audio <small>${s.audio===true?"supported":"unsupported"}</small></label><button class="kkv3-pill ${state.audio?"active":""}" id="kkv3Audio" ${s.audio===true?"":"disabled"}>${s.audio===true?(state.audio?"On":"Off"):"Unsupported"}</button></div><div class="kkv3-field"><label>Safety</label><span class="kkv3-small" style="padding:8px 0">Provider safety filters remain active</span></div></div>${s.webSearch||isSeed25(state.route)&&m==="text"?`<div class="kkv3-field" style="margin-top:10px"><label>Web search <small>Seedance 2.5</small></label><button class="kkv3-pill ${state.webSearch?"active":""}" id="kkv3WebSearch">${state.webSearch?"On":"Off"}</button></div>`:""}<div class="kkv3-keyhint"><strong>Reference limits:</strong> ${lim.images??0} images · ${lim.videos??0} videos · ${lim.audios??0} audio${lim.total?` · ${lim.total} total`:""}</div></section>`;
   }
 
   function refsSection(){
@@ -236,43 +293,102 @@
   }
 
   function shotWorkspace(){
-    const modelNamesList=modelNames();const selectedModel=modelLabel(currentRoute());const routesForModel=sameModelRoutes();const p=pricing();
-    return `<main class="kkv3-main"><section class="kkv3-card"><h3>Model & route</h3><div class="kkv3-modelbar"><select class="kkv3-select" id="kkv3Model">${modelNamesList.map(n=>`<option value="${esc(n)}" ${n===selectedModel?"selected":""}>${esc(n)}</option>`).join("")}</select></div><div class="kkv3-routebar">${routesForModel.map(r=>`<button class="kkv3-route ${r.id===state.route?"active":""}" data-route="${esc(r.id)}">${esc(routeLabel(r))}</button>`).join("")}</div></section><div class="kkv3-stable-actions" aria-label="Video actions"><button type="button" class="kkv3-generate" data-stable-generate ${state.busy||!apiKey()?"disabled":""}>${state.busy?"Generating…":"Generate video"}</button><button type="button" class="kkv3-secondary" data-kosmic-video-gallery aria-label="Open Gallery">Gallery</button><button type="button" class="kkv3-secondary" data-kosmic-video-assets aria-label="Upload from Assets">Upload from Assets</button></div>${!apiKey()?`<div class="kkv3-keyhint" style="margin:0 2px 2px">Video generation uses the existing EvoLink API slot. Configure it in the app's existing API Settings.</div>`:""}<section class="kkv3-card"><h3>Prompt</h3><textarea class="kkv3-input kkv3-prompt" id="kkv3Prompt" placeholder="Describe the shot, action, environment, camera, lighting, mood and timing...">${esc(state.prompt)}</textarea><div class="kkv3-toolbar"><span class="kkv3-small">Use director chips below to build a precise shot without hiding controls in another settings panel.</span><button class="kkv3-pill" id="kkv3ClearPrompt">Clear</button></div></section>${presetsSection()}${routeControls()}${refsSection()}</main><aside class="kkv3-side"><section class="kkv3-card"><h3>Generation summary</h3><div class="kkv3-summary"><div class="kkv3-stat"><b>${state.duration}s</b><span>duration</span></div><div class="kkv3-stat"><b>${esc(state.quality)}</b><span>resolution</span></div><div class="kkv3-stat"><b>${esc(state.aspect)}</b><span>aspect</span></div><div class="kkv3-stat"><b>${p.cost?`${p.cost.toFixed(3)}`:"—"}</b><span>${esc(p.unit)}</span></div></div><div class="kkv3-small" style="margin-top:8px">${esc(p.detail)}</div></section><section class="kkv3-card"><h3>Output library <span>${state.history.length}</span></h3><div class="kkv3-history">${historyHtml()}</div></section></aside>`;
+    const modelNamesList=modelNames();const selectedModel=modelId(currentRoute());const routesForModel=sameModelRoutes();const p=pricing();
+    return `<main class="kkv3-main"><section class="kkv3-card"><h3>Model & route</h3><div class="kkv3-modelbar"><select class="kkv3-select" id="kkv3Model" aria-label="Video model">${modelNamesList.map(m=>`<option value="${esc(m.id)}" ${m.id===selectedModel?"selected":""}>${esc(m.name)}</option>`).join("")}</select></div><div class="kkv3-routebar">${routesForModel.map(r=>`<button class="kkv3-route ${r.id===state.route?"active":""}" data-route="${esc(r.id)}">${esc(routeLabel(r))}</button>`).join("")}</div></section><div class="kkv3-stable-actions" aria-label="Video actions"><button type="button" class="kkv3-generate" data-stable-generate ${state.busy||!apiKey()?"disabled":""}>${state.busy?"Generating…":"Generate video"}</button><button type="button" class="kkv3-secondary" data-kosmic-video-gallery aria-label="Open Gallery">Gallery</button><button type="button" class="kkv3-secondary" data-kosmic-video-assets aria-label="Upload from Assets">Upload from Assets</button></div>${!apiKey()?`<div class="kkv3-keyhint" style="margin:0 2px 2px">Video generation uses the existing EvoLink API slot. Configure it in the app's existing API Settings.</div>`:""}<section class="kkv3-card"><h3>Prompt</h3><textarea class="kkv3-input kkv3-prompt" id="kkv3Prompt" placeholder="Describe the shot, action, environment, camera, lighting, mood and timing...">${esc(state.prompt)}</textarea><div class="kkv3-toolbar"><span class="kkv3-small">Use director chips below to build a precise shot without hiding controls in another settings panel.</span><button class="kkv3-pill" id="kkv3ClearPrompt">Clear</button></div></section>${presetsSection()}${routeControls()}${refsSection()}</main><aside class="kkv3-side"><section class="kkv3-card"><h3>Generation summary</h3><div class="kkv3-summary"><div class="kkv3-stat"><b>${state.duration}s</b><span>duration</span></div><div class="kkv3-stat"><b>${esc(state.quality)}</b><span>resolution</span></div><div class="kkv3-stat"><b>${esc(state.aspect)}</b><span>aspect</span></div><div class="kkv3-stat"><b>${p.cost?`${p.cost.toFixed(3)}`:"—"}</b><span>${esc(p.unit)}</span></div></div><div class="kkv3-small" style="margin-top:8px">${esc(p.detail)}</div></section><section class="kkv3-card"><h3>Output library <span>${historyItems().length}</span></h3><div class="kkv3-history">${historyHtml()}</div></section></aside>`;
   }
 
   function storyboardWorkspace(){
     return `<main class="kkv3-main"><section class="kkv3-card"><h3>Storyboard <span>${state.storyboard.length} shots</span></h3><div class="kkv3-small" style="margin-bottom:10px">Plan a sequence before rendering. Each shot uses the same selected route and current model controls.</div>${state.storyboard.map((shot,i)=>`<div class="kkv3-shot" style="margin-top:${i?10:0}px"><div class="kkv3-shot-num">${i+1}</div><div class="kkv3-shot-main"><textarea class="kkv3-input" data-story-prompt="${shot.id}" rows="3" placeholder="Shot ${i+1}: action, camera, blocking, lighting...">${esc(shot.prompt)}</textarea><div class="kkv3-shot-actions"><button data-story-remove="${shot.id}">Remove</button><button data-story-copy="${shot.id}">Copy previous</button></div></div></div>`).join("")}<button class="kkv3-secondary" id="kkv3AddShot">+ Add shot</button></section>${presetsSection()}<section class="kkv3-card"><h3>Render sequence</h3>${routeControls()}<button class="kkv3-generate" id="kkv3StoryboardGenerate" ${state.busy||!apiKey()?"disabled":""}>${state.busy?"Rendering sequence…":"Generate storyboard"}</button></section></main><aside class="kkv3-side"><section class="kkv3-card"><h3>Sequence outputs</h3><div class="kkv3-history">${historyHtml()}</div></section></aside>`;
   }
 
+  function newChat(){
+    state.chat={id:"chat_"+Date.now(),title:"New Chat",messages:[]};
+    state.prompt="";state.images=[];state.videos=[];state.audios=[];state.errors=[];state.workspace="chat";
+    render();
+  }
+
+  function chatMessagesHtml(){
+    const messages=Array.isArray(state.chat?.messages)?state.chat.messages:[];
+    if(!messages.length)return '<div class="kkv3-chat-empty"><b>What are we making?</b><span>Describe a scene naturally. Keep refining the same idea in one conversation, then generate the next version from the same V3 controls and references.</span></div>';
+    return messages.map(m=>{
+      const role=m.role==="user"?"user":"assistant";
+      const output=m.output;
+      const out=output?'<div class="kkv3-chat-output"><video src="'+esc(output.url)+'" controls playsinline preload="metadata"></video><div class="kkv3-chat-output-meta"><b>'+esc(output.model||state.route)+'</b><span>'+esc(output.duration||state.duration)+'s</span><span>'+esc(output.quality||state.quality)+'</span><span>'+esc(output.aspect||state.aspect)+'</span></div></div>':"";
+      return '<div class="kkv3-chat-msg '+role+'"><div class="kkv3-chat-avatar">'+(role==="user"?"You":"✦")+'</div><div><div class="kkv3-chat-bubble">'+esc(m.content||"")+'</div>'+out+'</div></div>';
+    }).join("");
+  }
+
+  function chatWorkspace(){
+    const refs=[...state.images.map(x=>x.name||"Image"),...state.videos.map(x=>x.name||"Video"),...state.audios.map(x=>x.name||"Audio")];
+    return '<main class="kkv3-main"><section class="kkv3-card kkv3-chat"><div class="kkv3-chat-head"><div class="kkv3-chat-head-title"><strong>'+esc(state.chat?.title||"New Chat")+'</strong><span>Each message creates a new clip using the current V3 controls and EvoLink route</span></div><button class="kkv3-chat-new" id="kkv3NewChat" type="button" '+(state.busy?"disabled":"")+'>＋ New Chat</button></div><div class="kkv3-chat-thread" id="kkv3ChatThread" aria-live="polite">'+chatMessagesHtml()+'</div><div class="kkv3-chat-composer"><div class="kkv3-chat-refline">'+(refs.length?refs.map(x=>'<span class="kkv3-chat-ref">'+esc(x)+'</span>').join(""):'<span class="kkv3-small">No references attached</span>')+'</div><div class="kkv3-chat-row"><button class="kkv3-chat-tool" type="button" id="kkv3ChatAttach" title="Add reference" aria-label="Add reference">＋</button><textarea class="kkv3-chat-input" id="kkv3ChatPrompt" rows="1" placeholder="Describe the video, then refine it naturally…">'+esc(state.prompt)+'</textarea><button class="kkv3-chat-send" type="button" id="kkv3ChatSend" aria-label="Generate video" '+(state.busy||!apiKey()?"disabled":"")+'>'+(state.busy?"…":"➤")+'</button></div><div class="kkv3-chat-status"><span><b>'+esc(modelLabel(currentRoute()))+'</b> · '+esc(routeLabel(currentRoute()))+'</span><span>'+(!apiKey()?"Add your existing EvoLink API key in Settings":"Enter = generate · Shift+Enter = new line")+'</span></div><input id="kkv3ChatFile" type="file" accept="image/*,video/*,audio/*" multiple style="display:none"></div></section></main><aside class="kkv3-side"><section class="kkv3-card"><h3>Chat context</h3><div class="kkv3-small">The selected model, route, duration, quality, aspect ratio, audio setting and references remain controlled by the canonical V3 state.</div></section><section class="kkv3-card"><h3>Generation history <span>'+historyItems().length+'</span></h3><div class="kkv3-history">'+historyHtml()+'</div></section></aside>';
+  }
+
   function render(){
     window.__kosmicVideoCanvasV3Render=render;
     const host=$("kkVideoCanvasV3");if(!host)return;normalize();
-    host.innerHTML=`<div class="kkv3-head"><div class="kkv3-brand">✦</div><div><div class="kkv3-title">Video Canvas</div><div class="kkv3-sub">Creator-first generation workspace · EvoLink routes</div></div><div class="kkv3-status"><i></i>Live generation</div></div><div class="kkv3-tabs"><button class="kkv3-tab ${state.workspace==="shot"?"active":""}" data-workspace="shot">Single Shot</button><button class="kkv3-tab ${state.workspace==="storyboard"?"active":""}" data-workspace="storyboard">Storyboard</button></div><div class="kkv3-body">${state.workspace==="storyboard"?storyboardWorkspace():shotWorkspace()}</div>`;
+    host.innerHTML=`<div class="kkv3-head"><div class="kkv3-brand">✦</div><div><div class="kkv3-title">Video Canvas</div><div class="kkv3-sub">Creator-first generation workspace · EvoLink routes</div></div><div class="kkv3-status"><i></i>Live generation</div></div><div class="kkv3-tabs"><button class="kkv3-tab ${state.workspace==="shot"?"active":""}" data-workspace="shot">Single Shot</button><button class="kkv3-tab ${state.workspace==="storyboard"?"active":""}" data-workspace="storyboard">Storyboard</button><button class="kkv3-tab ${state.workspace==="chat"?"active":""}" data-workspace="chat">Chat</button></div><div class="kkv3-body">${state.workspace==="storyboard"?storyboardWorkspace():state.workspace==="chat"?chatWorkspace():shotWorkspace()}</div>`;
     bind();
+    window.dispatchEvent(new Event("kosmic:video-v3-rendered"));
   }
 
   function bind(){
+    const root=document.getElementById("kkVideoCanvasV3");
     qAll("#kkVideoCanvasV3 [data-workspace]").forEach(b=>b.addEventListener("click",()=>{state.workspace=b.dataset.workspace;render();}));
-    $("kkv3Model")?.addEventListener("change",e=>{const r=routes().find(x=>modelLabel(x)===e.target.value);if(r)setRoute(r.id);});
+    $("kkv3Model")?.addEventListener("change",e=>{const r=routes().find(x=>modelId(x)===e.target.value);if(r)setRoute(r.id);});
     qAll("#kkVideoCanvasV3 [data-route]").forEach(b=>b.addEventListener("click",()=>setRoute(b.dataset.route)));
     $("kkv3Prompt")?.addEventListener("input",e=>{state.prompt=e.target.value;});
     $("kkv3ClearPrompt")?.addEventListener("click",()=>{state.prompt="";render();});
+    $("kkv3NewChat")?.addEventListener("click",newChat);
+    $("kkv3ChatPrompt")?.addEventListener("input",e=>{state.prompt=e.target.value;const send=$("kkv3ChatSend");if(send)send.disabled=!e.target.value.trim()||state.busy||!apiKey();e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,150)+"px";});
+    $("kkv3ChatPrompt")?.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("kkv3ChatSend")?.click();}});
+    $("kkv3ChatSend")?.addEventListener("click",async()=>{
+      if(state.busy)return;
+      const input=$("kkv3ChatPrompt"),prompt=input?.value.trim()||"";
+      if(!prompt){toast("Write a video prompt first.","error");return;}
+      if(!apiKey()){toast("EvoLink is not configured in the existing API key settings.","error");return;}
+      state.chat=state.chat||{id:"chat_"+Date.now(),title:"New Chat",messages:[]};
+      state.chat.title=state.chat.title==="New Chat"?prompt.slice(0,52)+(prompt.length>52?"…":""):state.chat.title;
+      const refs=[...state.images.map(x=>x.name||"Image"),...state.videos.map(x=>x.name||"Video"),...state.audios.map(x=>x.name||"Audio")];
+      state.chat.messages.push({role:"user",content:prompt,references:refs,created:Date.now()});
+      state.prompt=prompt;state.busy=true;render();
+      try{
+        const url=await generateSingle(prompt);
+        state.chat.messages.push({role:"assistant",content:"Generated a video from this prompt.",output:{url,model:modelLabel(currentRoute()),duration:state.duration,quality:state.quality,aspect:state.aspect},created:Date.now()});
+        state.prompt="";
+        toast("Video generated.","success");
+      }catch(e){
+        state.chat.messages.push({role:"assistant",content:"Generation failed: "+(e?.message||String(e)),error:true,created:Date.now()});
+        state.prompt="";
+        toast("❌ "+(e?.message||String(e)),"error");
+      }finally{state.busy=false;render();}
+    });
+    $("kkv3ChatAttach")?.addEventListener("click",()=>$("kkv3ChatFile")?.click());
+    $("kkv3ChatFile")?.addEventListener("change",async e=>{
+      for(const file of Array.from(e.target.files||[])){
+        const kind=file.type.startsWith("video/")?"videos":file.type.startsWith("audio/")?"audios":"images";
+        await addFiles(kind,[file]);
+      }
+      e.target.value="";
+      if(state.workspace!=="chat")state.workspace="chat";
+      render();
+    });
     qAll("#kkVideoCanvasV3 [data-preset-tab]").forEach(b=>b.addEventListener("click",()=>{state.presetTab=b.dataset.presetTab;render();}));
     qAll("#kkVideoCanvasV3 [data-preset]").forEach(b=>b.addEventListener("click",()=>insertPrompt(b.dataset.preset)));
     const dur=$("kkv3Duration"),num=$("kkv3DurationNum");dur?.addEventListener("input",e=>{state.duration=Number(e.target.value);if(num)num.value=state.duration;renderCostOnly();});num?.addEventListener("change",e=>{state.duration=Number(e.target.value);normalize();render();});
     qAll("#kkVideoCanvasV3 [data-quality]").forEach(b=>b.addEventListener("click",()=>{state.quality=b.dataset.quality;render();}));
     qAll("#kkVideoCanvasV3 [data-aspect]").forEach(b=>b.addEventListener("click",()=>{state.aspect=b.dataset.aspect;render();}));
     $("kkv3Audio")?.addEventListener("click",()=>{state.audio=!state.audio;render();});
-    $("kkv3Content")?.addEventListener("click",()=>{state.content_filter=state.content_filter===false;render();});
+
     $("kkv3WebSearch")?.addEventListener("click",()=>{state.webSearch=!state.webSearch;render();});
     $("kkv3Images")?.addEventListener("change",e=>addFiles("images",e.target.files));$("kkv3Videos")?.addEventListener("change",e=>addFiles("videos",e.target.files));$("kkv3Audios")?.addEventListener("change",e=>addFiles("audios",e.target.files));
     qAll("#kkVideoCanvasV3 [data-remove-ref]").forEach(b=>b.addEventListener("click",()=>{const [k,i]=b.dataset.removeRef.split(":");removeRef(k,Number(i));}));
-    $("kkVideoCanvasV3 [data-stable-generate]")?.addEventListener("click",generate);$("kkVideoCanvasV3 [data-kosmic-video-gallery]")?.addEventListener("click",()=>{const target=document.querySelector('.mod-btn[data-mod="gallery"]');if(typeof window.switchMod==="function")window.switchMod("gallery",target);});$("kkVideoCanvasV3 [data-kosmic-video-assets]")?.addEventListener("click",()=>{if(typeof window.__kosmicVideoOpenAssetPicker==="function")window.__kosmicVideoOpenAssetPicker();});$("kkv3StoryboardGenerate")?.addEventListener("click",generateStoryboard);
+    root?.querySelector("[data-stable-generate]")?.addEventListener("click",generate);root?.querySelector("[data-kosmic-video-gallery]")?.addEventListener("click",()=>{const target=document.querySelector('.mod-btn[data-mod="gallery"]');if(typeof window.switchMod==="function")window.switchMod("gallery",target);});root?.querySelector("[data-kosmic-video-assets]")?.addEventListener("click",()=>{if(typeof window.__kosmicVideoOpenAssetPicker==="function")window.__kosmicVideoOpenAssetPicker();});$("kkv3StoryboardGenerate")?.addEventListener("click",generateStoryboard);
     $("kkv3AddShot")?.addEventListener("click",addShot);
     qAll("#kkVideoCanvasV3 [data-story-prompt]").forEach(el=>el.addEventListener("input",e=>{const x=state.storyboard.find(s=>String(s.id)===String(e.target.dataset.storyPrompt));if(x)x.prompt=e.target.value;}));
     qAll("#kkVideoCanvasV3 [data-story-remove]").forEach(b=>b.addEventListener("click",()=>removeShot(b.dataset.storyRemove)));
     qAll("#kkVideoCanvasV3 [data-story-copy]").forEach(b=>b.addEventListener("click",()=>{const i=state.storyboard.findIndex(s=>String(s.id)===String(b.dataset.storyCopy));if(i>0)state.storyboard[i].prompt=state.storyboard[i-1].prompt;render();}));
     qAll("#kkVideoCanvasV3 [data-use-history]").forEach(b=>b.addEventListener("click",()=>copyHistoryPrompt(Number(b.dataset.useHistory))));
+    qAll("#kkVideoCanvasV3 [data-history-action]").forEach(b=>b.addEventListener("click",()=>{const item=historyItems()[Number(b.dataset.historyIndex)];if(!item||item.error)return;const action=b.dataset.historyAction;if(action==="download"){if(!/^https?:\/\//i.test(String(item.url||""))){toast("This result has no downloadable URL.","error");return;}const a=document.createElement("a");a.href=item.url;a.target="_blank";a.rel="noopener";a.download=(item.model||"kosmic-video")+"-"+Date.now()+".mp4";a.click();return;}if(action==="regenerate"){state.workspace="shot";state.prompt=item.prompt||"";render();setTimeout(()=>document.querySelector("#kkVideoCanvasV3 [data-stable-generate]")?.click(),60);return;}const all=routes(),isSeed=id=>String(id||"").startsWith("seedance-2.5-");const target=action==="reference"?(all.find(x=>isSeed(x.id)&&modeOf(x)==="reference")||all.find(x=>modeOf(x)==="reference")):(all.find(x=>isSeed(x.id)&&modeOf(x)===action)||all.find(x=>modeOf(x)===action));if(!target){toast("No compatible Video route is available for that action.","error");return;}state.route=target.id;state.videos=[{url:item.url,name:"Generated video"}];state.images=[];state.audios=[];state.prompt=item.prompt||"";state.workspace="shot";normalize();render();}));
   }
   function renderCostOnly(){const p=pricing();const el=document.querySelector("#kkVideoCanvasV3 .kkv3-stat:nth-child(4) b");if(el)el.textContent=p.cost?`$${p.cost.toFixed(3)}`:"—";const note=document.querySelector("#kkVideoCanvasV3 .kkv3-small");}
 
@@ -288,10 +404,4 @@
   }
   window.__kosmicMountVideoCanvasV3=mount;
 
-  function boot(){
-    if(!window.KOSMIC_EVOLINK_VIDEO?.index)return false;
-    return mount();
-  }
-  let tries=0;const timer=setInterval(()=>{if(boot()||++tries>240)clearInterval(timer);},100);
-  const mo=new MutationObserver(()=>{if(mount())mo.disconnect();});mo.observe(document.body,{childList:true,subtree:true});
 })();

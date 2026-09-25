@@ -1,0 +1,61 @@
+name: Video PR QA
+
+on:
+  pull_request:
+    paths:
+      - '**.html'
+      - '**.js'
+      - 'qa/**'
+      - '.github/workflows/video-pr-qa.yml'
+  push:
+    branches:
+      - refactor/video-v3-canonical
+    paths:
+      - '**.html'
+      - '**.js'
+      - 'qa/**'
+      - '.github/workflows/video-pr-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  video-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Static QA
+        run: node qa/static-audit.mjs
+
+      - name: Install Playwright
+        run: npm install --no-save playwright@1.55.0
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Start local site
+        run: |
+          python3 -m http.server 4173 --directory . >/tmp/kosmic-http.log 2>&1 &
+          echo $! >/tmp/kosmic-http.pid
+
+      - name: Runtime QA
+        env:
+          KOSMIC_SITE_URL: http://127.0.0.1:4173/
+        run: node qa/runtime-audit.mjs
+
+      - name: Upload QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-qa-artifacts
+          path: qa-artifacts/
+          if-no-files-found: ignore
