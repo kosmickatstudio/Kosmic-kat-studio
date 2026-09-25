@@ -238,10 +238,7 @@
       const existing=new Set([...og.options].map(o=>o.value));CATALOG.forEach(m=>m.routes.forEach(r=>{if(existing.has(r.id))return;const op=document.createElement("option");op.value=r.id;op.textContent=`${m.name} · ${r.label} · EvoLink`;og.appendChild(op);}));
       sel.dataset.evoEnhanced="1";
     });
-    if(!document.getElementById("evoVideoPlaygroundLaunch")){
-      const host=document.querySelector("#moduleContent");
-      if(host&&!host.querySelector("#kkVideoCanvasV3")){const text=(host.textContent||"").toLowerCase();if(text.includes("video model")||text.includes("video canvas")||text.includes("video studio")){const b=document.createElement("button");b.id="evoVideoPlaygroundLaunch";b.className="btn btn-outline btn-sm";b.type="button";b.textContent="◎ EvoLink Playground";b.onclick=openPlayground;(host.querySelector(".panel-title")?.parentElement||host.firstElementChild||host).appendChild(b);}}
-    }
+    // The canonical Video Canvas owns the Video generation surface. The legacy standalone playground is not injected.
   }
   [0,250,800,1600,3000].forEach(ms=>setTimeout(enhanceVideoUI,ms));
   window.__kosmicEvoLinkEnhance=enhanceVideoUI;
