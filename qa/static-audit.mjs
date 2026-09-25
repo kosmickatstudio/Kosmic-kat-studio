@@ -49,12 +49,12 @@ for(const rel of ['video-canvas-v3-loader.js','video-canvas-v3.js','video-v3-sup
 const scriptBlocks=[...index.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
 let inlineCount=0;
 for(const m of scriptBlocks){
-  const tag=m[0].slice(0,m[0].indexOf('>')+1);
-  if(/type=["']application\/ld\+json["']/i.test(tag))continue;
+  const tag=m[0].slice(0,m[0].indexOf(">")+1);
+  if(/\bsrc=["']/i.test(tag)||/type=["']application\/ld\+json["']/i.test(tag))continue;
   const code=m[1].trim();
   if(!code)continue;
   inlineCount++;
-  try{new vm.Script(code,{filename:'index.html:inline-script-'+inlineCount});}catch(e){fail('JavaScript syntax error in index.html inline script #'+inlineCount+': '+e.message);}
+  try{new vm.Script(code,{filename:"index.html:inline-script-"+inlineCount});}catch(e){fail("JavaScript syntax error in index.html inline script #"+inlineCount+": "+e.message);}
 }
 
 const report={checkedAt:new Date().toISOString(),failures,requiredFiles:required.length,localScriptReferences:localSrcs.length,inlineScriptsParsed:inlineCount};
