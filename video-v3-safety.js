@@ -9,7 +9,7 @@
   const TTL=30000;let arm=null,inFlight=false;
   const armUser=e=>{
     if(!e?.isTrusted)return;
-    const t=e.target?.closest?.("[data-stable-generate],#kkv3StoryboardGenerate,#kkvcSend");
+    const t=e.target?.closest?.("[data-stable-generate],#kkv3StoryboardGenerate");
     if(t)arm={expiresAt:Date.now()+TTL,source:t.id||t.dataset?.stableGenerate||"generate"};
   };
   const consume=()=>{if(!arm||arm.expiresAt<Date.now()){arm=null;return false;}arm=null;return true;};
