@@ -39,12 +39,13 @@ async function auditCanonicalVideo(page){
     audios:document.querySelectorAll('#kkVideoCanvasV3 #kkv3Audios').length,
     prompt:document.querySelectorAll('#kkVideoCanvasV3 #kkv3Prompt').length,
     storyboard:document.querySelectorAll('#kkVideoCanvasV3 [data-workspace="storyboard"]').length,
+    chatTab:document.querySelectorAll('#kkVideoCanvasV3 [data-workspace="chat"]').length,
     playground:document.querySelectorAll("#evoVideoPlaygroundLaunch").length,
     videoChat:document.querySelectorAll('#kkVideoChat').length,
     legacyMount:document.querySelectorAll('#kk-video-legacy-mount').length,
     legacyIds:["#vcModel","#vcSettingsPanel","#vcSettingsBackdrop","#vcGalleryView"].filter(sel=>[...document.querySelectorAll(sel)].some(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=="none"&&s.visibility!=="hidden"&&s.opacity!=="0";}))
   }));
-  for(const [k,expected] of Object.entries({v3:1,model:1,modelVisible:1,generate:1,gallery:1,assets:1,uploads:1,images:1,videos:1,audios:1,prompt:1,storyboard:1})){
+  for(const [k,expected] of Object.entries({v3:1,model:1,modelVisible:1,generate:1,gallery:1,assets:1,uploads:1,images:1,videos:1,audios:1,prompt:1,storyboard:1,chatTab:1})){
     if(selectors[k]!==expected)fail('Canonical Video DOM invariant failed',k+"="+selectors[k]+", expected "+expected);
   }
   if(selectors.videoChat)fail('Video Chat is still auto-mounted inside the canonical Video module');
@@ -104,6 +105,20 @@ async function auditInteraction(page){
   await page.locator('#kkVideoCanvasV3 [data-workspace="storyboard"]').click({force:true}).catch(()=>{});
   await sleep(100);
   if(!(await visible(page,'#kkVideoCanvasV3 #kkv3AddShot')))fail('Storyboard workspace did not render');
+  await page.locator('#kkVideoCanvasV3 [data-workspace="shot"]').click({force:true}).catch(()=>{});
+  await sleep(100);
+
+  const chatTab=page.locator('#kkVideoCanvasV3 [data-workspace="chat"]').first();
+  if(await chatTab.count()){await chatTab.click({force:true});await sleep(100);}
+  if(!(await visible(page,'#kkVideoCanvasV3 #kkv3NewChat')))fail('Chat workspace did not render New Chat control');
+  if(!(await visible(page,'#kkVideoCanvasV3 #kkv3ChatPrompt')))fail('Chat workspace did not render its prompt composer');
+  const chatBefore=await page.evaluate(()=>{const s=window.__kosmicVideoV3State;return{id:s?.chat?.id||null,title:s?.chat?.title||null,count:s?.chat?.messages?.length||0};});
+  await page.evaluate(()=>{const s=window.__kosmicVideoV3State;s.chat.messages=[{role:'user',content:'QA test'}];s.chat.title='QA Chat';window.__kosmicVideoCanvasV3Render?.();});
+  await sleep(50);
+  await page.locator('#kkVideoCanvasV3 #kkv3NewChat').click({force:true}).catch(()=>{});
+  await sleep(50);
+  const chatAfter=await page.evaluate(()=>{const s=window.__kosmicVideoV3State;return{id:s?.chat?.id||null,title:s?.chat?.title||null,count:s?.chat?.messages?.length||0,images:s?.images?.length||0,videos:s?.videos?.length||0,audios:s?.audios?.length||0};});
+  if(chatAfter.title!=='New Chat'||chatAfter.count!==0)fail('New Chat did not reset the active V3 conversation cleanly',JSON.stringify({before:chatBefore,after:chatAfter}));
   await page.locator('#kkVideoCanvasV3 [data-workspace="shot"]').click({force:true}).catch(()=>{});
   await sleep(100);
 
