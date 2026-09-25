@@ -72,7 +72,7 @@ async function auditDirector(page){
   if(!duration)fail('V3 duration controls are missing');
   else if(Number(duration.min)>=Number(duration.max))warn('Duration route exposes a fixed min/max range',JSON.stringify(duration));
 
-  const model=await page.evaluate(()=>{const t=document.querySelector('#kkv3ModelTrigger'),m=document.querySelector('#kkv3ModelMenu');return{customTrigger:!!t,menu:!!m,optionCount:m?.querySelectorAll('[data-model-value]').length||0,nativeVisible:!!(document.querySelector('#kkv3Model')&&getComputedStyle(document.querySelector('#kkv3Model')).opacity!=='0')};}).catch(()=>null);
+  const model=await page.evaluate(()=>{const t=document.querySelector('#kkv3FinalModelTrigger'),m=document.querySelector('#kkv3FinalModelMenu');const n=document.querySelector('#kkv3Model');return{customTrigger:!!t,menu:!!m,optionCount:m?.querySelectorAll('[data-model-value]').length||0,nativeVisible:!!(n&&getComputedStyle(n).opacity!=='0'&&getComputedStyle(n).visibility!=='hidden'&&getComputedStyle(n).display!=='none')};}).catch(()=>null);
   if(!model?.customTrigger)fail('V3 custom model picker trigger is missing');
   if(!model?.menu||model.optionCount<2)fail('V3 model picker menu/options are missing');
   if(model?.nativeVisible)fail('Native V3 model select remains visibly exposed');
