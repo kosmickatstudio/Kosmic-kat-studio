@@ -84,10 +84,11 @@
     const d=s.duration||[4,30];
     state.duration=Math.max(Number(d[0]??4),Math.min(Number(d[1]??30),Number(state.duration)||Number(d[0]??4)));
     if(Array.isArray(s.quality)&&s.quality.length&&!s.quality.includes(state.quality))state.quality=s.quality[0];
+    if(s.audio!==true)state.audio=false;
     const aspects=Array.isArray(s.aspect)&&s.aspect.length?s.aspect.map(v=>v==="auto"?"adaptive":v):["16:9","9:16"];
     if(modeOf(currentRoute())!=="text"&&/image|edit|extend/.test(modeOf(currentRoute()))&&aspects.includes("adaptive"))state.aspect="adaptive";
     if(!aspects.includes(state.aspect))state.aspect=aspects[0];
-    if(s.audio===false)state.audio=false;
+
   }
 
   function routes(){return Object.values(catalog()).filter(Boolean).filter(r=>r.id);}
