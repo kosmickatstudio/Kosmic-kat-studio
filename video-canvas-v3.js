@@ -38,7 +38,7 @@
   const currentCard=()=>currentRoute()?.model||currentRoute()?.card||currentRoute()||{};
   const currentSchema=()=>currentCard()?.schema||currentRoute()?.schema||{};
   const isSeed25=id=>SEED25.includes(id);
-  const modeOf=r=>String(r?.mode||r?.id||"").includes("reference")?"reference":String(r?.mode||r?.id||"").includes("extend")?"extend":String(r?.mode||r?.id||"").includes("edit")?"edit":String(r?.mode||r?.id||"").includes("image")?"image":"text";
+  const modeOf=r=>{const s=String(r?.mode||r?.id||"").toLowerCase();return s.includes("reference")?"reference":s.includes("first_last")?"first_last":s.includes("extend")?"extend":s.includes("edit")?"edit":s.includes("motion")?"motion":s.includes("upscale")?"upscale":s.includes("avatar")?"avatar":s.includes("image")?"image":"text";};
 
   function injectCss(){
     if($("kk-video-v3-css"))return;
@@ -151,12 +151,12 @@
 
   function routeRequirements(r){
     const m=modeOf(r),problems=[];
-    const needImage=["image","reference","motion","avatar"].includes(m);
-    const needVideo=["edit","extend","reference","motion","upscale"].includes(m);
-    const needAudio=m==="avatar";
-    if(needImage&&!state.images.length)problems.push("Add at least one image reference for this route.");
-    if(needVideo&&!state.videos.length)problems.push("Add at least one video reference for this route.");
-    if(needAudio&&!state.audios.length)problems.push("Add at least one audio reference for this route.");
+    if(m==="image"&&!state.images.length)problems.push("Add at least one image reference for this route.");
+    else if(m==="reference"&&!(state.images.length||state.videos.length||state.audios.length))problems.push("Add at least one reference asset for this route.");
+    else if(m==="first_last"&&state.images.length<2)problems.push("Add two image references for first and last frame generation.");
+    else if(m==="edit"||m==="extend"||m==="upscale"){if(!state.videos.length)problems.push("Add at least one video reference for this route.");}
+    else if(m==="motion"){if(!state.images.length||!state.videos.length)problems.push("Add both an image and a motion video reference for this route.");}
+    else if(m==="avatar"){if(!state.images.length)problems.push("Add an image reference for this digital-human route.");if(!state.audios.length)problems.push("Add an audio reference for this digital-human route.");}
     const lim=currentSchema().refs||{};const total=state.images.length+state.videos.length+state.audios.length;
     if(lim.total!=null&&total>Number(lim.total))problems.push("Too many references are attached for this route.");
     return problems;
@@ -166,10 +166,11 @@
     const r=currentRoute();if(!r)throw new Error("Selected video route is unavailable.");
     const problems=routeRequirements(r);if(problems.length)throw new Error(problems.join(" "));
     const m=modeOf(r);const opts={duration:state.duration,quality:state.quality,aspect_ratio:state.aspect,generate_audio:!!state.audio,content_filter:state.content_filter!==false};
-    if(state.webSearch&&isSeed25(state.route)&&m==="text")opts.model_params={web_search:true};
+    if(state.webSearch&&isSeed25(state.route)&&m==="text")opts.web_search=true;
     if(m==="image")opts.image_urls=await hosted(state.images.slice(0,1),0);
     else if(["edit","extend","upscale"].includes(m))opts.video_urls=await hosted(state.videos.slice(0,1),0);
     else if(m==="reference"){opts.image_urls=await hosted(state.images.slice(0,30),0);opts.video_urls=await hosted(state.videos.slice(0,10),30);opts.audio_urls=await hosted(state.audios.slice(0,10),40);}
+    else if(m==="first_last")opts.image_urls=await hosted(state.images.slice(0,2),0);
     else if(m==="motion"){opts.image_urls=await hosted(state.images.slice(0,1),0);opts.video_urls=await hosted(state.videos.slice(0,1),1);}
     else if(m==="avatar"){opts.image_urls=await hosted(state.images.slice(0,1),0);opts.audio_url=(await hosted(state.audios.slice(0,1),1))[0];}
     const result=await window.generateEvoLinkVideo(state.route,prompt,opts);
