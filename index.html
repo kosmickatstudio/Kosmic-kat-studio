@@ -2070,16 +2070,15 @@ function handleTabSwitch(mod,name){
 // Canonical Video Canvas V3 mount entry. Legacy Video markup remains in this file temporarily for compatibility, but it is no longer part of the active Video render path.
 function renderVideoCanvasV3Module(el){
   if(!el)return;
+  el.innerHTML="";
+  try{
+    if(typeof window.__kosmicMountVideoCanvasV3==="function"&&window.__kosmicMountVideoCanvasV3())return;
+    if(typeof window.__kosmicEnsureVideoStack==="function"){
+      window.__kosmicEnsureVideoStack();
+      return;
+    }
+  }catch(err){console.error("Kosmic Video Canvas V3 mount failed",err);}
   el.innerHTML='<div class="kk-video-v3-loading" style="padding:24px;text-align:center;color:var(--textm,#5a4880);font-size:11px">Loading Video Canvas…</div>';
-  const mount=()=>{
-    try{
-      if(typeof window.__kosmicMountVideoCanvasV3==="function")return !!window.__kosmicMountVideoCanvasV3();
-      if(typeof window.__kosmicEnsureVideoStack==="function")return !!window.__kosmicEnsureVideoStack();
-    }catch(err){console.error("Kosmic Video Canvas V3 mount failed",err);}
-    return false;
-  };
-  mount();
-  [80,220,500,900].forEach(ms=>setTimeout(mount,ms));
 }
 
 // ── RENDER MODULES ──
