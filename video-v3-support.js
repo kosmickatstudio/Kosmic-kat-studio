@@ -63,33 +63,12 @@
     });
   }
 
-  function historyAction(index,action){
-    const s=state(),item=s?.history?.[index];if(!s||!item||item.error)return;
-    if(action==="download"){
-      if(!/^https?:\/\//i.test(String(item.url||""))){toast("This result has no downloadable URL.","error");return;}
-      const a=document.createElement("a");a.href=item.url;a.target="_blank";a.rel="noopener";a.download=(item.model||"kosmic-video")+"-"+Date.now()+".mp4";a.click();return;
-    }
-    if(action==="regenerate"){
-      s.workspace="shot";s.prompt=item.prompt||"";window.__kosmicVideoCanvasV3Render?.();setTimeout(()=>root()?.querySelector("[data-stable-generate]")?.click(),60);return;
-    }
-    const routes=Object.values(catalog());
-    const isSeed25=id=>String(id||"").startsWith("seedance-2.5-");
-    const target=action==="reference"
-      ? routes.find(r=>isSeed25(r.id)&&modeOf(r)==="reference")||routes.find(r=>modeOf(r)==="reference")
-      : routes.find(r=>isSeed25(r.id)&&modeOf(r)===action)||routes.find(r=>modeOf(r)===action);
-    if(!target){toast("No compatible Video route is available for that action.","error");return;}
-    s.route=target.id;s.videos=[{url:item.url,name:"Generated video"}];s.images=[];s.audios=[];s.prompt=item.prompt||"";s.workspace="shot";
-    window.__kosmicVideoCanvasV3Render?.();
-  }
-
   function bind(){
     const r=root();if(!r||r.__kkv3SupportBound)return;
     r.__kkv3SupportBound=true;
     r.addEventListener("click",e=>{
       const asset=e.target.closest("[data-kosmic-video-assets]");
       if(asset){openAssetPicker();return;}
-      const b=e.target.closest("[data-history-action]");
-      if(b)historyAction(Number(b.dataset.historyIndex),b.dataset.historyAction);
     });
   }
 
