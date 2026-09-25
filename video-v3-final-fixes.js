@@ -100,78 +100,24 @@
   }
   function syncModel(){
     const s=$("kkv3Model");if(!s)return;
-
-    // Keep an open picker stable across the 1s refresh loop. The previous
-    // implementation removed and rebuilt the menu every refresh, so the
-    // dropdown could collapse while the user was trying to tap a model.
-    document.querySelectorAll("#kkv3FinalModelMenu").forEach(m=>{
-      if(!m.__kkOwnerSelect?.isConnected)m.remove();
-    });
-
+    document.querySelectorAll("#kkv3FinalModelMenu").forEach(x=>x.remove());
+    s.parentElement?.querySelectorAll(".kkv3-final-model-picker").forEach(x=>x.remove());
     let picker=s.parentElement?.querySelector(".kkv3-final-model-picker");
-    if(picker){
-      const trigger=picker.querySelector("#kkv3FinalModelTrigger");
-      const menu=document.getElementById("kkv3FinalModelMenu");
-      if(trigger&&menu?.__kkOwnerSelect===s){
-        const options=Array.from(s.options||[]);
-        const current=options.find(x=>x.value===s.value)||options[0];
-        const label=trigger.querySelector("span");
-        if(label)label.textContent=current?.textContent||s.value;
-        menu.querySelectorAll(".kkv3-final-model-option").forEach(b=>b.classList.toggle("active",b.dataset.value===s.value));
-        return;
-      }
-      picker.remove();
-    }
-
+    if(picker)return;
     const options=Array.from(s.options||[]);if(!options.length)return;
     picker=document.createElement("div");picker.className="kkv3-final-model-picker";
-    const trigger=document.createElement("button");trigger.type="button";trigger.id="kkv3FinalModelTrigger";trigger.className="kkv3-final-model-trigger";trigger.setAttribute("aria-haspopup","listbox");trigger.setAttribute("aria-expanded","false");trigger.setAttribute("aria-label","Choose video model");
+    const trigger=document.createElement("button");trigger.type="button";trigger.id="kkv3FinalModelTrigger";trigger.className="kkv3-final-model-trigger";trigger.setAttribute("aria-haspopup","listbox");trigger.setAttribute("aria-expanded","false");
     const text=document.createElement("span"),arrow=document.createElement("b");arrow.textContent="⌄";trigger.append(text,arrow);
-
-    const menu=document.createElement("div");menu.id="kkv3FinalModelMenu";menu.className="kkv3-final-model-menu";menu.setAttribute("role","listbox");menu.__kkOwnerSelect=s;
+    const menu=document.createElement("div");menu.id="kkv3FinalModelMenu";menu.className="kkv3-final-model-menu";menu.setAttribute("role","listbox");
     const search=document.createElement("input");search.id="kkv3FinalModelSearch";search.className="kkv3-final-model-search";search.type="search";search.placeholder="Search models…";search.autocomplete="off";
-    const list=document.createElement("div");list.className="kkv3-final-model-list");
-
-    options.forEach(o=>{
-      const b=document.createElement("button");
-      b.type="button";b.className="kkv3-final-model-option";b.dataset.value=o.value;b.dataset.modelValue=o.value;b.setAttribute("role","option");b.textContent=o.textContent||o.value;
-      b.addEventListener("click",e=>{
-        e.preventDefault();e.stopPropagation();
-        s.value=o.value;
-        s.dispatchEvent(new Event("change",{bubbles:true}));
-        closeMenu();
-      });
-      list.appendChild(b);
-    });
-
+    const list=document.createElement("div");list.className="kkv3-final-model-list";
+    options.forEach(o=>{const b=document.createElement("button");b.type="button";b.className="kkv3-final-model-option";b.dataset.value=o.value;b.dataset.modelValue=o.value;b.setAttribute("role","option");b.textContent=o.textContent||o.value;b.addEventListener("click",()=>{s.value=o.value;s.dispatchEvent(new Event("change",{bubbles:true}));closeMenu();});list.appendChild(b);});
     menu.append(search,list);picker.append(trigger);s.parentElement?.insertBefore(picker,s);document.body.appendChild(menu);
-
-    const sync=()=>{
-      const current=Array.from(s.options||[]).find(x=>x.value===s.value)||s.options?.[0];
-      text.textContent=current?.textContent||s.value;
-      list.querySelectorAll(".kkv3-final-model-option").forEach(b=>b.classList.toggle("active",b.dataset.value===s.value));
-    };
-    sync();
-
-    trigger.addEventListener("click",e=>{
-      e.preventDefault();e.stopPropagation();
-      const open=!menu.classList.contains("open");
-      document.querySelectorAll(".kkv3-final-model-menu.open").forEach(x=>{if(x!==menu)x.classList.remove("open");});
-      menu.classList.toggle("open",open);
-      trigger.setAttribute("aria-expanded",open?"true":"false");
-      if(open){positionMenu();setTimeout(()=>search.focus(),0);}
-    });
-    menu.addEventListener("click",e=>e.stopPropagation());
-    search.addEventListener("keydown",e=>{
-      if(e.key==="Escape"){e.preventDefault();closeMenu();trigger.focus();}
-    });
-    search.addEventListener("input",()=>{
-      const q=search.value.trim().toLowerCase();
-      list.querySelectorAll(".kkv3-final-model-option").forEach(b=>b.style.display=(!q||b.textContent.toLowerCase().includes(q))?"block":"none");
-    });
-
+    function sync(){const o=options.find(x=>x.value===s.value)||options[0];text.textContent=o?.textContent||s.value;list.querySelectorAll(".kkv3-final-model-option").forEach(b=>b.classList.toggle("active",b.dataset.value===s.value));}
+    sync();trigger.setAttribute("aria-label","Choose video model");trigger.addEventListener("click",e=>{e.stopPropagation();const open=!menu.classList.contains("open");document.querySelectorAll(".kkv3-final-model-menu.open").forEach(x=>x.classList.remove("open"));menu.classList.toggle("open",open);trigger.setAttribute("aria-expanded",open?"true":"false");if(open){positionMenu();setTimeout(()=>search.focus(),0);}});
+    search.addEventListener("input",()=>{const q=search.value.trim().toLowerCase();list.querySelectorAll(".kkv3-final-model-option").forEach(b=>b.style.display=(!q||b.textContent.toLowerCase().includes(q))?"block":"none");});
     window.addEventListener("resize",()=>{if(menu.classList.contains("open"))positionMenu();},{passive:true});
-    document.addEventListener("scroll",()=>{if(menu.classList.contains("open"))positionMenu();},{passive:true,capture:true});
+    document.addEventListener("scroll",()=>{if(menu.classList.contains("open"))positionMenu();},true);
   }
 
   function ensureGallery(){
