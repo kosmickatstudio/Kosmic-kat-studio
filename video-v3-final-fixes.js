@@ -34,8 +34,8 @@
       /* Stable custom model picker. The native select remains in the DOM as
          the source of truth, but never becomes the mobile browser picker. */
       #kkVideoCanvasV3 .kkv3-modelbar{position:relative!important;overflow:visible!important;}
-      #kkVideoCanvasV3 .kkv3-modelbar select#kkv3Model{position:absolute!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;}
       #kkVideoCanvasV3 .kkv3-model-picker{position:relative;min-width:0;flex:1 1 auto;}
+      #kkVideoCanvasV3 .kkv3-model-picker > .kkv3-select{position:absolute!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;}
       #kkVideoCanvasV3 .kkv3-final-model-trigger{width:100%;min-height:42px;display:flex;align-items:center;justify-content:space-between;gap:9px;border:1px solid var(--border,rgba(61,31,122,.11));background:var(--pearl2,#f3eff8);color:var(--text,#1e1230);border-radius:11px;padding:10px 11px;font-size:11px;font-weight:850;text-align:left;}
       #kkVideoCanvasV3 .kkv3-final-model-trigger span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
       #kkVideoCanvasV3 .kkv3-final-model-trigger b{font-size:13px;color:var(--texts,#9488ae);font-weight:700;}
@@ -100,8 +100,6 @@
   }
   function syncModel(){
     const s=$("kkv3Model");if(!s)return;
-    document.querySelectorAll("#kkv3FinalModelMenu").forEach(x=>x.remove());
-    s.parentElement?.querySelectorAll(".kkv3-final-model-picker").forEach(x=>x.remove());
     let picker=s.parentElement?.querySelector(".kkv3-final-model-picker");
     if(picker)return;
     const options=Array.from(s.options||[]);if(!options.length)return;
@@ -111,10 +109,10 @@
     const menu=document.createElement("div");menu.id="kkv3FinalModelMenu";menu.className="kkv3-final-model-menu";menu.setAttribute("role","listbox");
     const search=document.createElement("input");search.id="kkv3FinalModelSearch";search.className="kkv3-final-model-search";search.type="search";search.placeholder="Search models…";search.autocomplete="off";
     const list=document.createElement("div");list.className="kkv3-final-model-list";
-    options.forEach(o=>{const b=document.createElement("button");b.type="button";b.className="kkv3-final-model-option";b.dataset.value=o.value;b.dataset.modelValue=o.value;b.setAttribute("role","option");b.textContent=o.textContent||o.value;b.addEventListener("click",()=>{s.value=o.value;s.dispatchEvent(new Event("change",{bubbles:true}));closeMenu();});list.appendChild(b);});
+    options.forEach(o=>{const b=document.createElement("button");b.type="button";b.className="kkv3-final-model-option";b.dataset.value=o.value;b.setAttribute("role","option");b.textContent=o.textContent||o.value;b.addEventListener("click",()=>{s.value=o.value;s.dispatchEvent(new Event("change",{bubbles:true}));closeMenu();});list.appendChild(b);});
     menu.append(search,list);picker.append(trigger);s.parentElement?.insertBefore(picker,s);document.body.appendChild(menu);
     function sync(){const o=options.find(x=>x.value===s.value)||options[0];text.textContent=o?.textContent||s.value;list.querySelectorAll(".kkv3-final-model-option").forEach(b=>b.classList.toggle("active",b.dataset.value===s.value));}
-    sync();trigger.setAttribute("aria-label","Choose video model");trigger.addEventListener("click",e=>{e.stopPropagation();const open=!menu.classList.contains("open");document.querySelectorAll(".kkv3-final-model-menu.open").forEach(x=>x.classList.remove("open"));menu.classList.toggle("open",open);trigger.setAttribute("aria-expanded",open?"true":"false");if(open){positionMenu();setTimeout(()=>search.focus(),0);}});
+    sync();trigger.addEventListener("click",e=>{e.stopPropagation();const open=!menu.classList.contains("open");document.querySelectorAll(".kkv3-final-model-menu.open").forEach(x=>x.classList.remove("open"));menu.classList.toggle("open",open);trigger.setAttribute("aria-expanded",open?"true":"false");if(open){positionMenu();setTimeout(()=>search.focus(),0);}});
     search.addEventListener("input",()=>{const q=search.value.trim().toLowerCase();list.querySelectorAll(".kkv3-final-model-option").forEach(b=>b.style.display=(!q||b.textContent.toLowerCase().includes(q))?"block":"none");});
     window.addEventListener("resize",()=>{if(menu.classList.contains("open"))positionMenu();},{passive:true});
     document.addEventListener("scroll",()=>{if(menu.classList.contains("open"))positionMenu();},true);
