@@ -326,10 +326,4 @@
   }
   window.__kosmicMountVideoCanvasV3=mount;
 
-  function boot(){
-    if(!window.KOSMIC_EVOLINK_VIDEO?.index)return false;
-    return mount();
-  }
-  let tries=0;const timer=setInterval(()=>{if(boot()||++tries>240)clearInterval(timer);},100);
-  const mo=new MutationObserver(()=>{if(mount())mo.disconnect();});mo.observe(document.body,{childList:true,subtree:true});
 })();
