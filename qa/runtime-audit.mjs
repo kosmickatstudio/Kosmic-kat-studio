@@ -39,6 +39,7 @@ async function auditCanonicalVideo(page){
     audios:document.querySelectorAll('#kkVideoCanvasV3 #kkv3Audios').length,
     prompt:document.querySelectorAll('#kkVideoCanvasV3 #kkv3Prompt').length,
     storyboard:document.querySelectorAll('#kkVideoCanvasV3 [data-workspace="storyboard"]').length,
+    playground:document.querySelectorAll("#evoVideoPlaygroundLaunch").length,
     videoChat:document.querySelectorAll('#kkVideoChat').length,
     legacyMount:document.querySelectorAll('#kk-video-legacy-mount').length,
     legacyIds:["#vcModel","#vcSettingsPanel","#vcSettingsBackdrop","#vcGalleryView"].filter(sel=>[...document.querySelectorAll(sel)].some(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=="none"&&s.visibility!=="hidden"&&s.opacity!=="0";}))
@@ -47,6 +48,7 @@ async function auditCanonicalVideo(page){
     if(selectors[k]!==expected)fail('Canonical Video DOM invariant failed',k+"="+selectors[k]+", expected "+expected);
   }
   if(selectors.videoChat)fail('Video Chat is still auto-mounted inside the canonical Video module');
+  if(selectors.playground)fail('Standalone EvoLink Playground is still injected alongside canonical Video UI');
   if(selectors.legacyMount||selectors.legacyIds.length)fail('Legacy Video UI remains visibly mounted',JSON.stringify(selectors.legacyIds));
 
   const models=await page.evaluate(()=>{
