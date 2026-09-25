@@ -149,17 +149,34 @@
     return{cost:0,unit:"Provider pricing",detail:"Uses selected route"};
   }
 
+  function routeRequirements(r){
+    const m=modeOf(r),problems=[];
+    const needImage=["image","reference","motion","avatar"].includes(m);
+    const needVideo=["edit","extend","reference","motion","upscale"].includes(m);
+    const needAudio=m==="avatar";
+    if(needImage&&!state.images.length)problems.push("Add at least one image reference for this route.");
+    if(needVideo&&!state.videos.length)problems.push("Add at least one video reference for this route.");
+    if(needAudio&&!state.audios.length)problems.push("Add at least one audio reference for this route.");
+    const lim=currentSchema().refs||{};const total=state.images.length+state.videos.length+state.audios.length;
+    if(lim.total!=null&&total>Number(lim.total))problems.push("Too many references are attached for this route.");
+    return problems;
+  }
+
   async function generateSingle(prompt,shotNo){
     const r=currentRoute();if(!r)throw new Error("Selected video route is unavailable.");
+    const problems=routeRequirements(r);if(problems.length)throw new Error(problems.join(" "));
     const m=modeOf(r);const opts={duration:state.duration,quality:state.quality,aspect_ratio:state.aspect,generate_audio:!!state.audio,content_filter:state.content_filter!==false};
     if(state.webSearch&&isSeed25(state.route)&&m==="text")opts.model_params={web_search:true};
-    let image_urls=[],video_urls=[],audio_urls=[];
-    if(m==="image"){image_urls=await hosted(state.images.slice(0,1),0);}
-    else if(m==="edit"||m==="extend"){video_urls=await hosted(state.videos.slice(0,1),0);}
-    else if(m==="reference"){image_urls=await hosted(state.images.slice(0,30),0);video_urls=await hosted(state.videos.slice(0,10),30);audio_urls=await hosted(state.audios.slice(0,10),40);}
-    Object.assign(opts,{image_urls,video_urls,audio_urls});
+    if(m==="image")opts.image_urls=await hosted(state.images.slice(0,1),0);
+    else if(["edit","extend","upscale"].includes(m))opts.video_urls=await hosted(state.videos.slice(0,1),0);
+    else if(m==="reference"){opts.image_urls=await hosted(state.images.slice(0,30),0);opts.video_urls=await hosted(state.videos.slice(0,10),30);opts.audio_urls=await hosted(state.audios.slice(0,10),40);}
+    else if(m==="motion"){opts.image_urls=await hosted(state.images.slice(0,1),0);opts.video_urls=await hosted(state.videos.slice(0,1),1);}
+    else if(m==="avatar"){opts.image_urls=await hosted(state.images.slice(0,1),0);opts.audio_url=(await hosted(state.audios.slice(0,1),1))[0];}
     const result=await window.generateEvoLinkVideo(state.route,prompt,opts);
-    state.history.unshift({url:result.url,prompt,route:state.route,model:modelLabel(r),quality:state.quality,duration:state.duration,shot:shotNo||null,created:Date.now()});
+    let asset=null;
+    if(typeof createVideoAsset==="function")asset=createVideoAsset(result.url,prompt,"",{model:state.route,providerLabel:"EvoLink",aspectRatio:state.aspect,resolution:state.quality,duration:String(state.duration)+"s"});
+    const est=pricing();if(typeof logCost==="function"&&est?.cost>0)logCost(state.route,prompt.slice(0,60),1,est.cost);
+    state.history.unshift({url:result.url,prompt,route:state.route,model:modelLabel(r),quality:state.quality,duration:state.duration,shot:shotNo||null,assetId:asset?.id||null,created:Date.now()});
     state.history=state.history.slice(0,18);
     return result.url;
   }
