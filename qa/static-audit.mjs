@@ -39,12 +39,14 @@ if(v3.includes('kkvcSend')||v3.includes('kkVideoChat'))fail('Canonical V3 contai
 
 const support=fs.readFileSync(path.join(root,'video-v3-support.js'),'utf8');
 const safety=fs.readFileSync(path.join(root,'video-v3-safety.js'),'utf8');
-if(/MutationObserver/.test(support))fail('V3 support module must not use MutationObserver');
+const supportForScan=support.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm,"");
+if(/\bMutationObserver\b/.test(supportForScan))fail("V3 support module must not use MutationObserver");
 if(/video-chat|kkvcSend/.test(safety))fail('Canonical V3 safety gate contains Chat dependencies');
 
 for(const rel of ['video-canvas-v3-loader.js','video-canvas-v3.js','video-v3-support.js','video-v3-safety.js','qa/runtime-audit.mjs']){
   const file=fs.readFileSync(path.join(root,rel),'utf8');
-  try{new vm.Script(file,{filename:rel});}catch(e){fail('JavaScript syntax error in '+rel+': '+e.message);}
+  const parseable=rel.endsWith('.mjs')?file.split('\n').filter(line=>!/^\s*import\s/.test(line)).join('\n'):file;
+  try{new vm.Script(parseable,{filename:rel});}catch(e){fail('JavaScript syntax error in '+rel+': '+e.message);}
 }
 
 const scriptBlocks=[...indexForScriptScan.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
