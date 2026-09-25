@@ -80,7 +80,7 @@
     const reqImage=(m==="image"||m==="reference")&&Number(lim.images||0)>0;
     const reqVideo=(m==="edit"||m==="extend")&&Number(lim.videos||0)>0;
     const routeMissing=SEED25.includes(s.route)&&!catalog()[s.route];
-    const genButtons=root.querySelectorAll("#kkv3Generate,#kkv3GenerateMobile,[data-stable-generate]");
+    const genButtons=root.querySelectorAll("#kkv3Generate,#kkv3GenerateMobile");
     const prompt=String(root.querySelector("#kkv3Prompt")?.value||s.prompt||"").trim();
     const hasInput=(!reqImage||s.images?.length>0)&&(!reqVideo||s.videos?.length>0);
     genButtons.forEach(btn=>{
