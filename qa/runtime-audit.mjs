@@ -72,10 +72,23 @@ async function auditDirector(page){
   if(!duration)fail('V3 duration controls are missing');
   else if(Number(duration.min)>=Number(duration.max))warn('Duration route exposes a fixed min/max range',JSON.stringify(duration));
 
-  const model=await page.evaluate(()=>{const t=document.querySelector('#kkv3FinalModelTrigger'),m=document.querySelector('#kkv3FinalModelMenu');const n=document.querySelector('#kkv3Model');return{customTrigger:!!t,menu:!!m,optionCount:m?.querySelectorAll('[data-model-value]').length||0,nativeVisible:!!(n&&getComputedStyle(n).opacity!=='0'&&getComputedStyle(n).visibility!=='hidden'&&getComputedStyle(n).display!=='none')};}).catch(()=>null);
+  const model=await page.evaluate(()=>{const t=document.querySelector('#kkv3FinalModelTrigger'),m=document.querySelector('#kkv3FinalModelMenu');const n=document.querySelector('#kkv3Model');return{customTrigger:!!t,menu:!!m,optionCount:m?.querySelectorAll('[data-model-value]').length||0,nativeVisible:!!(n&&getComputedStyle(n).opacity!=='0'&&getComputedStyle(n).visibility!=='hidden'&&getComputedStyle(n).display!=='none'),ownerAttached:!!(m?.__kkOwnerSelect?.isConnected)};}).catch(()=>null);
   if(!model?.customTrigger)fail('V3 custom model picker trigger is missing');
   if(!model?.menu||model.optionCount<2)fail('V3 model picker menu/options are missing');
   if(model?.nativeVisible)fail('Native V3 model select remains visibly exposed');
+  if(model?.menu&&!model.ownerAttached)fail('V3 model picker menu is detached from its live model select');
+
+  const pickerStability=await page.evaluate(async()=>{
+    const trigger=document.querySelector('#kkv3FinalModelTrigger'),menu=document.querySelector('#kkv3FinalModelMenu');
+    if(!trigger||!menu)return {opened:false,stable:false};
+    trigger.click();
+    const wasOpen=menu.classList.contains('open');
+    await new Promise(r=>setTimeout(r,1200));
+    const stable=menu.isConnected&&menu.classList.contains('open');
+    const options=menu.querySelectorAll('[data-model-value]').length;
+    return {opened:wasOpen,stable,options};
+  }).catch(()=>({opened:false,stable:false}));
+  if(!pickerStability.opened||!pickerStability.stable)fail('V3 model picker collapses during normal refresh',JSON.stringify(pickerStability));
 
   const referenceRoute=page.locator('#kkVideoCanvasV3 [data-route="seedance-2.5-reference-to-video"]').first();
   if(await referenceRoute.count()){
