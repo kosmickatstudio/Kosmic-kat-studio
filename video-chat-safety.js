@@ -36,13 +36,13 @@
   function eventIsTrusted(e){return !!e&&e.isTrusted===true;}
   function userAction(e){
     if(!eventIsTrusted(e))return;
-    const t=e.target?.closest?.("#kkv3Generate,#kkvcSend,[data-history-action='regenerate']");
+    const t=e.target?.closest?.("#kkv3Generate,[data-stable-generate],#kkvcSend,[data-history-action='regenerate']");
     if(t)armGeneration(t.dataset?.historyAction==="regenerate"?"history-regenerate":(t.id||"video-generate"));
   }
   function userKeyAction(e){
     if(!eventIsTrusted(e))return;
     if(e.key!=="Enter"&&e.key!==" ")return;
-    const t=e.target?.closest?.("#kkv3Generate,#kkvcSend,#kkvcInput,[data-history-action='regenerate']");
+    const t=e.target?.closest?.("#kkv3Generate,[data-stable-generate],#kkvcSend,#kkvcInput,[data-history-action='regenerate']");
     if(t)armGeneration(t.dataset?.historyAction==="regenerate"?"history-regenerate":(t.id||"video-keyboard-generate"));
   }
   function budgetAllows(){
