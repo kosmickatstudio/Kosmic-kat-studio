@@ -34,8 +34,9 @@
           load("evolink-video-expansion.js","data-kosmic-evo-v3-expansion",()=>
             load("evolink-video-integrity.js","data-kosmic-evo-v3-integrity",()=>
               load("evolink-video-pricing.js","data-kosmic-evo-v3-pricing",()=>
-                load("video-canvas-v3.js","data-kosmic-video-v3",()=>
-                  load("video-v3-safety.js","data-kosmic-video-v3-safety",()=>
+                load("video-canvas-v3.js","data-kosmic-video-v3",()=>{
+                    window.__kosmicMountVideoCanvasV3?.();
+                    load("video-v3-safety.js","data-kosmic-video-v3-safety",()=>
                     load("video-v3-support.js","data-kosmic-video-v3-support",()=>{
                       window.__kosmicVideoStackLoaded=true;
                       window.__kosmicVideoStackLoading=false;
