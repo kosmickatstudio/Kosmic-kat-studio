@@ -93,8 +93,13 @@
   function routes(){return Object.values(catalog()).filter(Boolean).filter(r=>r.id);}
   function routeLabel(r){return r?.label||r?.mode||String(r?.id||"").split("-").pop();}
   function modelLabel(r){return r?.model?.name||r?.name||String(r?.id||"").replace(/-/g," ");}
-  function modelNames(){return [...new Set(routes().map(r=>modelLabel(r)))].sort((a,b)=>a.localeCompare(b));}
-  function sameModelRoutes(){const name=modelLabel(currentRoute());return routes().filter(r=>modelLabel(r)===name);}
+  function modelId(r){return String(r?.model?.id||r?.model?.slug||r?.model?.name||r?.id||"");}
+  function modelNames(){
+    const map=new Map();
+    routes().forEach(r=>{const id=modelId(r);if(id&&!map.has(id))map.set(id,{id,name:modelLabel(r)});});
+    return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  }
+  function sameModelRoutes(){const id=modelId(currentRoute());return routes().filter(r=>modelId(r)===id);}
   function setRoute(id){state.route=id;normalize();render();}
 
   function presetText(kind,value){return value;}
@@ -236,8 +241,8 @@
   }
 
   function shotWorkspace(){
-    const modelNamesList=modelNames();const selectedModel=modelLabel(currentRoute());const routesForModel=sameModelRoutes();const p=pricing();
-    return `<main class="kkv3-main"><section class="kkv3-card"><h3>Model & route</h3><div class="kkv3-modelbar"><select class="kkv3-select" id="kkv3Model">${modelNamesList.map(n=>`<option value="${esc(n)}" ${n===selectedModel?"selected":""}>${esc(n)}</option>`).join("")}</select></div><div class="kkv3-routebar">${routesForModel.map(r=>`<button class="kkv3-route ${r.id===state.route?"active":""}" data-route="${esc(r.id)}">${esc(routeLabel(r))}</button>`).join("")}</div></section><div class="kkv3-stable-actions" aria-label="Video actions"><button type="button" class="kkv3-generate" data-stable-generate ${state.busy||!apiKey()?"disabled":""}>${state.busy?"Generating…":"Generate video"}</button><button type="button" class="kkv3-secondary" data-kosmic-video-gallery aria-label="Open Gallery">Gallery</button><button type="button" class="kkv3-secondary" data-kosmic-video-assets aria-label="Upload from Assets">Upload from Assets</button></div>${!apiKey()?`<div class="kkv3-keyhint" style="margin:0 2px 2px">Video generation uses the existing EvoLink API slot. Configure it in the app's existing API Settings.</div>`:""}<section class="kkv3-card"><h3>Prompt</h3><textarea class="kkv3-input kkv3-prompt" id="kkv3Prompt" placeholder="Describe the shot, action, environment, camera, lighting, mood and timing...">${esc(state.prompt)}</textarea><div class="kkv3-toolbar"><span class="kkv3-small">Use director chips below to build a precise shot without hiding controls in another settings panel.</span><button class="kkv3-pill" id="kkv3ClearPrompt">Clear</button></div></section>${presetsSection()}${routeControls()}${refsSection()}</main><aside class="kkv3-side"><section class="kkv3-card"><h3>Generation summary</h3><div class="kkv3-summary"><div class="kkv3-stat"><b>${state.duration}s</b><span>duration</span></div><div class="kkv3-stat"><b>${esc(state.quality)}</b><span>resolution</span></div><div class="kkv3-stat"><b>${esc(state.aspect)}</b><span>aspect</span></div><div class="kkv3-stat"><b>${p.cost?`${p.cost.toFixed(3)}`:"—"}</b><span>${esc(p.unit)}</span></div></div><div class="kkv3-small" style="margin-top:8px">${esc(p.detail)}</div></section><section class="kkv3-card"><h3>Output library <span>${state.history.length}</span></h3><div class="kkv3-history">${historyHtml()}</div></section></aside>`;
+    const modelNamesList=modelNames();const selectedModel=modelId(currentRoute());const routesForModel=sameModelRoutes();const p=pricing();
+    return `<main class="kkv3-main"><section class="kkv3-card"><h3>Model & route</h3><div class="kkv3-modelbar"><select class="kkv3-select" id="kkv3Model" aria-label="Video model">${modelNamesList.map(m=>`<option value="${esc(m.id)}" ${m.id===selectedModel?"selected":""}>${esc(m.name)}</option>`).join("")}</select></div><div class="kkv3-routebar">${routesForModel.map(r=>`<button class="kkv3-route ${r.id===state.route?"active":""}" data-route="${esc(r.id)}">${esc(routeLabel(r))}</button>`).join("")}</div></section><div class="kkv3-stable-actions" aria-label="Video actions"><button type="button" class="kkv3-generate" data-stable-generate ${state.busy||!apiKey()?"disabled":""}>${state.busy?"Generating…":"Generate video"}</button><button type="button" class="kkv3-secondary" data-kosmic-video-gallery aria-label="Open Gallery">Gallery</button><button type="button" class="kkv3-secondary" data-kosmic-video-assets aria-label="Upload from Assets">Upload from Assets</button></div>${!apiKey()?`<div class="kkv3-keyhint" style="margin:0 2px 2px">Video generation uses the existing EvoLink API slot. Configure it in the app's existing API Settings.</div>`:""}<section class="kkv3-card"><h3>Prompt</h3><textarea class="kkv3-input kkv3-prompt" id="kkv3Prompt" placeholder="Describe the shot, action, environment, camera, lighting, mood and timing...">${esc(state.prompt)}</textarea><div class="kkv3-toolbar"><span class="kkv3-small">Use director chips below to build a precise shot without hiding controls in another settings panel.</span><button class="kkv3-pill" id="kkv3ClearPrompt">Clear</button></div></section>${presetsSection()}${routeControls()}${refsSection()}</main><aside class="kkv3-side"><section class="kkv3-card"><h3>Generation summary</h3><div class="kkv3-summary"><div class="kkv3-stat"><b>${state.duration}s</b><span>duration</span></div><div class="kkv3-stat"><b>${esc(state.quality)}</b><span>resolution</span></div><div class="kkv3-stat"><b>${esc(state.aspect)}</b><span>aspect</span></div><div class="kkv3-stat"><b>${p.cost?`${p.cost.toFixed(3)}`:"—"}</b><span>${esc(p.unit)}</span></div></div><div class="kkv3-small" style="margin-top:8px">${esc(p.detail)}</div></section><section class="kkv3-card"><h3>Output library <span>${state.history.length}</span></h3><div class="kkv3-history">${historyHtml()}</div></section></aside>`;
   }
 
   function storyboardWorkspace(){
@@ -253,7 +258,7 @@
 
   function bind(){
     qAll("#kkVideoCanvasV3 [data-workspace]").forEach(b=>b.addEventListener("click",()=>{state.workspace=b.dataset.workspace;render();}));
-    $("kkv3Model")?.addEventListener("change",e=>{const r=routes().find(x=>modelLabel(x)===e.target.value);if(r)setRoute(r.id);});
+    $("kkv3Model")?.addEventListener("change",e=>{const r=routes().find(x=>modelId(x)===e.target.value);if(r)setRoute(r.id);});
     qAll("#kkVideoCanvasV3 [data-route]").forEach(b=>b.addEventListener("click",()=>setRoute(b.dataset.route)));
     $("kkv3Prompt")?.addEventListener("input",e=>{state.prompt=e.target.value;});
     $("kkv3ClearPrompt")?.addEventListener("click",()=>{state.prompt="";render();});
