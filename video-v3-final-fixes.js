@@ -34,7 +34,7 @@
       /* Stable custom model picker. The native select remains in the DOM as
          the source of truth, but never becomes the mobile browser picker. */
       #kkVideoCanvasV3 .kkv3-modelbar{position:relative!important;overflow:visible!important;}
-      #kkVideoCanvasV3 .kkv3-modelbar select#kkv3Model{position:absolute!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;}
+      #kkVideoCanvasV3 .kkv3-modelbar>select#kkv3Model{display:none!important;position:absolute!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;}
       #kkVideoCanvasV3 .kkv3-model-picker{position:relative;min-width:0;flex:1 1 auto;}
       #kkVideoCanvasV3 .kkv3-final-model-trigger{width:100%;min-height:42px;display:flex;align-items:center;justify-content:space-between;gap:9px;border:1px solid var(--border,rgba(61,31,122,.11));background:var(--pearl2,#f3eff8);color:var(--text,#1e1230);border-radius:11px;padding:10px 11px;font-size:11px;font-weight:850;text-align:left;}
       #kkVideoCanvasV3 .kkv3-final-model-trigger span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
