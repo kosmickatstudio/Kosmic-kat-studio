@@ -25,7 +25,7 @@
   const state=window.__kosmicVideoV3State||(window.__kosmicVideoV3State={
     route:"seedance-2.5-text-to-video",duration:5,quality:"720p",aspect:"16:9",
     audio:true,content_filter:true,webSearch:false,
-    prompt:"",images:[],videos:[],audios:[],history:[],busy:false,
+    prompt:"",images:[],videos:[],audios:[],errors:[],busy:false,
     workspace:"shot",presetTab:"camera",storyboard:[{id:1,prompt:"",duration:5}],
     selectedModelFilter:"all"
   });
@@ -178,8 +178,6 @@
     let asset=null;
     if(typeof createVideoAsset==="function")asset=createVideoAsset(result.url,prompt,"",{model:state.route,providerLabel:"EvoLink",aspectRatio:state.aspect,resolution:state.quality,duration:String(state.duration)+"s"});
     const est=pricing();if(typeof logCost==="function"&&est?.cost>0)logCost(state.route,prompt.slice(0,60),1,est.cost);
-    state.history.unshift({url:result.url,prompt,route:state.route,model:modelLabel(r),quality:state.quality,duration:state.duration,shot:shotNo||null,assetId:asset?.id||null,created:Date.now()});
-    state.history=state.history.slice(0,18);
     return result.url;
   }
 
@@ -190,7 +188,7 @@
     if(!prompt){toast("Write a shot prompt first.","error");return;}
     normalize();state.busy=true;render();
     try{await generateSingle(prompt);state.prompt="";if($("kkv3Prompt"))$("kkv3Prompt").value="";toast("Video generated.","success");}
-    catch(e){state.history.unshift({error:e?.message||String(e),prompt,route:state.route,created:Date.now()});state.history=state.history.slice(0,18);toast("❌ "+(e?.message||String(e)),"error");}
+    catch(e){state.errors.unshift({error:e?.message||String(e),prompt,route:state.route,created:Date.now()});state.errors=state.errors.slice(0,6);toast("❌ "+(e?.message||String(e)),"error");}
     finally{state.busy=false;render();}
   }
 
@@ -200,7 +198,7 @@
     const shots=state.storyboard.filter(s=>s.prompt.trim());if(!shots.length){toast("Add at least one storyboard shot.","error");return;}
     state.busy=true;render();
     try{for(let i=0;i<shots.length;i++){const previous=state.duration;state.duration=Math.max(Number(currentSchema().duration?.[0]??4),Math.min(Number(currentSchema().duration?.[1]??30),Number(shots[i].duration)||previous));normalize();await generateSingle(shots[i].prompt.trim(),i+1);}}
-    catch(e){state.history.unshift({error:e?.message||String(e),prompt:"Storyboard generation",route:state.route,created:Date.now()});toast("❌ "+(e?.message||String(e)),"error");}
+    catch(e){state.errors.unshift({error:e?.message||String(e),prompt:"Storyboard generation",route:state.route,created:Date.now()});state.errors=state.errors.slice(0,6);toast("❌ "+(e?.message||String(e)),"error");}
     finally{state.busy=false;render();}
   }
 
@@ -210,12 +208,23 @@
   function insertPrompt(text){const area=$("kkv3Prompt");if(!area)return;applyPreset(text);area.focus();}
   function copyHistoryPrompt(i){const j=state.history[i];if(!j?.prompt)return;state.prompt=j.prompt;state.workspace="shot";render();}
 
+  function historyItems(){
+    const assets=Array.isArray(window.S?.assets)?window.S.assets:[];
+    return assets.filter(a=>a&&a.type==="video"&&a.url).sort((a,b)=>{
+      const at=Date.parse(a.created||"")||0,bt=Date.parse(b.created||"")||0;
+      return bt-at;
+    }).slice(0,18);
+  }
+
   function historyHtml(){
-    if(!state.history.length)return '<div class="kkv3-empty">Your generated clips will appear here.</div>';
-    return state.history.map((j,i)=>{
-      if(j.error)return '<div class="kkv3-error"><b>Generation error</b><br>'+esc(j.error)+'</div>';
-      return '<article class="kkv3-job"><video src="'+esc(j.url)+'" controls playsinline preload="metadata"></video><div class="kkv3-job-body"><div class="kkv3-job-top"><span>'+esc(j.model||j.route||"Video")+(j.shot?" · Shot "+esc(j.shot):"")+'</span><span>'+esc(j.duration)+'s · '+esc(j.quality)+'</span></div><div class="kkv3-job-prompt">'+esc(j.prompt)+'</div><div class="kkv3-history-actions"><button class="kkv3-secondary" data-history-action="reference" data-history-index="'+i+'">Use as reference</button><button class="kkv3-secondary" data-history-action="edit" data-history-index="'+i+'">Edit</button><button class="kkv3-secondary" data-history-action="extend" data-history-index="'+i+'">Extend</button><button class="kkv3-secondary" data-history-action="regenerate" data-history-index="'+i+'">Regenerate</button><button class="kkv3-secondary" data-history-action="download" data-history-index="'+i+'">Download</button></div></div></article>';
+    const items=historyItems();
+    const errors=Array.isArray(state.errors)?state.errors:[];
+    if(!items.length&&!errors.length)return '<div class="kkv3-empty">Your generated clips will appear here.</div>';
+    const errorHtml=errors.map(j=>'<div class="kkv3-error"><b>Generation error</b><br>'+esc(j.error)+'</div>').join("");
+    const videoHtml=items.map((j,i)=>{
+      return '<article class="kkv3-job"><video src="'+esc(j.url)+'" controls playsinline preload="metadata"></video><div class="kkv3-job-body"><div class="kkv3-job-top"><span>'+esc(j.model||j.providerLabel||"Video")+'</span><span>'+esc(j.duration||"")+(j.duration?"s":"")+' · '+esc(j.resolution||"")+'</span></div><div class="kkv3-job-prompt">'+esc(j.prompt||"")+'</div><div class="kkv3-history-actions"><button class="kkv3-secondary" data-history-action="reference" data-history-index="'+i+'">Use as reference</button><button class="kkv3-secondary" data-history-action="edit" data-history-index="'+i+'">Edit</button><button class="kkv3-secondary" data-history-action="extend" data-history-index="'+i+'">Extend</button><button class="kkv3-secondary" data-history-action="regenerate" data-history-index="'+i+'">Regenerate</button><button class="kkv3-secondary" data-history-action="download" data-history-index="'+i+'">Download</button></div></div></article>';
     }).join("");
+    return errorHtml+videoHtml;
   }
 
   function referencesHtml(){
@@ -264,7 +273,7 @@
 
   function shotWorkspace(){
     const modelNamesList=modelNames();const selectedModel=modelId(currentRoute());const routesForModel=sameModelRoutes();const p=pricing();
-    return `<main class="kkv3-main"><section class="kkv3-card"><h3>Model & route</h3><div class="kkv3-modelbar"><select class="kkv3-select" id="kkv3Model" aria-label="Video model">${modelNamesList.map(m=>`<option value="${esc(m.id)}" ${m.id===selectedModel?"selected":""}>${esc(m.name)}</option>`).join("")}</select></div><div class="kkv3-routebar">${routesForModel.map(r=>`<button class="kkv3-route ${r.id===state.route?"active":""}" data-route="${esc(r.id)}">${esc(routeLabel(r))}</button>`).join("")}</div></section><div class="kkv3-stable-actions" aria-label="Video actions"><button type="button" class="kkv3-generate" data-stable-generate ${state.busy||!apiKey()?"disabled":""}>${state.busy?"Generating…":"Generate video"}</button><button type="button" class="kkv3-secondary" data-kosmic-video-gallery aria-label="Open Gallery">Gallery</button><button type="button" class="kkv3-secondary" data-kosmic-video-assets aria-label="Upload from Assets">Upload from Assets</button></div>${!apiKey()?`<div class="kkv3-keyhint" style="margin:0 2px 2px">Video generation uses the existing EvoLink API slot. Configure it in the app's existing API Settings.</div>`:""}<section class="kkv3-card"><h3>Prompt</h3><textarea class="kkv3-input kkv3-prompt" id="kkv3Prompt" placeholder="Describe the shot, action, environment, camera, lighting, mood and timing...">${esc(state.prompt)}</textarea><div class="kkv3-toolbar"><span class="kkv3-small">Use director chips below to build a precise shot without hiding controls in another settings panel.</span><button class="kkv3-pill" id="kkv3ClearPrompt">Clear</button></div></section>${presetsSection()}${routeControls()}${refsSection()}</main><aside class="kkv3-side"><section class="kkv3-card"><h3>Generation summary</h3><div class="kkv3-summary"><div class="kkv3-stat"><b>${state.duration}s</b><span>duration</span></div><div class="kkv3-stat"><b>${esc(state.quality)}</b><span>resolution</span></div><div class="kkv3-stat"><b>${esc(state.aspect)}</b><span>aspect</span></div><div class="kkv3-stat"><b>${p.cost?`${p.cost.toFixed(3)}`:"—"}</b><span>${esc(p.unit)}</span></div></div><div class="kkv3-small" style="margin-top:8px">${esc(p.detail)}</div></section><section class="kkv3-card"><h3>Output library <span>${state.history.length}</span></h3><div class="kkv3-history">${historyHtml()}</div></section></aside>`;
+    return `<main class="kkv3-main"><section class="kkv3-card"><h3>Model & route</h3><div class="kkv3-modelbar"><select class="kkv3-select" id="kkv3Model" aria-label="Video model">${modelNamesList.map(m=>`<option value="${esc(m.id)}" ${m.id===selectedModel?"selected":""}>${esc(m.name)}</option>`).join("")}</select></div><div class="kkv3-routebar">${routesForModel.map(r=>`<button class="kkv3-route ${r.id===state.route?"active":""}" data-route="${esc(r.id)}">${esc(routeLabel(r))}</button>`).join("")}</div></section><div class="kkv3-stable-actions" aria-label="Video actions"><button type="button" class="kkv3-generate" data-stable-generate ${state.busy||!apiKey()?"disabled":""}>${state.busy?"Generating…":"Generate video"}</button><button type="button" class="kkv3-secondary" data-kosmic-video-gallery aria-label="Open Gallery">Gallery</button><button type="button" class="kkv3-secondary" data-kosmic-video-assets aria-label="Upload from Assets">Upload from Assets</button></div>${!apiKey()?`<div class="kkv3-keyhint" style="margin:0 2px 2px">Video generation uses the existing EvoLink API slot. Configure it in the app's existing API Settings.</div>`:""}<section class="kkv3-card"><h3>Prompt</h3><textarea class="kkv3-input kkv3-prompt" id="kkv3Prompt" placeholder="Describe the shot, action, environment, camera, lighting, mood and timing...">${esc(state.prompt)}</textarea><div class="kkv3-toolbar"><span class="kkv3-small">Use director chips below to build a precise shot without hiding controls in another settings panel.</span><button class="kkv3-pill" id="kkv3ClearPrompt">Clear</button></div></section>${presetsSection()}${routeControls()}${refsSection()}</main><aside class="kkv3-side"><section class="kkv3-card"><h3>Generation summary</h3><div class="kkv3-summary"><div class="kkv3-stat"><b>${state.duration}s</b><span>duration</span></div><div class="kkv3-stat"><b>${esc(state.quality)}</b><span>resolution</span></div><div class="kkv3-stat"><b>${esc(state.aspect)}</b><span>aspect</span></div><div class="kkv3-stat"><b>${p.cost?`${p.cost.toFixed(3)}`:"—"}</b><span>${esc(p.unit)}</span></div></div><div class="kkv3-small" style="margin-top:8px">${esc(p.detail)}</div></section><section class="kkv3-card"><h3>Output library <span>${historyItems().length}</span></h3><div class="kkv3-history">${historyHtml()}</div></section></aside>`;
   }
 
   function storyboardWorkspace(){
@@ -301,7 +310,7 @@
     qAll("#kkVideoCanvasV3 [data-story-remove]").forEach(b=>b.addEventListener("click",()=>removeShot(b.dataset.storyRemove)));
     qAll("#kkVideoCanvasV3 [data-story-copy]").forEach(b=>b.addEventListener("click",()=>{const i=state.storyboard.findIndex(s=>String(s.id)===String(b.dataset.storyCopy));if(i>0)state.storyboard[i].prompt=state.storyboard[i-1].prompt;render();}));
     qAll("#kkVideoCanvasV3 [data-use-history]").forEach(b=>b.addEventListener("click",()=>copyHistoryPrompt(Number(b.dataset.useHistory))));
-    qAll("#kkVideoCanvasV3 [data-history-action]").forEach(b=>b.addEventListener("click",()=>{const item=state.history[Number(b.dataset.historyIndex)];if(!item||item.error)return;const action=b.dataset.historyAction;if(action==="download"){if(!/^https?:\/\//i.test(String(item.url||""))){toast("This result has no downloadable URL.","error");return;}const a=document.createElement("a");a.href=item.url;a.target="_blank";a.rel="noopener";a.download=(item.model||"kosmic-video")+"-"+Date.now()+".mp4";a.click();return;}if(action==="regenerate"){state.workspace="shot";state.prompt=item.prompt||"";render();setTimeout(()=>document.querySelector("#kkVideoCanvasV3 [data-stable-generate]")?.click(),60);return;}const all=routes(),isSeed=id=>String(id||"").startsWith("seedance-2.5-");const target=action==="reference"?(all.find(x=>isSeed(x.id)&&modeOf(x)==="reference")||all.find(x=>modeOf(x)==="reference")):(all.find(x=>isSeed(x.id)&&modeOf(x)===action)||all.find(x=>modeOf(x)===action));if(!target){toast("No compatible Video route is available for that action.","error");return;}state.route=target.id;state.videos=[{url:item.url,name:"Generated video"}];state.images=[];state.audios=[];state.prompt=item.prompt||"";state.workspace="shot";normalize();render();}));
+    qAll("#kkVideoCanvasV3 [data-history-action]").forEach(b=>b.addEventListener("click",()=>{const item=historyItems()[Number(b.dataset.historyIndex)];if(!item||item.error)return;const action=b.dataset.historyAction;if(action==="download"){if(!/^https?:\/\//i.test(String(item.url||""))){toast("This result has no downloadable URL.","error");return;}const a=document.createElement("a");a.href=item.url;a.target="_blank";a.rel="noopener";a.download=(item.model||"kosmic-video")+"-"+Date.now()+".mp4";a.click();return;}if(action==="regenerate"){state.workspace="shot";state.prompt=item.prompt||"";render();setTimeout(()=>document.querySelector("#kkVideoCanvasV3 [data-stable-generate]")?.click(),60);return;}const all=routes(),isSeed=id=>String(id||"").startsWith("seedance-2.5-");const target=action==="reference"?(all.find(x=>isSeed(x.id)&&modeOf(x)==="reference")||all.find(x=>modeOf(x)==="reference")):(all.find(x=>isSeed(x.id)&&modeOf(x)===action)||all.find(x=>modeOf(x)===action));if(!target){toast("No compatible Video route is available for that action.","error");return;}state.route=target.id;state.videos=[{url:item.url,name:"Generated video"}];state.images=[];state.audios=[];state.prompt=item.prompt||"";state.workspace="shot";normalize();render();}));
   }
   function renderCostOnly(){const p=pricing();const el=document.querySelector("#kkVideoCanvasV3 .kkv3-stat:nth-child(4) b");if(el)el.textContent=p.cost?`$${p.cost.toFixed(3)}`:"—";const note=document.querySelector("#kkVideoCanvasV3 .kkv3-small");}
 
