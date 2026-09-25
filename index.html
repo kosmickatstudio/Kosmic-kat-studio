@@ -3502,34 +3502,10 @@ function showIgChatView(){
 
 // ── VIDEO INLINE GALLERY VIEW — real, mirrors Image's exact pattern ──
 function showVcGalleryView(){
-  const thread=document.getElementById("vcChatThread");
-  const galleryView=document.getElementById("vcGalleryView");
-  const inputBar=document.querySelector(".ig-chat-inputbar");
-  if(!galleryView)return;
-  const videos=[];
-  S.vcChatHistory.forEach(msg=>{
-    if(msg.role!=="assistant"||msg.type!=="video")return;
-    videos.push({url:msg.content,prompt:msg.meta?.prompt||"",providerLabel:msg.meta?.providerLabel||"",assetId:msg.meta?.assetId||null});
-  });
-  videos.reverse();
-  galleryView.innerHTML=`
-    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-      <div style="font-size:12px;font-weight:700;color:var(--violet)">🎬 ${videos.length} video${videos.length!==1?'s':''} from this chat</div>
-      <button class="btn btn-ghost btn-xs" onclick="showVcChatView()">← Back to Chat</button>
-    </div>
-    <div style="padding:14px;max-height:52vh;overflow-y:auto">
-      ${videos.length===0?`<div class="empty-desc">No videos generated yet — go back and describe something.</div>`
-      :`<div class="grid2">${videos.map(v=>`
-        <div class="card" style="padding:6px">
-          <video src="${v.url}" style="width:100%;border-radius:8px;aspect-ratio:16/9;object-fit:cover" muted controls></video>
-          <div style="font-size:10px;color:var(--textm);margin:4px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.providerLabel}</div>
-          ${v.assetId?`<button class="btn btn-outline btn-xs btn-full" onclick="openCollectionPicker('asset','${v.assetId}')">📁 Collection</button>`:''}
-        </div>`).join('')}</div>`}
-    </div>`;
-  thread.style.display="none";
-  galleryView.style.display="block";
-  if(inputBar)inputBar.style.display="none";
+  // Retired per-video chat gallery. Use the canonical Gallery module.
+  if(typeof switchMod==="function")switchMod("gallery");
 }
+
 
 function showVcChatView(){
   const thread=document.getElementById("vcChatThread");
@@ -5819,272 +5795,13 @@ async function sendMotionControlGen(){
 }
 
 function renderVideoCanvasLegacy(el){
-  const hasKey=gs("api_falai");
-  const project=S.vcActiveProject?S.projects.find(p=>p.id===S.vcActiveProject):null;
-
-  if(!project){
-    el.innerHTML=`
-      ${S.projects.length?`<div class="panel" style="margin-bottom:0"><div class="f-group" style="margin-bottom:0"><label class="f-label">Open a Project for a Shot-by-Shot Storyboard</label><select class="f-select" id="vcProjectPicker" onchange="if(this.value){S.vcActiveProject=this.value;renderVideoCanvasV3Module(document.getElementById("moduleContent"));}"><option value="">— Open an existing project —</option>${S.projects.filter(p=>!p.archived).map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div></div>`:''}
-
-      <div class="ig-chat-shell" style="margin-top:${S.projects.length?'12px':'0'}">
-        <div class="ig-chat-header">
-          <button class="ig-icon-btn" onclick="openVcChatHistory()" title="Chat History">☰</button>
-          <div style="flex:1;text-align:center">
-            <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">▶ Video</div>
-            <div style="font-size:10px;color:var(--textm);margin-top:1px">${hasKey?'<span style="color:var(--green);font-weight:700">●</span> Ready':'<span style="color:var(--red);font-weight:700">●</span> No key configured'}${gs("active_director","")?' · '+pIcon('film',10)+' '+(getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name:''}</div>
-          </div>
-          <button class="ig-icon-btn" onclick="startNewVcChat()" title="New Chat">➕</button>
-        </div>
-        <div id="vcGalleryView" style="display:none"></div>
-
-        <div id="vcSettingsPanel" class="ig-settings-sheet">
-          <div class="ig-sheet-handle" ontouchstart="sheetSwipeStart(event)" ontouchmove="sheetSwipeMove(event,'vcSettingsPanel')" ontouchend="sheetSwipeEnd(event,'vcSettingsPanel','toggleVcSettings')"></div>
-          <div class="ig-sheet-header">
-            <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">⚙ Settings</div>
-            <button class="ig-icon-btn" onclick="toggleVcSettings()" title="Close">✕</button>
-          </div>
-          <div style="padding:14px 16px">
-          ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:10px">Add a <b>fal.ai</b> API key in Settings — this one key powers Seedance, Kling, and Veo.</div>`:''}
-          <div class="f-group">
-            <label class="f-label">Model</label>
-            <select class="f-select" id="vcModel" onchange="updateVcModelUI()" style="display:none">${modelOptionsHTML("video",null,gs("default_video_model","bytedance/seedance-2.0/fast/text-to-video"))}</select>
-            <div id="vcModelTrigger" onclick="openModelPicker('vcModel','video')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-            <div id="vcModelNote" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
-          </div>
-          <div class="f-row">
-            <div class="f-group" id="vcResWrap">
-              <label class="f-label">Resolution</label>
-              <select class="f-select" id="vcRes" onchange="updateVcCostHint();renderVisualTrigger('vcRes','resolution')" style="display:none"></select>
-              <div id="vcResTrigger" onclick="openVisualPicker('vcRes','Choose Resolution','resolution')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-            </div>
-            <div class="f-group">
-              <label class="f-label">Aspect Ratio</label>
-              <select class="f-select" id="vcRatio" onchange="renderVisualTrigger('vcRatio','ratio')" style="display:none"></select>
-              <div id="vcRatioTrigger" onclick="openVisualPicker('vcRatio','Choose Aspect Ratio','ratio')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-            </div>
-          </div>
-          <div class="f-group"><label class="f-label">Duration <span id="vcDurationLabel" style="font-weight:400;color:var(--texts)"></span></label>
-            <input type="range" id="vcDurationSlider" min="0" max="0" step="1" value="0" style="width:100%" oninput="updateVcDurationFromSlider()">
-            <input type="hidden" id="vcDuration" value="">
-          </div>
-          <div class="f-group" id="vcNegPromptWrap" style="display:none"><label class="f-label">Negative Prompt</label><input class="f-input" id="vcNegPrompt" placeholder="e.g. blur, distort, low quality"></div>
-          <div class="f-group" id="vcCfgScaleWrap" style="display:none">
-            <label class="f-label">Prompt Adherence (CFG Scale) — <span id="vcCfgScaleLabel">0.5</span></label>
-            <input type="range" id="vcCfgScaleSlider" min="0" max="1" step="0.05" value="0.5" style="width:100%" oninput="document.getElementById('vcCfgScaleLabel').textContent=this.value;updateRangeFill(this)">
-            <div style="font-size:10px;color:var(--textm);margin-top:3px">Lower = more creative motion/variation. Higher = sticks closer to your exact prompt. Kling's own default is 0.5.</div>
-          </div>
-
-          <div class="f-group" id="vcFramesWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <label class="f-label">${pIcon('film',12)} Frames <span style="font-weight:400;color:var(--texts)">(optional — where the shot starts and ends)</span></label>
-            <div style="display:flex;gap:10px;align-items:stretch">
-              <div style="flex:1">
-                <div id="vcStartFrameSlot"></div>
-                <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.05em;margin-top:6px;text-align:center">Start frame</div>
-              </div>
-              <div style="display:flex;align-items:center;color:var(--textm);font-size:18px;padding-top:65px">→</div>
-              <div style="flex:1">
-                <div id="vcEndFrameSlot"></div>
-                <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.05em;margin-top:6px;text-align:center">End frame</div>
-              </div>
-            </div>
-            <input type="file" accept="image/*" id="vcStartFrameFile" style="display:none" onchange="handleVcStartFrameUpload(event)">
-            <input type="file" accept="image/*" id="vcFramesEndFile" style="display:none" onchange="handleVcEndFrameUpload(event)">
-            <div style="font-size:9.5px;color:var(--textm);margin-top:7px">Kling animates from the start frame to the end frame. Leave both empty to generate purely from the prompt.</div>
-            <div style="font-size:9.5px;color:var(--textm);margin-top:3px">Both frames must be at least 300×300, under 10MB, and between 2:5 and 5:2 — so 16:9, 9:16, 1:1, 4:5 and 21:9 are all fine; only extreme letterbox or sliver crops are rejected.</div>
-            <div id="vcFramesMismatch" style="display:none;font-size:9.5px;color:var(--gold);margin-top:5px"></div>
-          </div>
-          <div class="f-group" id="vcElementsWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <label class="f-label">${pIcon('sparkle',12)} Elements <span style="font-weight:400;color:var(--texts)">(characters / objects to keep consistent)</span></label>
-            <div style="font-size:10px;color:var(--textm);margin:-2px 0 8px">Each Element is ONE character or object. Kling needs a main view plus at least one other angle of that same subject — that pairing is what holds it consistent across the shot.</div>
-            <div id="vcElementsList"></div>
-            <button type="button" class="btn btn-outline btn-sm" id="vcAddElementBtn" onclick="addVcElement()">+ Add Element</button>
-            <input type="file" accept="image/*" id="vcElementFrontalFile" style="display:none" onchange="handleVcElementImage(event,'frontal')">
-            <input type="file" accept="image/*" multiple id="vcElementAngleFile" style="display:none" onchange="handleVcElementImage(event,'angle')">
-            <input type="file" accept="video/*" id="vcElementVideoFile" style="display:none" onchange="handleVcElementVideo(event)">
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-              <button type="button" class="btn btn-ghost btn-sm" onclick="openSaveCharacterPresetModal()">${pIcon('save',13)} Save as Preset</button>
-              <button type="button" class="btn btn-ghost btn-sm" onclick="openLoadCharacterPresetModal()">${pIcon('folder',13)} Load Preset</button>
-            </div>
-            <div style="font-size:9.5px;color:var(--textm);margin-top:5px">Presets are saved in this app only, for fast reuse — fal doesn't expose Kling's own Element Library via its API, so Elements are built per generation rather than registered once.</div>
-          </div>
-          <div class="f-group" id="vcMultiImageWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <label class="f-label" id="vcMultiImageLabel">Reference Images</label>
-            <input type="file" accept="image/*" multiple id="vcMultiImageFile" style="display:none" onchange="handleVcMultiImageUpload(event)">
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px" id="vcMultiImagePreview"></div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcMultiImageFile').click()">${pIcon('upload',13)} Add Images</button>
-              <button type="button" class="btn btn-ghost btn-sm" onclick="openSaveCharacterPresetModal()">${pIcon('save',13)} Save as Preset</button>
-              <button type="button" class="btn btn-ghost btn-sm" onclick="openLoadCharacterPresetModal()">${pIcon('folder',13)} Load Preset</button>
-            </div>
-            <div style="font-size:9.5px;color:var(--textm);margin-top:5px">Presets are saved in this app only, for fast reuse — not a registered Kling Element (fal doesn't expose Kling's own Element Library via its API).</div>
-          </div>
-          <div class="f-group" id="vcMotionBrushWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <label class="f-label">Motion Brush <span style="font-weight:400;color:var(--texts)">(optional — paint where motion happens)</span></label>
-            <div id="vcMotionBrushStatus" style="font-size:11px;color:var(--textm);margin-bottom:8px">Not set — uses the first reference image above as the base.</div>
-            <div style="display:flex;gap:6px">
-              <button type="button" class="btn btn-outline btn-sm" style="flex:1" onclick="openMotionBrushEditor()">${pIcon('brush',13)} Open Motion Brush</button>
-              <button type="button" class="btn btn-ghost btn-sm" id="vcMotionBrushClearBtn" style="display:none" onclick="clearMotionBrush()">✕ Clear</button>
-            </div>
-          </div>
-          <div class="f-group" id="vcEndFrameWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <label class="f-label">End Frame <span style="font-weight:400;color:var(--texts)">(optional — Kling interpolates from your reference image to this one)</span></label>
-            <input type="file" accept="image/*" id="vcEndFrameFile" style="display:none" onchange="handleVcEndFrameUpload(event)">
-            <div id="vcEndFramePreview" style="margin-bottom:8px"></div>
-            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcEndFrameFile').click()">${pIcon('upload',13)} Add End Frame</button>
-          </div>
-          <div class="f-group" id="vcMultiShotWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">
-              <input type="checkbox" id="vcMultiShotToggle" onchange="toggleMultiShotMode()">
-              <span class="f-label" style="margin:0">${pIcon('film',12)} Multi-Shot Storyboard <span style="font-weight:400;color:var(--texts)">(up to 6 shots, one generation)</span></span>
-            </label>
-            <div id="vcKlingAudioWrap" style="display:none;border-top:1px solid var(--border);padding-top:10px;margin-top:8px">
-              <div style="display:flex;align-items:center;gap:10px">
-                <label class="kk-toggle">
-                  <input type="checkbox" id="vcKlingAudioToggle" onchange="saveSetting('kling_generate_audio',this.checked);updateVcCostHint()">
-                  <span class="kk-toggle-track"></span><span class="kk-toggle-thumb"></span>
-                </label>
-                <span class="f-label" style="margin:0">${pIcon('mic',12)} Native Audio <span style="font-weight:400;color:var(--texts)">(Kling v3 — off is ~33% cheaper)</span></span>
-              </div>
-              <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
-                <label class="kk-toggle">
-                  <input type="checkbox" id="vcKlingSmartShotToggle" onchange="saveSetting('kling_shot_type',this.checked?'intelligent':'customize')">
-                  <span class="kk-toggle-track"></span><span class="kk-toggle-thumb"></span>
-                </label>
-                <span class="f-label" style="margin:0">${pIcon('sparkle',12)} Smart Multi-Shot <span style="font-weight:400;color:var(--texts)">(let Kling decide the shot structure)</span></span>
-              </div>
-            </div>
-            <div id="vcMultiShotBuilder" style="display:none">
-              <div class="f-group">
-                <label class="f-label">Generation Mode</label>
-                <div class="vc-shottype-toggle">
-                  <button type="button" class="vc-shottype-btn active" data-val="combined" onclick="setVcShotMode('combined')">Combined<br>one video, all shots at once</button>
-                  <button type="button" class="vc-shottype-btn" data-val="sequential" onclick="setVcShotMode('sequential')">Sequential<br>one clip per shot, own reference each</button>
-                </div>
-                <input type="hidden" id="vcShotMode" value="combined">
-                <div class="vc-shottype-note" id="vcShotModeNote">Real multi-character reference in one call — needs 2+ attached images.</div>
-              </div>
-              <div class="f-group" id="vcShotTypeWrap">
-                <label class="f-label">Shot Type</label>
-                <div class="vc-shottype-toggle">
-                  <button type="button" class="vc-shottype-btn active" data-val="customize" onclick="setVcShotType('customize')">Customize<br>set each shot's prompt &amp; duration</button>
-                  <button type="button" class="vc-shottype-btn" data-val="intelligent" onclick="setVcShotType('intelligent')">Intelligent<br>model auto-paces the shots</button>
-                </div>
-                <input type="hidden" id="vcShotType" value="customize">
-                <div class="vc-shottype-note" id="vcShotTypeNote">You control exactly when each shot starts and ends.</div>
-              </div>
-              <div id="vcShotList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px"></div>
-              <button type="button" class="btn btn-outline btn-sm" onclick="addVcShot()">+ Add Shot</button>
-              <div id="vcShotTotalInfo" style="font-size:11px;color:var(--textm);margin-top:8px"></div>
-            </div>
-          </div>
-          <div class="f-group" id="vcVoiceWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <label class="f-label">${pIcon('mic',12)} Dialogue Voices <span style="font-weight:400;color:var(--texts)">(optional, up to 2 — clone a voice from a sample)</span></label>
-            <div id="vcVoiceList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
-            <input type="file" accept="audio/*,video/*" id="vcVoiceSampleFile" style="display:none" onchange="handleVoiceSampleUpload(event)">
-            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcVoiceSampleFile').click()">${pIcon('mic',13)} Clone New Voice (5–30s sample)</button>
-            <div id="vcVoiceHint" style="display:none;font-size:10px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px;margin-top:6px"></div>
-          </div>
-          <div class="f-group" id="vcMultiVideoWrap" style="display:none">
-            <label class="f-label" id="vcMultiVideoLabel">Reference Videos <span style="font-weight:400;color:var(--texts)">(up to 3)</span></label>
-            <input type="file" accept="video/*" multiple id="vcMultiVideoFile" style="display:none" onchange="handleVcMultiVideoUpload(event)">
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px" id="vcMultiVideoPreview"></div>
-            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcMultiVideoFile').click()">${pIcon('upload',13)} Add Videos</button>
-          </div>
-          <div class="f-group" id="vcMultiAudioWrap" style="display:none">
-            <label class="f-label">Reference Audio <span style="font-weight:400;color:var(--texts)">(up to 3)</span></label>
-            <input type="file" accept="audio/*" multiple id="vcMultiAudioFile" style="display:none" onchange="handleVcMultiAudioUpload(event)">
-            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px" id="vcMultiAudioPreview"></div>
-            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcMultiAudioFile').click()">${pIcon('upload',13)} Add Audio</button>
-          </div>
-          <div class="f-group" id="vcElementGroupWrap" style="display:none">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-              <input type="checkbox" id="vcElementGroupToggle" onchange="setVcElementGroupMode(this.checked)">
-              <span class="f-label" style="margin:0">These are multiple angles of ONE character <span style="font-weight:400;color:var(--texts);text-transform:none;letter-spacing:0">(off = each image is a different character)</span></span>
-            </label>
-            <div style="font-size:10px;color:var(--textm);margin-top:4px" id="vcElementGroupNote">Kling's own Element system expects 2+ angle photos per character — turn this on if all your uploads are the same person/object from different angles.</div>
-          </div>
-          <div id="vcTagHint" style="display:none;font-size:10px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px;margin-top:6px"></div>
-          </div>
-        </div>
-
-        <div class="ig-chat-thread" id="vcChatThread"></div>
-
-        <div id="vcAttachmentBar" style="display:none;padding:4px 15px;font-size:11px;color:var(--textm);flex-direction:column;gap:4px"></div>
-        <div id="vcTagChips" style="display:none;padding:0 15px 6px;gap:5px;flex-wrap:wrap"></div>
-
-        <div class="ig-chat-inputbar">
-          <div class="ig-input-shell">
-            <div style="position:relative">
-              <div id="vcChatHighlight" style="position:absolute;inset:0;padding:2px 4px;font-size:13px;font-family:inherit;line-height:normal;white-space:pre-wrap;word-wrap:break-word;overflow:hidden;pointer-events:none;color:var(--text)"></div>
-              <textarea class="ig-input-textarea-v2" id="vcChatInput" rows="1" placeholder="${hasKey?'Describe the video you want…':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleVcChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,240)+'px';checkVcTagAutocomplete();renderVcTagChips();renderVcChatHighlight()" onscroll="syncVcChatHighlightScroll()" onblur="setTimeout(hideVcTagAutocomplete,150)" style="position:relative;background:transparent;color:transparent;caret-color:var(--text)"></textarea>
-            </div>
-            <div id="vcTagAutocomplete" style="display:none;position:absolute;bottom:100%;left:0;right:0;margin-bottom:6px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shv);max-height:160px;overflow-y:auto;z-index:10"></div>
-            <div class="ig-input-toolbar">
-              <button class="ig-tool-btn" onclick="toggleVcSettings()" title="Settings">⚙</button>
-              <button class="ig-tool-btn" onclick="vcMagicPrompt()" title="Magic Prompt"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4M22 5h-4M4 17v2M5 18H3"/></svg></button>
-              <button class="ig-tool-btn" id="vcVoiceBtn" onclick="toggleVcVoiceInput()" title="Voice Message"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></button>
-              <button class="ig-send-round" id="vcSendBtn" ${!hasKey?'disabled':''} onclick="sendVcChatPrompt()" title="Generate">➤</button>
-            </div>
-            <div style="font-size:9px;color:var(--texts);padding:2px 4px 0;display:flex;justify-content:space-between"><span id="vcCostHint" style="font-weight:700;color:var(--gold)"></span><span>Enter for a new line · <b>Ctrl+Enter</b> to generate</span></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="ig-settings-backdrop" id="vcSettingsBackdrop" onclick="toggleVcSettings()"></div>
-    `;
-    updateVcModelUI();
-    updateVcAttachmentBar();
-    renderVcChatThread();
-    return;
-  }
-
-  const shots=S.shots.filter(s=>s.projectId===project.id);
-  el.innerHTML=`
-    <div class="panel">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-        <button class="btn btn-ghost btn-xs" onclick="S.vcActiveProject=null;renderVideoCanvasV3Module(document.getElementById("moduleContent"))">← Change Project</button>
-        <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet);flex:1">🎬 ${project.name} — Storyboard</div>
-        ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}
-      </div>
-      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">${shots.length} shot${shots.length!==1?'s':''}${gs("active_director","")?' · 🎬 '+(getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name+' style active':''}</div>
-      ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:10px">Add a <b>fal.ai</b> API key in Settings to generate. This one key powers Seedance, Kling, and Veo.</div>`:''}
-      <button class="btn btn-primary btn-sm" onclick="openShotEditor('${project.id}')">+ Add Shot</button>
-    </div>
-    ${shots.length===0?`
-      <div class="empty-state">
-        <div class="empty-icon">🎬</div>
-        <div class="empty-title">No Shots Yet</div>
-        <div class="empty-desc">Build your storyboard one shot at a time — each shot gets its own prompt, camera movement, VFX, character lock, and model.</div>
-        <button class="btn btn-primary" onclick="openShotEditor('${project.id}')">+ Add First Shot</button>
-      </div>
-    `:`<div class="grid2" style="margin-top:14px">${shots.map(s=>shotCardHTML(s)).join('')}</div>`}
-  `;
+  // Retired compatibility entry. Video is rendered exclusively by V3.
+  // Keep this symbol temporarily so stale callers cannot resurrect the old UI.
+  if(typeof renderVideoCanvasV3Module==="function")return renderVideoCanvasV3Module(el);
+  if(el)el.innerHTML="";
 }
 
-// ── VIDEO CHAT UI — model-driven dynamic settings ──
-S.vcMultiImages=S.vcMultiImages||[];
 
-// ── FRAMES (start + end) ────────────────────────────────────────────────
-// On element-capable models the old flat image bucket was doing two unrelated
-// jobs: holding the start frame AND holding character references. Splitting
-// them is what makes the screen legible — Frames owns the shot's first and
-// last image, Elements owns the characters.
-async function handleVcStartFrameUpload(event){
-  const file=(event.target.files||[])[0];
-  event.target.value="";
-  if(!file)return;
-  if(!file.type.startsWith("image/")){toast("Images only","error");return;}
-  try{
-    const dataUrl=await downscaleImageFile(file);
-    // Start frame IS vcMultiImages[0] on these endpoints — it becomes
-    // start_image_url. Kept in the same place so every existing upload,
-    // validation and request path keeps working unchanged.
-    S.vcMultiImages=[{dataUrl,name:file.name}];
-    renderVcFrames();
-    if(typeof updateVcMultiImagePreview==="function")updateVcMultiImagePreview();
-    updateVcModelUI();
-  }catch(err){ toast(err.message,"error"); }
-}
 function clearVcStartFrame(){ S.vcMultiImages=[]; renderVcFrames(); if(typeof updateVcMultiImagePreview==="function")updateVcMultiImagePreview(); updateVcModelUI(); }
 function clearVcEndFrame(){ S.vcEndFrame=null; renderVcFrames(); }
 function renderVcFrames(){
@@ -7594,13 +7311,14 @@ function sheetSwipeEnd(e,panelId,closeFnName){
 }
 
 function toggleVcSettings(){
-  const panel=document.getElementById("vcSettingsPanel");
-  const backdrop=document.getElementById("vcSettingsBackdrop");
-  if(!panel)return;
-  const opening=!panel.classList.contains("open");
-  panel.classList.toggle("open",opening);
-  if(backdrop)backdrop.classList.toggle("show",opening);
+  // Retired legacy Video settings sheet. Advanced Video controls belong to Director.
+  if(window.__kosmicVideoDirector){
+    if(typeof window.__kosmicVideoDirector.open==="function")window.__kosmicVideoDirector.open();
+  }else{
+    window.dispatchEvent(new CustomEvent("kosmic:video-director-toggle",{detail:{open:true}}));
+  }
 }
+
 
 // Single source of truth for what each attached reference file is actually
 // addressable as in a prompt. Used by both the thumbnail labels
