@@ -10,9 +10,17 @@
   const armUser=e=>{
     if(!e?.isTrusted)return;
     const t=e.target?.closest?.("[data-stable-generate],#kkv3StoryboardGenerate");
-    if(t)arm={expiresAt:Date.now()+TTL,source:t.id||t.dataset?.stableGenerate||"generate"};
+    if(!t)return;
+    const s=window.__kosmicVideoV3State;
+    const count=t.id==="kkv3StoryboardGenerate"?Math.max(1,(s?.storyboard||[]).filter(x=>String(x?.prompt||"").trim()).length):1;
+    arm={expiresAt:Date.now()+TTL,source:t.id||t.dataset?.stableGenerate||"generate",remaining:count};
   };
-  const consume=()=>{if(!arm||arm.expiresAt<Date.now()){arm=null;return false;}arm=null;return true;};
+  const consume=()=>{
+    if(!arm||arm.expiresAt<Date.now()){arm=null;return false;}
+    arm.remaining=Math.max(0,(arm.remaining||1)-1);
+    if(arm.remaining===0)arm=null;
+    return true;
+  };
   const budget=()=>{
     const cap=parseFloat(typeof gs==="function"?gs("budget_cap","0"):"0")||0;
     const spent=parseFloat(typeof gs==="function"?gs("total_spent","0"):"0")||0;
@@ -34,7 +42,7 @@
   function boot(){
     document.addEventListener("click",armUser,true);document.addEventListener("pointerdown",armUser,true);
     let tries=0;const timer=setInterval(()=>{if(install()||++tries>240)clearInterval(timer);},50);
-    window.__kosmicVideoSafety={status:()=>({armed:!!arm&&arm.expiresAt>Date.now(),expiresAt:arm?.expiresAt||0,route:currentRoute(),inFlight}),disarm:()=>{arm=null;}};
+    window.__kosmicVideoSafety={status:()=>({armed:!!arm&&arm.expiresAt>Date.now(),expiresAt:arm?.expiresAt||0,remaining:arm?.remaining||0,route:currentRoute(),inFlight}),disarm:()=>{arm=null;}};
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();
 })();
