@@ -146,8 +146,14 @@ async function main(){
 
   const title=await page.title();if(!/KosmicKat/i.test(title))warn('Unexpected title',title);
   await page.setViewportSize({width:390,height:844});await sleep(250);
-  const mobile=await page.evaluate(()=>{const r=document.querySelector('#kkVideoCanvasV3');const scrolling=document.scrollingElement;return r?{rootHeight:r.clientHeight,rootScrollHeight:r.scrollHeight,documentHeight:scrolling?.scrollHeight||0,viewport:innerHeight}:null;});
-  if(!mobile||mobile.documentHeight<=mobile.viewport)warn('Mobile page did not report vertical overflow',JSON.stringify(mobile));
+  const mobile=await page.evaluate(()=>{const r=document.querySelector('#kkVideoCanvasV3');const shell=document.querySelector('#moduleContent');return r?{rootHeight:r.clientHeight,rootScrollHeight:r.scrollHeight,shellHeight:shell?.clientHeight||0,shellScrollHeight:shell?.scrollHeight||0,rootOverflow:getComputedStyle(r).overflowY,shellOverflow:shell?getComputedStyle(shell).overflowY:"",viewport:innerHeight}:null;});
+  if(!mobile)warn('Mobile Video Canvas was not measurable');
+  else{
+    const nestedRootScroll=mobile.rootScrollHeight>mobile.rootHeight+4&&mobile.rootOverflow!=="visible";
+    const shellScroll=mobile.shellScrollHeight>mobile.shellHeight+4;
+    if(nestedRootScroll)fail('Mobile Video Canvas created a nested scrolling container',JSON.stringify(mobile));
+    if(!shellScroll)warn('Mobile module shell did not report vertical overflow',JSON.stringify(mobile));
+  }
   await page.screenshot({path:path.join(OUT,'kosmic-video-canonical.png'),fullPage:true}).catch(()=>{});
 
   const report={site:SITE_URL,checkedAt:new Date().toISOString(),title,navigation:response?{status:response.status(),url:response.url()}:null,openedVideo:opened,canonical,interaction,mobile,warnings,failures,consoleErrors,pageErrors,requestFailures,badResponses};
