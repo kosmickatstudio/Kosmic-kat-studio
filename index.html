@@ -2045,8 +2045,8 @@ function handleTabSwitch(mod,name){
     if(name==="Generate"){showIgChatView();return;}
   }
   if(mod==="videocanvas"){
-    if(name==="Gallery"){showVcGalleryView();return;}
-    if(name==="Generate"){showVcChatView();}
+    if(name==="Gallery"){switchMod("gallery",document.querySelector('[data-mod="gallery"]'));return;}
+    if(name==="Generate"){renderVideoCanvasV3Module(document.getElementById("moduleContent"));}
   }
   if(mod==="upscaler"){
     // Real toggle that already existed (S.upscaleMode/setUpscaleMode) but was
@@ -2067,6 +2067,21 @@ function handleTabSwitch(mod,name){
   }
 }
 
+// Canonical Video Canvas V3 mount entry. Legacy Video markup remains in this file temporarily for compatibility, but it is no longer part of the active Video render path.
+function renderVideoCanvasV3Module(el){
+  if(!el)return;
+  el.innerHTML='<div class="kk-video-v3-loading" style="padding:24px;text-align:center;color:var(--textm,#5a4880);font-size:11px">Loading Video Canvas…</div>';
+  const mount=()=>{
+    try{
+      if(typeof window.__kosmicMountVideoCanvasV3==="function")return !!window.__kosmicMountVideoCanvasV3();
+      if(typeof window.__kosmicEnsureVideoStack==="function")return !!window.__kosmicEnsureVideoStack();
+    }catch(err){console.error("Kosmic Video Canvas V3 mount failed",err);}
+    return false;
+  };
+  mount();
+  [80,220,500,900].forEach(ms=>setTimeout(mount,ms));
+}
+
 // ── RENDER MODULES ──
 function renderModule(mod){
   const el=document.getElementById("moduleContent");
@@ -2081,7 +2096,7 @@ function renderModule(mod){
     projects:renderProjects,
     characters:renderCharacters,
     imagegen:renderImageGen,
-    videocanvas:renderVideoCanvas,
+    videocanvas:renderVideoCanvasV3Module,
     directors:renderDirectors,
     agentfeline:renderAgentFeline,
     adstudio:renderAdStudio,
@@ -2530,7 +2545,7 @@ async function deleteShot(id){
     if(p)p.shots=Math.max(0,(p.shots||1)-1);
     S.shots=S.shots.filter(s=>s.id!==id);
     save("shots");save("projects");
-    if(S.mod==="videocanvas"){renderVideoCanvas(document.getElementById("moduleContent"));}
+    if(S.mod==="videocanvas"){renderVideoCanvasV3Module(document.getElementById("moduleContent"));}
     else if(p){renderProjectWorkspace(p);}
     toast("Shot deleted","");
   }
@@ -5803,13 +5818,13 @@ async function sendMotionControlGen(){
   }
 }
 
-function renderVideoCanvas(el){
+function renderVideoCanvasLegacy(el){
   const hasKey=gs("api_falai");
   const project=S.vcActiveProject?S.projects.find(p=>p.id===S.vcActiveProject):null;
 
   if(!project){
     el.innerHTML=`
-      ${S.projects.length?`<div class="panel" style="margin-bottom:0"><div class="f-group" style="margin-bottom:0"><label class="f-label">Open a Project for a Shot-by-Shot Storyboard</label><select class="f-select" id="vcProjectPicker" onchange="if(this.value){S.vcActiveProject=this.value;renderVideoCanvas(document.getElementById('moduleContent'));}"><option value="">— Open an existing project —</option>${S.projects.filter(p=>!p.archived).map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div></div>`:''}
+      ${S.projects.length?`<div class="panel" style="margin-bottom:0"><div class="f-group" style="margin-bottom:0"><label class="f-label">Open a Project for a Shot-by-Shot Storyboard</label><select class="f-select" id="vcProjectPicker" onchange="if(this.value){S.vcActiveProject=this.value;renderVideoCanvasV3Module(document.getElementById("moduleContent"));}"><option value="">— Open an existing project —</option>${S.projects.filter(p=>!p.archived).map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div></div>`:''}
 
       <div class="ig-chat-shell" style="margin-top:${S.projects.length?'12px':'0'}">
         <div class="ig-chat-header">
@@ -6027,7 +6042,7 @@ function renderVideoCanvas(el){
   el.innerHTML=`
     <div class="panel">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-        <button class="btn btn-ghost btn-xs" onclick="S.vcActiveProject=null;renderVideoCanvas(document.getElementById('moduleContent'))">← Change Project</button>
+        <button class="btn btn-ghost btn-xs" onclick="S.vcActiveProject=null;renderVideoCanvasV3Module(document.getElementById("moduleContent"))">← Change Project</button>
         <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet);flex:1">🎬 ${project.name} — Storyboard</div>
         ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}
       </div>
@@ -8870,7 +8885,7 @@ function saveShotEditor(){
   }
   save("shots");
   document.getElementById("shotEditorModal").remove();
-  renderVideoCanvas(document.getElementById("moduleContent"));
+  renderVideoCanvasV3Module(document.getElementById("moduleContent"));
   toast("💾 Shot saved","success");
 }
 
