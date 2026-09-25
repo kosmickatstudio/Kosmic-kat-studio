@@ -27,7 +27,7 @@
       .kkvc-refrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.kkvc-ref{display:flex;align-items:center;gap:5px;padding:5px 7px;border-radius:9px;background:rgba(98,64,176,.07);border:1px solid var(--border,rgba(61,31,122,.1));font-size:8px;font-weight:800;color:var(--textm,#5a4880)}.kkvc-ref img{width:28px;height:28px;border-radius:6px;object-fit:cover}
       .kkvc-composer-wrap{position:absolute;left:0;right:0;bottom:0;padding:12px max(12px,3vw) 16px;background:linear-gradient(180deg,transparent,rgba(250,248,245,.88) 25%,rgba(250,248,245,.98));backdrop-filter:blur(10px)}
       .kkvc-composer{max-width:900px;margin:0 auto;padding:9px;border:1px solid var(--glass-brd,rgba(61,31,122,.15));border-radius:22px;background:rgba(255,255,255,.72);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);box-shadow:0 14px 40px rgba(61,31,122,.13)}
-      .kkvc-preview{display:none;gap:7px;flex-wrap:wrap;padding:2px 4px 7px}.kkvc-preview.has{display:flex}.kkvc-preview-item{position:relative;width:58px;height:46px;border-radius:9px;overflow:hidden;border:1px solid var(--border,rgba(61,31,122,.1));background:var(--pearl2,#f3eff8)}.kkvc-preview-item img{width:100%;height:100%;object-fit:cover}.kkvc-preview-remove{position:absolute;top:2px;right:2px;width:17px;height:17px;border:0;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:10px;cursor:pointer}
+      .kkvc-preview{display:none;gap:7px;flex-wrap:wrap;padding:2px 4px 7px}.kkvc-preview.has{display:flex}.kkvc-preview-item{position:relative;width:58px;height:46px;border-radius:9px;overflow:hidden;border:1px solid var(--border,rgba(61,31,122,.1));background:var(--pearl2,#f3eff8)}.kkvc-preview-item img,.kkvc-preview-item video{width:100%;height:100%;object-fit:cover}.kkvc-preview-item audio{width:100%;height:100%;padding:5px}.kkvc-preview-remove{position:absolute;top:2px;right:2px;width:17px;height:17px;border:0;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:10px;cursor:pointer}
       .kkvc-textrow{display:flex;align-items:flex-end;gap:8px}.kkvc-input{min-height:42px;max-height:150px;resize:none;flex:1;border:0;outline:0;background:transparent;color:var(--text,#1e1230);padding:10px 5px;font-size:13px;line-height:1.45}.kkvc-input::placeholder{color:var(--texts,#9488ae)}
       .kkvc-tool{width:37px;height:37px;flex:0 0 auto;border:1px solid var(--glass-brd,rgba(61,31,122,.12));border-radius:12px;background:rgba(255,255,255,.55);color:var(--textm,#5a4880);display:grid;place-items:center;cursor:pointer;transition:.18s}.kkvc-tool:hover{transform:translateY(-1px);background:rgba(98,64,176,.08);color:var(--violet,#3d1f7a)}
       .kkvc-send{width:39px;height:39px;border:0;border-radius:13px;background:linear-gradient(135deg,var(--violet,#3d1f7a),var(--ice,#4aa9d9));color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 7px 18px rgba(61,31,122,.2)}.kkvc-send:disabled{opacity:.45;cursor:not-allowed}
@@ -78,7 +78,7 @@
               <button class="kkvc-send" type="button" id="kkvcSend" title="Generate" aria-label="Generate">${icons.send}</button>
             </div>
             <div class="kkvc-meta"><span><strong id="kkvcRefCount">0</strong> references attached</span><span>Settings stay global • Director controls live separately</span></div>
-            <input id="kkvcFile" class="kkvc-file" type="file" accept="image/*" multiple>
+            <input id="kkvcFile" class="kkvc-file" type="file" accept="image/*,video/*,audio/*" multiple>
           </div>
         </div>
       </div>`;
@@ -95,7 +95,8 @@
   function renderRefs(){
     const q=st(),wrap=document.getElementById("kkvcPreview"),count=document.getElementById("kkvcRefCount");if(!wrap)return;
     wrap.classList.toggle("has",q.references.length>0);count&&(count.textContent=q.references.length);
-    wrap.innerHTML=q.references.map(r=>`<div class="kkvc-preview-item"><img src="${esc(r.url)}" alt="${esc(r.name||"Reference")}"><button type="button" class="kkvc-preview-remove" data-ref-id="${esc(r.id)}" aria-label="Remove reference">×</button></div>`).join("");
+    const media=r=>r.kind==="video"?`<video src="${esc(r.url)}" muted playsinline></video>`:r.kind==="audio"?`<audio src="${esc(r.url)}" controls></audio>`:`<img src="${esc(r.url)}" alt="${esc(r.name||"Reference")}">`;
+    wrap.innerHTML=q.references.map(r=>`<div class="kkvc-preview-item">${media(r)}<button type="button" class="kkvc-preview-remove" data-ref-id="${esc(r.id)}" aria-label="Remove reference">×</button></div>`).join("");
     wrap.querySelectorAll("[data-ref-id]").forEach(b=>b.addEventListener("click",()=>{q.removeReference(b.dataset.refId);renderRefs();q.syncV3&&q.syncV3();}));
   }
 
@@ -104,7 +105,12 @@
     input.addEventListener("input",()=>{q.composerDraft=input.value;q.touch();q.syncV3&&q.syncV3();input.style.height="auto";input.style.height=Math.min(input.scrollHeight,150)+"px";send.disabled=!input.value.trim()&&q.references.length===0;});
     input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send.click();}});
     attach.addEventListener("click",()=>file.click());
-    file.addEventListener("change",async()=>{for(const f of [...file.files||[]]){if(!f.type.startsWith("image/"))continue;const url=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(f);});q.addReference({kind:"image",url,name:f.name});}file.value="";renderRefs();q.syncV3&&q.syncV3();input.focus();});
+    file.addEventListener("change",async()=>{for(const f of [...file.files||[]]){
+      const kind=f.type.startsWith("video/")?"video":f.type.startsWith("audio/")?"audio":f.type.startsWith("image/")?"image":null;
+      if(!kind)continue;
+      const url=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(f);});
+      q.addReference({kind,url,name:f.name});
+    }file.value="";renderRefs();q.syncV3&&q.syncV3();input.focus();});
     send.disabled=!input.value.trim();
     settings.addEventListener("click",()=>{q.directorOpen=!q.directorOpen;q.touch();const open=!!q.directorOpen;const fire=()=>{if(window.__kosmicVideoDirector){open?window.__kosmicVideoDirector.open():window.__kosmicVideoDirector.close();return true;}return false;};if(!fire()&&open){[40,140,300,600].forEach(ms=>setTimeout(fire,ms));}if(typeof window.dispatchEvent==="function")window.dispatchEvent(new CustomEvent("kosmic:video-director-toggle",{detail:{open,state:q}}));});
     renderRefs();
