@@ -72,13 +72,14 @@ async function auditCanonicalVideo(page){
 
   const action=page.locator('#kkVideoCanvasV3 [data-stable-generate]').first();
   const before=await page.evaluate(()=>({busy:!!window.__kosmicVideoV3State?.busy,history:window.__kosmicVideoV3State?.history?.length||0}));
+  let generateDisabled=true;
   if(await action.isVisible().catch(()=>false)){
-    const disabled=await action.isDisabled().catch(()=>false);
-    if(!disabled)await action.click({force:true}).catch(e=>warn('Generate click test could not execute',String(e.message||e)));
+    generateDisabled=await action.isDisabled().catch(()=>true);
+    if(!generateDisabled)await action.click({force:true}).catch(e=>warn('Generate click test could not execute',String(e.message||e)));
     await sleep(150);
   }
   const after=await page.evaluate(()=>({busy:!!window.__kosmicVideoV3State?.busy,history:window.__kosmicVideoV3State?.history?.length||0,arm:window.__kosmicVideoSafety?.status?.()||null}));
-  if(!disabled && after.busy)warn('Generate entered busy state during no-key QA; it should fail before provider submission');
+  if(!generateDisabled && after.busy)warn('Generate entered busy state during no-key QA; it should fail before provider submission');
   if((after.history-before.history)>0)fail('Generate produced a history entry during no-key QA');
 
   return {v3:true,selectors,models:modelSummary(models),routeState,legacyScripts,before,after};
