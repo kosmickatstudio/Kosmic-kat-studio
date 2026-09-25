@@ -27,8 +27,11 @@
     audio:true,webSearch:false,
     prompt:"",images:[],videos:[],audios:[],errors:[],busy:false,
     workspace:"shot",presetTab:"camera",storyboard:[{id:1,prompt:"",duration:5}],
+    chat:{id:"chat_"+Date.now(),title:"New Chat",messages:[]},
     selectedModelFilter:"all"
   });
+  state.chat=state.chat&&typeof state.chat==="object"?state.chat:{id:"chat_"+Date.now(),title:"New Chat",messages:[]};
+  if(!Array.isArray(state.chat.messages))state.chat.messages=[];
   const $=id=>document.getElementById(id);
   const qAll=sel=>Array.from(document.querySelectorAll(sel));
   const esc=v=>String(v??"").replace(/[&<>\"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[m]));
@@ -71,6 +74,24 @@
       .kkv3-generate{width:100%;padding:13px;border:0;border-radius:13px;background:linear-gradient(135deg,var(--violet,#3d1f7a),var(--ice,#4aa9d9));color:#fff;font-weight:900;letter-spacing:.02em;box-shadow:0 8px 22px rgba(61,31,122,.18)}.kkv3-generate:disabled{opacity:.48;box-shadow:none;cursor:not-allowed}.kkv3-secondary{width:100%;margin-top:7px;padding:9px;border:1px solid var(--border,rgba(61,31,122,.10));border-radius:11px;background:var(--surface,#fff);color:var(--textm,#5a4880);font-size:9px;font-weight:850}
       .kkv3-history{display:flex;flex-direction:column;gap:9px}.kkv3-job{border:1px solid var(--border,rgba(61,31,122,.10));background:var(--surface,#fff);border-radius:13px;overflow:hidden}.kkv3-job video{width:100%;display:block;background:#09080e}.kkv3-job-body{padding:9px}.kkv3-job-top{display:flex;justify-content:space-between;gap:7px;font-size:8px;color:var(--texts,#9488ae)}.kkv3-job-prompt{font-size:9px;margin-top:5px;line-height:1.4}.kkv3-error{padding:10px;border-radius:10px;background:rgba(239,68,68,.07);color:#b91c1c;font-size:9px;line-height:1.4}
       .kkv3-empty{padding:20px 10px;text-align:center;color:var(--texts,#9488ae);font-size:9px;border:1px dashed var(--border,rgba(61,31,122,.10));border-radius:12px}
+      .kkv3-chat{min-height:0;height:100%;display:flex;flex-direction:column;position:relative;overflow:hidden;background:radial-gradient(900px 420px at 15% 0%,rgba(98,64,176,.07),transparent 60%),radial-gradient(900px 420px at 100% 100%,rgba(74,169,217,.06),transparent 62%),var(--pearl,#faf8f5)}
+      .kkv3-chat-head{display:flex;align-items:center;gap:8px;padding:2px 0 12px;border-bottom:1px solid var(--border,rgba(61,31,122,.08))}
+      .kkv3-chat-head-title{min-width:0;flex:1}.kkv3-chat-head-title strong{display:block;font-size:13px}.kkv3-chat-head-title span{display:block;font-size:8px;color:var(--texts,#9488ae);margin-top:2px}
+      .kkv3-chat-new{flex:0 0 auto;border:1px solid var(--border,rgba(61,31,122,.11));background:var(--surface,#fff);color:var(--textm,#5a4880);border-radius:10px;padding:8px 10px;font-size:9px;font-weight:850}
+      .kkv3-chat-thread{flex:1;min-height:240px;overflow:auto;padding:14px 3px 12px;display:flex;flex-direction:column;gap:10px}
+      .kkv3-chat-empty{margin:auto;max-width:520px;text-align:center;padding:30px 18px}.kkv3-chat-empty b{display:block;font-size:22px;letter-spacing:-.03em;margin-bottom:7px}.kkv3-chat-empty span{font-size:10px;line-height:1.6;color:var(--textm,#5a4880)}
+      .kkv3-chat-msg{max-width:min(820px,88%);display:flex;gap:8px;align-items:flex-start}.kkv3-chat-msg.user{margin-left:auto;flex-direction:row-reverse}
+      .kkv3-chat-avatar{width:29px;height:29px;display:grid;place-items:center;border-radius:9px;background:rgba(98,64,176,.09);color:var(--violet,#3d1f7a);font-size:11px;flex:0 0 auto}.kkv3-chat-msg.user .kkv3-chat-avatar{background:linear-gradient(135deg,var(--violet,#3d1f7a),var(--ice,#4aa9d9));color:#fff}
+      .kkv3-chat-bubble{padding:10px 12px;border-radius:15px;background:rgba(255,255,255,.72);border:1px solid var(--border,rgba(61,31,122,.10));font-size:11px;line-height:1.55;white-space:pre-wrap;box-shadow:0 7px 22px rgba(61,31,122,.04)}
+      .kkv3-chat-msg.user .kkv3-chat-bubble{background:linear-gradient(135deg,rgba(98,64,176,.11),rgba(74,169,217,.08))}
+      .kkv3-chat-output{margin-top:8px;border:1px solid var(--border,rgba(61,31,122,.10));border-radius:13px;overflow:hidden;background:#0b0811}.kkv3-chat-output video{display:block;width:100%;max-height:420px;background:#09080e}
+      .kkv3-chat-output-meta{padding:8px 9px;background:var(--surface,#fff);font-size:8px;color:var(--texts,#9488ae);display:flex;gap:6px;flex-wrap:wrap}.kkv3-chat-output-meta b{color:var(--textm,#5a4880)}
+      .kkv3-chat-composer{border:1px solid var(--border,rgba(61,31,122,.13));border-radius:16px;background:rgba(255,255,255,.76);padding:8px;box-shadow:0 12px 30px rgba(61,31,122,.08)}
+      .kkv3-chat-refline{display:flex;gap:5px;flex-wrap:wrap;padding:2px 2px 7px}.kkv3-chat-ref{font-size:8px;font-weight:800;border:1px solid var(--border,rgba(61,31,122,.1));background:var(--pearl2,#f3eff8);color:var(--textm,#5a4880);padding:5px 7px;border-radius:9px}
+      .kkv3-chat-row{display:flex;align-items:flex-end;gap:7px}.kkv3-chat-input{min-height:44px;max-height:150px;resize:none;flex:1;border:0;outline:0;background:transparent;color:var(--text,#1e1230);padding:9px 4px;font-size:12px;line-height:1.45}.kkv3-chat-input::placeholder{color:var(--texts,#9488ae)}
+      .kkv3-chat-tool{width:36px;height:36px;flex:0 0 auto;border:1px solid var(--border,rgba(61,31,122,.11));border-radius:11px;background:var(--surface,#fff);color:var(--textm,#5a4880);display:grid;place-items:center;font-size:16px}
+      .kkv3-chat-send{width:38px;height:38px;flex:0 0 auto;border:0;border-radius:12px;background:linear-gradient(135deg,var(--violet,#3d1f7a),var(--ice,#4aa9d9));color:#fff;font-size:14px;box-shadow:0 7px 18px rgba(61,31,122,.17)}.kkv3-chat-send:disabled{opacity:.45;cursor:not-allowed}
+      .kkv3-chat-status{display:flex;justify-content:space-between;gap:8px;padding:6px 3px 1px;font-size:8px;color:var(--texts,#9488ae)}.kkv3-chat-status b{color:var(--textm,#5a4880)}
       .kkv3-mobile-generate{display:none}.kkv3-keyhint{font-size:8px;color:var(--texts,#9488ae);line-height:1.4;padding-top:7px}.kkv3-keyhint strong{color:var(--textm,#5a4880)}
       @media(max-width:920px){.kkv3{height:auto;min-height:100%;overflow:visible}.kkv3-body{grid-template-columns:1fr}.kkv3-main,.kkv3-side{overflow:visible}.kkv3-side{border-left:0;border-top:1px solid var(--border,rgba(61,31,122,.08));max-height:none}.kkv3-mobile-generate{display:block;position:sticky;bottom:8px;z-index:5;margin:2px 0;padding:0 12px}.kkv3-mobile-generate .kkv3-generate{box-shadow:0 12px 30px rgba(61,31,122,.20)}}
       @media(max-width:620px){.kkv3-browser-upload-grid{grid-template-columns:1fr}.kkv3-browser-upload{min-height:86px}.kkv3-head{padding:11px 12px}.kkv3-title{font-size:14px}.kkv3-main,.kkv3-side{padding:10px}.kkv3-grid{grid-template-columns:1fr}.kkv3-dropgrid{grid-template-columns:1fr 1fr}.kkv3-status{display:none}.kkv3-card{border-radius:15px;padding:12px}}
@@ -280,10 +301,32 @@
     return `<main class="kkv3-main"><section class="kkv3-card"><h3>Storyboard <span>${state.storyboard.length} shots</span></h3><div class="kkv3-small" style="margin-bottom:10px">Plan a sequence before rendering. Each shot uses the same selected route and current model controls.</div>${state.storyboard.map((shot,i)=>`<div class="kkv3-shot" style="margin-top:${i?10:0}px"><div class="kkv3-shot-num">${i+1}</div><div class="kkv3-shot-main"><textarea class="kkv3-input" data-story-prompt="${shot.id}" rows="3" placeholder="Shot ${i+1}: action, camera, blocking, lighting...">${esc(shot.prompt)}</textarea><div class="kkv3-shot-actions"><button data-story-remove="${shot.id}">Remove</button><button data-story-copy="${shot.id}">Copy previous</button></div></div></div>`).join("")}<button class="kkv3-secondary" id="kkv3AddShot">+ Add shot</button></section>${presetsSection()}<section class="kkv3-card"><h3>Render sequence</h3>${routeControls()}<button class="kkv3-generate" id="kkv3StoryboardGenerate" ${state.busy||!apiKey()?"disabled":""}>${state.busy?"Rendering sequence…":"Generate storyboard"}</button></section></main><aside class="kkv3-side"><section class="kkv3-card"><h3>Sequence outputs</h3><div class="kkv3-history">${historyHtml()}</div></section></aside>`;
   }
 
+  function newChat(){
+    state.chat={id:"chat_"+Date.now(),title:"New Chat",messages:[]};
+    state.prompt="";state.images=[];state.videos=[];state.audios=[];state.errors=[];state.workspace="chat";
+    render();
+  }
+
+  function chatMessagesHtml(){
+    const messages=Array.isArray(state.chat?.messages)?state.chat.messages:[];
+    if(!messages.length)return '<div class="kkv3-chat-empty"><b>What are we making?</b><span>Describe a scene naturally. Keep refining the same idea in one conversation, then generate the next version from the same V3 controls and references.</span></div>';
+    return messages.map(m=>{
+      const role=m.role==="user"?"user":"assistant";
+      const output=m.output;
+      const out=output?'<div class="kkv3-chat-output"><video src="'+esc(output.url)+'" controls playsinline preload="metadata"></video><div class="kkv3-chat-output-meta"><b>'+esc(output.model||state.route)+'</b><span>'+esc(output.duration||state.duration)+'s</span><span>'+esc(output.quality||state.quality)+'</span><span>'+esc(output.aspect||state.aspect)+'</span></div></div>':"";
+      return '<div class="kkv3-chat-msg '+role+'"><div class="kkv3-chat-avatar">'+(role==="user"?"You":"✦")+'</div><div><div class="kkv3-chat-bubble">'+esc(m.content||"")+'</div>'+out+'</div></div>';
+    }).join("");
+  }
+
+  function chatWorkspace(){
+    const refs=[...state.images.map(x=>x.name||"Image"),...state.videos.map(x=>x.name||"Video"),...state.audios.map(x=>x.name||"Audio")];
+    return '<main class="kkv3-main"><section class="kkv3-card kkv3-chat"><div class="kkv3-chat-head"><div class="kkv3-chat-head-title"><strong>'+esc(state.chat?.title||"New Chat")+'</strong><span>Conversational Video Canvas · same model, route, Director controls and EvoLink generation</span></div><button class="kkv3-chat-new" id="kkv3NewChat" type="button">＋ New Chat</button></div><div class="kkv3-chat-thread" id="kkv3ChatThread" aria-live="polite">'+chatMessagesHtml()+'</div><div class="kkv3-chat-composer"><div class="kkv3-chat-refline">'+(refs.length?refs.map(x=>'<span class="kkv3-chat-ref">'+esc(x)+'</span>').join(""):'<span class="kkv3-small">No references attached</span>')+'</div><div class="kkv3-chat-row"><button class="kkv3-chat-tool" type="button" id="kkv3ChatAttach" title="Add reference" aria-label="Add reference">＋</button><textarea class="kkv3-chat-input" id="kkv3ChatPrompt" rows="1" placeholder="Describe the video, then refine it naturally…">'+esc(state.prompt)+'</textarea><button class="kkv3-chat-send" type="button" id="kkv3ChatSend" aria-label="Generate video" '+(state.busy||!apiKey()?"disabled":"")+'>'+(state.busy?"…":"➤")+'</button></div><div class="kkv3-chat-status"><span><b>'+esc(modelLabel(currentRoute()))+'</b> · '+esc(routeLabel(currentRoute()))+'</span><span>'+(!apiKey()?"Add your existing EvoLink API key in Settings":"Enter = generate · Shift+Enter = new line")+'</span></div><input id="kkv3ChatFile" type="file" accept="image/*,video/*,audio/*" multiple style="display:none"></div></section></main><aside class="kkv3-side"><section class="kkv3-card"><h3>Chat context</h3><div class="kkv3-small">The selected model, route, duration, quality, aspect ratio, audio setting and references remain controlled by the canonical V3 state.</div></section><section class="kkv3-card"><h3>Generation history <span>'+historyItems().length+'</span></h3><div class="kkv3-history">'+historyHtml()+'</div></section></aside>';
+  }
+
   function render(){
     window.__kosmicVideoCanvasV3Render=render;
     const host=$("kkVideoCanvasV3");if(!host)return;normalize();
-    host.innerHTML=`<div class="kkv3-head"><div class="kkv3-brand">✦</div><div><div class="kkv3-title">Video Canvas</div><div class="kkv3-sub">Creator-first generation workspace · EvoLink routes</div></div><div class="kkv3-status"><i></i>Live generation</div></div><div class="kkv3-tabs"><button class="kkv3-tab ${state.workspace==="shot"?"active":""}" data-workspace="shot">Single Shot</button><button class="kkv3-tab ${state.workspace==="storyboard"?"active":""}" data-workspace="storyboard">Storyboard</button></div><div class="kkv3-body">${state.workspace==="storyboard"?storyboardWorkspace():shotWorkspace()}</div>`;
+    host.innerHTML=`<div class="kkv3-head"><div class="kkv3-brand">✦</div><div><div class="kkv3-title">Video Canvas</div><div class="kkv3-sub">Creator-first generation workspace · EvoLink routes</div></div><div class="kkv3-status"><i></i>Live generation</div></div><div class="kkv3-tabs"><button class="kkv3-tab ${state.workspace==="shot"?"active":""}" data-workspace="shot">Single Shot</button><button class="kkv3-tab ${state.workspace==="storyboard"?"active":""}" data-workspace="storyboard">Storyboard</button><button class="kkv3-tab ${state.workspace==="chat"?"active":""}" data-workspace="chat">Chat</button></div><div class="kkv3-body">${state.workspace==="storyboard"?storyboardWorkspace():state.workspace==="chat"?chatWorkspace():shotWorkspace()}</div>`;
     bind();
     window.dispatchEvent(new Event("kosmic:video-v3-rendered"));
   }
@@ -295,6 +338,40 @@
     qAll("#kkVideoCanvasV3 [data-route]").forEach(b=>b.addEventListener("click",()=>setRoute(b.dataset.route)));
     $("kkv3Prompt")?.addEventListener("input",e=>{state.prompt=e.target.value;});
     $("kkv3ClearPrompt")?.addEventListener("click",()=>{state.prompt="";render();});
+    $("kkv3NewChat")?.addEventListener("click",newChat);
+    $("kkv3ChatPrompt")?.addEventListener("input",e=>{state.prompt=e.target.value;const send=$("kkv3ChatSend");if(send)send.disabled=!e.target.value.trim()||state.busy||!apiKey();e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,150)+"px";});
+    $("kkv3ChatPrompt")?.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("kkv3ChatSend")?.click();}});
+    $("kkv3ChatSend")?.addEventListener("click",async()=>{
+      if(state.busy)return;
+      const input=$("kkv3ChatPrompt"),prompt=input?.value.trim()||"";
+      if(!prompt){toast("Write a video prompt first.","error");return;}
+      if(!apiKey()){toast("EvoLink is not configured in the existing API key settings.","error");return;}
+      state.chat=state.chat||{id:"chat_"+Date.now(),title:"New Chat",messages:[]};
+      state.chat.title=state.chat.title==="New Chat"?prompt.slice(0,52)+(prompt.length>52?"…":""):state.chat.title;
+      const refs=[...state.images.map(x=>x.name||"Image"),...state.videos.map(x=>x.name||"Video"),...state.audios.map(x=>x.name||"Audio")];
+      state.chat.messages.push({role:"user",content:prompt,references:refs,created:Date.now()});
+      state.prompt=prompt;state.busy=true;render();
+      try{
+        const url=await generateSingle(prompt);
+        state.chat.messages.push({role:"assistant",content:"Generated a video from this prompt.",output:{url,model:modelLabel(currentRoute()),duration:state.duration,quality:state.quality,aspect:state.aspect},created:Date.now()});
+        state.prompt="";
+        toast("Video generated.","success");
+      }catch(e){
+        state.chat.messages.push({role:"assistant",content:"Generation failed: "+(e?.message||String(e)),error:true,created:Date.now()});
+        state.prompt="";
+        toast("❌ "+(e?.message||String(e)),"error");
+      }finally{state.busy=false;render();}
+    });
+    $("kkv3ChatAttach")?.addEventListener("click",()=>$("kkv3ChatFile")?.click());
+    $("kkv3ChatFile")?.addEventListener("change",async e=>{
+      for(const file of Array.from(e.target.files||[])){
+        const kind=file.type.startsWith("video/")?"videos":file.type.startsWith("audio/")?"audios":"images";
+        await addFiles(kind,[file]);
+      }
+      e.target.value="";
+      if(state.workspace!=="chat")state.workspace="chat";
+      render();
+    });
     qAll("#kkVideoCanvasV3 [data-preset-tab]").forEach(b=>b.addEventListener("click",()=>{state.presetTab=b.dataset.presetTab;render();}));
     qAll("#kkVideoCanvasV3 [data-preset]").forEach(b=>b.addEventListener("click",()=>insertPrompt(b.dataset.preset)));
     const dur=$("kkv3Duration"),num=$("kkv3DurationNum");dur?.addEventListener("input",e=>{state.duration=Number(e.target.value);if(num)num.value=state.duration;renderCostOnly();});num?.addEventListener("change",e=>{state.duration=Number(e.target.value);normalize();render();});
