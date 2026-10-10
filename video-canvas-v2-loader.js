@@ -3,7 +3,7 @@
   "use strict";
   if(window.__kosmicVideoCanvasV3Loader)return;
   window.__kosmicVideoCanvasV3Loader=true;
-  const V="20260922-v3-actions-director-8";
+  const V="20261010-v3-legacy-scrub-9";
 
   const videoActive=()=>window.S?.mod==="videocanvas"||!!document.querySelector('.mod-btn[data-mod="videocanvas"].active');
   const markV3Pending=()=>document.documentElement.classList.add("kk-video-v3-pending");
@@ -28,6 +28,7 @@
     markV3Pending();
     if(window.__kosmicVideoStackLoaded||window.__kosmicVideoStackLoading)return true;
     window.__kosmicVideoStackLoading=true;
+    load("video-v3-ui-overrides.js","data-kosmic-video-v3-ui-overrides",()=>
     load("evolink-video-compat-fix.js","data-kosmic-evo-v3-compat",()=>
       load("evolink-video.js","data-kosmic-evo-v3-catalog",()=>
         load("evolink-video-current.js","data-kosmic-evo-v3-current",()=>
@@ -64,7 +65,7 @@
           )
         )
       )
-    );
+    ));
     return true;
   };
 

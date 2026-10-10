@@ -228,7 +228,7 @@ function clearMotionBrush(){
 (function loadVideoCanvasV2(){
   if(document.querySelector('script[data-kosmic-video-canvas-v2-loader="1"]'))return;
   const s=document.createElement("script");
-  s.src="video-canvas-v2-loader.js?v=20260922-v3-actions-director-8";
+  s.src="video-canvas-v2-loader.js?v=20261010-v3-legacy-scrub-9";
   s.async=false;
   s.dataset.kosmicVideoCanvasV2Loader="1";
   document.head.appendChild(s);
