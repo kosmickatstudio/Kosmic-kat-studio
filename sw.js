@@ -1,13 +1,35 @@
 // Network-first service worker. Cache version is bumped whenever deploy-relevant
 // runtime layers change so an offline client does not retain a stale catalog.
-const CACHE_NAME = "kosmic-kat-studio-v39";
+// Requests use cache:"no-cache" (always revalidate with the server via ETag, so a deploy is
+// never served stale, but unchanged files come back as tiny 304s instead of full re-downloads).
+// If the network is slow (>3s) the cached copy is served so the app still opens quickly, while
+// the fresh copy keeps downloading in the background for the next load.
+const CACHE_NAME = "kosmic-kat-studio-v40";
 const ASSETS = [
-  "/index.html","/audio.js","/adstudio.js","/editor.js","/team.js","/costs.js","/upscaler.js","/display.js","/flow.js","/nodecanvas.js","/motion.js","/assets.js","/gallery.js","/characters.js","/directors.js","/home.js","/home-models-current.js","/kosmicengine.js","/cinemastudio.js",
-  "/evolink-video.js","/evolink-video-current.js","/evolink-video-expansion.js","/evolink-video-integrity.js","/evolink-video-pricing.js","/evolink-video-adapter-fallback.js","/evolink-video-safety.js","/evolink-video-canvas-adapter.js","/evolink-video-final-guard.js","/evolink-video-route-hud.js","/video-canvas-v2-loader.js","/video-canvas-mobile-upload-fix.js","/video-canvas-mobile-upload-fix-v2.js","/video-settings-parity.js","/settings-layer-guard.js",
-  "/kosmic-video.js","/video-canvas-v3.js","/video-v3-ui-overrides.js","/video-chat-state.js","/video-chat-shell.js","/video-chat-generation.js","/video-chat-director.js","/video-chat-primary.js","/video-chat-safety.js","/video-v3-interaction-hardening.js","/video-v3-ux-fixes.js","/video-v3-final-fixes.js",
-  "/ui-v2-evolink-route.css","/ui-v2.css","/ui-v2-phase1.css","/ui-v2-phase2.css","/ui-v2-phase3.css","/ui-v2-phase4.css","/ui-v2-phase5.css","/ui-v2-phase6.css","/ui-v2-phase7.css","/ui-v2-phase8.css","/ui-v2-phase9.css","/ui-v2-phase10.css","/ui-v2-home-latest.css","/ui-v2-settings-fix.css","/ui-v2-settings-immune.css","/ui-v2-layer-arbiter.css",
-  "/engine-glass-ui.js","/engine-asset-review.js","/engine-strategy-ui.js","/engine-recovery.js","/manifest.json","/icon-192.png","/icon-512.png"
+  "/index.html","/audio.js","/adstudio.js","/editor.js","/team.js","/costs.js","/upscaler.js","/display.js",
+  "/flow.js","/nodecanvas.js","/motion.js","/assets.js","/gallery.js","/characters.js","/directors.js","/home.js",
+  "/home-models-current.js","/kosmicengine.js","/cinemastudio.js","/settings-layer-guard.js","/kosmic-video.js","/ui-v2-evolink-route.css","/ui-v2.css","/ui-v2-phase1.css",
+  "/ui-v2-phase2.css","/ui-v2-phase3.css","/ui-v2-phase4.css","/ui-v2-phase5.css","/ui-v2-phase6.css","/ui-v2-phase7.css","/ui-v2-phase8.css","/ui-v2-phase9.css",
+  "/ui-v2-phase10.css","/ui-v2-home-latest.css","/ui-v2-settings-fix.css","/ui-v2-settings-immune.css","/ui-v2-layer-arbiter.css","/engine-glass-ui.js","/engine-asset-review.js","/engine-strategy-ui.js",
+  "/engine-recovery.js","/manifest.json","/icon-192.png","/icon-512.png"
 ];
 self.addEventListener("install",event=>{event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(ASSETS)).catch(()=>{}));self.skipWaiting()});
 self.addEventListener("activate",event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim()});
-self.addEventListener("fetch",event=>{if(event.request.method!=="GET")return;const url=new URL(event.request.url);if(url.origin!==self.location.origin)return;event.respondWith(fetch(event.request,{cache:"no-store"}).then(response=>{const copy=response.clone();caches.open(CACHE_NAME).then(cache=>cache.put(event.request,copy)).catch(()=>{});return response}).catch(()=>caches.match(event.request)))});
+self.addEventListener("fetch",event=>{
+  if(event.request.method!=="GET")return;
+  const url=new URL(event.request.url);
+  if(url.origin!==self.location.origin)return;
+  event.respondWith((async()=>{
+    const cache=await caches.open(CACHE_NAME);
+    const network=fetch(event.request,{cache:"no-cache"}).then(res=>{
+      if(res&&res.ok)cache.put(event.request,res.clone()).catch(()=>{});
+      return res;
+    });
+    const cached=await cache.match(event.request);
+    if(!cached)return network;
+    return Promise.race([
+      network.catch(()=>cached),
+      new Promise(resolve=>setTimeout(()=>resolve(cached),3000))
+    ]);
+  })());
+});

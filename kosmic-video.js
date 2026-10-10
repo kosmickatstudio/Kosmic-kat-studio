@@ -734,6 +734,19 @@
   window.showVcChatView=function(){K.view="generate";render();markTab("Generate")};
   window.showVcGalleryView=function(){K.view="gallery";render();markTab("Gallery")};
 
+  // "🎬 send to video" button elsewhere in the app (image → first frame)
+  window.sendToVideoCanvas=function(imageUrl){
+    const url=safeUrl(imageUrl);
+    if(!url){say("That image can't be used as a video frame","error");return}
+    K.model="seedance-2.5";K.mode="image";K.view="generate";
+    K.media={image_urls:[{id:"m_"+rid(),name:"From chat",kind:"image",url}]};
+    normalize();saveForm();
+    const btn=document.querySelector('.mod-btn[data-mod="videocanvas"]');
+    if(typeof S!=="undefined"&&S.mod==="videocanvas")render();
+    else if(typeof switchMod==="function")switchMod("videocanvas",btn);
+    say("🎬 Image added as the first frame","success");
+  };
+
   window.KosmicVideo={MODELS,state:K,buildBody,validate,extractUrl,render};
 
   loadForm();loadJobs();
