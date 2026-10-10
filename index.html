@@ -13,6 +13,8 @@
 <meta name="apple-mobile-web-app-title" content="KosmicKat AI">
 <meta name="description" content="AI-driven cinematic content studio — video, image, audio, and ad production powered by Seedance, Kling, Veo, and more.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -2067,6 +2069,28 @@ function handleTabSwitch(mod,name){
   }
 }
 
+// ── VIDEO MODULE COMPAT ──
+// The old Video Canvas (v1 chat UI, v2 loader, v3 layers) was removed. The Video module now lives
+// entirely in kosmic-video.js, which replaces renderVideoCanvas / showVcChatView / showVcGalleryView /
+// sendToVideoCanvas when it loads. These placeholders only exist so any leftover call (or a click that
+// lands before kosmic-video.js has loaded) can never throw a ReferenceError.
+function renderVideoCanvas(el){if(el)el.innerHTML='<div class="empty-desc" style="padding:28px;text-align:center">Loading Video Studio…</div>';}
+function showVcChatView(){}
+function showVcGalleryView(){}
+function sendToVideoCanvas(imageUrl){S.pendingFirstFrame=imageUrl;if(typeof switchMod==="function")switchMod("videocanvas",document.querySelector('[data-mod="videocanvas"]'));}
+function unresolvedVcElementTags(){return [];}
+function getVcAvailableTags(){return [];}
+function saveVcElements(){}
+function renderVcElements(){}
+function renderVcVoiceList(){}
+function updateVcAttachmentBar(){}
+function updateVcModelUI(){}
+function renderVcMultiPreview(){}
+function renderVcTagChips(){}
+function toggleVcSettings(){}
+function pushVcChatMessage(){}
+function replaceVcLoadingBubble(){}
+
 // ── RENDER MODULES ──
 function renderModule(mod){
   const el=document.getElementById("moduleContent");
@@ -3486,45 +3510,6 @@ function showIgChatView(){
 }
 
 // ── VIDEO INLINE GALLERY VIEW — real, mirrors Image's exact pattern ──
-function showVcGalleryView(){
-  const thread=document.getElementById("vcChatThread");
-  const galleryView=document.getElementById("vcGalleryView");
-  const inputBar=document.querySelector(".ig-chat-inputbar");
-  if(!galleryView)return;
-  const videos=[];
-  S.vcChatHistory.forEach(msg=>{
-    if(msg.role!=="assistant"||msg.type!=="video")return;
-    videos.push({url:msg.content,prompt:msg.meta?.prompt||"",providerLabel:msg.meta?.providerLabel||"",assetId:msg.meta?.assetId||null});
-  });
-  videos.reverse();
-  galleryView.innerHTML=`
-    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-      <div style="font-size:12px;font-weight:700;color:var(--violet)">🎬 ${videos.length} video${videos.length!==1?'s':''} from this chat</div>
-      <button class="btn btn-ghost btn-xs" onclick="showVcChatView()">← Back to Chat</button>
-    </div>
-    <div style="padding:14px;max-height:52vh;overflow-y:auto">
-      ${videos.length===0?`<div class="empty-desc">No videos generated yet — go back and describe something.</div>`
-      :`<div class="grid2">${videos.map(v=>`
-        <div class="card" style="padding:6px">
-          <video src="${v.url}" style="width:100%;border-radius:8px;aspect-ratio:16/9;object-fit:cover" muted controls></video>
-          <div style="font-size:10px;color:var(--textm);margin:4px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.providerLabel}</div>
-          ${v.assetId?`<button class="btn btn-outline btn-xs btn-full" onclick="openCollectionPicker('asset','${v.assetId}')">📁 Collection</button>`:''}
-        </div>`).join('')}</div>`}
-    </div>`;
-  thread.style.display="none";
-  galleryView.style.display="block";
-  if(inputBar)inputBar.style.display="none";
-}
-
-function showVcChatView(){
-  const thread=document.getElementById("vcChatThread");
-  const galleryView=document.getElementById("vcGalleryView");
-  const inputBar=document.querySelector(".ig-chat-inputbar");
-  if(thread)thread.style.display="flex";
-  if(galleryView)galleryView.style.display="none";
-  if(inputBar)inputBar.style.display="flex";
-  document.querySelectorAll("#moduleTabs .inner-tab").forEach(t=>t.classList.toggle("active",t.textContent==="Generate"));
-}
 
 // ── CHAT HISTORY (SESSIONS) — "New Chat" archives instead of deletes ──
 
@@ -4039,9 +4024,6 @@ async function magicPrompt(targetId,mediaType){
   }
 }
 
-function vcMagicPrompt(){
-  return magicPrompt("vcChatInput","video");
-}
 
 // ── PROMPT LIBRARY ──
 function openPromptLibrary(){
@@ -4145,13 +4127,6 @@ function goToVideoCanvasFor(projectId){
 }
 
 // ── SEND TO VIDEO CANVAS (now really wired via the storyboard's Image-to-Video support) ──
-function sendToVideoCanvas(imageUrl){
-  S.pendingFirstFrame=imageUrl;
-  const projSel=document.getElementById("igProject");
-  const projectId=projSel?projSel.value:"";
-  goToVideoCanvasFor(projectId);
-  toast(projectId?"🎬 Image ready — add a new shot and it'll be pre-filled as your reference frame":"🎬 Image ready — pick a project, then add a shot to use it as your reference frame","success");
-}
 
 // ── Provider-specific generation calls (each returns {url, providerLabel} or throws) ──
 async function genViaFal(prompt,negPrompt,model,ratio,useImg2Img){
@@ -4782,16 +4757,7 @@ function measureVideo(dataUrl){
 // error on a dangling tag — it just ignores it, so the user gets a shot where
 // their third character silently never appears and no failure is reported
 // anywhere. Cheap to check locally, impossible to notice afterwards.
-function unresolvedVcElementTags(prompt){
-  if(!prompt)return [];
-  const used=[...new Set((prompt.match(/@Element\d+/gi)||[]).map(t=>t.toLowerCase()))];
-  if(!used.length)return [];
-  const available=(S.vcElements||[]).filter(e=>e&&e.frontal&&e.angles&&e.angles.length).length;
-  return used.filter(t=>{
-    const n=parseInt(t.replace(/\D/g,""),10);
-    return !isFinite(n)||n<1||n>available;
-  });
-}
+
 function collectKlingV3Images(){
   const out=[];
   (S.vcMultiImages||[]).forEach((it,i)=>{ if(it&&it.dataUrl)out.push({...it,name:it.name||`Start frame`}); });
@@ -5334,12 +5300,6 @@ function openGenerationInfoModal(meta){
   document.body.appendChild(sheet);
 }
 
-function showVcGenerationInfo(msgId){
-  const msg=S.vcChatHistory.find(m=>m.id===msgId);
-  if(!msg)return;
-  const meta=msg.meta||{};
-  openGenerationInfoModal({...meta,mediaUrl:msg.content,mediaType:"video",duration:meta.totalDuration?meta.totalDuration+"s":meta.duration});
-}
 
 function closeGenerationInfoModal(){
   document.getElementById("vcInfoSheet")?.remove();
@@ -5803,248 +5763,6 @@ async function sendMotionControlGen(){
   }
 }
 
-function renderVideoCanvas(el){
-  const hasKey=gs("api_falai");
-  const project=S.vcActiveProject?S.projects.find(p=>p.id===S.vcActiveProject):null;
-
-  if(!project){
-    el.innerHTML=`
-      ${S.projects.length?`<div class="panel" style="margin-bottom:0"><div class="f-group" style="margin-bottom:0"><label class="f-label">Open a Project for a Shot-by-Shot Storyboard</label><select class="f-select" id="vcProjectPicker" onchange="if(this.value){S.vcActiveProject=this.value;renderVideoCanvas(document.getElementById('moduleContent'));}"><option value="">— Open an existing project —</option>${S.projects.filter(p=>!p.archived).map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div></div>`:''}
-
-      <div class="ig-chat-shell" style="margin-top:${S.projects.length?'12px':'0'}">
-        <div class="ig-chat-header">
-          <button class="ig-icon-btn" onclick="openVcChatHistory()" title="Chat History">☰</button>
-          <div style="flex:1;text-align:center">
-            <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">▶ Video</div>
-            <div style="font-size:10px;color:var(--textm);margin-top:1px">${hasKey?'<span style="color:var(--green);font-weight:700">●</span> Ready':'<span style="color:var(--red);font-weight:700">●</span> No key configured'}${gs("active_director","")?' · '+pIcon('film',10)+' '+(getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name:''}</div>
-          </div>
-          <button class="ig-icon-btn" onclick="startNewVcChat()" title="New Chat">➕</button>
-        </div>
-        <div id="vcGalleryView" style="display:none"></div>
-
-        <div id="vcSettingsPanel" class="ig-settings-sheet">
-          <div class="ig-sheet-handle" ontouchstart="sheetSwipeStart(event)" ontouchmove="sheetSwipeMove(event,'vcSettingsPanel')" ontouchend="sheetSwipeEnd(event,'vcSettingsPanel','toggleVcSettings')"></div>
-          <div class="ig-sheet-header">
-            <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">⚙ Settings</div>
-            <button class="ig-icon-btn" onclick="toggleVcSettings()" title="Close">✕</button>
-          </div>
-          <div style="padding:14px 16px">
-          ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:10px">Add a <b>fal.ai</b> API key in Settings — this one key powers Seedance, Kling, and Veo.</div>`:''}
-          <div class="f-group">
-            <label class="f-label">Model</label>
-            <select class="f-select" id="vcModel" onchange="updateVcModelUI()" style="display:none">${modelOptionsHTML("video",null,gs("default_video_model","bytedance/seedance-2.0/fast/text-to-video"))}</select>
-            <div id="vcModelTrigger" onclick="openModelPicker('vcModel','video')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-            <div id="vcModelNote" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
-          </div>
-          <div class="f-row">
-            <div class="f-group" id="vcResWrap">
-              <label class="f-label">Resolution</label>
-              <select class="f-select" id="vcRes" onchange="updateVcCostHint();renderVisualTrigger('vcRes','resolution')" style="display:none"></select>
-              <div id="vcResTrigger" onclick="openVisualPicker('vcRes','Choose Resolution','resolution')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-            </div>
-            <div class="f-group">
-              <label class="f-label">Aspect Ratio</label>
-              <select class="f-select" id="vcRatio" onchange="renderVisualTrigger('vcRatio','ratio')" style="display:none"></select>
-              <div id="vcRatioTrigger" onclick="openVisualPicker('vcRatio','Choose Aspect Ratio','ratio')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-            </div>
-          </div>
-          <div class="f-group"><label class="f-label">Duration <span id="vcDurationLabel" style="font-weight:400;color:var(--texts)"></span></label>
-            <input type="range" id="vcDurationSlider" min="0" max="0" step="1" value="0" style="width:100%" oninput="updateVcDurationFromSlider()">
-            <input type="hidden" id="vcDuration" value="">
-          </div>
-          <div class="f-group" id="vcNegPromptWrap" style="display:none"><label class="f-label">Negative Prompt</label><input class="f-input" id="vcNegPrompt" placeholder="e.g. blur, distort, low quality"></div>
-          <div class="f-group" id="vcCfgScaleWrap" style="display:none">
-            <label class="f-label">Prompt Adherence (CFG Scale) — <span id="vcCfgScaleLabel">0.5</span></label>
-            <input type="range" id="vcCfgScaleSlider" min="0" max="1" step="0.05" value="0.5" style="width:100%" oninput="document.getElementById('vcCfgScaleLabel').textContent=this.value;updateRangeFill(this)">
-            <div style="font-size:10px;color:var(--textm);margin-top:3px">Lower = more creative motion/variation. Higher = sticks closer to your exact prompt. Kling's own default is 0.5.</div>
-          </div>
-
-          <div class="f-group" id="vcFramesWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <label class="f-label">${pIcon('film',12)} Frames <span style="font-weight:400;color:var(--texts)">(optional — where the shot starts and ends)</span></label>
-            <div style="display:flex;gap:10px;align-items:stretch">
-              <div style="flex:1">
-                <div id="vcStartFrameSlot"></div>
-                <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.05em;margin-top:6px;text-align:center">Start frame</div>
-              </div>
-              <div style="display:flex;align-items:center;color:var(--textm);font-size:18px;padding-top:65px">→</div>
-              <div style="flex:1">
-                <div id="vcEndFrameSlot"></div>
-                <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.05em;margin-top:6px;text-align:center">End frame</div>
-              </div>
-            </div>
-            <input type="file" accept="image/*" id="vcStartFrameFile" style="display:none" onchange="handleVcStartFrameUpload(event)">
-            <input type="file" accept="image/*" id="vcFramesEndFile" style="display:none" onchange="handleVcEndFrameUpload(event)">
-            <div style="font-size:9.5px;color:var(--textm);margin-top:7px">Kling animates from the start frame to the end frame. Leave both empty to generate purely from the prompt.</div>
-            <div style="font-size:9.5px;color:var(--textm);margin-top:3px">Both frames must be at least 300×300, under 10MB, and between 2:5 and 5:2 — so 16:9, 9:16, 1:1, 4:5 and 21:9 are all fine; only extreme letterbox or sliver crops are rejected.</div>
-            <div id="vcFramesMismatch" style="display:none;font-size:9.5px;color:var(--gold);margin-top:5px"></div>
-          </div>
-          <div class="f-group" id="vcElementsWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <label class="f-label">${pIcon('sparkle',12)} Elements <span style="font-weight:400;color:var(--texts)">(characters / objects to keep consistent)</span></label>
-            <div style="font-size:10px;color:var(--textm);margin:-2px 0 8px">Each Element is ONE character or object. Kling needs a main view plus at least one other angle of that same subject — that pairing is what holds it consistent across the shot.</div>
-            <div id="vcElementsList"></div>
-            <button type="button" class="btn btn-outline btn-sm" id="vcAddElementBtn" onclick="addVcElement()">+ Add Element</button>
-            <input type="file" accept="image/*" id="vcElementFrontalFile" style="display:none" onchange="handleVcElementImage(event,'frontal')">
-            <input type="file" accept="image/*" multiple id="vcElementAngleFile" style="display:none" onchange="handleVcElementImage(event,'angle')">
-            <input type="file" accept="video/*" id="vcElementVideoFile" style="display:none" onchange="handleVcElementVideo(event)">
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-              <button type="button" class="btn btn-ghost btn-sm" onclick="openSaveCharacterPresetModal()">${pIcon('save',13)} Save as Preset</button>
-              <button type="button" class="btn btn-ghost btn-sm" onclick="openLoadCharacterPresetModal()">${pIcon('folder',13)} Load Preset</button>
-            </div>
-            <div style="font-size:9.5px;color:var(--textm);margin-top:5px">Presets are saved in this app only, for fast reuse — fal doesn't expose Kling's own Element Library via its API, so Elements are built per generation rather than registered once.</div>
-          </div>
-          <div class="f-group" id="vcMultiImageWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <label class="f-label" id="vcMultiImageLabel">Reference Images</label>
-            <input type="file" accept="image/*" multiple id="vcMultiImageFile" style="display:none" onchange="handleVcMultiImageUpload(event)">
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px" id="vcMultiImagePreview"></div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcMultiImageFile').click()">${pIcon('upload',13)} Add Images</button>
-              <button type="button" class="btn btn-ghost btn-sm" onclick="openSaveCharacterPresetModal()">${pIcon('save',13)} Save as Preset</button>
-              <button type="button" class="btn btn-ghost btn-sm" onclick="openLoadCharacterPresetModal()">${pIcon('folder',13)} Load Preset</button>
-            </div>
-            <div style="font-size:9.5px;color:var(--textm);margin-top:5px">Presets are saved in this app only, for fast reuse — not a registered Kling Element (fal doesn't expose Kling's own Element Library via its API).</div>
-          </div>
-          <div class="f-group" id="vcMotionBrushWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <label class="f-label">Motion Brush <span style="font-weight:400;color:var(--texts)">(optional — paint where motion happens)</span></label>
-            <div id="vcMotionBrushStatus" style="font-size:11px;color:var(--textm);margin-bottom:8px">Not set — uses the first reference image above as the base.</div>
-            <div style="display:flex;gap:6px">
-              <button type="button" class="btn btn-outline btn-sm" style="flex:1" onclick="openMotionBrushEditor()">${pIcon('brush',13)} Open Motion Brush</button>
-              <button type="button" class="btn btn-ghost btn-sm" id="vcMotionBrushClearBtn" style="display:none" onclick="clearMotionBrush()">✕ Clear</button>
-            </div>
-          </div>
-          <div class="f-group" id="vcEndFrameWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <label class="f-label">End Frame <span style="font-weight:400;color:var(--texts)">(optional — Kling interpolates from your reference image to this one)</span></label>
-            <input type="file" accept="image/*" id="vcEndFrameFile" style="display:none" onchange="handleVcEndFrameUpload(event)">
-            <div id="vcEndFramePreview" style="margin-bottom:8px"></div>
-            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcEndFrameFile').click()">${pIcon('upload',13)} Add End Frame</button>
-          </div>
-          <div class="f-group" id="vcMultiShotWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">
-              <input type="checkbox" id="vcMultiShotToggle" onchange="toggleMultiShotMode()">
-              <span class="f-label" style="margin:0">${pIcon('film',12)} Multi-Shot Storyboard <span style="font-weight:400;color:var(--texts)">(up to 6 shots, one generation)</span></span>
-            </label>
-            <div id="vcKlingAudioWrap" style="display:none;border-top:1px solid var(--border);padding-top:10px;margin-top:8px">
-              <div style="display:flex;align-items:center;gap:10px">
-                <label class="kk-toggle">
-                  <input type="checkbox" id="vcKlingAudioToggle" onchange="saveSetting('kling_generate_audio',this.checked);updateVcCostHint()">
-                  <span class="kk-toggle-track"></span><span class="kk-toggle-thumb"></span>
-                </label>
-                <span class="f-label" style="margin:0">${pIcon('mic',12)} Native Audio <span style="font-weight:400;color:var(--texts)">(Kling v3 — off is ~33% cheaper)</span></span>
-              </div>
-              <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
-                <label class="kk-toggle">
-                  <input type="checkbox" id="vcKlingSmartShotToggle" onchange="saveSetting('kling_shot_type',this.checked?'intelligent':'customize')">
-                  <span class="kk-toggle-track"></span><span class="kk-toggle-thumb"></span>
-                </label>
-                <span class="f-label" style="margin:0">${pIcon('sparkle',12)} Smart Multi-Shot <span style="font-weight:400;color:var(--texts)">(let Kling decide the shot structure)</span></span>
-              </div>
-            </div>
-            <div id="vcMultiShotBuilder" style="display:none">
-              <div class="f-group">
-                <label class="f-label">Generation Mode</label>
-                <div class="vc-shottype-toggle">
-                  <button type="button" class="vc-shottype-btn active" data-val="combined" onclick="setVcShotMode('combined')">Combined<br>one video, all shots at once</button>
-                  <button type="button" class="vc-shottype-btn" data-val="sequential" onclick="setVcShotMode('sequential')">Sequential<br>one clip per shot, own reference each</button>
-                </div>
-                <input type="hidden" id="vcShotMode" value="combined">
-                <div class="vc-shottype-note" id="vcShotModeNote">Real multi-character reference in one call — needs 2+ attached images.</div>
-              </div>
-              <div class="f-group" id="vcShotTypeWrap">
-                <label class="f-label">Shot Type</label>
-                <div class="vc-shottype-toggle">
-                  <button type="button" class="vc-shottype-btn active" data-val="customize" onclick="setVcShotType('customize')">Customize<br>set each shot's prompt &amp; duration</button>
-                  <button type="button" class="vc-shottype-btn" data-val="intelligent" onclick="setVcShotType('intelligent')">Intelligent<br>model auto-paces the shots</button>
-                </div>
-                <input type="hidden" id="vcShotType" value="customize">
-                <div class="vc-shottype-note" id="vcShotTypeNote">You control exactly when each shot starts and ends.</div>
-              </div>
-              <div id="vcShotList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px"></div>
-              <button type="button" class="btn btn-outline btn-sm" onclick="addVcShot()">+ Add Shot</button>
-              <div id="vcShotTotalInfo" style="font-size:11px;color:var(--textm);margin-top:8px"></div>
-            </div>
-          </div>
-          <div class="f-group" id="vcVoiceWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <label class="f-label">${pIcon('mic',12)} Dialogue Voices <span style="font-weight:400;color:var(--texts)">(optional, up to 2 — clone a voice from a sample)</span></label>
-            <div id="vcVoiceList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
-            <input type="file" accept="audio/*,video/*" id="vcVoiceSampleFile" style="display:none" onchange="handleVoiceSampleUpload(event)">
-            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcVoiceSampleFile').click()">${pIcon('mic',13)} Clone New Voice (5–30s sample)</button>
-            <div id="vcVoiceHint" style="display:none;font-size:10px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px;margin-top:6px"></div>
-          </div>
-          <div class="f-group" id="vcMultiVideoWrap" style="display:none">
-            <label class="f-label" id="vcMultiVideoLabel">Reference Videos <span style="font-weight:400;color:var(--texts)">(up to 3)</span></label>
-            <input type="file" accept="video/*" multiple id="vcMultiVideoFile" style="display:none" onchange="handleVcMultiVideoUpload(event)">
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px" id="vcMultiVideoPreview"></div>
-            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcMultiVideoFile').click()">${pIcon('upload',13)} Add Videos</button>
-          </div>
-          <div class="f-group" id="vcMultiAudioWrap" style="display:none">
-            <label class="f-label">Reference Audio <span style="font-weight:400;color:var(--texts)">(up to 3)</span></label>
-            <input type="file" accept="audio/*" multiple id="vcMultiAudioFile" style="display:none" onchange="handleVcMultiAudioUpload(event)">
-            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px" id="vcMultiAudioPreview"></div>
-            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('vcMultiAudioFile').click()">${pIcon('upload',13)} Add Audio</button>
-          </div>
-          <div class="f-group" id="vcElementGroupWrap" style="display:none">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-              <input type="checkbox" id="vcElementGroupToggle" onchange="setVcElementGroupMode(this.checked)">
-              <span class="f-label" style="margin:0">These are multiple angles of ONE character <span style="font-weight:400;color:var(--texts);text-transform:none;letter-spacing:0">(off = each image is a different character)</span></span>
-            </label>
-            <div style="font-size:10px;color:var(--textm);margin-top:4px" id="vcElementGroupNote">Kling's own Element system expects 2+ angle photos per character — turn this on if all your uploads are the same person/object from different angles.</div>
-          </div>
-          <div id="vcTagHint" style="display:none;font-size:10px;color:var(--textm);background:rgba(61,31,122,0.05);border-radius:8px;padding:8px;margin-top:6px"></div>
-          </div>
-        </div>
-
-        <div class="ig-chat-thread" id="vcChatThread"></div>
-
-        <div id="vcAttachmentBar" style="display:none;padding:4px 15px;font-size:11px;color:var(--textm);flex-direction:column;gap:4px"></div>
-        <div id="vcTagChips" style="display:none;padding:0 15px 6px;gap:5px;flex-wrap:wrap"></div>
-
-        <div class="ig-chat-inputbar">
-          <div class="ig-input-shell">
-            <div style="position:relative">
-              <div id="vcChatHighlight" style="position:absolute;inset:0;padding:2px 4px;font-size:13px;font-family:inherit;line-height:normal;white-space:pre-wrap;word-wrap:break-word;overflow:hidden;pointer-events:none;color:var(--text)"></div>
-              <textarea class="ig-input-textarea-v2" id="vcChatInput" rows="1" placeholder="${hasKey?'Describe the video you want…':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleVcChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,240)+'px';checkVcTagAutocomplete();renderVcTagChips();renderVcChatHighlight()" onscroll="syncVcChatHighlightScroll()" onblur="setTimeout(hideVcTagAutocomplete,150)" style="position:relative;background:transparent;color:transparent;caret-color:var(--text)"></textarea>
-            </div>
-            <div id="vcTagAutocomplete" style="display:none;position:absolute;bottom:100%;left:0;right:0;margin-bottom:6px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shv);max-height:160px;overflow-y:auto;z-index:10"></div>
-            <div class="ig-input-toolbar">
-              <button class="ig-tool-btn" onclick="toggleVcSettings()" title="Settings">⚙</button>
-              <button class="ig-tool-btn" onclick="vcMagicPrompt()" title="Magic Prompt"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4M22 5h-4M4 17v2M5 18H3"/></svg></button>
-              <button class="ig-tool-btn" id="vcVoiceBtn" onclick="toggleVcVoiceInput()" title="Voice Message"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></button>
-              <button class="ig-send-round" id="vcSendBtn" ${!hasKey?'disabled':''} onclick="sendVcChatPrompt()" title="Generate">➤</button>
-            </div>
-            <div style="font-size:9px;color:var(--texts);padding:2px 4px 0;display:flex;justify-content:space-between"><span id="vcCostHint" style="font-weight:700;color:var(--gold)"></span><span>Enter for a new line · <b>Ctrl+Enter</b> to generate</span></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="ig-settings-backdrop" id="vcSettingsBackdrop" onclick="toggleVcSettings()"></div>
-    `;
-    updateVcModelUI();
-    updateVcAttachmentBar();
-    renderVcChatThread();
-    return;
-  }
-
-  const shots=S.shots.filter(s=>s.projectId===project.id);
-  el.innerHTML=`
-    <div class="panel">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-        <button class="btn btn-ghost btn-xs" onclick="S.vcActiveProject=null;renderVideoCanvas(document.getElementById('moduleContent'))">← Change Project</button>
-        <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet);flex:1">🎬 ${project.name} — Storyboard</div>
-        ${hasKey?'<span class="badge badge-green">ACTIVE — fal.ai</span>':'<span class="badge badge-red">NO KEY</span>'}
-      </div>
-      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">${shots.length} shot${shots.length!==1?'s':''}${gs("active_director","")?' · 🎬 '+(getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name+' style active':''}</div>
-      ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:10px">Add a <b>fal.ai</b> API key in Settings to generate. This one key powers Seedance, Kling, and Veo.</div>`:''}
-      <button class="btn btn-primary btn-sm" onclick="openShotEditor('${project.id}')">+ Add Shot</button>
-    </div>
-    ${shots.length===0?`
-      <div class="empty-state">
-        <div class="empty-icon">🎬</div>
-        <div class="empty-title">No Shots Yet</div>
-        <div class="empty-desc">Build your storyboard one shot at a time — each shot gets its own prompt, camera movement, VFX, character lock, and model.</div>
-        <button class="btn btn-primary" onclick="openShotEditor('${project.id}')">+ Add First Shot</button>
-      </div>
-    `:`<div class="grid2" style="margin-top:14px">${shots.map(s=>shotCardHTML(s)).join('')}</div>`}
-  `;
-}
 
 // ── VIDEO CHAT UI — model-driven dynamic settings ──
 S.vcMultiImages=S.vcMultiImages||[];
@@ -6054,65 +5772,7 @@ S.vcMultiImages=S.vcMultiImages||[];
 // jobs: holding the start frame AND holding character references. Splitting
 // them is what makes the screen legible — Frames owns the shot's first and
 // last image, Elements owns the characters.
-async function handleVcStartFrameUpload(event){
-  const file=(event.target.files||[])[0];
-  event.target.value="";
-  if(!file)return;
-  if(!file.type.startsWith("image/")){toast("Images only","error");return;}
-  try{
-    const dataUrl=await downscaleImageFile(file);
-    // Start frame IS vcMultiImages[0] on these endpoints — it becomes
-    // start_image_url. Kept in the same place so every existing upload,
-    // validation and request path keeps working unchanged.
-    S.vcMultiImages=[{dataUrl,name:file.name}];
-    renderVcFrames();
-    if(typeof updateVcMultiImagePreview==="function")updateVcMultiImagePreview();
-    updateVcModelUI();
-  }catch(err){ toast(err.message,"error"); }
-}
-function clearVcStartFrame(){ S.vcMultiImages=[]; renderVcFrames(); if(typeof updateVcMultiImagePreview==="function")updateVcMultiImagePreview(); updateVcModelUI(); }
-function clearVcEndFrame(){ S.vcEndFrame=null; renderVcFrames(); }
-function renderVcFrames(){
-  const startSlot=document.getElementById("vcStartFrameSlot");
-  const endSlot=document.getElementById("vcEndFrameSlot");
-  if(!startSlot||!endSlot)return;
-  const start=S.vcMultiImages&&S.vcMultiImages[0];
-  const end=S.vcEndFrame;
-  const box=(img,pick,clear,placeholder)=>img
-    ?`<div style="position:relative">
-        <img src="${img.dataUrl}" style="width:100%;height:148px;object-fit:cover;border-radius:10px;border:1px solid var(--glass-brd);display:block">
-        <button onclick="${clear}" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--red);color:#fff;font-size:12px;line-height:1;cursor:pointer">✕</button>
-      </div>`
-    :`<div onclick="${pick}" style="height:148px;border:1.5px dashed var(--border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--textm);font-size:10.5px;gap:3px">
-        <div style="font-size:20px;line-height:1">+</div>${placeholder}
-      </div>`;
-  startSlot.innerHTML=box(start,"document.getElementById('vcStartFrameFile').click()","clearVcStartFrame()","Add start frame");
-  // The end frame is only meaningful once there is a start frame to move FROM.
-  endSlot.innerHTML=start
-    ? box(end,"document.getElementById('vcFramesEndFile').click()","clearVcEndFrame()","Add end frame")
-    : `<div style="height:148px;border:1.5px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--texts);font-size:10px;text-align:center;padding:0 8px;opacity:0.6">Add a start frame first</div>`;
-  // Aspect MISMATCH between the two frames is a warning, not a block: fal's
-  // schema constrains each frame's own ratio but says nothing about them
-  // matching each other. Rather than invent a rule, flag it — interpolating
-  // between different shapes usually crops or distorts, and that is worth
-  // knowing before spending, not after.
-  const mm=document.getElementById("vcFramesMismatch");
-  if(mm){
-    mm.style.display="none";
-    if(start&&end){
-      Promise.all([measureImage(start.dataUrl),measureImage(end.dataUrl)]).then(([a,b])=>{
-        if(!a||!b||!a.h||!b.h)return;
-        const ra=a.w/a.h, rb=b.w/b.h;
-        if(Math.abs(ra-rb)>0.05){
-          mm.textContent=`Heads up: your start frame is ${ra.toFixed(2)}:1 and the end frame is ${rb.toFixed(2)}:1. Kling will interpolate between them anyway, but mismatched shapes usually crop or stretch.`;
-          mm.style.display="block";
-        }
-      });
-    }
-  }
-  if(typeof renderVcTagChips==="function")renderVcTagChips();
-  if(typeof renderVcChatHighlight==="function")renderVcChatHighlight();
-}
+
 // ── EXPLICIT KLING ELEMENTS ─────────────────────────────────────────────
 // Replaces the flat "up to 4 reference images, auto-paired" model, which was
 // genuinely confusing: the user could not see which image belonged to which
@@ -6122,7 +5782,6 @@ function renderVcFrames(){
 // fal's schema is literally that shape too: elements[] of
 // {frontal_image_url, reference_image_urls, voice_id}.
 S.vcElements=S.vcElements||[];
-let _vcElementTarget=null; // which element+slot an upload is destined for
 const VC_MAX_ELEMENTS=4, VC_MAX_ANGLES=3;
 
 
@@ -6133,21 +5792,7 @@ const VC_MAX_ELEMENTS=4, VC_MAX_ANGLES=3;
 // built. Saved on every change instead of behind a Save button: an explicit
 // button is one more thing to forget, and the failure mode of forgetting it is
 // exactly the data loss being fixed.
-function saveVcElements(){
-  try{ window.save&&window.save("vcElements"); }
-  catch(err){ console.warn("Couldn't persist Elements:",err); }
-}
-function addVcElement(){
-  if(S.vcElements.length>=VC_MAX_ELEMENTS){toast(`Up to ${VC_MAX_ELEMENTS} Elements`,"error");return;}
-  S.vcElements.push({name:"",tag:"Characters",desc:"",frontal:null,angles:[],video:null,voiceId:null,collapsed:false});
-  saveVcElements();renderVcElements();
-}
-function removeVcElement(i){ S.vcElements.splice(i,1); saveVcElements(); renderVcElements(); }
-function removeVcElementAngle(i,j){ if(S.vcElements[i])S.vcElements[i].angles.splice(j,1); saveVcElements(); renderVcElements(); }
-function pickVcElementImage(i,slot){
-  _vcElementTarget={i,slot};
-  document.getElementById(slot==="frontal"?"vcElementFrontalFile":"vcElementAngleFile").click();
-}
+
 // Shared by every Kling reference/frame/element upload. All four handlers
 // stored the FileReader result completely raw — no downscaling at all — so
 // a modern phone photo (10-15MB+ at full resolution) went straight into
@@ -6181,102 +5826,19 @@ function downscaleImageFile(file,maxDim=1024,quality=0.82){
     reader.readAsDataURL(file);
   });
 }
-async function handleVcElementImage(event,slot){
-  const files=[...(event.target.files||[])];
-  event.target.value="";
-  const t=_vcElementTarget; _vcElementTarget=null;
-  if(!files.length||!t||!S.vcElements[t.i])return;
-  const el=S.vcElements[t.i];
-  const room=slot==="frontal"?1:Math.max(0,VC_MAX_ANGLES-el.angles.length);
-  for(const file of files.slice(0,room)){
-    if(!file.type.startsWith("image/")){toast("Images only","error");continue;}
-    try{
-      const dataUrl=await downscaleImageFile(file);
-      const item={dataUrl,name:file.name};
-      if(slot==="frontal")el.frontal=item; else el.angles.push(item);
-      saveVcElements();renderVcElements();
-    }catch(err){ toast(err.message,"error"); }
-  }
-}
 
 const VC_ELEMENT_TAGS=["Characters","Animals","Items","Costumes","Scenes","Effects","Others"];
-function setVcElementField(i,field,value){
-  if(!S.vcElements[i])return;
-  S.vcElements[i][field]=value;
-  saveVcElements();
-  // No re-render on text input — rebuilding innerHTML per keystroke destroys
-  // the field and drops the caret mid-word. "tag" and "collapsed" both need
-  // one, since each switches which layout is actually on screen (tag via its
-  // own custom picker, collapsed between the full form and the summary row).
-  if(field==="tag"||field==="collapsed")renderVcElements();
-}
-function pickVcElementVideo(i){ _vcElementTarget={i,slot:"video"}; document.getElementById("vcElementVideoFile").click(); }
-function handleVcElementVideo(event){
-  const file=(event.target.files||[])[0];
-  event.target.value="";
-  const t=_vcElementTarget; _vcElementTarget=null;
-  if(!file||!t||!S.vcElements[t.i])return;
-  // Schema: only ONE element in a request may carry a video.
-  const other=S.vcElements.findIndex((e,idx)=>idx!==t.i&&e.video);
-  if(other>=0){toast(`Only one Element can have a video — @Element${other+1} already does`,"error");return;}
-  const r=new FileReader();
-  r.onload=e=>{S.vcElements[t.i].video={dataUrl:e.target.result,name:file.name};saveVcElements();renderVcElements();};
-  r.readAsDataURL(file);
-}
-function removeVcElementVideo(i){ if(S.vcElements[i])S.vcElements[i].video=null; saveVcElements(); renderVcElements(); }
 
 // Binds one of the already-cloned Kling voices to a specific Element. Voice is
 // per-element in the v3 schema, which is why this is a per-card action rather
 // than the old global voice list — that list was sent as a top-level voice_ids
 // field the endpoint does not define, so it never did anything.
-function openKlingVoiceModal(elIndex){
-  const prev=document.getElementById("vcElVoiceModal"); if(prev)prev.remove();
-  const voices=S.klingVoices||[];
-  const overlay=document.createElement("div");
-  overlay.className="modal-overlay show"; overlay.id="vcElVoiceModal";
-  overlay.onclick=(e)=>{if(e.target===overlay)overlay.remove();};
-  overlay.innerHTML=`<div class="modal" style="width:400px">
-    <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet);margin-bottom:4px">Voice for @Element${elIndex+1}</div>
-    <div style="font-size:11px;color:var(--textm);margin-bottom:14px">Optional. Kling binds the voice to this character, so any line it speaks in the prompt uses it.</div>
-    ${voices.length?voices.map(v=>`<div onclick="setVcElementField(${elIndex},'voiceId','${v.id}');renderVcElements();document.getElementById('vcElVoiceModal').remove()" style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text)">${v.name}</div>`).join("")
-      :`<div style="font-size:11.5px;color:var(--textm);text-align:center;padding:10px 0 4px">No voices yet — upload a 5–30s sample below to make one.</div>`}
-    <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px">
-      <button class="btn btn-outline btn-sm" style="width:100%" onclick="document.getElementById('vcElVoiceSampleFile').click()">${pIcon('upload',13)} Upload voice sample (5–30s)</button>
-      <div style="font-size:9.5px;color:var(--textm);margin-top:6px">Uploaded here so you don't have to leave this Element. Voices cloned in Dialogue Voices appear in this list too.</div>
-    </div>
-    <div style="text-align:right;margin-top:12px"><button class="btn btn-ghost" onclick="document.getElementById('vcElVoiceModal').remove()">Close</button></div>
-  </div>`;
-  document.body.appendChild(overlay);
-  let fi=document.getElementById("vcElVoiceSampleFile");
-  if(!fi){
-    fi=document.createElement("input");
-    fi.type="file"; fi.accept="audio/*"; fi.id="vcElVoiceSampleFile"; fi.style.display="none";
-    fi.onchange=handleVcElementVoiceSample;
-    document.body.appendChild(fi);
-  }
-  fi.dataset.elIndex=String(elIndex);
-}
+
 // Clones through the same real fal-ai/kling-video/create-voice path the
 // Dialogue Voices section uses, then binds the result straight to the element
 // that asked — otherwise the user clones a voice and still has to come back
 // and select it manually.
-async function handleVcElementVoiceSample(event){
-  const file=(event.target.files||[])[0];
-  const idx=parseInt(event.target.dataset.elIndex||"-1",10);
-  event.target.value="";
-  if(!file||idx<0)return;
-  const modal=document.getElementById("vcElVoiceModal");
-  if(modal)modal.remove();
-  const before=(S.klingVoices||[]).length;
-  await createKlingVoice(file,file.name);
-  const after=S.klingVoices||[];
-  if(after.length>before&&S.vcElements[idx]){
-    S.vcElements[idx].voiceId=after[after.length-1].id;
-    renderVcElements();
-    toast(`Voice bound to @Element${idx+1}`,"success");
-  }
-}
-function vcElementIsValid(el){ return !!(el&&el.frontal&&el.angles.length>=1); }
+
 // THE single source of truth for "are there real Elements attached right now".
 // Six separate call sites had each grown their own copy of this check, and
 // five of them still tested S.vcMultiImages.length>1 — a condition that
@@ -6286,108 +5848,14 @@ function vcElementIsValid(el){ return !!(el&&el.frontal&&el.angles.length>=1); }
 // despite 2 complete Elements being visibly attached in the UI). One helper,
 // used everywhere, so this class of bug can only be wrong in one place at a
 // time instead of drifting across six.
-function vcHasRealElements(cap){
-  return !!(cap&&cap.elements&&(S.vcElements||[]).some(vcElementIsValid));
-}
-function renderVcElements(){
-  const list=document.getElementById("vcElementsList");
-  if(!list)return;
-  const slot=(img,onClick,onRemove,label)=>img
-    ?`<div style="position:relative;width:58px;height:58px;flex-shrink:0">
-        <img src="${img.dataUrl}" style="width:58px;height:58px;object-fit:cover;border-radius:9px;border:1px solid var(--glass-brd)">
-        <button onclick="${onRemove}" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;border:none;background:var(--red);color:#fff;font-size:11px;line-height:1;cursor:pointer">✕</button>
-      </div>`
-    :`<div onclick="${onClick}" style="width:58px;height:58px;flex-shrink:0;border:1.5px dashed var(--border);border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--textm);font-size:9px;text-align:center;line-height:1.1">
-        <div style="font-size:15px">+</div>${label}
-      </div>`;
-  list.innerHTML=S.vcElements.map((el,i)=>{
-    const ok=vcElementIsValid(el);
-    // Collapse is presentational only — a new `collapsed` flag that nothing
-    // in the upload/validation/request-building path ever reads (those only
-    // touch frontal/angles/name/tag/desc/video/voiceId). Collapsing or
-    // expanding a card cannot change what gets sent to fal; it only changes
-    // what's currently drawn on screen. Legacy elements (loaded from an
-    // older preset, or a session saved before this existed) simply have no
-    // `collapsed` field at all, which is falsy the same way false is — they
-    // correctly default to expanded with no migration needed.
-    if(ok&&el.collapsed){
-      return `<div style="display:flex;align-items:center;gap:9px;border:1px solid var(--glass-brd);border-radius:12px;padding:8px 10px;margin-bottom:8px;background:var(--glass)">
-        <img src="${el.frontal.dataUrl}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(el.name||`@Element${i+1}`)}</div>
-          <div style="font-size:9.5px;color:var(--textm)">@Element${i+1} · ${el.tag||"Characters"} · ${el.angles.length} angle${el.angles.length!==1?'s':''}${el.video?' · video':''}${el.voiceId?' · voice':''}</div>
-        </div>
-        <button class="btn btn-ghost btn-xs" onclick="setVcElementField(${i},'collapsed',false)">${pIcon('pencil',12)} Edit</button>
-        <button class="btn btn-ghost btn-xs" onclick="removeVcElement(${i})">✕</button>
-      </div>`;
-    }
-    return `<div style="border:1px solid ${ok?'var(--glass-brd)':'var(--gold)'};border-radius:12px;padding:10px;margin-bottom:8px;background:var(--glass)">
-      <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
-        <span class="badge ${ok?'badge-violet':'badge-gray'}">@Element${i+1}</span>
-        <span style="flex:1;font-size:10px;color:${ok?'var(--textm)':'var(--gold)'}">${ok?`Reference as @Element${i+1} in your prompt`:"Needs a main view + at least 1 other angle"}</span>
-        ${ok?`<button class="btn btn-primary btn-xs" onclick="setVcElementField(${i},'collapsed',true)">${pIcon('check',12)} Create</button>`:''}
-        <button class="btn btn-ghost btn-xs" onclick="removeVcElement(${i})">Remove</button>
-      </div>
-      <div style="display:flex;gap:6px;margin-bottom:7px">
-        <input class="f-input" style="flex:1;font-size:12px;padding:6px 9px" maxlength="20" placeholder="Name (e.g. Sedi)" value="${(el.name||"").replace(/"/g,"&quot;")}" oninput="setVcElementField(${i},'name',this.value)">
-        <select id="vcElTagSel_${i}" style="display:none" onchange="setVcElementField(${i},'tag',this.value)">
-          ${VC_ELEMENT_TAGS.map(t=>`<option value="${t}" ${el.tag===t?"selected":""}>${t}</option>`).join("")}
-        </select>
-        <div id="vcElTagSel_${i}Trigger" onclick="openSimplePicker('vcElTagSel_${i}','Element Type')" style="width:118px;flex-shrink:0;display:flex;align-items:center;gap:5px;border:1px solid var(--border);border-radius:10px;padding:6px 8px;cursor:pointer;background:var(--surface)">
-          <span style="flex:1;font-size:11.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${el.tag||"Characters"}</span>
-          <span style="color:var(--textm)">${pIcon('chevron',12)}</span>
-        </div>
-      </div>
-      <input class="f-input" style="width:100%;font-size:11.5px;padding:6px 9px;margin-bottom:8px" maxlength="200" placeholder="Description — details to keep or discard (optional)" value="${(el.desc||"").replace(/"/g,"&quot;")}" oninput="setVcElementField(${i},'desc',this.value)">
-      <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-start">
-        ${slot(el.frontal,`pickVcElementImage(${i},'frontal')`,`removeVcElement(${i});addVcElement()`,"Main view")}
-        <div style="width:1px;align-self:stretch;background:var(--border)"></div>
-        ${el.angles.map((a,j)=>slot(a,"",`removeVcElementAngle(${i},${j})`,"")).join("")}
-        ${el.angles.length<VC_MAX_ANGLES?slot(null,`pickVcElementImage(${i},'angle')`,"",`Angle ${el.angles.length+1}`):""}
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
-        ${el.video
-          ?`<span class="badge badge-violet" style="cursor:pointer" onclick="removeVcElementVideo(${i})">${pIcon('film',10)} ${el.video.name.slice(0,18)} ✕</span>`
-          :`<button type="button" class="btn btn-ghost btn-xs" onclick="pickVcElementVideo(${i})">${pIcon('film',11)} Add Video</button>`}
-        ${el.voiceId
-          ?`<span class="badge badge-violet" style="cursor:pointer" onclick="setVcElementField(${i},'voiceId',null);renderVcElements()">${pIcon('mic',10)} voice set ✕</span>`
-          :`<button type="button" class="btn btn-ghost btn-xs" onclick="openKlingVoiceModal(${i})">${pIcon('mic',11)} Add Voice</button>`}
-      </div>
-      <div style="font-size:9px;color:var(--texts);margin-top:6px">Name, tag and description are saved in this app only — they're for finding this character again, and aren't sent to Kling. Only the images, video and voice are.</div>
-    </div>`;
-  }).join("")||`<div style="font-size:11px;color:var(--textm);padding:8px 0">No Elements yet — add one to keep a character consistent.</div>`;
-  const btn=document.getElementById("vcAddElementBtn");
-  if(btn)btn.style.display=S.vcElements.length>=VC_MAX_ELEMENTS?"none":"inline-flex";
-  if(typeof renderVcTagChips==="function")renderVcTagChips();
-  if(typeof renderVcChatHighlight==="function")renderVcChatHighlight();
-}
+
 // Flattened for upload: only VALID elements are sent, so a half-filled card
 // never reaches fal (which would reject it for the missing angle).
-function vcElementsForUpload(){
-  return S.vcElements.filter(vcElementIsValid).map(el=>({frontal:el.frontal,angles:el.angles.slice(0,VC_MAX_ANGLES),voiceId:el.voiceId}));
-}
 
 // Uploads each Element's images in ONE batched call, then re-splits the hosted
 // URLs back into their element groupings. Batching matters: uploading per
 // element would fire a separate round trip per card, which on mobile is the
 // slowest part of the whole request.
-async function uploadVcElements(apiKey){
-  const els=vcElementsForUpload();
-  if(!els.length)return [];
-  const flat=[];
-  els.forEach(e=>{flat.push(e.frontal);e.angles.forEach(a=>flat.push(a));});
-  // Element videos upload alongside, then get re-attached below.
-  const vidEls=els.map((e,i)=>e.video?{i,item:e.video}:null).filter(Boolean);
-  const hostedVids=vidEls.length?await uploadRefsToFal(vidEls.map(v=>v.item),apiKey):[];
-  const hosted=await uploadRefsToFal(flat,apiKey);
-  let k=0;
-  return els.map((e,idx)=>{
-    const frontal=hosted[k++];
-    const angles=e.angles.map(()=>hosted[k++]).filter(Boolean);
-    const vi=vidEls.findIndex(v=>v.i===idx);
-    return {frontal,angles,voiceId:e.voiceId,video:vi>=0?hostedVids[vi]:null};
-  }).filter(e=>e.frontal&&e.angles.length);
-}
 
 // Local, app-side saved character presets — NOT a registered Kling Element.
 // fal doesn't expose Kling's own persistent Element Library (create/name/
@@ -6408,37 +5876,6 @@ S.vcElementGroupMode=S.vcElementGroupMode||false; // O3: treat all reference ima
 // Reference Elements. Simple two-image interpolation (start_image_url ->
 // end_image_url), confirmed via a real hands-on review of Kling's own app
 // using this exact "Start/End frames" mechanism.
-async function handleVcEndFrameUpload(event){
-  const file=event.target.files[0];
-  if(!file)return;
-  event.target.value="";
-  if(!file.type.startsWith("image/")){toast("Images only","error");return;}
-  try{
-    const dataUrl=await downscaleImageFile(file);
-    S.vcEndFrame={dataUrl,name:file.name};
-    renderVcEndFramePreview();
-    // Also repaint the Frames compartment — on element models the old preview
-    // node is inside a hidden container, so without this the upload succeeds
-    // but the slot still reads "Add end frame".
-    if(typeof renderVcFrames==="function")renderVcFrames();
-    updateVcAttachmentBar();
-  }catch(err){ toast(err.message,"error"); }
-}
-
-function renderVcEndFramePreview(){
-  const wrap=document.getElementById("vcEndFramePreview");
-  if(!wrap)return;
-  wrap.innerHTML=S.vcEndFrame?`<div style="position:relative;width:70px;height:70px">
-    <img src="${S.vcEndFrame.dataUrl}" style="width:70px;height:70px;border-radius:8px;object-fit:cover">
-    <button onclick="removeVcEndFrame()" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;cursor:pointer;line-height:1">✕</button>
-  </div>`:'';
-}
-
-function removeVcEndFrame(){
-  S.vcEndFrame=null;
-  renderVcEndFramePreview();
-  updateVcAttachmentBar();
-}
 
 // ── LOCAL CHARACTER PRESETS — save/reuse a named group of reference images
 // in this app. Uploads to Firebase Storage (same proven pattern as the
@@ -6659,13 +6096,6 @@ async function deleteCharacterPreset(id){
   openLoadCharacterPresetModal(); // re-render the list with it removed
 }
 
-function setVcElementGroupMode(checked){
-  S.vcElementGroupMode=checked;
-  const note=document.getElementById("vcElementGroupNote");
-  if(note)note.textContent=checked
-    ?"All uploaded images will be sent as one character's multiple angles — @Element1 refers to that one character."
-    :"Kling's own Element system expects 2+ angle photos per character — turn this on if all your uploads are the same person/object from different angles.";
-}
 
 // ── KLING MULTI-SHOT STORYBOARD — real multi_prompt/shot_type schema ──
 S.vcShots=S.vcShots||[];
@@ -6678,98 +6108,12 @@ S.vcShots=S.vcShots||[];
 // single reference image and its own real, proven-working image-to-video
 // call (start_image_url), generated one at a time as separate clips
 // instead of one combined video. Trades "one file" for "actually works".
-function setVcShotMode(val){
-  document.getElementById("vcShotMode").value=val;
-  document.querySelectorAll(".vc-shottype-btn").forEach(b=>{if(b.dataset.val==="combined"||b.dataset.val==="sequential")b.classList.toggle("active",b.dataset.val===val);});
-  document.getElementById("vcShotModeNote").textContent=val==="sequential"
-    ?"Generates one real clip per shot, each with its own single reference image — download and stitch them together afterward."
-    :"Real multi-character reference in one call — needs 2+ attached images.";
-  document.getElementById("vcShotTypeWrap").style.display=val==="sequential"?"none":"block";
-  renderVcShotList();
-}
 
 // Intelligent mode means fal's own model decides shot pacing/boundaries rather
 // than strictly following the per-shot durations you set — so those duration
 // pickers become advisory in that mode, not a hard promise. This function is
 // what makes selecting Customize vs Intelligent actually visibly do something,
 // instead of just changing a value nothing reads until submit.
-function setVcShotType(val){
-  document.getElementById("vcShotType").value=val;
-  document.querySelectorAll(".vc-shottype-btn").forEach(b=>b.classList.toggle("active",b.dataset.val===val));
-  document.getElementById("vcShotTypeNote").textContent=val==="intelligent"
-    ?"The model paces and times the shots itself — durations below are a rough guide, not a guarantee."
-    :"You control exactly when each shot starts and ends.";
-  renderVcShotList();
-}
-
-function toggleMultiShotMode(){
-  const on=document.getElementById("vcMultiShotToggle").checked;
-  document.getElementById("vcMultiShotBuilder").style.display=on?"block":"none";
-  const inputEl=document.getElementById("vcChatInput");
-  if(on){
-    if(!S.vcShots.length){S.vcShots=[{prompt:"",duration:"5"},{prompt:"",duration:"5"}];}
-    inputEl.disabled=true;
-    inputEl.placeholder="Multi-shot mode — build your shots below, then tap Send";
-    renderVcShotList();
-  } else {
-    inputEl.disabled=!gs("api_falai");
-    inputEl.placeholder="Describe the video you want…";
-  }
-  updateVcAttachmentBar();
-}
-
-function renderVcShotList(){
-  const wrap=document.getElementById("vcShotList");
-  if(!wrap)return;
-  const durOptions=VIDEO_MODEL_DURATIONS[document.getElementById("vcModel").value]?.options||[3,4,5,6,7,8,9,10,11,12,13,14,15];
-  const isIntelligent=document.getElementById("vcShotType")?.value==="intelligent";
-  const isSequential=document.getElementById("vcShotMode")?.value==="sequential";
-  wrap.innerHTML=S.vcShots.map((s,i)=>`
-    <div class="vc-shot-card">
-      <div class="vc-shot-card-head">
-        <span class="vc-shot-num">Shot ${i+1}</span>
-        ${S.vcShots.length>1?`<button type="button" onclick="removeVcShot(${i})" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:11px;font-weight:600">✕ Remove</button>`:''}
-      </div>
-      <textarea class="f-textarea" style="min-height:44px;margin-bottom:8px" placeholder="Describe this shot…" oninput="updateVcShotField(${i},'prompt',this.value)">${s.prompt}</textarea>
-      ${isSequential?`<div style="margin-bottom:8px">
-        <span class="vc-shot-dur-label" style="display:block;margin-bottom:5px">Reference for this shot</span>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <div onclick="updateVcShotField(${i},'refIndex',null)" style="width:44px;height:44px;border-radius:8px;border:2px solid ${s.refIndex==null?'var(--violet)':'var(--border)'};display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--textm);cursor:pointer;text-align:center;line-height:1.1">None</div>
-          ${S.vcMultiImages.map((img,ii)=>`<img src="${img.dataUrl}" onclick="updateVcShotField(${i},'refIndex',${ii})" style="width:44px;height:44px;border-radius:8px;object-fit:cover;border:2px solid ${s.refIndex===ii?'var(--violet)':'var(--border)'};cursor:pointer">`).join('')}
-        </div>
-      </div>`:''}
-      <div class="vc-shot-dur-wrap ${isIntelligent&&!isSequential?'paced':''}">
-        <span class="vc-shot-dur-label">${isIntelligent&&!isSequential?'Approx. duration':'Duration'}</span>
-        <select class="f-select" onchange="updateVcShotField(${i},'duration',this.value)">${durOptions.map(d=>`<option value="${d}" ${s.duration==String(d)?'selected':''}>${d}s</option>`).join('')}</select>
-      </div>
-    </div>`).join('');
-  updateVcShotTotal();
-}
-
-function addVcShot(){
-  if(S.vcShots.length>=6){toast("Max 6 shots per generation","error");return;}
-  S.vcShots.push({prompt:"",duration:"5"});
-  renderVcShotList();
-}
-
-function removeVcShot(i){
-  S.vcShots.splice(i,1);
-  renderVcShotList();
-}
-
-function updateVcShotField(i,field,value){
-  S.vcShots[i][field]=value;
-  if(field==="duration")updateVcShotTotal();
-  if(field==="refIndex")renderVcShotList();
-}
-
-function updateVcShotTotal(){
-  const total=S.vcShots.reduce((sum,s)=>sum+parseInt(s.duration||0,10),0);
-  const info=document.getElementById("vcShotTotalInfo");
-  if(!info)return;
-  const over=total>15;
-  info.innerHTML=`<span style="color:${over?'var(--red)':'var(--textm)'}">${total}s total${over?' — exceeds Kling\'s 15s max, trim a shot':''}</span>`;
-}
 
 // ── KLING VOICE CLONING — real create-voice endpoint, referenced via
 // <<<voice_1>>>/<<<voice_2>>> tags in the prompt, max 2 per generation.
@@ -6851,9 +6195,6 @@ function normalizeElementTags(text){
 // styled-overlay technique that has to match font metrics pixel-for-pixel;
 // getting that wrong would make the primary input look broken, which is a
 // worse outcome than not having live highlighting at all.
-function highlightVcTags(text){
-  return (text||"").replace(/@(Element|Image|Video|Audio)(\d+)/g,'<b style="color:var(--gold);background:rgba(212,175,55,0.16);border-radius:4px;padding:0 3px">@$1$2</b>');
-}
 
 async function uploadRefsToFal(items,apiKey){
   let uploadedFreshCount=0;
@@ -6942,152 +6283,7 @@ async function createKlingVoice(file,fileName){
   }
 }
 
-function renderVcVoiceList(){
-  const wrap=document.getElementById("vcVoiceList");
-  if(!wrap)return;
-  if(!S.klingVoices.length){
-    wrap.innerHTML=`<div style="font-size:11px;color:var(--textm)">No cloned voices yet.</div>`;
-    document.getElementById("vcVoiceHint").style.display="none";
-    return;
-  }
-  wrap.innerHTML=S.klingVoices.map(v=>{
-    const selected=S.klingSelectedVoices.includes(v.id);
-    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px">
-      <input type="checkbox" ${selected?'checked':''} onchange="toggleVoiceSelection('${v.id}')">
-      <span style="flex:1;font-size:12px">${v.name}</span>
-      <button type="button" onclick="deleteKlingVoice('${v.id}')" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:12px">✕</button>
-    </div>`;
-  }).join('');
-  updateVoiceHint();
-}
 
-function toggleVoiceSelection(id){
-  const idx=S.klingSelectedVoices.indexOf(id);
-  if(idx>=0)S.klingSelectedVoices.splice(idx,1);
-  else{
-    if(S.klingSelectedVoices.length>=2){toast("Max 2 voices per generation","error");renderVcVoiceList();return;}
-    S.klingSelectedVoices.push(id);
-  }
-  renderVcVoiceList();
-}
-
-function updateVoiceHint(){
-  const hint=document.getElementById("vcVoiceHint");
-  if(!hint)return;
-  if(S.klingSelectedVoices.length){
-    hint.style.display="block";
-    hint.textContent=`Reference in your prompt with ${S.klingSelectedVoices.map((_,i)=>`<<<voice_${i+1}>>>`).join(' and ')} — e.g. "<<<voice_1>>> says: welcome home."`;
-  } else hint.style.display="none";
-  updateVcAttachmentBar();
-}
-
-function deleteKlingVoice(id){
-  S.klingVoices=S.klingVoices.filter(v=>v.id!==id);
-  S.klingSelectedVoices=S.klingSelectedVoices.filter(vid=>vid!==id);
-  saveSetting("kling_voices",S.klingVoices);
-  renderVcVoiceList();
-}
-
-function updateVcAttachmentBar(){
-  const bar=document.getElementById("vcAttachmentBar");
-  if(!bar)return;
-  const chips=[];
-  // Elements and the end frame were both invisible here — the bar showed only
-  // the flat image list, so a user with 3 built characters and an end frame saw
-  // a single thumbnail and reasonably concluded nothing else was attached.
-  const usesElements=(()=>{const m=document.getElementById("vcModel")?.value;const c=VIDEO_MODEL_CAPABILITIES[m]||{};return !!(c.elements||c.provider==="kling-o3-ref");})();
-  if(usesElements){
-    const ready=(S.vcElements||[]).filter(e=>e&&e.frontal&&e.angles&&e.angles.length);
-    if(ready.length){
-      chips.push(`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        <div style="display:flex;gap:5px;flex-wrap:wrap">${ready.map((el,i)=>`<img src="${el.frontal.dataUrl}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;border:1.5px solid var(--violet)" title="@Element${i+1}${el.name?" — "+el.name:""}">`).join('')}</div>
-        <span style="font-size:11px;color:var(--violet);font-weight:700">${ready.length} Element${ready.length!==1?'s':''}</span>
-      </div>`);
-    }
-    const start=S.vcMultiImages&&S.vcMultiImages[0];
-    if(start||S.vcEndFrame){
-      chips.push(`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        ${start?`<img src="${start.dataUrl}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;border:1.5px solid var(--glass-brd)" title="Start frame">`:''}
-        ${start&&S.vcEndFrame?`<span style="color:var(--textm);font-size:12px">→</span>`:''}
-        ${S.vcEndFrame?`<img src="${S.vcEndFrame.dataUrl}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;border:1.5px solid var(--glass-brd)" title="End frame">`:''}
-        <span style="font-size:11px;color:var(--textm)">${start&&S.vcEndFrame?"Start → End frame":start?"Start frame":"End frame only — add a start frame"}</span>
-      </div>`);
-    }
-  }
-  if(!usesElements&&S.vcMultiImages&&S.vcMultiImages.length){
-    chips.push(`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-      <div style="display:flex;gap:5px;flex-wrap:wrap">${S.vcMultiImages.map((im,i)=>`<img src="${im.dataUrl}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;border:1.5px solid var(--glass-brd)" title="Reference image ${i+1}">`).join('')}</div>
-      <button onclick="clearAllVcMulti('vcMultiImagePreview')" style="border:none;background:none;color:var(--red);cursor:pointer;font-weight:700;display:flex;align-items:center;gap:3px">${pIcon('trash',12)} Clear</button>
-    </div>`);
-  }
-  if(S.vcMultiVideos&&S.vcMultiVideos.length){
-    chips.push(`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-      <div style="display:flex;gap:5px;flex-wrap:wrap">${S.vcMultiVideos.map((v,i)=>`<video src="${v.dataUrl}" muted preload="metadata" style="width:38px;height:38px;border-radius:8px;object-fit:cover;border:1.5px solid var(--glass-brd)" title="Reference video ${i+1}"></video>`).join('')}</div>
-      <button onclick="clearAllVcMulti('vcMultiVideoPreview')" style="border:none;background:none;color:var(--red);cursor:pointer;font-weight:700;display:flex;align-items:center;gap:3px">${pIcon('trash',12)} Clear</button>
-    </div>`);
-  }
-  if(S.vcMultiAudios&&S.vcMultiAudios.length){
-    chips.push(`<div style="display:flex;align-items:center;gap:6px">
-      <div style="width:38px;height:38px;border-radius:8px;background:var(--lav);color:var(--violet);display:flex;align-items:center;justify-content:center;flex-shrink:0">${pIcon('mic',16)}</div>
-      <span>${S.vcMultiAudios.length} audio reference${S.vcMultiAudios.length!==1?'s':''}</span>
-      <button onclick="clearAllVcMulti('vcMultiAudioPreview')" style="border:none;background:none;color:var(--red);cursor:pointer;font-weight:700;display:flex;align-items:center;gap:3px">${pIcon('trash',12)} Clear</button>
-    </div>`);
-  }
-  if(S.vcMotionBrush)chips.push(`<div style="display:flex;align-items:center;gap:6px"><span style="display:flex;align-items:center;gap:5px">${pIcon('swap',13)} Motion Brush set — ${S.vcMotionBrush.trajectories.length} path points</span><button onclick="clearMotionBrush()" style="border:none;background:none;color:var(--red);cursor:pointer;font-weight:700;display:flex;align-items:center;gap:3px">${pIcon('trash',12)} Clear</button></div>`);
-  if(S.klingSelectedVoices&&S.klingSelectedVoices.length)chips.push(`<div style="display:flex;align-items:center;gap:5px">${pIcon('mic',13)} ${S.klingSelectedVoices.length} voice${S.klingSelectedVoices.length!==1?'s':''} selected — use ${S.klingSelectedVoices.map((_,i)=>`&lt;&lt;&lt;voice_${i+1}&gt;&gt;&gt;`).join(' / ')} in your prompt</div>`);
-  const multiShotOn=document.getElementById("vcMultiShotToggle")?.checked;
-  if(multiShotOn)chips.push(`<div style="display:flex;align-items:center;gap:5px">${pIcon('film',13)} Multi-shot mode ON — the text box above is disabled, build shots in Settings</div>`);
-
-  if(!chips.length){bar.style.display="none";bar.innerHTML="";return;}
-  bar.style.display="flex";
-  bar.style.flexDirection="column";
-  bar.innerHTML=chips.map(c=>`<div>${c}</div>`).join('');
-}
-
-function clearAllVcMulti(previewId){
-  // Also clears Elements and the end frame. Previously "Clear" emptied only
-  // the flat list, so a user who had built three characters clicked Clear,
-  // saw the thumbnails vanish, and then generated with all three still
-  // attached — paying for references they believed they had removed.
-  if(previewId==="vcMultiImagePreview"){
-    const hadElements=(S.vcElements||[]).length;
-    S.vcElements=[];
-    S.vcEndFrame=null;
-    saveVcElements();
-    if(typeof renderVcElements==="function")renderVcElements();
-    if(typeof renderVcFrames==="function")renderVcFrames();
-    if(typeof renderVcEndFramePreview==="function")renderVcEndFramePreview();
-    if(hadElements)toast(`Cleared ${hadElements} Element${hadElements!==1?"s":""} and both frames`,"");
-  }
-  const map={vcMultiImagePreview:"vcMultiImages",vcMultiVideoPreview:"vcMultiVideos",vcMultiAudioPreview:"vcMultiAudios"};
-  S[map[previewId]]=[];
-  renderVcMultiPreview(previewId,S[map[previewId]],previewId==="vcMultiAudioPreview");
-  if(previewId==="vcMultiImagePreview")refreshMotionBrushVisibility();
-  updateVcAttachmentBar();
-}
-
-function updateVcDurationFromSlider(){
-  const model=document.getElementById("vcModel").value;
-  const durConfig=VIDEO_MODEL_DURATIONS[model];
-  const slider=document.getElementById("vcDurationSlider");
-  const idx=parseInt(slider.value,10)||0;
-  const val=durConfig.options[idx];
-  document.getElementById("vcDuration").value=val;
-  document.getElementById("vcDurationLabel").textContent=`— ${val}s`;
-  updateRangeFill(slider);
-  updateVcCostHint();
-}
-function updateVcCostHint(){
-  const model=document.getElementById("vcModel").value;
-  const seconds=parseFloat(document.getElementById("vcDuration").value)||0;
-  const resEl=document.getElementById("vcRes");
-  const resolution=resEl?resEl.value:"720p";
-  const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
-  const usesElements=vcHasRealElements(cap);
-  const est=estimateVideoCost(model,seconds,resolution,!!(S.vcMultiVideos&&S.vcMultiVideos.length),usesElements);
-  const hint=document.getElementById("vcCostHint");
-  if(hint)hint.textContent=cap.provider==="veo-direct"?"Free tier (Google API) — rate-limited, not billed":(est?formatCostLine(est):"");
-}
 // ── COST ESTIMATION ──
 // Rates verified directly against fal.ai's own model pages. Seedance 2.0
 // standard tier bills by a token formula, NOT a flat per-second rate:
@@ -7261,290 +6457,6 @@ function formatCostLine(est){
   return `${est.approx?'~':''}$${dollars} est.`;
 }
 
-function updateVcModelUI(){
-  const model=document.getElementById("vcModel").value;
-  renderModelTrigger("vcModel","video");
-  const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
-  const durConfig=VIDEO_MODEL_DURATIONS[model];
-  const slider=document.getElementById("vcDurationSlider");
-  slider.max=durConfig.options.length-1;
-  slider.value=0;
-  updateVcDurationFromSlider();
-  populateResolutionSelect("vcRes","vcResWrap",model);
-  updateVcRatioSelect(model);
-  updateVcCostHint();
-
-  document.getElementById("vcNegPromptWrap").style.display=cap.negPrompt?"block":"none";
-  document.getElementById("vcCfgScaleWrap").style.display=cap.cfgScale?"block":"none";
-  document.getElementById("vcMultiImageWrap").style.display=(cap.multiRef||cap.multiImage)?"block":"none";
-  if((cap.multiRef||cap.multiImage)&&cap.maxImages&&S.vcMultiImages.length>cap.maxImages){
-    const removed=S.vcMultiImages.length-cap.maxImages;
-    // On element-capable models this control is the START FRAME, not a
-    // reference bucket — Kling v3 has no "4 reference images" concept at all,
-    // references live exclusively in Elements. Capping at 1 here because
-    // anything beyond the first was being uploaded and then silently dropped:
-    // only hostedImages[0] ever reaches start_image_url.
-    const flatCap=(cap.elements||cap.provider==="kling-o3-ref")?1:cap.maxImages;
-    if(S.vcMultiImages.length>flatCap){
-      S.vcMultiImages=S.vcMultiImages.slice(0,flatCap);
-      toast("Kling v3 uses one Start Frame — extra images belong in Elements below","");
-    }
-    renderVcMultiPreview("vcMultiImagePreview",S.vcMultiImages,false);
-    toast(`This model only supports ${cap.maxImages} reference images — removed the last ${removed}`,"error");
-  }
-  // Videos now have per-model caps too (Seedance: 3, O3 Pro: 2) — previously
-  // only images got truncated on model switch since video refs used to be
-  // Seedance-only with one fixed cap, so this never came up.
-  if(cap.multiRef&&cap.maxVideos&&S.vcMultiVideos.length>cap.maxVideos){
-    const removedV=S.vcMultiVideos.length-cap.maxVideos;
-    S.vcMultiVideos=S.vcMultiVideos.slice(0,cap.maxVideos);
-    renderVcMultiPreview("vcMultiVideoPreview",S.vcMultiVideos,false);
-    toast(`This model only supports ${cap.maxVideos} reference video${cap.maxVideos===1?'':'s'} — removed the last ${removedV}`,"error");
-  }
-  const isKling=model.startsWith("fal-ai/kling-video");
-  const motionBrushApplicable=cap.multiImage&&S.vcMultiImages.length>0&&S.vcMultiImages.length<=1;
-  document.getElementById("vcMotionBrushWrap").style.display=motionBrushApplicable?"block":"none";
-  if(!motionBrushApplicable&&S.vcMotionBrush){
-    // Was set for a single-image use case that no longer applies (model
-    // switched to something that doesn't support it, or a 2nd+ reference
-    // image just got attached) — clearing it here instead of leaving it to
-    // silently persist and potentially hijack a later, unrelated generation.
-    S.vcMotionBrush=null;
-  }
-  // End Frame pairs with a single start frame (real Kling interpolation
-  // feature), not with multi-element mode — same single-image gating logic
-  // as Motion Brush, and cleared the same way when it stops applying.
-  const endFrameApplicable=!!IMAGE_TO_VIDEO_MAP[model]?.endField&&S.vcMultiImages.length===1;
-  document.getElementById("vcEndFrameWrap").style.display=endFrameApplicable?"block":"none";
-  // Kling v3 only: generate_audio and shot_type are v3 fields. Showing them for
-  // Seedance/Veo would imply control the endpoint doesn't have.
-  const klingV3=/kling-video\/v3\//.test(model||"");
-  const kAudioWrap=document.getElementById("vcKlingAudioWrap");
-  if(kAudioWrap){
-    kAudioWrap.style.display=klingV3?"block":"none";
-    const aT=document.getElementById("vcKlingAudioToggle");
-    if(aT)aT.checked=gs("kling_generate_audio",true)!==false;
-    const sT=document.getElementById("vcKlingSmartShotToggle");
-    if(sT)sT.checked=gs("kling_shot_type","customize")==="intelligent";
-  }
-  if(!endFrameApplicable&&S.vcEndFrame){S.vcEndFrame=null;}
-  renderVcEndFramePreview();
-  // v3 builds elements from inline images exactly like O3 does, so the same
-  // choice applies: are these N characters, or one character from N angles?
-  // Gating this to O3 meant v3 was silently locked to "separate characters"
-  // with no way to say four uploads are four angles of one subject — which is
-  // precisely what Kling's own "Add Additional Angles" flow is for.
-  // Element-capable models now use the explicit Element cards instead of the
-  // flat image bucket, so the old grouping toggle is redundant for them — the
-  // user says which images belong together by putting them in one card.
-  const elementsUI=!!(cap.elements||cap.provider==="kling-o3-ref");
-  const elWrap=document.getElementById("vcElementsWrap");
-  if(elWrap){elWrap.style.display=elementsUI?"block":"none";if(elementsUI)renderVcElements();}
-  const framesWrap=document.getElementById("vcFramesWrap");
-  if(framesWrap){framesWrap.style.display=elementsUI?"block":"none";if(elementsUI)renderVcFrames();}
-  // On element models the flat bucket and the standalone End Frame block are
-  // both superseded by Frames — leaving them visible was the actual complaint:
-  // a "Reference Images (up to 4)" control that no longer holds references.
-  const flatWrap=document.getElementById("vcMultiImageWrap");
-  if(flatWrap&&elementsUI)flatWrap.style.display="none";
-  const oldEnd=document.getElementById("vcEndFrameWrap");
-  if(oldEnd&&elementsUI)oldEnd.style.display="none";
-  const groupApplicable=false;
-  const groupWrap=document.getElementById("vcElementGroupWrap");
-  if(groupWrap){
-    groupWrap.style.display=groupApplicable?"block":"none";
-    if(!groupApplicable)S.vcElementGroupMode=false;
-    const groupToggle=document.getElementById("vcElementGroupToggle");
-    if(groupToggle)groupToggle.checked=S.vcElementGroupMode;
-  }
-  // Multi-shot storyboarding (multi_prompt/shot_type) was added in Kling v3 —
-  // v2.1/v2.6 don't support it, so this gates on the real multiShot flag
-  // instead of piggybacking on multiImage (which older tiers also have).
-  document.getElementById("vcMultiShotWrap").style.display=cap.multiShot?"block":"none";
-  document.getElementById("vcVoiceWrap").style.display=isKling?"block":"none";
-  if(isKling)renderVcVoiceList();
-  if(!cap.multiShot){document.getElementById("vcMultiShotToggle").checked=false;toggleMultiShotMode();}
-  document.getElementById("vcMultiVideoWrap").style.display=(cap.multiRef&&cap.maxVideos)?"block":"none";
-  if(cap.multiRef&&cap.maxVideos){
-    document.getElementById("vcMultiVideoLabel").innerHTML=`Reference Videos <span style="font-weight:400;color:var(--texts)">(up to ${cap.maxVideos})</span>`;
-  }
-  document.getElementById("vcMultiAudioWrap").style.display=(cap.multiRef&&cap.maxAudio)?"block":"none";
-  const tagHint=document.getElementById("vcTagHint");
-  if(cap.tagSyntax){
-    tagHint.style.display="block";
-    const exampleTag=(cap.tagSyntax.match(/@\w+\d+/)||["@Element1"])[0];
-    // Spell out how many elements the current uploads actually produce. Kling
-    // requires every element to carry a frontal image PLUS at least one extra
-    // angle, so images are paired — 4 uploads make 2 characters, not 4. Saying
-    // only "@Element1 (when 2+ images)" implied one element per image, which is
-    // wrong and would have people writing @Element4 that never resolves.
-    const nImgs=S.vcMultiImages.length;
-    let pairingNote="";
-    if(cap.elements&&nImgs>1){
-      // floor, not ceil: buildKlingV3Elements folds an odd trailing image into
-      // the previous element as an extra angle rather than creating a lone
-      // element with no angle (which fal rejects). So 3 images make ONE
-      // character, not two — ceil here would advertise an @Element2 that never
-      // resolves, which is the exact confusion this hint exists to prevent.
-      const count=S.vcElementGroupMode?1:Math.floor(nImgs/2);
-      const tags=Array.from({length:count},(_,i)=>`@Element${i+1}`).join(", ");
-      pairingNote=S.vcElementGroupMode
-        ? ` Your ${nImgs} images are being treated as ${nImgs} angles of ONE character, so you have ${tags}.`
-        : ` Kling needs 2 images per character (a front view plus an angle), so your ${nImgs} images make ${count} character${count===1?"":"s"}: ${tags}.`;
-    } else if(cap.elements&&nImgs===1){
-      pairingNote=" One image can't form an Element — it'll be used as the start frame instead. Add a second angle to make a character.";
-    }
-    tagHint.textContent=`Reference your uploads in the prompt using ${cap.tagSyntax} — e.g. "${exampleTag} walks down a neon street".${pairingNote}`;
-  } else tagHint.style.display="none";
-
-  if(cap.multiRef||cap.multiImage){
-    const modelLabel=model.includes("kling")?"Kling":model.includes("seedance")?"Seedance":model.includes("veo")?"Veo":"this model";
-    // Two separate sites were setting this label and only one was updated
-    // before, so element-capable models kept showing "Reference Images (up to
-    // 4)" — a control that no longer holds references at all. On those models
-    // the flat bucket is now hidden entirely; Frames owns start/end and
-    // Elements owns references.
-    const labelEl=document.getElementById("vcMultiImageLabel");
-    if(labelEl)labelEl.textContent=(cap.elements||cap.provider==="kling-o3-ref")
-      ?"Start Frame"
-      :`Reference Images for ${modelLabel} (up to ${cap.maxImages})`;
-  }
-  const note=document.getElementById("vcModelNote");
-  if(KLING_FIXED_RESOLUTION_NOTE[model])note.textContent=KLING_FIXED_RESOLUTION_NOTE[model];
-  else if(cap.provider==="seedance-ref")note.textContent="Real multi-modal: combine images, video, and audio references in one generation.";
-  else if(cap.provider==="veo-ref")note.textContent="Real reference-based generation — keeps a character/product/object consistent across the shot.";
-  else if(cap.provider==="kling-o3-ref")note.textContent="Real multi-character reference generation — each uploaded image locks in one character/object across the whole clip.";
-  else if(cap.elements)note.textContent=`1 image = first-frame reference. 2+ images = real multi-character reference (up to ${cap.maxImages}), plus negative prompt support.`;
-  else if(cap.multiImage)note.textContent=`Up to ${cap.maxImages} reference image${cap.maxImages===1?'':'s'}, plus negative prompt support.`;
-  else note.textContent="";
-  updateVcAttachmentBar();
-}
-
-function handleVcMultiImageUpload(event){handleVcMultiUpload(event,S.vcMultiImages,"vcMultiImagePreview",VIDEO_MODEL_CAPABILITIES[document.getElementById("vcModel").value]?.maxImages||4);}
-function handleVcMultiVideoUpload(event){handleVcMultiUpload(event,S.vcMultiVideos,"vcMultiVideoPreview",VIDEO_MODEL_CAPABILITIES[document.getElementById("vcModel").value]?.maxVideos||3,true);}
-function handleVcMultiAudioUpload(event){handleVcMultiUpload(event,S.vcMultiAudios,"vcMultiAudioPreview",3,false,true);}
-
-function handleVcMultiUpload(event,targetArr,previewId,max,isVideo,isAudio){
-  const files=Array.from(event.target.files||[]);
-  if(!files.length)return;
-  if(targetArr.length+files.length>max){toast(`Max ${max} for this type`,"error");event.target.value="";return;}
-  // Only images are downscaled here. Video and audio can't go through a
-  // canvas the way an image can — client-side re-encoding of either is a
-  // genuinely different, much bigger feature (real transcoding, not a
-  // resize), so those two keep the original raw upload rather than silently
-  // pretending to compress something they don't.
-  files.forEach(async file=>{
-    if(!isVideo&&!isAudio){
-      try{
-        const dataUrl=await downscaleImageFile(file);
-        targetArr.push({dataUrl,name:file.name});
-        renderVcMultiPreview(previewId,targetArr,isAudio);
-        refreshMotionBrushVisibility();
-      }catch(err){ toast(err.message,"error"); }
-      return;
-    }
-    const reader=new FileReader();
-    reader.onload=e=>{
-      targetArr.push({dataUrl:e.target.result,name:file.name});
-      renderVcMultiPreview(previewId,targetArr,isAudio);
-      refreshMotionBrushVisibility();
-    };
-    reader.readAsDataURL(file);
-  });
-  event.target.value="";
-}
-
-function refreshMotionBrushVisibility(){
-  const modelEl=document.getElementById("vcModel");
-  const wrap=document.getElementById("vcMotionBrushWrap");
-  if(!modelEl||!wrap)return;
-  const cap=VIDEO_MODEL_CAPABILITIES[modelEl.value]||{};
-  const motionBrushApplicable=cap.multiImage&&S.vcMultiImages.length>0&&S.vcMultiImages.length<=1;
-  wrap.style.display=motionBrushApplicable?"block":"none";
-  // Clear on 0 images (nothing to base it on) AND on 2+ images (Motion Brush
-  // is single-image only — attaching a 2nd/3rd/4th reference on top of an
-  // existing Motion Brush setup used to leave it set silently, and it would
-  // then hijack generation later even though the person clearly moved on to
-  // multi-image reference mode. Confirmed as the cause of a real failure:
-  // 4 references correctly attached, but the request never built `elements`
-  // because leftover Motion Brush state took over instead.
-  if(!motionBrushApplicable&&S.vcMotionBrush)clearMotionBrush();
-  const endFrameWrap=document.getElementById("vcEndFrameWrap");
-  if(endFrameWrap){
-    const endFrameApplicable=!!IMAGE_TO_VIDEO_MAP[modelEl.value]?.endField&&S.vcMultiImages.length===1;
-    endFrameWrap.style.display=endFrameApplicable?"block":"none";
-    if(!endFrameApplicable&&S.vcEndFrame)removeVcEndFrame();
-  }
-  const groupWrap=document.getElementById("vcElementGroupWrap");
-  if(groupWrap){
-    // v3 builds elements from inline images exactly like O3 does, so the same
-  // choice applies: are these N characters, or one character from N angles?
-  // Gating this to O3 meant v3 was silently locked to "separate characters"
-  // with no way to say four uploads are four angles of one subject — which is
-  // precisely what Kling's own "Add Additional Angles" flow is for.
-  // Element-capable models now use the explicit Element cards instead of the
-  // flat image bucket, so the old grouping toggle is redundant for them — the
-  // user says which images belong together by putting them in one card.
-  const elementsUI=!!(cap.elements||cap.provider==="kling-o3-ref");
-  const elWrap=document.getElementById("vcElementsWrap");
-  if(elWrap){elWrap.style.display=elementsUI?"block":"none";if(elementsUI)renderVcElements();}
-  const framesWrap=document.getElementById("vcFramesWrap");
-  if(framesWrap){framesWrap.style.display=elementsUI?"block":"none";if(elementsUI)renderVcFrames();}
-  // On element models the flat bucket and the standalone End Frame block are
-  // both superseded by Frames — leaving them visible was the actual complaint:
-  // a "Reference Images (up to 4)" control that no longer holds references.
-  const flatWrap=document.getElementById("vcMultiImageWrap");
-  if(flatWrap&&elementsUI)flatWrap.style.display="none";
-  const oldEnd=document.getElementById("vcEndFrameWrap");
-  if(oldEnd&&elementsUI)oldEnd.style.display="none";
-  const groupApplicable=false;
-    groupWrap.style.display=groupApplicable?"block":"none";
-    if(!groupApplicable)S.vcElementGroupMode=false;
-    const groupToggle=document.getElementById("vcElementGroupToggle");
-    if(groupToggle)groupToggle.checked=S.vcElementGroupMode;
-  }
-  updateVcAttachmentBar();
-}
-
-function renderVcMultiPreview(previewId,arr,isAudio){
-  const wrap=document.getElementById(previewId);
-  if(!wrap)return;
-  // Pulls from the same single source of truth the @ autocomplete uses
-  // (vcTagList) instead of recomputing this independently — that's exactly
-  // how the thumbnail labels and autocomplete drifted out of sync before.
-  const list=vcTagList();
-  const tagArr=previewId==="vcMultiImagePreview"?list.images:previewId==="vcMultiVideoPreview"?list.videos:list.audios;
-  // On element models the images array no longer corresponds 1:1 with
-  // vcMultiImages (which is just the start frame), so index-based lookup would
-  // mislabel it. Frames get named, not tagged.
-  const framesMode=list.usesElements&&previewId==="vcMultiImagePreview";
-  const tagFor=i=>framesMode?"Start frame":`@${tagArr[i]||"?"}`;
-  if(isAudio){
-    wrap.innerHTML=arr.map((a,i)=>`<div style="display:flex;align-items:center;gap:6px;font-size:11px;background:var(--lav);border-radius:6px;padding:6px 8px">
-      <span style="font-weight:700;color:var(--violet);flex-shrink:0">${tagFor(i)}</span>
-      <span style="flex:1;color:var(--textm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">${(a.name||'').replace(/</g,'&lt;')}</span>
-      <span style="cursor:pointer;color:var(--red);flex-shrink:0" onclick="removeVcMultiItem('${previewId}',${i})">✕</span>
-    </div>`).join('');
-  } else {
-    wrap.innerHTML=arr.map((a,i)=>`<div style="width:70px">
-      <div style="position:relative;width:70px;height:70px">
-        ${a.dataUrl.startsWith("data:video")?`<video src="${a.dataUrl}" style="width:70px;height:70px;border-radius:8px;object-fit:cover"></video>`:`<img src="${a.dataUrl}" style="width:70px;height:70px;border-radius:8px;object-fit:cover">`}
-        <div style="position:absolute;bottom:2px;left:2px;right:2px;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;font-size:8px;font-weight:700;color:#fff;text-align:center;pointer-events:none">${tagFor(i)}</div>
-        <button onclick="removeVcMultiItem('${previewId}',${i})" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;cursor:pointer;line-height:1">✕</button>
-      </div>
-    </div>`).join('');
-  }
-}
-
-function removeVcMultiItem(previewId,i){
-  const map={vcMultiImagePreview:S.vcMultiImages,vcMultiVideoPreview:S.vcMultiVideos,vcMultiAudioPreview:S.vcMultiAudios};
-  const arr=map[previewId];
-  arr.splice(i,1);
-  renderVcMultiPreview(previewId,arr,previewId==="vcMultiAudioPreview");
-  if(previewId==="vcMultiImagePreview")refreshMotionBrushVisibility();
-  updateVcAttachmentBar();
-}
-
 
 // The little bar at the top of a bottom sheet (.ig-sheet-handle) looked like
 // a standard mobile drag-to-dismiss handle but had no touch handling behind
@@ -7578,53 +6490,12 @@ function sheetSwipeEnd(e,panelId,closeFnName){
   if(dy>90)window[closeFnName]();
 }
 
-function toggleVcSettings(){
-  const panel=document.getElementById("vcSettingsPanel");
-  const backdrop=document.getElementById("vcSettingsBackdrop");
-  if(!panel)return;
-  const opening=!panel.classList.contains("open");
-  panel.classList.toggle("open",opening);
-  if(backdrop)backdrop.classList.toggle("show",opening);
-}
 
 // Single source of truth for what each attached reference file is actually
 // addressable as in a prompt. Used by both the thumbnail labels
 // (renderVcMultiPreview) and the @ autocomplete (getVcAvailableTags) — this
 // used to be computed independently in each place and drifted out of sync
 // (thumbnails said @Element1 while autocomplete still suggested @Image1).
-function vcTagList(){
-  const model=document.getElementById("vcModel")?.value;
-  const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
-  const usesElements=cap.elements||cap.provider==="kling-o3-ref";
-  const images=[],videos=[],audios=[],descriptors=[];
-  if(usesElements){
-    // Elements come from S.vcElements now, NOT from the flat image list. This
-    // still read vcMultiImages, which since the Frames split holds only the
-    // START FRAME — so the start frame was being labelled @Element1 and the
-    // user's real Elements had no tags at all. The @ autocomplete and the
-    // thumbnail labels both read this, so both were wrong together.
-    (S.vcElements||[]).forEach((el,i)=>{
-      if(!el||!el.frontal)return;
-      const tag="Element"+(i+1);
-      images.push(tag);
-      descriptors.push({tag,dataUrl:el.frontal.dataUrl,isVideo:false,isAudio:false,name:el.name||`Element ${i+1}`});
-    });
-    // The start frame is a frame, not a character — it gets its own label so it
-    // stops impersonating an Element.
-    const start=S.vcMultiImages&&S.vcMultiImages[0];
-    if(start)descriptors.push({tag:"StartFrame",dataUrl:start.dataUrl,isVideo:false,isAudio:false,name:start.name||"Start frame",isFrame:true});
-    if(S.vcEndFrame)descriptors.push({tag:"EndFrame",dataUrl:S.vcEndFrame.dataUrl,isVideo:false,isAudio:false,name:S.vcEndFrame.name||"End frame",isFrame:true});
-  } else {
-    S.vcMultiImages.forEach((item,i)=>{const tag="Image"+(i+1);images.push(tag);descriptors.push({tag,dataUrl:item.dataUrl,isVideo:false,isAudio:false,name:item.name});});
-    S.vcMultiVideos.forEach((item,i)=>{const tag="Video"+(i+1);videos.push(tag);descriptors.push({tag,dataUrl:item.dataUrl,isVideo:true,isAudio:false,name:item.name});});
-    S.vcMultiAudios.forEach((item,i)=>{const tag="Audio"+(i+1);audios.push(tag);descriptors.push({tag,dataUrl:item.dataUrl,isVideo:false,isAudio:true,name:item.name});});
-  }
-  return{usesElements,images,videos,audios,all:[...images,...videos,...audios],descriptors};
-}
-
-function getVcAvailableTags(){
-  return vcTagList().all;
-}
 
 // Live @-tag chips under the input. A plain <textarea> cannot style a
 // substring of its own text — there is no way to make just "@Element1"
@@ -7652,205 +6523,6 @@ function getVcAvailableTags(){
 // unresolvedVcElementTags/renderVcTagChips rather than a third copy of it,
 // so the in-place glow, the chip strip, and the actual pre-flight
 // validation can never disagree about which tags are real.
-function renderVcChatHighlight(){
-  const mirror=document.getElementById("vcChatHighlight");
-  const input=document.getElementById("vcChatInput");
-  if(!mirror||!input)return;
-  const text=input.value||"";
-  const availableEls=(S.vcElements||[]).filter(e=>e&&e.frontal&&e.angles&&e.angles.length).length;
-  const hasStart=!!(S.vcMultiImages&&S.vcMultiImages[0]);
-  const hasEnd=!!S.vcEndFrame;
-  const html=escapeHtml(text).replace(/@(Element\d+|StartFrame|EndFrame)/gi,(m,name)=>{
-    const lower=name.toLowerCase();
-    let valid;
-    if(lower==="startframe")valid=hasStart;
-    else if(lower==="endframe")valid=hasEnd;
-    else{const n=parseInt(lower.replace(/\D/g,""),10);valid=isFinite(n)&&n>=1&&n<=availableEls;}
-    return `<span style="background:${valid?'var(--lav)':'rgba(200,150,20,0.18)'};color:${valid?'var(--violet)':'var(--gold)'};border-radius:4px;padding:0 2px;font-weight:700">${m}</span>`;
-  });
-  // Trailing newline protection: if the raw text ends with \n, pre-wrap can
-  // collapse that final empty line's height, drifting the mirror one line
-  // short of the real textarea and misaligning everything below it.
-  mirror.innerHTML=text.endsWith("\n")?html+"&nbsp;":html;
-  mirror.scrollTop=input.scrollTop;
-}
-function syncVcChatHighlightScroll(){
-  const mirror=document.getElementById("vcChatHighlight");
-  const input=document.getElementById("vcChatInput");
-  if(mirror&&input)mirror.scrollTop=input.scrollTop;
-}
-
-function renderVcTagChips(){
-  const wrap=document.getElementById("vcTagChips");
-  const input=document.getElementById("vcChatInput");
-  if(!wrap||!input)return;
-  const text=input.value||"";
-  const found=[...new Set((text.match(/@(Element\d+|StartFrame|EndFrame)/gi)||[]))];
-  if(!found.length){wrap.style.display="none";wrap.innerHTML="";return;}
-  wrap.style.display="flex";
-  const availableEls=(S.vcElements||[]).filter(e=>e&&e.frontal&&e.angles&&e.angles.length).length;
-  const hasStart=!!(S.vcMultiImages&&S.vcMultiImages[0]);
-  const hasEnd=!!S.vcEndFrame;
-  wrap.innerHTML=found.map(tag=>{
-    const lower=tag.toLowerCase();
-    let valid;
-    if(lower==="@startframe")valid=hasStart;
-    else if(lower==="@endframe")valid=hasEnd;
-    else{const n=parseInt(lower.replace(/\D/g,""),10);valid=isFinite(n)&&n>=1&&n<=availableEls;}
-    return `<span class="${valid?'kk-tag-valid':''}" style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:10.5px;font-weight:700;background:${valid?'var(--lav)':'rgba(200,150,20,0.12)'};color:${valid?'var(--violet)':'var(--gold)'};border:1px solid ${valid?'var(--vs)':'var(--gold)'}">${escapeHtml(tag)}${valid?'':' ⚠'}</span>`;
-  }).join('');
-}
-
-function checkVcTagAutocomplete(){
-  const input=document.getElementById("vcChatInput");
-  const dropdown=document.getElementById("vcTagAutocomplete");
-  if(!input||!dropdown)return;
-  const cursor=input.selectionStart;
-  const textBeforeCursor=input.value.slice(0,cursor);
-  const match=textBeforeCursor.match(/@(\w*)$/);
-  if(!match){hideVcTagAutocomplete();return;}
-  const partial=match[1].toLowerCase();
-  const matches=vcTagList().descriptors.filter(d=>d.tag.toLowerCase().startsWith(partial));
-  if(!matches.length){hideVcTagAutocomplete();return;}
-  // Shows the actual attached reference (thumbnail for image/video, an icon
-  // for audio) next to its tag, not just plain text — makes it possible to
-  // tell at a glance which real file @Element2 is before inserting it,
-  // instead of having to remember the upload order.
-  dropdown.innerHTML=matches.map(d=>`<div onclick="insertVcTag('${d.tag}')" style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;border-bottom:1px solid var(--borderl)">
-    ${d.isAudio?`<div style="width:28px;height:28px;border-radius:6px;background:var(--lav);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px">🎙️</div>`
-      :d.isVideo?`<video src="${d.dataUrl}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0"></video>`
-      :`<img src="${d.dataUrl}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0">`}
-    <div style="min-width:0">
-      <div style="font-size:12px;font-weight:700;color:var(--violet)">@${d.tag}</div>
-      ${d.name?`<div style="font-size:9px;color:var(--textm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${d.name}</div>`:''}
-    </div>
-  </div>`).join('');
-  dropdown.style.display="block";
-}
-
-function hideVcTagAutocomplete(){
-  const dropdown=document.getElementById("vcTagAutocomplete");
-  if(dropdown)dropdown.style.display="none";
-}
-
-function insertVcTag(tag){
-  const input=document.getElementById("vcChatInput");
-  const cursor=input.selectionStart;
-  const textBeforeCursor=input.value.slice(0,cursor);
-  const textAfterCursor=input.value.slice(cursor);
-  const match=textBeforeCursor.match(/@(\w*)$/);
-  const matchStart=textBeforeCursor.length-match[0].length;
-  const beforeMatch=textBeforeCursor.slice(0,matchStart);
-  // Previously only guaranteed a trailing space after the inserted tag —
-  // if the text immediately BEFORE "@" had no space of its own (pasted
-  // text, or typing "@" right after a word with no space), the tag merged
-  // straight into that preceding word until a space was pressed manually.
-  // Now guaranteed on both sides.
-  const needsLeadingSpace=beforeMatch.length>0&&!/\s$/.test(beforeMatch);
-  const newBefore=beforeMatch+(needsLeadingSpace?" ":"")+`@${tag} `;
-  input.value=newBefore+textAfterCursor;
-  const newCursorPos=newBefore.length;
-  input.focus();
-  input.setSelectionRange(newCursorPos,newCursorPos);
-  hideVcTagAutocomplete();
-  // Setting .value directly (as opposed to the user actually typing) does
-  // NOT fire the textarea's own "input" event, which is what the live
-  // in-place glow and chip strip are wired to — so clicking a tag from
-  // this dropdown left both looking stale until something else later
-  // forced a re-render (e.g. actually sending the prompt). Called
-  // explicitly here so tagging via click glows immediately, the same as
-  // tagging by typing already did.
-  renderVcChatHighlight();
-  renderVcTagChips();
-}
-
-function handleVcChatKeydown(e){
-  const dropdown=document.getElementById("vcTagAutocomplete");
-  if(e.key==="Enter"&&dropdown&&dropdown.style.display==="block"){
-    e.preventDefault();hideVcTagAutocomplete();return;
-  }
-  if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();sendVcChatPrompt();}
-}
-
-function toggleVcVoiceInput(){
-  const SpeechRecognitionCtor=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SpeechRecognitionCtor){toast("Voice input isn't supported in this browser — try Chrome","error");return;}
-  const btn=document.getElementById("vcVoiceBtn");
-  if(S.vcRecognition){S.vcRecognition.stop();return;}
-  const recognition=new SpeechRecognitionCtor();
-  recognition.lang=navigator.language||"en-US";
-  recognition.interimResults=true;
-  recognition.continuous=false;
-  const inputEl=document.getElementById("vcChatInput");
-  const baseText=inputEl.value?inputEl.value+" ":"";
-  recognition.onstart=()=>btn.classList.add("recording");
-  recognition.onresult=(event)=>{
-    let transcript="";
-    for(let i=0;i<event.results.length;i++)transcript+=event.results[i][0].transcript;
-    inputEl.value=baseText+transcript;
-  };
-  recognition.onerror=(event)=>{
-    toast(event.error==="not-allowed"?"Microphone permission denied":"Voice input error: "+event.error,"error");
-    btn.classList.remove("recording");S.vcRecognition=null;
-  };
-  recognition.onend=()=>{btn.classList.remove("recording");S.vcRecognition=null;};
-  S.vcRecognition=recognition;
-  recognition.start();
-}
-
-function renderVcChatThread(){
-  const thread=document.getElementById("vcChatThread");
-  if(!thread)return;
-  if(!S.vcChatHistory.length){
-    thread.innerHTML=`<div class="ig-empty-chat">
-      <div style="font-size:36px;margin-bottom:10px;opacity:0.5">✨</div>
-      <div style="font-size:13px;font-weight:600;color:var(--textm)">Describe a video below to get started</div>
-      <div style="font-size:11px;color:var(--texts);margin-top:4px">Your generations stay here like a conversation — scroll up to see past ones</div>
-    </div>`;
-    return;
-  }
-  thread.innerHTML=S.vcChatHistory.map(msg=>{
-    if(msg.role==="user"){
-      const canRestore=msg.id&&msg.genSettings;
-      return `<div style="align-self:flex-end;max-width:82%;display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-        <div class="ig-bubble-user" style="align-self:stretch;max-width:none">${highlightVcTags(msg.content)}</div>
-        <div style="display:flex;gap:10px;padding:0 4px">
-          ${canRestore?`<button class="ig-msg-action" onclick="editVcUserMessage('${msg.id}')" title="Edit">${pIcon('pencil',11)} Edit</button>`:''}
-          <button class="ig-msg-action" onclick="copyVcUserMessage('${msg.id||''}')" title="Copy">${pIcon('clipboard',11)} Copy</button>
-          ${canRestore?`<button class="ig-msg-action" onclick="retryVcUserMessage('${msg.id}')" title="Retry with the same settings">${pIcon('restore',11)} Retry</button>`:''}
-        </div>
-      </div>`;
-    }
-    if(msg.type==="loading")return `<div class="ig-bubble-loading" id="${msg.id}"><span class="ig-dot"></span><span class="ig-dot"></span><span class="ig-dot"></span>&nbsp;${msg.content}</div>`;
-    if(msg.type==="error")return `<div class="ig-bubble-assistant" style="color:var(--red)">❌ ${msg.content}</div>`;
-    if(msg.type==="debug")return `<div class="ig-bubble-assistant" style="font-family:monospace;font-size:10.5px;white-space:pre-wrap;word-break:break-all;color:var(--textm);background:var(--pearl2);border:1px dashed var(--border)">${msg.content}</div>`;
-    if(msg.type==="video"){
-      const isVeo=(msg.meta.providerLabel||"").includes("Veo");
-      const isKling=(msg.meta.providerLabel||"").includes("Kling");
-      return `<div class="ig-bubble-assistant" style="background:none;box-shadow:none;padding:0;border:none">
-        <video src="${msg.content}" controls style="width:100%;max-width:320px;border-radius:12px;display:block"></video>
-        <div class="vc-result-actions">
-          <button class="vc-result-icon-btn" title="Download" onclick="downloadWithName('${msg.content.replace(/'/g,"\\'")}','KosmicKat_${sanitizeFilenamePart(msg.meta.prompt)}.mp4')">${VC_RESULT_ICONS.download}</button>
-          ${msg.meta.assetId?`<button class="vc-result-icon-btn" title="Add to Collection" onclick="openCollectionPicker('asset','${msg.meta.assetId}')">${VC_RESULT_ICONS.collection}</button>`:''}
-          <button class="vc-result-icon-btn" title="Details" onclick="showVcGenerationInfo('${msg.id||''}')">${VC_RESULT_ICONS.info}</button>
-          ${isVeo?`<button class="btn btn-outline btn-xs" onclick="extendVeoVideo('${msg.id||''}')">⏩ Extend</button>`:''}
-          ${isKling?`<button class="btn btn-outline btn-xs" onclick="openLipSyncDialog('${msg.id||''}')">👄 Lip Sync</button>`:''}
-        </div>
-      </div>`;
-    }
-    return '';
-  }).join('');
-  thread.scrollTop=thread.scrollHeight;
-}
-
-function patchVcUserMessageRefs(msgId,hostedImages,hostedVideos,hostedAudios){
-  const msg=S.vcChatHistory.find(m=>m.id===msgId);
-  if(!msg||!msg.genSettings)return;
-  msg.genSettings.refImages=hostedImages;
-  msg.genSettings.refVideos=hostedVideos;
-  msg.genSettings.refAudios=hostedAudios;
-  saveSetting("vc_chat_history",S.vcChatHistory);
-}
 
 // Restores every control that affects a generation to match a past message's
 // exact snapshot — model, duration, ratio, resolution, negative prompt,
@@ -7858,100 +6530,6 @@ function patchVcUserMessageRefs(msgId,hostedImages,hostedVideos,hostedAudios){
 // already-hosted URLs, so this doesn't re-upload anything). Used by both
 // Edit (restore + let the person review before sending) and Retry (restore +
 // send immediately) so the two can't drift out of sync with each other.
-function restoreVcGenSettings(g){
-  document.getElementById("vcModel").value=g.model;
-  updateVcModelUI(); // cascades duration/ratio/resolution option lists + multiShot/voice/ref UI for this model — this resets values to defaults, which is why everything below re-applies the real ones afterward
-  const durConfig=VIDEO_MODEL_DURATIONS[g.model];
-  if(durConfig&&g.duration!=null){
-    const idx=durConfig.options.indexOf(parseInt(g.duration,10));
-    document.getElementById("vcDurationSlider").value=idx>=0?idx:0;
-    updateVcDurationFromSlider();
-  }
-  const ratioSel=document.getElementById("vcRatio");
-  if(ratioSel&&g.ratio&&[...ratioSel.options].some(o=>o.value===g.ratio)){ratioSel.value=g.ratio;renderVisualTrigger("vcRatio","ratio");}
-  if(g.resolution)populateResolutionSelect("vcRes","vcResWrap",g.model,g.resolution);
-  const negEl=document.getElementById("vcNegPrompt");
-  if(negEl)negEl.value=g.negPrompt||"";
-  S.klingSelectedVoices=[...(g.klingVoices||[])];
-  saveSetting("active_director",g.directorId||"");
-  if(document.getElementById("vcVoiceWrap").style.display!=="none")renderVcVoiceList();
-
-  S.vcMultiImages=(g.refImages||[]).map(u=>({dataUrl:u,name:""}));
-  S.vcMultiVideos=(g.refVideos||[]).map(u=>({dataUrl:u,name:""}));
-  S.vcMultiAudios=(g.refAudios||[]).map(u=>({dataUrl:u,name:""}));
-  S.vcEndFrame=g.endFrame?{dataUrl:g.endFrame,name:""}:null;
-  renderVcMultiPreview("vcMultiImagePreview",S.vcMultiImages,false);
-  renderVcMultiPreview("vcMultiVideoPreview",S.vcMultiVideos,false);
-  renderVcMultiPreview("vcMultiAudioPreview",S.vcMultiAudios,true);
-  renderVcEndFramePreview();
-  refreshMotionBrushVisibility();
-  updateVcAttachmentBar();
-
-  const msToggle=document.getElementById("vcMultiShotToggle");
-  if(g.multiShotOn){
-    msToggle.checked=true;
-    S.vcShots=JSON.parse(JSON.stringify(g.shots||[{prompt:"",duration:"5"}]));
-    toggleMultiShotMode();
-    setVcShotMode(g.shotMode||"combined");
-    setVcShotType(g.shotType||"customize");
-  } else if(msToggle.checked){
-    msToggle.checked=false;
-    toggleMultiShotMode();
-  }
-}
-
-function editVcUserMessage(msgId){
-  const msg=S.vcChatHistory.find(m=>m.id===msgId);
-  if(!msg||!msg.genSettings)return;
-  restoreVcGenSettings(msg.genSettings);
-  if(msg.genSettings.multiShotOn){
-    toast("Settings and shots restored — review them below, then tap Send when ready.","success");
-  } else {
-    const inputEl=document.getElementById("vcChatInput");
-    inputEl.value=msg.content;
-    inputEl.style.height="auto";inputEl.style.height=Math.min(inputEl.scrollHeight,240)+"px";
-    inputEl.focus();
-    toast("Settings restored — edit the prompt above, then tap Send.","success");
-  }
-  document.getElementById("vcChatThread")?.scrollIntoView({behavior:"smooth",block:"end"});
-}
-
-function retryVcUserMessage(msgId){
-  const msg=S.vcChatHistory.find(m=>m.id===msgId);
-  if(!msg||!msg.genSettings)return;
-  restoreVcGenSettings(msg.genSettings);
-  if(msg.genSettings.multiShotOn){
-    msg.genSettings.shotMode==="sequential"?sendVcSequentialShots():sendVcMultiShotPrompt();
-  } else {
-    const inputEl=document.getElementById("vcChatInput");
-    inputEl.value=msg.content;
-    sendVcChatPrompt();
-  }
-}
-
-function copyVcUserMessage(msgId){
-  const msg=S.vcChatHistory.find(m=>m.id===msgId);
-  if(!msg)return;
-  navigator.clipboard.writeText(msg.content).then(
-    ()=>toast("Copied","success"),
-    ()=>toast("Couldn't copy — your browser may be blocking clipboard access","error")
-  );
-}
-
-function pushVcChatMessage(msg){
-  S.vcChatHistory.push(msg);
-  if(S.vcChatHistory.length>60)S.vcChatHistory=S.vcChatHistory.slice(-60);
-  saveSetting("vc_chat_history",S.vcChatHistory);
-  renderVcChatThread();
-}
-
-function replaceVcLoadingBubble(loadingId,newMsg){
-  const idx=S.vcChatHistory.findIndex(m=>m.id===loadingId);
-  if(idx>=0)S.vcChatHistory[idx]=newMsg;
-  else S.vcChatHistory.push(newMsg);
-  saveSetting("vc_chat_history",S.vcChatHistory);
-  renderVcChatThread();
-}
 
 // ── VEO 3.1 EXTEND-VIDEO — real endpoint, verified. Takes an already-hosted
 // video URL (never base64 — this only ever operates on prior generation
@@ -8054,43 +6632,6 @@ async function runLipSync(msgId){
   }
 }
 
-async function extendVeoVideo(msgId){
-  const msg=S.vcChatHistory.find(m=>m.id===msgId);
-  if(!msg){toast("Couldn't find that video — try regenerating","error");return;}
-  const continuation=await showPromptDialog("Describe how the scene should continue, keeping the same style and motion.","",{title:"Extend This Video",okLabel:"Extend",multiline:true});
-  if(!continuation||!continuation.trim())return;
-
-  const currentTotal=msg.meta.totalDuration||8;
-  if(currentTotal>=30){
-    const proceed=await showConfirmDialog(`This video is already ~${currentTotal}s — fal.ai's Veo 3.1 extend-video is documented as supporting up to ~30 seconds total. Extending further may fail or produce unreliable results. Try anyway?`,{danger:true,okLabel:"Try Anyway"});
-    if(!proceed)return;
-  }
-
-  const isFast=(msg.meta.providerLabel||"").includes("Fast");
-  const model=isFast?"fal-ai/veo3.1/fast/extend-video":"fal-ai/veo3.1/extend-video";
-  const loadingId="vcLoading_"+Date.now();
-  pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Extending video…"});
-  const sendBtn=document.getElementById("vcSendBtn");
-  if(sendBtn)sendBtn.disabled=true;
-
-  try{
-    const apiKey=gs("api_falai","");
-    if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
-    const body={prompt:continuation,video_url:msg.content};
-    const submitRes=await fetch(`https://queue.fal.run/${model}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
-    const submitData=await submitRes.json();
-    if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
-    const videoUrl=await pollFalVideoResult(model,submitData,apiKey);
-    const savedAssetExt=createVideoAsset(videoUrl,continuation,"");
-    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:msg.meta.providerLabel,prompt:continuation,totalDuration:currentTotal+7,assetId:savedAssetExt.id,model,resolution:msg.meta.resolution||""}});
-    logCost(model,"Extend: "+continuation.slice(0,50));
-    toast("✨ Video extended!","success");
-  }catch(err){
-    replaceVcLoadingBubble(loadingId,{role:"assistant",type:"error",content:err.message});
-    toast("❌ "+err.message,"error");
-  }
-  if(sendBtn)sendBtn.disabled=false;
-}
 
 // Sequential shot generation — built as a working fallback after Combined
 // mode's real multi-character elements array had persistent, unresolved
@@ -8100,353 +6641,9 @@ async function extendVeoVideo(msgId){
 // most ONE reference image, using start_image_url/image_url — the single-
 // reference mechanism that's actually proven to work in this app. Produces
 // separate video clips, one per shot, instead of one combined file.
-async function sendVcSequentialShots(){
-  const validShots=S.vcShots.filter(s=>s.prompt.trim());
-  if(!validShots.length){toast("Add at least one shot with a prompt","error");return;}
-  const model=document.getElementById("vcModel").value;
-  const i2v=IMAGE_TO_VIDEO_MAP[model];
-  const ratio=document.getElementById("vcRatio").value;
-  const negPrompt=document.getElementById("vcNegPrompt")?.value.trim()||"";
-  const directorStyle=getActiveDirectorPrompt();
-  const apiKey=gs("api_falai","");
-  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
-
-  const userMsgId="vcUser_"+Date.now();
-  pushVcChatMessage({id:userMsgId,role:"user",content:`🎬 Sequential storyboard — ${validShots.length} shots, own reference each`,genSettings:{
-    model,ratio,duration:null,resolution:"",negPrompt,directorId:gs("active_director",""),
-    klingVoices:[...S.klingSelectedVoices],
-    refImages:S.vcMultiImages.map(i=>i.dataUrl),
-    refVideos:[],refAudios:[],
-    multiShotOn:true,shotMode:"sequential",shotType:"customize",
-    shots:JSON.parse(JSON.stringify(validShots)),
-  }});
-
-  const sendBtn=document.getElementById("vcSendBtn");
-  sendBtn.disabled=true;
-
-  let hostedImages=[];
-  if(/kling-video\/v3\//.test(model||"")){
-    // Same pre-upload validation as the other Kling paths — this is the
-    // sequential multi-shot route, which uploads once and then generates
-    // repeatedly, so a bad asset here wastes every subsequent shot too.
-    const problems=await validateKlingV3Assets(collectKlingV3Images(),collectKlingV3Videos(),null,negPrompt);
-    if(problems.length){
-      pushVcChatMessage({role:"assistant",type:"error",content:"Kling can't accept these yet:\n• "+problems.join("\n• ")});
-      sendBtn.disabled=false;
-      return;
-    }
-  }
-  if(S.vcMultiImages.length){
-    const uploadId="vcLoading_"+Date.now();
-    pushVcChatMessage({id:uploadId,role:"assistant",type:"loading",content:"Uploading reference files…"});
-    try{
-      hostedImages=await uploadRefsToFal(S.vcMultiImages,apiKey);
-      patchVcUserMessageRefs(userMsgId,hostedImages,[],[]);
-      replaceVcLoadingBubble(uploadId,{role:"assistant",type:"debug",content:`✅ ${hostedImages.length} reference image${hostedImages.length===1?'':'s'} ready — generating shots one at a time below.`});
-    }catch(err){
-      replaceVcLoadingBubble(uploadId,{role:"assistant",type:"error",content:err.message});
-      toast("❌ "+err.message,"error");
-      sendBtn.disabled=false;
-      return;
-    }
-  }
-
-  let successCount=0;
-  for(let idx=0;idx<validShots.length;idx++){
-    const shot=validShots[idx];
-    const loadingId="vcLoading_"+Date.now()+"_"+idx;
-    pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:`Generating shot ${idx+1} of ${validShots.length}…`});
-    try{
-      const shotPrompt=directorStyle?`${shot.prompt}, ${directorStyle}`:shot.prompt;
-      const refUrl=(shot.refIndex!=null&&hostedImages[shot.refIndex])?hostedImages[shot.refIndex]:null;
-      const durationConfig=VIDEO_MODEL_DURATIONS[model];
-      const formattedDuration=durationConfig?durationConfig.format(parseInt(shot.duration,10)):shot.duration;
-      let endpoint=model;
-      const body={prompt:shotPrompt,aspect_ratio:ratio,duration:formattedDuration,generate_audio:true};
-      if(negPrompt)body.negative_prompt=negPrompt;
-      const cfgScaleEl=document.getElementById("vcCfgScaleSlider");if(cfgScaleEl&&cap.cfgScale)body.cfg_scale=parseFloat(cfgScaleEl.value);
-      if(S.klingSelectedVoices.length)body.voice_ids=S.klingSelectedVoices;
-      if(refUrl&&i2v){endpoint=i2v.endpoint;body[i2v.field]=refUrl;}
-      normalizeKlingV3Body(endpoint,body);
-      const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
-      const submitData=await submitRes.json();
-      if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
-      const videoUrl=await pollFalVideoResult(endpoint,submitData,apiKey);
-      const savedAsset=createVideoAsset(videoUrl,shotPrompt,"");
-      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:`Sequential — Shot ${idx+1}/${validShots.length}`,prompt:shotPrompt,assetId:savedAsset.id,model,resolution:"Fixed by model (up to 1080p)",refImages:refUrl?[refUrl]:[]}});
-      logCost(model,`Sequential shot ${idx+1}/${validShots.length}`);
-      successCount++;
-    }catch(err){
-      replaceVcLoadingBubble(loadingId,{role:"assistant",type:"error",content:`Shot ${idx+1} failed: ${err.message}`});
-    }
-  }
-  toast(`✨ ${successCount}/${validShots.length} shots generated`,successCount===validShots.length?"success":"error");
-  sendBtn.disabled=false;
-}
-
-async function sendVcMultiShotPrompt(){
-  const validShots=S.vcShots.filter(s=>s.prompt.trim());
-  if(validShots.length<2){toast("Add at least 2 shots with prompts","error");return;}
-  const totalDuration=validShots.reduce((sum,s)=>sum+parseInt(s.duration,10),0);
-  if(totalDuration>15){toast("Total duration exceeds Kling's 15s max — trim a shot","error");return;}
-
-  const model=document.getElementById("vcModel").value;
-  const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
-  // Multi-shot storyboarding (multi_prompt/shot_type) was added in Kling v3 —
-  // this UI is now hidden for v2.1/v2.6 via updateVcModelUI's multiShot gate,
-  // but guard here too in case this gets called some other way.
-  if(!cap.multiShot){toast("This model doesn't support multi-shot storyboarding — switch to Kling 3.0 Standard/Pro or O3 Pro.","error");return;}
-  const ratio=document.getElementById("vcRatio").value;
-  const shotType=document.getElementById("vcShotType").value;
-  const negPrompt=document.getElementById("vcNegPrompt")?.value.trim()||"";
-  const directorStyle=getActiveDirectorPrompt();
-  const shouldNormalize=(cap.provider==="kling-o3-ref"&&(S.vcMultiImages.length||S.vcMultiVideos.length))||vcHasRealElements(cap);
-  const shotsPayload=validShots.map(s=>{
-    let p=directorStyle?`${s.prompt}, ${directorStyle}`:s.prompt;
-    if(shouldNormalize)p=normalizeElementTags(p);
-    return{prompt:p,duration:s.duration};
-  });
-
-  const userMsgId="vcUser_"+Date.now();
-  pushVcChatMessage({id:userMsgId,role:"user",content:`🎬 Multi-shot storyboard — ${validShots.length} shots, ${totalDuration}s total`,genSettings:{
-    model,ratio,duration:null,resolution:"",negPrompt,directorId:gs("active_director",""),
-    klingVoices:[...S.klingSelectedVoices],
-    refImages:S.vcMultiImages.map(i=>i.dataUrl),
-    refVideos:S.vcMultiVideos.map(v=>v.dataUrl),
-    refAudios:[],
-    multiShotOn:true,
-    shotType,
-    shots:JSON.parse(JSON.stringify(validShots)),
-  }});
-  const loadingId="vcLoading_"+Date.now();
-  pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:`Generating ${validShots.length}-shot sequence…`});
-  const sendBtn=document.getElementById("vcSendBtn");
-  sendBtn.disabled=true;
-
-  try{
-    let videoUrl;
-    const apiKey=gs("api_falai","");
-    if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
-    if(S.vcMultiImages.length||S.vcMultiVideos.length)replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Uploading reference files…"});
-    // Validated BEFORE upload on purpose: an oversized or wrong-shaped asset
-    // would otherwise be uploaded to fal in full and only then rejected, which
-    // wastes the transfer and the wait — and on mobile, real data allowance.
-    // Only applies to Kling v3, whose limits these are.
-    if(/kling-video\/v3\//.test(model||"")){
-      // 'prompt' (singular) was never declared anywhere in THIS function —
-      // only negPrompt was. It silently resolved to the browser's native
-      // window.prompt function rather than throwing a ReferenceError.
-      // validateKlingV3Assets survived that (prompt.length just read the
-      // function's arity, a harmless number) — but unresolvedVcElementTags
-      // calls prompt.match(), which does not exist on a function object and
-      // would throw. Did not cause the reported failure, since Multi-Shot
-      // Storyboard was off when that happened, but would crash the instant
-      // this toggle is used with an element-capable model. Checks every
-      // shot's text instead of a single flat prompt, since a dangling
-      // @ElementN tag can appear in any one of them.
-      const allShotText=validShots.map(s=>s.prompt).join(" ");
-      const problems=await validateKlingV3Assets(collectKlingV3Images(),collectKlingV3Videos(),allShotText,negPrompt);
-      const dangling=unresolvedVcElementTags(allShotText);
-      if(dangling.length){
-        const have=(S.vcElements||[]).filter(e=>e&&e.frontal&&e.angles&&e.angles.length).length;
-        problems.push(`Your prompt mentions ${dangling.join(", ")} but you have ${have} complete Element${have===1?"":"s"} — that reference would be ignored and the character wouldn't appear.`);
-      }
-      if(problems.length)throw new Error("Kling can't accept these yet:\n• "+problems.join("\n• "));
-    }
-    const hostedImages=S.vcMultiImages.length?await uploadRefsToFal(S.vcMultiImages,apiKey):[];
-    const hostedElements=await uploadVcElements(apiKey);
-    const hostedVideos=S.vcMultiVideos.length?await uploadRefsToFal(S.vcMultiVideos,apiKey):[];
-    patchVcUserMessageRefs(userMsgId,hostedImages,hostedVideos,[]);
-    if(cap.elements&&hostedImages.length===1){
-    // One image cannot form a valid element: the schema requires at least one
-    // reference_image_urls angle alongside the frontal image. Falling back to
-    // plain image-to-video (which works fine with one image) rather than
-    // sending an element fal will reject — and saying so, because silently
-    // changing the mode would look like the element feature just did nothing.
-    toast("One image can't be an Element — Kling needs a second angle. Using it as a start frame instead.","");
-  }
-  // Gated on hostedElements, NOT on hostedImages.length>1. That old condition
-  // became permanently false the moment the start-frame bucket was capped to a
-  // single image, which meant Elements were silently never sent — the user had
-  // a full Elements UI that produced nothing in the request.
-  if(cap.elements&&((hostedElements&&hostedElements.length)||hostedImages.length>1)){
-      // Real diagnostic visibility, not just fal's response — after several
-      // rounds where fal's own error kept saying elements were empty despite
-      // real uploads, the missing piece was seeing the ACTUAL URLs this app
-      // generated and sent, not just the eventual result. Logged as its own
-      // small message so it's easy to tap-and-hold to copy one and check it
-      // directly (paste into a new tab — a working reference image should
-      // just load).
-      // Printed hostedImages here previously — the WRONG array. hostedImages
-      // is the start-frame bucket (capped to 1), completely unrelated to
-      // Elements. This is exactly why the debug log showed only "1." even
-      // when 2 real Elements were attached: it was never showing Elements at
-      // all. Now prints the actual built element payload.
-      const builtEls=hostedElements&&hostedElements.length?buildKlingV3ElementsExplicit(hostedElements,[]):[];
-      pushVcChatMessage({role:"assistant",type:"debug",content:`🔎 Debug — ${builtEls.length} element${builtEls.length!==1?'s':''} about to be sent:\n${builtEls.map((e,i)=>`${i+1}. frontal=${e.frontal_image_url?'✓':'✗'} angles=${(e.reference_image_urls||[]).length}${e.voice_id?' voice=✓':''}`).join("\n")}${hostedImages.length?`\nStart frame: ${hostedImages[0]}`:''}`});
-    }
-    if(cap.provider==="kling-o3-ref"){
-      if(!S.vcMultiImages.length&&!S.vcMultiVideos.length)throw new Error("Add at least 1 reference image or video — O3 Pro needs one to generate.");
-      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:`Generating ${validShots.length}-shot sequence…`});
-      videoUrl=await genViaKlingO3Reference(null,ratio,null,hostedImages,hostedVideos,shotsPayload,shotType,S.vcElementGroupMode,document.getElementById("vcCfgScaleSlider")&&cap.cfgScale?parseFloat(document.getElementById("vcCfgScaleSlider").value):null);
-    } else {
-      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:`Generating ${validShots.length}-shot sequence…`});
-      let endpoint=model;
-      const body={
-        multi_prompt:shotsPayload.map(s=>({prompt:s.prompt,duration:String(s.duration)})),
-        shot_type:shotType,
-        // aspect_ratio is NOT a field on the v3 image-to-video endpoints — the
-        // schema's property list is prompt/multi_prompt/start_image_url/
-        // duration/generate_audio/end_image_url/elements/shot_type/
-        // negative_prompt/cfg_scale. Aspect comes from the start image.
-        generate_audio:gs("kling_generate_audio",true)!==false,
-      };
-      if(negPrompt)body.negative_prompt=negPrompt;
-      const cfgScaleEl=document.getElementById("vcCfgScaleSlider");if(cfgScaleEl&&cap.cfgScale)body.cfg_scale=parseFloat(cfgScaleEl.value);
-      // voice_ids does not exist on the v3 endpoints. Voice is bound PER
-      // ELEMENT (voice_id inside each element) and is applied by
-      // buildKlingV3Elements below. Sending it here did nothing at all — the
-      // user picked voices and silently got none.
-      const i2v=IMAGE_TO_VIDEO_MAP[model];
-      if(vcHasRealElements(cap)){
-        // CORRECTED: a previous version of this kept the request on the
-        // text-to-video endpoint, reasoning that fal's docs listed `elements`
-        // as a valid field there. That was an incomplete read — text-to-
-        // video's own docs specifically say element binding there supports
-        // only 1 element and requires character_orientation:'video' (a field
-        // this app never sets), which is why 4 real elements were being
-        // treated as unsupported/effectively empty. Every actually-confirmed
-        // working multi-element example uses the image-to-video endpoint
-        // with both start_image_url AND a full elements array together —
-        // swapping back to that, and including start_image_url (the first
-        // reference image) alongside elements, matching those examples
-        // exactly instead of assuming elements works standalone.
-        const missing=hostedImages.map((u,i)=>!u?i+1:null).filter(Boolean);
-        if(missing.length)throw new Error(`Reference image ${missing.join(", ")} has no usable URL — remove and re-attach it, then try again`);
-        if(i2v){
-          endpoint=i2v.endpoint;
-          // start_image_url is REQUIRED by the schema and every confirmed
-          // working multi-element example sends it alongside elements. When
-          // the user set no start frame, fall back to the first element's
-          // frontal image rather than sending undefined and being rejected.
-          const startUrl=hostedImages[0]||(hostedElements&&hostedElements[0]&&hostedElements[0].frontal)||null;
-          if(startUrl)body[i2v.field]=startUrl;
-          // The end frame was simply never carried on this branch — it was
-          // uploaded, stored, and then dropped before the request was built.
-          if(i2v.endField&&S.vcEndFrame){
-            const hostedEnd=await uploadRefsToFal([S.vcEndFrame],apiKey);
-            if(hostedEnd&&hostedEnd[0])body[i2v.endField]=hostedEnd[0];
-          }
-        }
-        body.elements=hostedElements&&hostedElements.length
-          ?buildKlingV3ElementsExplicit(hostedElements,hostedVideos)
-          :buildKlingV3Elements(hostedImages,hostedVideos,S.vcElementGroupMode,S.klingSelectedVoices);
-      } else if(S.vcMultiImages.length&&i2v){
-        endpoint=i2v.endpoint;
-        body[i2v.field]=hostedImages[0];
-      }
-      normalizeKlingV3Body(endpoint,body);
-      const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
-      const submitData=await submitRes.json();
-      if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
-      videoUrl=await pollFalVideoResult(endpoint,submitData,apiKey);
-    }
-    const multiShotPromptJoined=validShots.map(s=>s.prompt).join(" → ");
-    const savedAssetMs=createVideoAsset(videoUrl,multiShotPromptJoined,"");
-    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel:"Kling Multi-Shot",prompt:multiShotPromptJoined,assetId:savedAssetMs.id,model,resolution:"Fixed by model (up to 1080p)",refImages:hostedImages||[]}});
-    logCost(model,`Multi-shot (${validShots.length} shots)`);
-    toast(`✨ ${validShots.length}-shot video generated!`,"success");
-  }catch(err){
-    replaceVcLoadingBubble(loadingId,{role:"assistant",type:"error",content:err.message});
-    toast("❌ "+err.message,"error");
-  }
-  sendBtn.disabled=false;
-}
 
 // ── CHAT HISTORY (SESSIONS) — "New Chat" archives instead of deletes ──
 
-async function startNewVcChat(){
-  if(S.vcChatHistory.length){
-    const session={id:"sess_"+Date.now(),title:generateSessionTitle(S.vcChatHistory),messages:S.vcChatHistory,createdAt:new Date().toISOString()};
-    S.vcChatSessions.unshift(session);
-    // Same unbounded-growth issue as igChatSessions — no cap meant every
-    // "New Chat" permanently archived the full previous conversation forever.
-    // Now that messages carry Edit/Retry generation-setting snapshots
-    // (reference URLs, shot lists, etc.) this grows meaningfully faster than
-    // it used to, making it a much more likely real cause of quota errors.
-    if(S.vcChatSessions.length>15)S.vcChatSessions=S.vcChatSessions.slice(0,15);
-    saveSetting("vc_chat_sessions",S.vcChatSessions);
-  }
-  S.vcChatHistory=[];
-  saveSetting("vc_chat_history",[]);
-  // Motion Brush state isn't tied to chat messages at all — it's easy to
-  // assume "New Chat" means a clean slate and not realize it's still set
-  // from earlier. Clearing it here too, on top of the model-switch and
-  // image-count triggers, so there's no path left where it silently
-  // survives past when someone reasonably expects a fresh start.
-  if(S.vcMotionBrush)clearMotionBrush();
-  renderVcChatThread();
-  toast("✨ New chat started — your last one is saved in History","success");
-}
-
-function openVcChatHistory(){
-  const overlay=document.createElement("div");
-  overlay.className="modal-overlay show";
-  overlay.id="vcChatHistoryModal";
-  const sessions=S.vcChatSessions;
-  overlay.innerHTML=`
-    <div class="modal" style="max-height:75vh;display:flex;flex-direction:column">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">☰ Chat History</div>
-        <button class="ig-icon-btn" onclick="document.getElementById('vcChatHistoryModal').remove()">✕</button>
-      </div>
-      ${sessions.length?`<button class="btn btn-outline btn-xs" style="align-self:flex-end;margin-bottom:8px;color:var(--red)" onclick="clearAllVcChatSessions()">🗑️ Clear All (frees up storage)</button>`:''}
-      <div style="overflow-y:auto;flex:1">
-        ${sessions.length===0?`<div class="empty-desc">No past chats yet — start a new chat and your current one will be saved here.</div>`
-        :sessions.map(s=>`<div style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
-          <div style="flex:1;cursor:pointer" onclick="loadVcChatSession('${s.id}')">
-            <div style="font-size:13px;font-weight:600;color:var(--text)">${s.title}</div>
-            <div style="font-size:10px;color:var(--textm);margin-top:2px">${s.messages.length} messages · ${new Date(s.createdAt).toLocaleDateString()}</div>
-          </div>
-          <button onclick="deleteVcChatSession('${s.id}')" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>
-        </div>`).join('')}
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-}
-
-async function clearAllVcChatSessions(){
-  if(!(await showConfirmDialog(`Delete all ${S.vcChatSessions.length} saved chats permanently? This cannot be undone.`,{danger:true,okLabel:"Delete All"})))return;
-  S.vcChatSessions=[];
-  saveSetting("vc_chat_sessions",[]);
-  document.getElementById("vcChatHistoryModal")?.remove();
-  toast("🗑️ Cleared","success");
-}
-
-async function loadVcChatSession(sessionId){
-  const session=S.vcChatSessions.find(s=>s.id===sessionId);
-  if(!session)return;
-  if(S.vcChatHistory.length){
-    const current={id:"sess_"+Date.now(),title:generateSessionTitle(S.vcChatHistory),messages:S.vcChatHistory,createdAt:new Date().toISOString()};
-    S.vcChatSessions.unshift(current);
-    if(S.vcChatSessions.length>15)S.vcChatSessions=S.vcChatSessions.slice(0,15);
-  }
-  S.vcChatSessions=S.vcChatSessions.filter(s=>s.id!==sessionId);
-  S.vcChatHistory=session.messages;
-  saveSetting("vc_chat_sessions",S.vcChatSessions);
-  saveSetting("vc_chat_history",S.vcChatHistory);
-  renderVcChatThread();
-  document.getElementById("vcChatHistoryModal")?.remove();
-  toast("📂 Chat loaded","success");
-}
-
-async function deleteVcChatSession(sessionId){
-  if(!(await showConfirmDialog("Delete this saved chat permanently? This cannot be undone.",{danger:true,okLabel:"Delete"})))return;
-  S.vcChatSessions=S.vcChatSessions.filter(s=>s.id!==sessionId);
-  saveSetting("vc_chat_sessions",S.vcChatSessions);
-  document.getElementById("vcChatHistoryModal")?.remove();
-  openVcChatHistory();
-}
 
 // ── GENERATION STRUCTURAL DIAGRAM — replaces the plain "Generating with
 // reference assets…" line with a visual box diagram of what's actually
@@ -8457,262 +6654,6 @@ async function deleteVcChatSession(sessionId){
 // fal.ai's own queue is state-based (queued/in progress/done), it never
 // reports a real percent, so a sliding indeterminate bar is the honest
 // representation instead of inventing a number that doesn't exist. ──
-function vcGenerationDiagramHTML(promptText){
-  const nodes=[];
-  (S.vcMultiImages||[]).forEach((img,i)=>nodes.push({label:`@Image${i+1}`,thumb:img.dataUrl}));
-  (S.vcMultiVideos||[]).forEach((v,i)=>nodes.push({label:`@Video${i+1}`,icon:"🎬"}));
-  (S.vcMultiAudios||[]).forEach((a,i)=>nodes.push({label:`@Audio${i+1}`,icon:"🎵"}));
-  nodes.push({label:"Prompt",icon:"✎"});
-  const nodeHTML=nodes.map(n=>`<div style="width:52px;text-align:center">
-      <div style="width:44px;height:44px;border-radius:9px;overflow:hidden;background:var(--pearl2);border:1.5px solid var(--glass-brd);display:flex;align-items:center;justify-content:center;margin:0 auto 3px">
-        ${n.thumb?`<img src="${n.thumb}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:16px">${n.icon}</span>`}
-      </div>
-      <div style="font-size:8px;color:var(--textm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.label}</div>
-    </div>`).join('');
-  return `<div style="margin-top:10px;padding:14px;background:var(--pearl2);border-radius:14px;max-width:320px">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:6px">${nodeHTML}</div>
-    <div style="text-align:center;color:var(--textm);font-size:14px;line-height:1">↓</div>
-    <div style="text-align:center;padding:7px;background:var(--violet);color:#fff;border-radius:8px;font-size:10.5px;font-weight:700;margin:4px 0">Scene Composer</div>
-    <div style="text-align:center;color:var(--textm);font-size:14px;line-height:1">↓</div>
-    <div style="border:1.5px dashed var(--glass-brd);border-radius:10px;padding:14px;text-align:center">
-      <div style="width:100%;height:6px;background:var(--glass-brd);border-radius:3px;overflow:hidden;position:relative;margin-bottom:6px">
-        <div style="position:absolute;top:0;left:0;width:30%;height:100%;background:linear-gradient(90deg,var(--violet),var(--ice));border-radius:3px;animation:vc-diagram-progress-slide 1.6s ease-in-out infinite"></div>
-      </div>
-      <div style="font-size:10px;color:var(--textm)">Rendering your scene…</div>
-    </div>
-  </div>`;
-}
-
-async function sendVcChatPrompt(){
-  const multiShotOn=document.getElementById("vcMultiShotToggle")?.checked;
-  if(multiShotOn){
-    const shotMode=document.getElementById("vcShotMode")?.value;
-    return shotMode==="sequential"?sendVcSequentialShots():sendVcMultiShotPrompt();
-  }
-
-  const inputEl=document.getElementById("vcChatInput");
-  const rawPrompt=inputEl.value.trim();
-  if(!rawPrompt){toast("Type a prompt first","error");return;}
-  const directorStyle=getActiveDirectorPrompt();
-  let prompt=directorStyle?`${rawPrompt}, ${directorStyle}`:rawPrompt;
-  const model=document.getElementById("vcModel").value;
-  const cap=VIDEO_MODEL_CAPABILITIES[model]||{};
-  if((cap.provider==="kling-o3-ref"&&(S.vcMultiImages.length||S.vcMultiVideos.length))||vcHasRealElements(cap))prompt=normalizeElementTags(prompt);
-  const ratio=document.getElementById("vcRatio").value;
-  const duration=document.getElementById("vcDuration").value;
-  const negPrompt=document.getElementById("vcNegPrompt")?.value.trim()||"";
-  const resolution=document.getElementById("vcRes")?.value||"";
-
-  const userMsgId="vcUser_"+Date.now();
-  // Snapshot everything a regenerate needs to be exact, not approximate —
-  // model, duration, ratio, resolution, negative prompt, director style, and
-  // the reference files themselves (so @Image1/@Element1 tags still point at
-  // the same files on Retry, not whatever happens to be attached later).
-  pushVcChatMessage({id:userMsgId,role:"user",content:rawPrompt,genSettings:{
-    model,ratio,duration,resolution,negPrompt,directorId:gs("active_director",""),
-    klingVoices:[...S.klingSelectedVoices],
-    refImages:S.vcMultiImages.map(i=>i.dataUrl),
-    refVideos:S.vcMultiVideos.map(v=>v.dataUrl),
-    refAudios:S.vcMultiAudios.map(a=>a.dataUrl),
-    endFrame:S.vcEndFrame?S.vcEndFrame.dataUrl:null,
-    multiShotOn:false,
-  }});
-  inputEl.value="";inputEl.style.height="auto";
-  // Same root cause as insertVcTag's stale-glow bug: setting .value
-  // directly doesn't fire "input", so the mirror overlay (vcChatHighlight)
-  // kept showing the just-sent prompt's highlighted text rendered on top
-  // of the now-empty real textarea underneath — the overlapping/garbled
-  // look in the prompt box right after sending. Explicit calls here keep
-  // the mirror and chip strip in sync with the actual cleared value.
-  renderVcChatHighlight();
-  renderVcTagChips();
-  const loadingId="vcLoading_"+Date.now();
-  const sendBtn=document.getElementById("vcSendBtn");
-  sendBtn.disabled=true;
-
-  try{
-    let videoUrl,providerLabel,costKey;
-    // Veo 3 Direct uses api_gemini against Google's own API, not fal.ai — it
-    // needs no fal.ai key and no hosted-URL upload step (its optional single
-    // reference image goes straight in as inline base64), so it's handled as
-    // its own early branch before the fal.ai key gate below.
-    if(cap.provider==="veo-direct"){
-      pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Generating with Veo 3 Direct (Gemini API)…"});
-      const startImage=S.vcMultiImages.length?S.vcMultiImages[0].dataUrl:null;
-      videoUrl=await genViaVeoDirect(prompt,ratio,model,startImage);
-      providerLabel="Veo 3 Direct (Gemini API)";costKey=model;
-      const savedAssetVcDirect=createVideoAsset(videoUrl,prompt,"",{model,providerLabel,aspectRatio:ratio,resolution:"Fixed by model (no manual selection)",duration:"~8s (fixed)"});
-      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel,prompt,totalDuration:parseInt(duration,10),assetId:savedAssetVcDirect.id,model,resolution:"",refImages:[]}});
-      // amountOverride:0 — this is Google's own free-tier API, not fal.ai's
-      // paid proxy, so there's no per-call charge to log against COST_TABLE.
-      logCost(model,"Video Canvas — Veo 3 Direct (free tier)",1,0);
-      toast(`✨ Video generated via ${providerLabel}!`,"success");
-      sendBtn.disabled=false;
-      return;
-    }
-    const apiKeyEarly=gs("api_falai","");
-    if(!apiKeyEarly)throw new Error("Add a fal.ai API key in Settings first");
-    // Upload every attached reference file to a hosted URL before building any
-    // request — see uploadRefsToFal for why (large multi-image base64 payloads
-    // risk a job that "completes" with no video and no clear reason why).
-    const anyRefs=S.vcMultiImages.length||S.vcMultiVideos.length||S.vcMultiAudios.length;
-    if(anyRefs)pushVcChatMessage({id:loadingId,role:"assistant",type:"loading",content:"Uploading reference files…"});
-    // Validated BEFORE upload on purpose: an oversized or wrong-shaped asset
-    // would otherwise be uploaded to fal in full and only then rejected, which
-    // wastes the transfer and the wait — and on mobile, real data allowance.
-    // Only applies to Kling v3, whose limits these are.
-    if(/kling-video\/v3\//.test(model||"")){
-      const problems=await validateKlingV3Assets(collectKlingV3Images(),collectKlingV3Videos(),prompt,negPrompt);
-      const dangling=unresolvedVcElementTags(prompt);
-      if(dangling.length){
-        const have=(S.vcElements||[]).filter(e=>e&&e.frontal&&e.angles&&e.angles.length).length;
-        problems.push(`Your prompt mentions ${dangling.join(", ")} but you have ${have} complete Element${have===1?"":"s"} — that reference would be ignored and the character wouldn't appear.`);
-      }
-      if(problems.length)throw new Error("Kling can't accept these yet:\n• "+problems.join("\n• "));
-    }
-    const hostedImages=S.vcMultiImages.length?await uploadRefsToFal(S.vcMultiImages,apiKeyEarly):[];
-    const hostedElements=await uploadVcElements(apiKeyEarly);
-    const hostedVideos=S.vcMultiVideos.length?await uploadRefsToFal(S.vcMultiVideos,apiKeyEarly):[];
-    const hostedAudios=S.vcMultiAudios.length?await uploadRefsToFal(S.vcMultiAudios,apiKeyEarly):[];
-    // Patch the snapshot with the lightweight hosted URLs instead of the raw
-    // base64 originally captured above — keeps chat history storage small
-    // and means a future Retry reuses these directly instead of re-uploading.
-    patchVcUserMessageRefs(userMsgId,hostedImages,hostedVideos,hostedAudios);
-    // Gated on hostedElements, NOT on hostedImages.length>1. That old condition
-  // became permanently false the moment the start-frame bucket was capped to a
-  // single image, which meant Elements were silently never sent — the user had
-  // a full Elements UI that produced nothing in the request.
-  if(cap.elements&&((hostedElements&&hostedElements.length)||hostedImages.length>1)){
-      // Printed hostedImages here previously — the WRONG array. hostedImages
-      // is the start-frame bucket (capped to 1), completely unrelated to
-      // Elements. This is exactly why the debug log showed only "1." even
-      // when 2 real Elements were attached: it was never showing Elements at
-      // all. Now prints the actual built element payload.
-      const builtEls=hostedElements&&hostedElements.length?buildKlingV3ElementsExplicit(hostedElements,[]):[];
-      pushVcChatMessage({role:"assistant",type:"debug",content:`🔎 Debug — ${builtEls.length} element${builtEls.length!==1?'s':''} about to be sent:\n${builtEls.map((e,i)=>`${i+1}. frontal=${e.frontal_image_url?'✓':'✗'} angles=${(e.reference_image_urls||[]).length}${e.voice_id?' voice=✓':''}`).join("\n")}${hostedImages.length?`\nStart frame: ${hostedImages[0]}`:''}`});
-    }
-    if(cap.provider==="seedance-ref"){
-      if(!S.vcMultiImages.length&&!S.vcMultiVideos.length&&!S.vcMultiAudios.length){
-        throw new Error("Add at least one reference image, video, or audio file — this model needs one to generate.");
-      }
-      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"+vcGenerationDiagramHTML(prompt)});
-      videoUrl=await genViaSeedanceReference(prompt,model,ratio,duration,hostedImages,hostedVideos,hostedAudios);
-      providerLabel="Seedance 2.0 Reference-to-Video";costKey=model;
-    } else if(cap.provider==="veo-ref"){
-      if(!S.vcMultiImages.length)throw new Error("Add at least 1 reference image (up to 3) — this model needs one to generate.");
-      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Generating with reference images…"+vcGenerationDiagramHTML(prompt)});
-      videoUrl=await genViaVeoReference(prompt,ratio,duration,hostedImages);
-      providerLabel="Veo 3.1 Reference-to-Video";costKey=model;
-    } else if(cap.provider==="kling-o3-ref"){
-      if(!S.vcMultiImages.length&&!S.vcMultiVideos.length)throw new Error("Add at least 1 reference image or video — this model needs one to generate.");
-      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Generating with reference assets…"+vcGenerationDiagramHTML(prompt)});
-      videoUrl=await genViaKlingO3Reference(prompt,ratio,duration,hostedImages,hostedVideos,undefined,undefined,S.vcElementGroupMode,document.getElementById("vcCfgScaleSlider")&&cap.cfgScale?parseFloat(document.getElementById("vcCfgScaleSlider").value):null);
-      providerLabel="Kling O3 Pro Reference-to-Video";costKey=model;
-    } else {
-      replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"loading",content:"Generating…"});
-      const apiKey=apiKeyEarly;
-      let body={prompt,aspect_ratio:ratio};
-      let endpoint=model; // may get swapped below to the real image-to-video endpoint for this tier
-      const durationConfig=VIDEO_MODEL_DURATIONS[model];
-      const formattedDuration=durationConfig?durationConfig.format(duration):duration;
-      if(model.startsWith("fal-ai/kling-video")){
-        body.duration=formattedDuration;body.generate_audio=true;
-        if(negPrompt)body.negative_prompt=negPrompt;
-      const cfgScaleEl=document.getElementById("vcCfgScaleSlider");if(cfgScaleEl&&cap.cfgScale)body.cfg_scale=parseFloat(cfgScaleEl.value);
-        if(S.klingSelectedVoices.length)body.voice_ids=S.klingSelectedVoices;
-        const i2v=IMAGE_TO_VIDEO_MAP[model];
-        if(S.vcMotionBrush&&S.vcMultiImages.length<=1){
-          // Motion Brush is fundamentally a single-base-image mode (one image
-          // + a painted motion path) — it must never take priority over a
-          // genuine multi-image elements request. This used to check only
-          // S.vcMotionBrush's truthiness, with no regard for how many images
-          // were actually attached: since Motion Brush state persists
-          // globally until manually cleared (never auto-reset on a new chat,
-          // model switch, or by attaching more references), a real bug
-          // report traced back to exactly this — 4 images correctly
-          // attached and uploaded, but this branch silently took over
-          // anyway, using only the first image and never building `elements`
-          // at all, which is why fal reported "0 elements provided" despite
-          // 4 real images being present and correctly referenced in the
-          // prompt via @Element1-4.
-          if(i2v){endpoint=i2v.endpoint;body[i2v.field]=hostedImages[0];}
-          body.dynamic_masks=[{mask_url:S.vcMotionBrush.dynamicMaskUrl,trajectories:S.vcMotionBrush.trajectories}];
-          if(S.vcMotionBrush.staticMaskUrl)body.static_mask_url=S.vcMotionBrush.staticMaskUrl;
-        } else if(vcHasRealElements(cap)){
-          // CORRECTED: a previous version kept this on the text-to-video
-          // endpoint. That was wrong — text-to-video's own docs specifically
-          // limit element binding there to 1 element and require
-          // character_orientation:'video' (never set by this app), so 4 real
-          // elements were being treated as effectively unsupported. Every
-          // confirmed working multi-element example uses the image-to-video
-          // endpoint with both start_image_url AND elements together —
-          // swapping back to that and setting start_image_url to the first
-          // reference image, matching those examples exactly.
-          const missing=hostedImages.map((u,i)=>!u?i+1:null).filter(Boolean);
-          if(missing.length)throw new Error(`Reference image ${missing.join(", ")} has no usable URL — remove and re-attach it, then try again`);
-          if(i2v){
-            endpoint=i2v.endpoint;
-            const startUrl=hostedImages[0]||(hostedElements&&hostedElements[0]&&hostedElements[0].frontal)||null;
-            if(startUrl)body[i2v.field]=startUrl;
-            if(i2v.endField&&S.vcEndFrame){
-              const hostedEnd=await uploadRefsToFal([S.vcEndFrame],apiKeyEarly);
-              if(hostedEnd&&hostedEnd[0])body[i2v.endField]=hostedEnd[0];
-            }
-          }
-          body.elements=hostedElements&&hostedElements.length
-          ?buildKlingV3ElementsExplicit(hostedElements,hostedVideos)
-          :buildKlingV3Elements(hostedImages,hostedVideos,S.vcElementGroupMode,S.klingSelectedVoices);
-        } else if(i2v&&S.vcMultiImages.length){
-          // Exactly 1 reference image — swap to the real image-to-video endpoint
-          // and use that tier's actual field name (image_url or start_image_url —
-          // these genuinely differ between v2.x and v3, see IMAGE_TO_VIDEO_MAP).
-          endpoint=i2v.endpoint;
-          body[i2v.field]=hostedImages[0];
-          if(i2v.endField&&S.vcEndFrame){
-            const hostedEndFrame=await uploadRefsToFal([S.vcEndFrame],apiKeyEarly);
-            body[i2v.endField]=hostedEndFrame[0];
-          }
-        }
-      } else if(model==="fal-ai/veo3.1"){
-        body.duration=formattedDuration;body.audio=true;body.resolution=document.getElementById("vcRes").value;
-      } else {
-        body.duration=formattedDuration;body.resolution=document.getElementById("vcRes").value;
-      }
-      normalizeKlingV3Body(endpoint,body);
-      const submitRes=await fetch(`https://queue.fal.run/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+apiKey},body:JSON.stringify(body)});
-      const submitData=await submitRes.json();
-      if(!submitRes.ok)throw new Error((submitData.detail&&(Array.isArray(submitData.detail)?submitData.detail[0]?.msg:submitData.detail))||submitData.error||submitRes.statusText);
-      videoUrl=await pollFalVideoResult(endpoint,submitData,apiKey);
-      providerLabel=model.includes("kling")?"Kling":model.includes("veo")?"Veo 3.1":"Seedance 2.0";costKey=model;
-    }
-    const savedAssetVc=createVideoAsset(videoUrl,prompt,"",{model,providerLabel,aspectRatio:ratio,resolution:model.startsWith("fal-ai/kling-video")?"Fixed by model (up to 1080p)":(document.getElementById("vcRes")?.value||""),duration:duration+"s"});
-    replaceVcLoadingBubble(loadingId,{id:loadingId,role:"assistant",type:"video",content:videoUrl,meta:{providerLabel,prompt,totalDuration:parseInt(duration,10),assetId:savedAssetVc.id,model,resolution:model.startsWith("fal-ai/kling-video")?"Fixed by model (up to 1080p)":(document.getElementById("vcRes")?.value||""),refImages:hostedImages}});
-    // Real, resolution-aware cost, not the flat COST_TABLE number — that
-    // table has one fixed price per model regardless of what resolution
-    // was actually used, which is wrong for Seedance/Veo's token-based
-    // formulas (480p and 4K genuinely cost different amounts).
-    const realCostEst=estimateVideoCost(costKey,parseInt(duration,10)||0,resolution,!!(S.vcMultiVideos&&S.vcMultiVideos.length),vcHasRealElements(VIDEO_MODEL_CAPABILITIES[costKey]||{}));
-    logCost(costKey,prompt.slice(0,60),1,realCostEst?realCostEst.cost:null);
-    toast(`✨ Video generated via ${providerLabel}!`,"success");
-  }catch(err){
-    // This specific fal.ai rejection is their own safety classifier
-    // flagging a reference image (usually because it contains a real,
-    // recognizable face), not a bug in this app — nothing here can
-    // prevent it from firing, and the classifier isn't perfectly
-    // consistent, which is genuinely why a retry with the exact same
-    // images sometimes succeeds. Kept the original error text visible
-    // (not replaced) and added the plain-language explanation + what
-    // actually helps, instead of leaving it as an unexplained fal.ai
-    // error string.
-    const isContentFlag=/likenesses of real people|private information/i.test(err.message);
-    const friendlyMsg=isContentFlag
-      ?`${err.message}\n\nThis is fal.ai's own safety filter, not a bug here — it flagged one of your reference images, most likely one with a real recognizable face. It isn't perfectly consistent, so retrying as-is sometimes works; if it keeps failing, try swapping out whichever reference image is most likely to be the trigger.`
-      :err.message;
-    replaceVcLoadingBubble(loadingId,{role:"assistant",type:"error",content:friendlyMsg});
-    toast("❌ "+(isContentFlag?"Blocked by fal.ai's safety filter — see details below":err.message),"error");
-  }
-  sendBtn.disabled=false;
-}
 
 // ── SHOT CARDS ──
 function shotCardHTML(s){
@@ -9328,15 +7269,6 @@ function updatePdAspectRatioOptions(){
 // someone pick an aspect ratio Kling O3 Pro doesn't actually support (O3 is
 // confirmed 16:9/9:16/1:1 only, not the full 5-option set). Reuses the same
 // verified PD_ASPECT_RATIOS map the Production Wizard already relies on.
-function updateVcRatioSelect(model){
-  const ratios=PD_ASPECT_RATIOS[model]||["16:9","9:16","1:1","4:3","3:4"];
-  const sel=document.getElementById("vcRatio");
-  if(!sel)return;
-  const prevValue=sel.value;
-  sel.innerHTML=ratios.map(r=>`<option value="${r}">${r}</option>`).join('');
-  sel.value=ratios.includes(prevValue)?prevValue:ratios[0];
-  renderVisualTrigger("vcRatio","ratio");
-}
 
 // Editable "director intake" for a production that already exists — the
 // original wizard only ever creates NEW productions; there was no way to
