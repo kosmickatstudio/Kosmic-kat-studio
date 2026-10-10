@@ -224,13 +224,13 @@ function clearMotionBrush(){
 })();
 (function(){const x=document.createElement("script");x.src="engine-recovery.js";x.async=false;x.dataset.kosmicEngineRecovery="1";document.head.appendChild(x)})();
 
-// VIDEO CANVAS V3 — single canonical playground loader
-(function loadVideoCanvasV2(){
-  if(document.querySelector('script[data-kosmic-video-canvas-v2-loader="1"]'))return;
+// VIDEO STUDIO — rebuilt from scratch, EvoLink-powered (Seedance + Kling). Single file.
+(function loadKosmicVideoStudio(){
+  if(document.querySelector('script[data-kosmic-video-studio="1"]'))return;
   const s=document.createElement("script");
-  s.src="video-canvas-v2-loader.js?v=20261010-v3-legacy-scrub-9";
+  s.src="kosmic-video.js?v=20261010-1";
   s.async=false;
-  s.dataset.kosmicVideoCanvasV2Loader="1";
+  s.dataset.kosmicVideoStudio="1";
   document.head.appendChild(s);
 })();
 
