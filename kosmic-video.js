@@ -232,7 +232,7 @@
   function validate(){
     normalize();
     const r=route();
-    if(!getKey())return"Add your EvoLink API key in Settings first";
+    if(!getKey())return"No EvoLink key found. Paste it in Settings → EvoLink";
     if(!K.prompt.trim())return"Write a prompt first";
     if(K.prompt.length>r.pmax)return`Prompt is too long (max ${r.pmax} characters)`;
     let total=0;
@@ -263,7 +263,7 @@
   }
   async function api(path,init){
     const key=getKey();
-    if(!key){const e=new Error("Add your EvoLink API key in Settings first");e.status=401;throw e}
+    if(!key){const e=new Error("No EvoLink key found. Paste it in Settings → EvoLink");e.status=401;throw e}
     let res;
     try{
       res=await fetch(API+path,{...(init||{}),headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"}});
@@ -596,7 +596,7 @@
   }
   function threadHTML(){
     const ms=messages();
-    const notice=getKey()?"":`<div class="kv-notice kv-glass">Add your EvoLink API key in Settings to start generating.<button class="kv-btn" data-act="keyset">Add API key</button></div>`;
+    const notice="";
     if(!ms.length)return notice+emptyHTML();
     return notice+ms.map(m=>m.role==="user"?userHTML(m):asstHTML(m)).join("");
   }
