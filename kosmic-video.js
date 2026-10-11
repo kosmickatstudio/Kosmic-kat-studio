@@ -46,19 +46,57 @@
 
   /* ───────────── catalog ───────────── */
   const SEED_Q=["480p","720p","1080p"];
+  const SEED_Q4=["480p","720p","1080p","4k"];
+  const SEED_Q2=["480p","720p"];
+  const AR_SEED10=["16:9","9:16","1:1","4:3","3:4","21:9"];
   const seedBase={dur:[4,30],auto:true,q:SEED_Q,dq:"720p",audio:"seed",draft:true,relax:true,pmax:8000};
+  const imgIn=(max,maxMB,o)=>({key:"image_urls",kind:"image",min:0,max,fmt:IMG_SEED,maxMB,...o});
+  const frames=(maxMB)=>imgIn(2,maxMB,{label:"Frames",hint:"1 image = first frame · 2 images = first + last frame",min:1});
+  const refs20=(vidMB)=>[
+    imgIn(9,30,{label:"Reference images",hint:"Up to 9 · refer to them as @image1, @image2…"}),
+    {key:"video_urls",kind:"video",label:"Reference videos",hint:"Up to 3 · 2–15s each, 15s total · @video1…",min:0,max:3,fmt:VID_FMT,maxMB:vidMB},
+    {key:"audio_urls",kind:"audio",label:"Reference audio",hint:"Up to 3 · wav/mp3 · 2–15s each · needs an image or video too",min:0,max:3,fmt:AUD_FMT,maxMB:15}];
+  const editIns=(first,hint)=>[
+    {key:"video_urls",kind:"video",label:first,hint,min:1,max:10,fmt:VID_FMT,maxMB:200},
+    imgIn(30,30,{label:"Reference images",hint:"Optional · up to 30 · @image1…"}),
+    {key:"audio_urls",kind:"audio",label:"Reference audio",hint:"Optional · up to 10 · wav/mp3 · 2–30s each",min:0,max:10,fmt:AUD_FMT,maxMB:15}];
+  const std20={dur:[4,15],q:SEED_Q4,dq:"720p",audio:"seed",relax:true,pmax:8000};
+  const fast20={dur:[4,15],q:SEED_Q2,dq:"720p",audio:"seed",relax:true,pmax:8000};
+  const family20=(base,prefix,web)=>({
+    text:{...base,model:`${prefix}-text-to-video`,ar:AR_SEED,dar:"adaptive",web,inputs:[],hint:"Describe the video you want…"},
+    image:{...base,model:`${prefix}-image-to-video`,ar:AR_SEED,dar:"adaptive",inputs:[frames(30)],hint:"Describe how the image should move…"},
+    reference:{...base,model:`${prefix}-reference-to-video`,ar:AR_SEED,dar:"adaptive",anyInput:true,noAudioOnly:true,inputs:refs20(base===std20?50:50),hint:"Use @image1, @video1, @audio1 to point at your references…"}
+  });
   const MODELS=[
-    {id:"seedance-2.5",name:"Seedance 2.5",sub:"BytePlus · audio · 4–30s",family:"Seedance",routes:{
+    {id:"seedance-2.5",name:"Seedance 2.5",sub:"Newest · audio · 4–30s",family:"Seedance",routes:{
       text:{...seedBase,model:"seedance-2.5-text-to-video",ar:AR_SEED,dar:"adaptive",web:true,inputs:[],
         hint:"Describe the video you want…"},
-      image:{...seedBase,model:"seedance-2.5-image-to-video",ar:["adaptive"],dar:"adaptive",inputs:[
-        {key:"image_urls",kind:"image",label:"Frames",hint:"1 image = first frame · 2 images = first + last frame",min:1,max:2,fmt:IMG_SEED,maxMB:30}],
+      image:{...seedBase,model:"seedance-2.5-image-to-video",ar:["adaptive"],dar:"adaptive",inputs:[frames(30)],
         hint:"Describe how the image should move…"},
       reference:{...seedBase,model:"seedance-2.5-reference-to-video",ar:AR_SEED,dar:"adaptive",anyInput:true,inputs:[
-        {key:"image_urls",kind:"image",label:"Reference images",hint:"Up to 30 · refer to them as @image1, @image2…",min:0,max:30,fmt:IMG_SEED,maxMB:30},
+        imgIn(30,30,{label:"Reference images",hint:"Up to 30 · refer to them as @image1, @image2…"}),
         {key:"video_urls",kind:"video",label:"Reference videos",hint:"Up to 10 · 2–30s each, 30s total · @video1…",min:0,max:10,fmt:VID_FMT,maxMB:200},
         {key:"audio_urls",kind:"audio",label:"Reference audio",hint:"Up to 10 · wav/mp3 · 2–30s each · @audio1…",min:0,max:10,fmt:AUD_FMT,maxMB:15}],
-        hint:"Use @image1, @video1, @audio1 to point at your references…"}
+        hint:"Use @image1, @video1, @audio1 to point at your references…"},
+      edit:{...seedBase,model:"seedance-2.5-video-edit",fixedDur:true,ar:["adaptive"],dar:"adaptive",
+        inputs:editIns("Video to edit","The first video is edited · up to 10 · 4–30s each, 30s total · @video1…"),
+        hint:"Describe the edit, e.g. “change the jacket to red leather”…"},
+      extend:{...seedBase,model:"seedance-2.5-video-extend",ar:["adaptive"],dar:"adaptive",
+        inputs:editIns("Video to extend","The first video is extended · up to 10 · 2–30s each, 30s total · @video1…"),
+        hint:"Describe how the video should continue…"},
+      final:{kind:"final",model:"seedance-2.5-draft-to-video",dur:[4,30],q:["1080p"],dq:"1080p",pmax:8000,inputs:[],
+        hint:"Pick a finished draft in settings, then tap send"}
+    }},
+    {id:"seedance-2.0",name:"Seedance 2.0",sub:"BytePlus · audio · up to 4K · 4–15s",family:"Seedance",routes:family20(std20,"seedance-2.0",true)},
+    {id:"seedance-2.0-fast",name:"Seedance 2.0 Fast",sub:"BytePlus · cheaper · 4–15s",family:"Seedance",routes:family20(fast20,"seedance-2.0-fast",false)},
+    {id:"seedance-2.0-mini",name:"Seedance 2.0 Mini",sub:"BytePlus · lowest cost · 4–15s",family:"Seedance",routes:family20(fast20,"seedance-2.0-mini",false)},
+    {id:"seedance-1.5-pro",name:"Seedance 1.5 Pro",sub:"BytePlus · audio · 4–12s",family:"Seedance",routes:{
+      text:{model:"seedance-1.5-pro",dur:[4,12],q:SEED_Q,dq:"720p",ar:AR_SEED,dar:"16:9",audio:"seed",pmax:4000,inputs:[],hint:"Describe the video you want…"},
+      image:{model:"seedance-1.5-pro",dur:[4,12],q:SEED_Q,dq:"720p",ar:AR_SEED,dar:"adaptive",audio:"seed",pmax:4000,inputs:[frames(10)],hint:"Describe how the image should move…"}
+    }},
+    {id:"seedance-1.0-fast",name:"Seedance 1.0 Pro Fast",sub:"BytePlus · fast · 2–12s",family:"Seedance",routes:{
+      text:{model:"doubao-seedance-1.0-pro-fast",dur:[2,12],q:SEED_Q,dq:"1080p",ar:AR_SEED10,dar:"16:9",pmax:4000,inputs:[],hint:"Describe the video you want…"},
+      image:{model:"doubao-seedance-1.0-pro-fast",dur:[2,12],q:SEED_Q,dq:"1080p",ar:[...AR_SEED10,"keep_ratio","adaptive"],dar:"adaptive",pmax:4000,inputs:[imgIn(1,10,{label:"Image",hint:"1 image · JPG/PNG/WebP · ≤10MB",min:1})],hint:"Describe how the image should move…"}
     }},
     {id:"kling-v3",name:"Kling 3.0",sub:"Kling · 3–15s · up to 4K",family:"Kling",routes:{
       text:{model:"kling-v3-text-to-video",dur:[3,15],q:["720p","1080p","4k"],dq:"720p",ar:AR_KLING,dar:"16:9",audio:"kling",neg:true,pmax:2500,inputs:[],
@@ -85,7 +123,7 @@
         hint:"Refer to media with <<<image_1>>> and <<<video_1>>>…"}
     }}
   ];
-  const MODE_LABEL={text:"Text",image:"Image",reference:"Reference"};
+  const MODE_LABEL={text:"Text",image:"Image",reference:"Reference",edit:"Edit",extend:"Extend",final:"Draft → 1080p"};
   const IDEAS=[
     "A lone astronaut walking across a neon-lit desert at dusk, slow dolly shot",
     "Macro shot of rain drops hitting a glowing cyberpunk window, shallow depth of field",
@@ -98,7 +136,7 @@
     model:"seedance-2.5",mode:"text",prompt:"",negative:"",
     duration:5,durAuto:false,quality:"720p",aspect:"adaptive",
     audio:true,sound:false,draft:false,web:false,relaxed:false,keepSound:true,
-    media:{},sessions:[],activeId:null
+    media:{},finalSource:"",sessions:[],activeId:null
   };
   const polling=new Set();
 
@@ -206,12 +244,23 @@
     if(K.activeId===sess.id)K.activeId=null;
   }
 
+  function draftJobs(){
+    return allJobs().filter(j=>j.status==="completed"&&j.taskId&&j.form&&j.form.draft&&/^seedance-2\.5-/.test(j.route||"")&&!/draft-to-video/.test(j.route)
+      &&Date.now()-(j.doneAt||j.createdAt)<24*3600*1000).reverse();
+  }
+  function leftTxt(j){
+    const ms=24*3600*1000-(Date.now()-(j.doneAt||j.createdAt));
+    const h=Math.max(0,Math.floor(ms/3600000));return h>=1?`${h}h left`:`${Math.max(1,Math.floor(ms/60000))}m left`;
+  }
+
   /* ───────────── request building ───────────── */
   function mediaList(key){return(K.media[key]||[]).filter(x=>x&&x.url&&!x.uploading)}
   function buildBody(){
     normalize(); // always send values that are valid for the selected route
-    const r=route(),body={model:r.model,prompt:K.prompt.trim()};
-    body.duration=(r.auto&&K.durAuto)?-1:clamp(K.duration,r.dur[0],r.dur[1]);
+    const r=route();
+    if(r.kind==="final")return{model:r.model,source_task_id:K.finalSource,output_format:"mp4"};
+    const body={model:r.model,prompt:K.prompt.trim()};
+    body.duration=r.fixedDur?-1:(r.auto&&K.durAuto)?-1:clamp(K.duration,r.dur[0],r.dur[1]);
     const draftOn=!!(r.draft&&K.draft);
     body.quality=draftOn?"480p":K.quality;
     if(draftOn)body.draft=true;
@@ -233,6 +282,10 @@
     normalize();
     const r=route();
     if(!getKey())return"No EvoLink key found. Paste it in Settings → EvoLink";
+    if(r.kind==="final"){
+      if(!K.finalSource||!draftJobs().some(j=>j.taskId===K.finalSource))return"Pick a draft to upgrade first";
+      return"";
+    }
     if(!K.prompt.trim())return"Write a prompt first";
     if(K.prompt.length>r.pmax)return`Prompt is too long (max ${r.pmax} characters)`;
     let total=0;
@@ -245,6 +298,7 @@
       if(n<inp.min)return`${inp.label}: add at least ${inp.min}`;
     }
     if(r.anyInput&&total===0)return"Add at least one reference (image, video or audio)";
+    if(r.noAudioOnly&&!mediaList("image_urls").length&&!mediaList("video_urls").length)return"Audio can't be used alone — add an image or video too";
     if(K.mode==="reference"&&K.model==="kling-o3"){
       const imgs=mediaList("image_urls").length,vid=mediaList("video_url").length;
       if(vid&&imgs>4)return"With a reference video, use at most 4 images";
@@ -295,7 +349,7 @@
 
   /* ───────────── jobs ───────────── */
   function formSnapshot(){
-    return{model:K.model,mode:K.mode,prompt:K.prompt,negative:K.negative,duration:K.duration,durAuto:K.durAuto,quality:K.quality,aspect:K.aspect,audio:K.audio,sound:K.sound,draft:K.draft,web:K.web,relaxed:K.relaxed,keepSound:K.keepSound,
+    return{model:K.model,mode:K.mode,prompt:K.prompt,negative:K.negative,duration:K.duration,durAuto:K.durAuto,quality:K.quality,aspect:K.aspect,audio:K.audio,sound:K.sound,draft:K.draft,web:K.web,relaxed:K.relaxed,keepSound:K.keepSound,finalSource:K.finalSource,
       media:Object.fromEntries(Object.entries(K.media).map(([k,v])=>[k,(v||[]).filter(x=>x.url&&!x.uploading).map(x=>({id:x.id,url:x.url,name:x.name,kind:x.kind}))]))};
   }
   async function submit(){
@@ -303,17 +357,21 @@
     const err=validate();
     if(err){say(err,"error");return}
     const r=route(),m=cur(),body=buildBody();
+    const isFinal=r.kind==="final";
+    const src=isFinal?draftJobs().find(j=>j.taskId===K.finalSource):null;
     K.submitting=true;refreshBar();
     const t=Date.now();
     const job={
       id:"kvj_"+t.toString(36)+rid(),createdAt:t,status:"pending",progress:0,
-      name:m.name,mode:K.mode,route:r.model,prompt:K.prompt.trim(),
-      quality:body.quality,aspect:body.aspect_ratio||null,dur:body.duration,form:formSnapshot()
+      name:m.name,mode:K.mode,route:r.model,
+      prompt:isFinal?("1080p final · "+((src&&src.prompt)||"draft")):K.prompt.trim(),
+      quality:isFinal?"1080p":body.quality,aspect:isFinal?((src&&src.aspect)||null):(body.aspect_ratio||null),
+      dur:isFinal?((src&&src.dur)||-1):body.duration,form:formSnapshot()
     };
     const refs=[];
     r.inputs.forEach(inp=>mediaList(inp.key).forEach(x=>refs.push({kind:x.kind||inp.kind,url:x.url,name:x.name})));
     const um={id:"kvm_"+rid(),role:"user",t,text:job.prompt,
-      chips:[m.name,MODE_LABEL[K.mode]||K.mode,body.quality,body.duration>0?body.duration+"s":"auto length"],media:refs.slice(0,6)};
+      chips:isFinal?[m.name,"Draft → 1080p"]:[m.name,MODE_LABEL[K.mode]||K.mode,body.quality,body.duration>0?body.duration+"s":(r.fixedDur?"matches input":"auto length")],media:refs.slice(0,6)};
     const am={id:"kvm_"+rid(),role:"assistant",t,job};
     let sess=activeSession();
     if(!sess){sess=newSessionObj();K.sessions.unshift(sess);K.activeId=sess.id}
@@ -322,7 +380,7 @@
     if(!sess.title)sess.title=job.prompt.slice(0,48);
     saveChats();
     // clear the composer like a normal chat (settings stay, prompt/references reset)
-    K.prompt="";K.media={};saveForm();
+    K.prompt="";K.media={};K.finalSource="";saveForm();
     if(K.view==="chat"&&$("kvThread")){
       appendMessages([um,am]);
       syncComposer();refreshHeader();
@@ -386,7 +444,7 @@
     }
   }
   async function finish(job,d,url){
-    job.status="completed";job.progress=100;job.url=url;job.error=null;
+    job.status="completed";job.progress=100;job.url=url;job.error=null;job.doneAt=Date.now();
     const usd=d?.usage?.cost?.usd;
     if(typeof usd==="number")job.usd=usd;
     if(Number.isFinite(d?.video_duration))job.videoDur=d.video_duration;
@@ -421,12 +479,65 @@
   }
 
   /* ───────────── media uploads ───────────── */
-  async function uploadFile(file){
-    if(typeof fbStorage==="undefined")throw new Error("Storage isn't available — paste a direct URL instead");
-    const ext=(file.name.split(".").pop()||"bin").toLowerCase().replace(/[^a-z0-9]/g,"")||"bin";
-    const ref=fbStorage.ref(`asset-library/${Date.now()}_${rid()}.${ext}`);
-    await ref.put(file);
-    return await ref.getDownloadURL();
+  const UP_STALL=45000;
+  function upProgress(item,p){
+    item.progress=p;
+    const el=document.querySelector(`[data-up="${item.id}"]`);
+    if(el)el.textContent="Uploading "+Math.round(p*100)+"%";
+  }
+  // Primary route: EvoLink's own file service (public URL EvoLink can always read).
+  function evolinkUpload(file,item){
+    return new Promise((resolve,reject)=>{
+      const key=getKey();
+      if(!key)return reject(new Error("No EvoLink key"));
+      const x=new XMLHttpRequest();
+      let timer;
+      const arm=()=>{clearTimeout(timer);timer=setTimeout(()=>{try{x.abort()}catch(_){}reject(new Error("EvoLink upload stalled"))},UP_STALL)};
+      x.open("POST","https://files-api.evolink.ai/api/v1/files/upload/stream");
+      x.setRequestHeader("Authorization","Bearer "+key);
+      x.upload.onprogress=e=>{arm();if(e.lengthComputable)upProgress(item,e.loaded/e.total)};
+      x.onload=()=>{
+        clearTimeout(timer);
+        let d={};try{d=JSON.parse(x.responseText)}catch(_){}
+        const u=d&&d.data&&(d.data.file_url||d.data.url);
+        if(x.status>=200&&x.status<300&&u)resolve(u);
+        else reject(new Error((d&&(d.msg||(d.error&&d.error.message)))||("EvoLink upload error "+x.status)));
+      };
+      x.onerror=()=>{clearTimeout(timer);reject(new Error("EvoLink upload blocked"))};
+      x.onabort=()=>clearTimeout(timer);
+      item.abort=()=>{try{x.abort()}catch(_){}clearTimeout(timer);reject(new Error("Cancelled"))};
+      const form=new FormData();form.append("file",file,file.name||("upload."+(file.type.split("/")[1]||"bin")));
+      arm();x.send(form);
+    });
+  }
+  // Fallback: the app's Firebase storage, with real progress and a stall timeout.
+  function firebaseUpload(file,item){
+    return new Promise((resolve,reject)=>{
+      if(typeof fbStorage==="undefined")return reject(new Error("Storage isn't available"));
+      const ext=(file.name.split(".").pop()||"bin").toLowerCase().replace(/[^a-z0-9]/g,"")||"bin";
+      let task,timer;
+      const arm=()=>{clearTimeout(timer);timer=setTimeout(()=>{try{task&&task.cancel()}catch(_){}reject(new Error("Upload stalled — check your connection"))},UP_STALL+15000)};
+      try{
+        const ref=fbStorage.ref(`asset-library/${Date.now()}_${rid()}.${ext}`);
+        task=ref.put(file);
+        item.abort=()=>{try{task.cancel()}catch(_){}clearTimeout(timer);reject(new Error("Cancelled"))};
+        arm();
+        task.on("state_changed",sn=>{arm();if(sn.totalBytes)upProgress(item,sn.bytesTransferred/sn.totalBytes)},
+          err=>{clearTimeout(timer);reject(err)},
+          async()=>{clearTimeout(timer);try{resolve(await ref.getDownloadURL())}catch(e){reject(e)}});
+      }catch(e){clearTimeout(timer);reject(e)}
+    });
+  }
+  async function uploadFile(file,item){
+    let first;
+    try{return await evolinkUpload(file,item)}
+    catch(e){first=e;if(item.cancelled)throw e}
+    upProgress(item,0);
+    try{return await firebaseUpload(file,item)}
+    catch(e2){
+      if(item.cancelled)throw e2;
+      throw new Error(`${first.message}; ${e2.message}`);
+    }
   }
   function findInput(key){return route().inputs.find(i=>i.key===key)}
   function addMedia(key,item){
@@ -447,11 +558,11 @@
       const item={id:"m_"+rid(),name:file.name,kind:inp.kind,uploading:true};
       addMedia(key,item);refreshSheet();refreshSummary();
       try{
-        item.url=await uploadFile(file);
-        delete item.uploading;
+        item.url=await uploadFile(file,item);
+        delete item.uploading;delete item.abort;
       }catch(e){
         K.media[key]=(K.media[key]||[]).filter(x=>x!==item);
-        say(`Upload failed: ${e.message}`,"error");
+        if(!item.cancelled)say(`Upload failed: ${e.message}`,"error");
       }
       refreshSheet();refreshSummary();
     }
@@ -504,11 +615,11 @@
 
   /* ───────────── view builders ───────────── */
   function chips(field,values,selected,labelFn,disabled){
-    return values.map(v=>`<button class="kv-chip${v===selected?" on":""}" data-act="set" data-f="${field}" data-v="${esc(v)}"${disabled?" disabled":""}>${esc(labelFn?labelFn(v):v)}</button>`).join("");
+    return values.map(v=>`<button class="kv-chip kv-glow${v===selected?" on":""}" data-act="set" data-f="${field}" data-v="${esc(v)}"${disabled?" disabled":""}>${esc(labelFn?labelFn(v):v)}</button>`).join("");
   }
   function thumb(it){
     const u=safeUrl(it.url);
-    if(it.uploading)return`<div class="kv-thumb up"><span>Uploading…</span></div>`;
+    if(it.uploading)return`<div class="kv-thumb up"><span data-up="${esc(it.id)}">Uploading${it.progress?" "+Math.round(it.progress*100)+"%":"…"}</span></div>`;
     const inner=it.kind==="image"?`<img src="${esc(u)}" alt="" loading="lazy">`
       :it.kind==="video"?`<video src="${esc(u)}" muted playsinline preload="metadata"></video>`
       :`<span class="kv-aud">🎵<small>${esc((it.name||"audio").slice(0,14))}</small></span>`;
@@ -533,35 +644,51 @@
       </div>`;
     }).join("");
   }
+  function finalHTML(){
+    const list=draftJobs();
+    if(!list.length)return`<div class="kv-lab"><span>Upgrade a draft to 1080p</span></div>
+      <div class="kv-hint">No drafts yet. Turn on <b>Draft preview</b> on a Seedance 2.5 Text, Image, Reference, Edit or Extend generation, let it finish, then come back here to convert it to a 1080p final. Drafts stay convertible for 24 hours.</div>`;
+    return`<div class="kv-lab"><span>Pick a draft</span><small>${list.length} available</small></div>
+      <div class="kv-hint">The final reuses the draft's prompt, media, length and ratio. It is billed separately at the 1080p rate.</div>
+      <div class="kv-drafts">${list.map(j=>`<button class="kv-draft kv-glow${j.taskId===K.finalSource?" on":""}" data-act="pickdraft" data-id="${esc(j.id)}">
+        <b>${esc((j.prompt||"Draft").slice(0,70))}</b><small>${esc(MODE_LABEL[j.mode]||j.mode)} · ${j.dur>0?j.dur+"s":"auto"} · ${leftTxt(j)}</small></button>`).join("")}</div>`;
+  }
   function settingsHTML(){
     const r=route();
+    if(r.kind==="final")return finalHTML();
     const draftOn=!!(r.draft&&K.draft);
     const rows=[];
-    rows.push(`<div class="kv-lab"><span>Duration</span><b id="kvDurVal">${r.auto&&K.durAuto?"Auto":K.duration+"s"}</b></div>
-      <div class="kv-row kv-dur">
-        <input type="range" class="kv-range" data-f="duration" min="${r.dur[0]}" max="${r.dur[1]}" value="${K.duration}"${r.auto&&K.durAuto?" disabled":""}>
-        ${r.auto?`<button class="kv-chip${K.durAuto?" on":""}" data-act="auto">Auto</button>`:""}
-      </div>
-      <div class="kv-hint">${r.dur[0]}–${r.dur[1]} seconds${r.auto?" · Auto lets the model choose (billed by actual length)":""}</div>`);
+    if(r.fixedDur){
+      rows.push(`<div class="kv-lab"><span>Duration</span><b>Matches input</b></div><div class="kv-hint">The edited video keeps the length of the video you upload.</div>`);
+    }else{
+      const lo=r.dur[0],hi=r.dur[1],pct=Math.round((clamp(K.duration,lo,hi)-lo)/(hi-lo)*100);
+      rows.push(`<div class="kv-lab"><span>Duration</span><b id="kvDurVal">${r.auto&&K.durAuto?"Auto":K.duration+"s"}</b></div>
+        <div class="kv-row kv-dur">
+          <input type="range" class="kv-range" data-f="duration" min="${lo}" max="${hi}" step="1" value="${clamp(K.duration,lo,hi)}" style="--kvf:${pct}%"${r.auto&&K.durAuto?" disabled":""}>
+          ${r.auto?`<button class="kv-chip kv-glow${K.durAuto?" on":""}" data-act="auto">Auto</button>`:""}
+        </div>
+        <div class="kv-rangeends"><span>${lo}s</span><span>${hi}s</span></div>
+        <div class="kv-hint">${lo}–${hi} seconds${r.auto?" · Auto lets the model choose (billed by actual length)":""}</div>`);
+    }
     rows.push(`<div class="kv-lab"><span>Quality</span>${draftOn?"<small>Draft locks 480p</small>":""}</div>
       <div class="kv-chips">${chips("quality",r.q,draftOn?"480p":K.quality,v=>v==="4k"?"4K":v,draftOn)}</div>`);
     if(r.ar&&r.ar.length>1)rows.push(`<div class="kv-lab"><span>Aspect ratio</span></div>
-      <div class="kv-chips">${chips("aspect",r.ar,K.aspect,v=>v==="adaptive"?"Auto":v)}</div>`);
+      <div class="kv-chips">${chips("aspect",r.ar,K.aspect,v=>v==="adaptive"?"Auto":v==="keep_ratio"?"Keep":v)}</div>`);
     const toggles=[];
     if(r.audio==="seed")toggles.push(["audio","Generate audio",K.audio,"No extra charge"]);
     if(r.audio==="kling")toggles.push(["sound","Sound effects",K.sound,"Generates audio for the clip"]);
     if(r.keepSound)toggles.push(["keepSound","Keep original sound",K.keepSound,"Keep the reference video's audio"]);
-    if(r.draft)toggles.push(["draft","Draft preview (480p)",K.draft,"Cheaper quick preview"]);
+    if(r.draft)toggles.push(["draft","Draft preview (480p)",K.draft,"Cheaper quick preview · upgrade it later in Draft → 1080p"]);
     if(r.web)toggles.push(["web","Web search",K.web&&!K.relaxed,"Let the model look things up (billed only when used)"]);
     if(r.relax)toggles.push(["relaxed","Relaxed content filter",K.relaxed,"Bills at 1.1× · can't be combined with web search"]);
-    rows.push(toggles.map(t=>`<label class="kv-toggle"><input type="checkbox" data-f="${t[0]}" ${t[2]?"checked":""}><span><b>${esc(t[1])}</b><small>${esc(t[3])}</small></span></label>`).join(""));
+    rows.push(toggles.map(t=>`<label class="kv-toggle"><span class="kv-ttxt"><b>${esc(t[1])}</b><small>${esc(t[3])}</small></span><input type="checkbox" class="kv-sw" role="switch" data-f="${t[0]}" ${t[2]?"checked":""}></label>`).join(""));
     return rows.join("");
   }
   function sheetBodyHTML(){
     const m=cur(),r=route();
     const modes=Object.keys(m.routes);
     return`<div class="kv-lab"><span>Model</span></div>
-      <div class="kv-models">${MODELS.map(x=>`<button class="kv-model${x.id===K.model?" on":""}" data-act="model" data-v="${x.id}"><b>${esc(x.name)}</b><small>${esc(x.sub)}</small></button>`).join("")}</div>
+      <div class="kv-models">${MODELS.map(x=>`<button class="kv-model kv-glow${x.id===K.model?" on":""}" data-act="model" data-v="${x.id}"><b>${esc(x.name)}</b><small>${esc(x.sub)}</small></button>`).join("")}</div>
       <div class="kv-seg">${modes.map(x=>`<button class="${x===K.mode?"on":""}" data-act="mode" data-v="${x}">${MODE_LABEL[x]||x}</button>`).join("")}</div>
       ${mediaHTML()}
       <div class="kv-card" id="kvSettings">${settingsHTML()}</div>
@@ -570,7 +697,8 @@
   }
   function summaryText(){
     const r=route(),m=cur();
-    const dur=(r.auto&&K.durAuto)?"Auto":K.duration+"s";
+    if(r.kind==="final")return`${m.name} · Draft → 1080p${K.finalSource?" · draft selected":""}`;
+    const dur=r.fixedDur?"same length":(r.auto&&K.durAuto)?"Auto":K.duration+"s";
     const q=(r.draft&&K.draft)?"480p":K.quality;
     const n=r.inputs.reduce((a,i)=>a+mediaList(i.key).length,0);
     return`${m.name} · ${MODE_LABEL[K.mode]||K.mode} · ${dur} · ${q==="4k"?"4K":q}${n?` · ${n} ref${n>1?"s":""}`:""}`;
@@ -783,7 +911,7 @@
   }
   function applyForm(f){
     if(!f)return;
-    ["model","mode","prompt","negative","duration","durAuto","quality","aspect","audio","sound","draft","web","relaxed","keepSound"].forEach(k=>{if(f[k]!==undefined)K[k]=f[k]});
+    ["model","mode","prompt","negative","duration","durAuto","quality","aspect","audio","sound","draft","web","relaxed","keepSound","finalSource"].forEach(k=>{if(f[k]!==undefined)K[k]=f[k]});
     K.media=f.media?JSON.parse(JSON.stringify(f.media)):{};
     normalize();saveForm();
   }
@@ -853,11 +981,12 @@
       case"model":K.model=v;normalize();saveForm();refreshSheet();refreshSummary();{const ta=$("kvPrompt");if(ta)ta.placeholder=route().hint||""}break;
       case"mode":K.mode=v;normalize();saveForm();refreshSheet();refreshSummary();{const ta=$("kvPrompt");if(ta)ta.placeholder=route().hint||""}break;
       case"set":K[t.dataset.f]=v;saveForm();refreshSheet();refreshSummary();break;
+      case"pickdraft":{const j=findJob(t.dataset.id);if(j){K.finalSource=j.taskId;refreshSheet();refreshSummary()}break}
       case"auto":K.durAuto=!K.durAuto;saveForm();refreshSheet();refreshSummary();break;
       case"pick":{const inp=document.querySelector(`input[data-file="${t.dataset.key}"]`);inp&&inp.click();break}
       case"lib":openLibrary(t.dataset.key);break;
       case"url":pasteUrl(t.dataset.key);break;
-      case"rm":{const k=t.dataset.key;K.media[k]=(K.media[k]||[]).filter((_,i)=>i!==Number(t.dataset.i));refreshSheet();refreshSummary();break}
+      case"rm":{const k=t.dataset.key;const it=(K.media[k]||[])[Number(t.dataset.i)];if(it&&it.uploading){it.cancelled=true;try{it.abort&&it.abort()}catch(_){}}K.media[k]=(K.media[k]||[]).filter((_,i)=>i!==Number(t.dataset.i));refreshSheet();refreshSummary();break}
       case"keyset":typeof openSettings==="function"?openSettings():say("Open Settings to add your EvoLink key");break;
       case"generate":submit();break;
       case"sheet":setSheet(K.sheet?null:"sheet");break;
@@ -892,6 +1021,8 @@
     else if(f==="negative")K.negative=t.value;
     else if(f==="duration"){
       K.duration=Number(t.value);
+      const lo=Number(t.min),hi=Number(t.max);
+      t.style.setProperty("--kvf",Math.round((K.duration-lo)/Math.max(1,hi-lo)*100)+"%");
       const d=$("kvDurVal");if(d)d.textContent=K.duration+"s";
       refreshSummary();
     }else return;
@@ -985,12 +1116,12 @@
 .kv-lab{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:800;color:var(--textm,#5a4880);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
 .kv-lab small{font-weight:600;text-transform:none;letter-spacing:0;color:var(--texts,#9488ae)}.kv-lab b{color:var(--violet,#3d1f7a);font-size:13px;text-transform:none;letter-spacing:0}
 .kv-hint{font-size:10.5px;color:var(--texts,#9488ae);line-height:1.4;margin:2px 0 8px}
-.kv-models{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;margin-bottom:6px;scrollbar-width:none}.kv-models::-webkit-scrollbar{display:none}
+.kv-models{display:flex;gap:10px;overflow-x:auto;padding:8px 8px 14px;margin:-2px -8px 4px;scrollbar-width:none;isolation:isolate}.kv-models::-webkit-scrollbar{display:none}
 .kv-model{flex:0 0 auto;min-width:132px;text-align:left;border:1px solid var(--glass-brd,rgba(61,31,122,.12));background:var(--glass,rgba(255,255,255,.55));color:var(--text,#1e1230);border-radius:15px;padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:3px}
 .kv-model b{font-size:12.5px}.kv-model small{font-size:9.5px;color:var(--texts,#9488ae)}
-.kv-model.on{border-color:var(--vm,#6240b0);background:rgba(98,64,176,.16);box-shadow:0 0 0 1px var(--vm,#6240b0) inset}
-.kv-seg{display:flex;background:rgba(98,64,176,.10);border-radius:13px;padding:3px;margin-bottom:10px}
-.kv-seg button{flex:1;border:0;background:transparent;color:var(--textm,#5a4880);padding:9px 6px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer}
+.kv-model.on,.kv-draft.on{background:var(--glass-solid,#fcfaff)!important}
+.kv-seg{display:flex;background:rgba(98,64,176,.10);border-radius:13px;padding:3px;margin-bottom:10px;overflow-x:auto;scrollbar-width:none;gap:2px}.kv-seg::-webkit-scrollbar{display:none}
+.kv-seg button{flex:1 0 auto;border:0;background:transparent;color:var(--textm,#5a4880);padding:9px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
 .kv-seg button.on{background:var(--surface,#fff);color:var(--violet,#3d1f7a);box-shadow:0 1px 8px rgba(61,31,122,.14)}
 .kv-card{background:var(--glass,rgba(255,255,255,.55));border:1px solid var(--glass-brd,rgba(61,31,122,.1));border-radius:16px;padding:12px;margin-bottom:10px}
 .kv-ta{width:100%;border:1px solid var(--glass-brd,rgba(61,31,122,.12));background:rgba(98,64,176,.06);color:var(--text,#1e1230);border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;line-height:1.45;resize:vertical;outline:0}
@@ -1000,13 +1131,36 @@
 .kv-btn.sm{flex:0 0 auto;padding:7px 13px}
 .kv-btn:disabled,.kv-chip:disabled{opacity:.45;cursor:not-allowed}
 .kv-danger{width:100%;margin-top:10px;background:rgba(200,50,70,.12);color:#b3263e;border-color:rgba(200,50,70,.25)}
-.kv-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.kv-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;padding:3px;isolation:isolate}
 .kv-chip{border:1px solid var(--glass-brd,rgba(61,31,122,.14));background:rgba(98,64,176,.08);color:var(--textm,#5a4880);border-radius:999px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer}
 .kv-chip.on{background:linear-gradient(135deg,#6240b0,#3d1f7a);color:#fff;border-color:transparent}
-.kv-dur{flex-wrap:nowrap}.kv-range{flex:1;height:30px;accent-color:#6240b0}
-.kv-toggle{display:flex;align-items:flex-start;gap:10px;padding:8px 2px;cursor:pointer}
-.kv-toggle input{width:20px;height:20px;margin-top:1px;accent-color:#6240b0;flex:0 0 auto}
-.kv-toggle span{display:flex;flex-direction:column;gap:1px}.kv-toggle b{font-size:12.5px}.kv-toggle small{font-size:10.5px;color:var(--texts,#9488ae)}
+.kv-dur{flex-wrap:nowrap;padding:3px 0;isolation:isolate}
+.kv-range{-webkit-appearance:none!important;appearance:none!important;flex:1;min-width:0;height:34px;margin:0;padding:0;background:transparent!important;outline:0;--kvf:0%;touch-action:pan-y}
+.kv-range::-webkit-slider-runnable-track{height:8px;border-radius:99px;border:0!important;background:linear-gradient(90deg,#6240b0 0,#5ed2e1 var(--kvf),rgba(98,64,176,.18) var(--kvf))!important}
+.kv-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:26px;height:26px;margin-top:-9px;border-radius:50%;background:#fff!important;border:3px solid #6240b0!important;box-shadow:0 2px 10px rgba(98,64,176,.5)!important}
+.kv-range::-moz-range-track{height:8px;border-radius:99px;background:rgba(98,64,176,.18)}
+.kv-range::-moz-range-progress{height:8px;border-radius:99px;background:linear-gradient(90deg,#6240b0,#5ed2e1)}
+.kv-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#fff;border:3px solid #6240b0}
+.kv-range:disabled{opacity:.4}
+.kv-rangeends{display:flex;justify-content:space-between;font-size:10px;font-weight:700;color:var(--texts,#9488ae);margin:-2px 2px 2px}
+.kv-toggle{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 2px;cursor:pointer}
+.kv-ttxt{display:flex;flex-direction:column;gap:2px;min-width:0}.kv-ttxt b{font-size:13px}.kv-ttxt small{font-size:10.5px;color:var(--texts,#9488ae);line-height:1.35}
+.kv-sw{-webkit-appearance:none!important;appearance:none!important;flex:0 0 auto;width:52px!important;height:31px!important;margin:0;border:1px solid rgba(98,64,176,.4)!important;border-radius:99px;background:rgba(98,64,176,.28)!important;position:relative;cursor:pointer;transition:background .22s;outline:0}
+.kv-sw::after{content:"";position:absolute;top:2px;left:2px;width:25px;height:25px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.3);transition:transform .22s cubic-bezier(.2,.8,.2,1)}
+.kv-sw:checked{background:linear-gradient(135deg,#6240b0,#5ed2e1)!important;box-shadow:0 0 14px rgba(94,210,225,.55)}
+.kv-sw:checked::after{transform:translateX(21px)}.kv-sw:checked{border-color:transparent!important}
+.kv-drafts{display:flex;flex-direction:column;gap:10px;padding:3px;isolation:isolate}
+.kv-draft{position:relative;text-align:left;border:1px solid var(--glass-brd,rgba(61,31,122,.14));background:var(--glass,rgba(255,255,255,.55));color:var(--text,#1e1230);border-radius:15px;padding:11px 13px;cursor:pointer;display:flex;flex-direction:column;gap:3px;font-family:inherit}
+.kv-draft b{font-size:12.5px;line-height:1.35;overflow-wrap:anywhere}.kv-draft small{font-size:10.5px;color:var(--texts,#9488ae)}
+/* multi-colour glowing outline on selected options */
+@property --kva{syntax:"<angle>";inherits:false;initial-value:0deg}
+@keyframes kvSpin{to{--kva:360deg}}
+.kv-glow{position:relative}
+.kv-glow.on{border-color:transparent!important}
+.kv-glow.on::before,.kv-glow.on::after{content:"";position:absolute;pointer-events:none;border-radius:inherit;background:conic-gradient(from var(--kva),#ff4fb8,#ffb347,#f5f545,#4dff9e,#4fd8ff,#6a7cff,#c04fff,#ff4fb8);animation:kvSpin 3.6s linear infinite}
+.kv-glow.on::before{inset:-2px;padding:2px;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);mask-composite:exclude}
+.kv-glow.on::after{inset:0;z-index:-1;filter:blur(8px);opacity:.55}
+@media (prefers-reduced-motion:reduce){.kv-glow.on::before,.kv-glow.on::after{animation:none}}
 .kv-thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .kv-thumbwrap{position:relative}
 .kv-thumb{width:68px;height:68px;border-radius:11px;overflow:hidden;background:rgba(98,64,176,.14);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--textm,#5a4880);text-align:center}
