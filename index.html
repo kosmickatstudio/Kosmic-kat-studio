@@ -2983,10 +2983,10 @@ const BRAIN_MODEL_GROUPS=[
   {label:"AI Brain",items:[
     {value:"claude",name:"Claude (Anthropic)",sub:"Best quality, supports images"},
     {value:"gemini",name:"Google Gemini",sub:"Vision-capable, cheap, supports images"},
-    {value:"openai",name:"OpenAI GPT-4o",sub:"Supports images"},
+    {value:"openai",name:"OpenAI GPT-6",sub:"Supports images"},
     {value:"groq",name:"Groq GPT-OSS 120B",sub:"Free & fast, text only"},
-    {value:"deepseek",name:"DeepSeek V4 Flash",sub:"Ultra cheap, text only"},
-    {value:"grok",name:"Grok 4.6 (xAI)",sub:"xAI flagship, reasoning"},
+    {value:"deepseek",name:"DeepSeek V4",sub:"Ultra cheap, text only"},
+    {value:"grok",name:"Grok 4.7 (xAI)",sub:"xAI flagship, reasoning"},
     {value:"kimi",name:"Kimi K3 (EvoLink)",sub:"Long-context reasoning"},
     {value:"aicredits",name:"AICredits Gateway",sub:"Routes to whichever model you pick below, images if that model supports them"},
   ]},
@@ -7868,7 +7868,7 @@ function isPdBrainVisionCapable(brain){
     // and positions itself as an OpenAI-compatible drop-in — reasonably confident
     // vision passes through correctly for these known vision-capable families,
     // but not independently confirmed against their exact request format.
-    return model.includes("claude")||model.includes("gpt-4o")||model.includes("gpt-5")||model.includes("gemini");
+    return model.includes("claude")||model.includes("gpt-4o")||model.includes("gpt-5")||model.includes("gpt-6")||model.includes("gemini");
   }
   return isBrainVisionCapable(brain);
 }
@@ -10343,7 +10343,7 @@ function toggleAiPanel(){
 
 function updateAiModelLabel(){
   const model=gs("ai_model","claude");
-  const modelNames={claude:"Claude (Anthropic)",gemini:"Google Gemini",groq:"Groq GPT-OSS 120B",deepseek:"DeepSeek V4 Flash",openai:"OpenAI GPT-4o",grok:"Grok 4.6 (xAI)",kimi:"Kimi K3 (EvoLink)",aicredits:"AICredits ("+(gs("aicredits_model","")||"no model set")+")"};
+  const modelNames={claude:"Claude (Anthropic)",gemini:"Google Gemini",groq:"Groq GPT-OSS 120B",deepseek:"DeepSeek V4",openai:"OpenAI GPT-6",grok:"Grok 4.7 (xAI)",kimi:"Kimi K3 (EvoLink)",aicredits:"AICredits ("+(gs("aicredits_model","")||"no model set")+")"};
   const apiKeyMap={claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",deepseek:"api_deepseek",openai:"api_openai",grok:"api_xai",kimi:"api_evolink",aicredits:"api_aicredits"};
   const hasKey=!!gs(apiKeyMap[model],"");
   const lbl=document.getElementById("aiModelLabel");
@@ -10429,7 +10429,7 @@ async function callAiSimple(userPrompt,systemPrompt,modelOverride){
     // docs) — same request/response shape as OpenAI itself, just a different
     // base URL and a user-chosen model name instead of a fixed one.
     const endpoints={groq:"https://api.groq.com/openai/v1/chat/completions",deepseek:"https://api.deepseek.com/v1/chat/completions",openai:"https://api.openai.com/v1/chat/completions",grok:"https://api.x.ai/v1/chat/completions",kimi:"https://direct.evolink.ai/v1/chat/completions",aicredits:"https://api.aicredits.in/v1/chat/completions"};
-    const modelIds={groq:getBrainModel("groq"),deepseek:getBrainModel("deepseek"),openai:getBrainModel("openai"),grok:getBrainModel("grok")||"grok-4.6",kimi:getBrainModel("kimi")||"kimi-k3",aicredits:gs("aicredits_model","")||"gpt-4o-mini"};
+    const modelIds={groq:getBrainModel("groq"),deepseek:getBrainModel("deepseek"),openai:getBrainModel("openai"),grok:getBrainModel("grok")||"grok-4.7",kimi:getBrainModel("kimi")||"kimi-k3",aicredits:gs("aicredits_model","")||"gpt-4o-mini"};
     if(model==="aicredits"&&!gs("aicredits_model",""))throw new Error("Set which model AICredits should use in Settings (e.g. claude-3-5-sonnet, gpt-4o)");
     const response=await fetch(endpoints[model],{
       method:"POST",
