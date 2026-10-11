@@ -4,7 +4,7 @@
 // never served stale, but unchanged files come back as tiny 304s instead of full re-downloads).
 // If the network is slow (>3s) the cached copy is served so the app still opens quickly, while
 // the fresh copy keeps downloading in the background for the next load.
-const CACHE_NAME = "kosmic-kat-studio-v40";
+const CACHE_NAME = "kosmic-kat-studio-v41";
 const ASSETS = [
   "/index.html","/audio.js","/adstudio.js","/editor.js","/team.js","/costs.js","/upscaler.js","/display.js",
   "/flow.js","/nodecanvas.js","/motion.js","/assets.js","/gallery.js","/characters.js","/directors.js","/home.js",
