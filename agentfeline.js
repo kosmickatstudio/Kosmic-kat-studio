@@ -150,7 +150,7 @@ async function afCallKimi(userText){
 }
 async function afCallGrok(userText){
   const apiKey=gs("api_xai","");
-  const model=getBrainModel("grok")||"grok-4.5";
+  const model=getBrainModel("grok")||"grok-4.7";
   const res=await fetch("https://api.x.ai/v1/chat/completions",{
     method:"POST",
     headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},

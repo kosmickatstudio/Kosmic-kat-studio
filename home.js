@@ -16,37 +16,48 @@
 // ══════════════════════════════════════════════════════════════════════
 
 // ── CURRENT LLM CATALOG + LIVE UI WIRING ──
-// Verified against current provider documentation on 2026-09-08.
+// Verified against each provider's official model docs on 2026-10-11.
 // IMPORTANT: this catalog never writes API keys or clears settings.
 // API keys remain browser-local and are never stored in the repository.
 const CURRENT_LLM_CATALOG={
   claude:[
-    {id:"claude-fable-5",label:"Claude Fable 5 — latest / frontier"},
-    {id:"claude-opus-5",label:"Claude Opus 5 — advanced reasoning"},
-    {id:"claude-sonnet-5",label:"Claude Sonnet 5 — balanced"},
-    {id:"claude-haiku-4-5-20251001",label:"Claude Haiku 4.5 — fast"},
-    {id:"claude-opus-4-8",label:"Claude Opus 4.8"},
-    {id:"claude-opus-4-7",label:"Claude Opus 4.7"},
-    {id:"claude-opus-4-6",label:"Claude Opus 4.6"},
-    {id:"claude-sonnet-4-6",label:"Claude Sonnet 4.6"}
+    {id:"claude-fable-5-1",label:"Claude Fable 5.1 — latest / frontier"},
+    {id:"claude-opus-5-5",label:"Claude Opus 5.5 — advanced reasoning"},
+    {id:"claude-sonnet-5-5",label:"Claude Sonnet 5.5 — balanced"},
+    {id:"claude-haiku-5-5",label:"Claude Haiku 5.5 — fast, cheap"},
+    {id:"claude-fable-5",label:"Claude Fable 5 — older"},
+    {id:"claude-opus-5",label:"Claude Opus 5 — older"},
+    {id:"claude-sonnet-5",label:"Claude Sonnet 5 — older"}
   ],
   gemini:[
-    {id:"gemini-3.8-flash",label:"Gemini 3.8 Flash — FREE (latest)"},
-    {id:"gemini-3.7-flash",label:"Gemini 3.7 Flash — FREE"},
-    {id:"gemini-3.1-flash-lite",label:"Gemini 3.1 Flash-Lite — FREE (fast)"}
+    {id:"gemini-3.8-flash",label:"Gemini 3.8 Flash — latest"},
+    {id:"gemini-3.1-pro-preview",label:"Gemini 3.1 Pro — best quality (preview)"},
+    {id:"gemini-3.6-flash",label:"Gemini 3.6 Flash"},
+    {id:"gemini-3.5-flash-lite",label:"Gemini 3.5 Flash-Lite — fastest"},
+    {id:"gemini-3.1-flash-lite",label:"Gemini 3.1 Flash-Lite — efficient"}
   ],
   openai:[
-    {id:"gpt-5.6-sol",label:"GPT-5.6 Sol — flagship"},
-    {id:"gpt-5.6-terra",label:"GPT-5.6 Terra — balanced"},
-    {id:"gpt-5.6-luna",label:"GPT-5.6 Luna — cost-efficient"}
+    {id:"gpt-6.1-sol",label:"GPT-6.1 Sol — newest"},
+    {id:"gpt-6-astra",label:"GPT-6 Astra — flagship"},
+    {id:"gpt-6-luna",label:"GPT-6 Luna — fast, cheap"},
+    {id:"gpt-5.6-sol",label:"GPT-5.6 Sol — older"},
+    {id:"gpt-5.6-terra",label:"GPT-5.6 Terra — older"},
+    {id:"gpt-5.6-luna",label:"GPT-5.6 Luna — older"}
   ],
   groq:[
-    {id:"openai/gpt-oss-120b",label:"GPT-OSS 120B — FREE (latest)"},
+    {id:"openai/gpt-oss-120b",label:"GPT-OSS 120B — FREE (best quality)"},
     {id:"openai/gpt-oss-20b",label:"GPT-OSS 20B — FREE (fast)"},
-    {id:"qwen/qwen3.8-27b",label:"Qwen 3.8 27B — FREE"}
+    {id:"llama-3.3-70b-versatile",label:"Llama 3.3 70B — FREE"},
+    {id:"qwen/qwen3.8-27b",label:"Qwen 3.8 27B — FREE (preview)"},
+    {id:"minimaxai/minimax-m2.7",label:"MiniMax M2.7 — FREE (preview)"}
+  ],
+  deepseek:[
+    {id:"deepseek-v4-pro",label:"DeepSeek V4 Pro — advanced reasoning"},
+    {id:"deepseek-flash",label:"DeepSeek V4.1 Flash — fast, cheap"}
   ],
   grok:[
-    {id:"grok-4.6",label:"Grok 4.6 — xAI flagship"}
+    {id:"grok-4.7",label:"Grok 4.7 — xAI flagship"},
+    {id:"grok-4.6",label:"Grok 4.6 — older"}
   ],
   kimi:[
     {id:"kimi-k3",label:"Kimi K3 — EvoLink"}
@@ -419,7 +430,7 @@ function ensureExtraBrainKey(provider){
   if(provider!=="grok"&&provider!=="kimi")return true;
   const keyName=provider==="grok"?"api_xai":"api_evolink";
   if(gs(keyName,""))return true;
-  const label=provider==="grok"?"xAI API key (Grok 4.6)":"EvoLink API key (Kimi K3)";
+  const label=provider==="grok"?"xAI API key (Grok 4.7)":"EvoLink API key (Kimi K3)";
   const key=prompt("Enter your "+label+". It will be stored only in this browser.");
   if(!key||!key.trim()){toast("No API key entered — provider not selected","error");return false;}
   saveSetting(keyName,key.trim());
@@ -441,7 +452,7 @@ function ensureExtraBrainKey(provider){
   }
   window.callAiSimple=async function(userPrompt,systemPrompt){
     const provider=gs("ai_model","claude");
-    if(provider==="grok")return direct("https://api.x.ai/v1/chat/completions",gs("api_xai",""),gs("grok_brain_model","grok-4.6"),userPrompt,systemPrompt);
+    if(provider==="grok")return direct("https://api.x.ai/v1/chat/completions",gs("api_xai",""),gs("grok_brain_model","grok-4.7"),userPrompt,systemPrompt);
     if(provider==="kimi")return direct("https://direct.evolink.ai/v1/chat/completions",gs("api_evolink",""),gs("kimi_brain_model","kimi-k3"),userPrompt,systemPrompt);
     return original(userPrompt,systemPrompt);
   };
