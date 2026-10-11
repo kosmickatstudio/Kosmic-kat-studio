@@ -272,32 +272,15 @@ function renderAgentFeline(el){
   const multiAgent=gs("af_multi_agent",false)===true||gs("af_multi_agent",false)==="true";
   const anyKey=AGENT_ORDER.some(id=>AGENTS[id].hasTextKey());
   el.innerHTML=`
-    <div class="ig-chat-shell">
-      <div class="ig-chat-header">
-        <button class="ig-icon-btn" onclick="openAfSettings()" title="Agents">⚙</button>
-        <div style="flex:1;text-align:center">
-          <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">🐱 Agent Feline</div>
-          <div style="font-size:10px;color:var(--textm);margin-top:1px">${multiAgent?'Multi-Agent — every configured agent answers':afAgentLabel(selectedAgent)}</div>
-        </div>
-        <button class="ig-icon-btn" onclick="startNewAfChat()" title="New Chat">➕</button>
-      </div>
-
-      <div class="ig-chat-thread" id="afChatThread"></div>
-
-      <div class="ig-chat-inputbar">
-        <div class="ig-input-shell">
-          <textarea class="ig-input-textarea-v2" id="afChatInput" rows="1" placeholder="${anyKey?'Ask anything…':'Add an AI API key in Settings first…'}" ${!anyKey?'disabled':''} onkeydown="handleAfChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,240)+'px'"></textarea>
-          <div class="ig-input-toolbar">
-            <button class="ig-tool-btn" onclick="openAfSettings()" title="Agents">⚙</button>
-            <button class="ig-send-round" id="afSendBtn" ${!anyKey?'disabled':''} onclick="sendAfPrompt()" title="Send">➤</button>
-          </div>
-          <div style="font-size:9px;color:var(--texts);padding:2px 4px 0;display:flex;justify-content:flex-end"><span>Enter for a new line · <b>Ctrl+Enter</b> to send</span></div>
-        </div>
-      </div>
+    <div class="kc" id="afKc">
+      ${KosmicChatGlass.header({hist:"openAfChatHistory()",newChat:"startNewAfChat()",delChat:"deleteCurrentAfChat()",title:"🐱 Agent Feline",subId:"afSubt",sub:multiAgent?'Multi-Agent — every configured agent answers':afAgentLabel(selectedAgent)})}
+      <div class="ig-chat-thread kc-thread" id="afChatThread"></div>
+      ${KosmicChatGlass.composer({inputId:"afChatInput",placeholder:anyKey?'Ask anything…':'Add an AI API key in Settings first…',disabled:!anyKey,keydown:"handleAfChatKeydown(event)",settings:"openAfSettings()",summaryId:"afSummary",sendId:"afSendBtn",send:"sendAfPrompt()",tools:[],
+        hint:'<div class="kc-hint"><span></span><span>Ctrl+Enter to send</span></div>'})}
     </div>
 
     <div class="ig-settings-backdrop" id="afSettingsBackdrop" onclick="closeAfSettings()"></div>
-    <div class="ig-settings-sheet" id="afSettingsPanel">
+    <div class="ig-settings-sheet kc-sheet" id="afSettingsPanel">
       <div class="ig-sheet-handle" ontouchstart="sheetSwipeStart(event)" ontouchmove="sheetSwipeMove(event,'afSettingsPanel')" ontouchend="sheetSwipeEnd(event,'afSettingsPanel','closeAfSettings')"></div>
       <div class="ig-sheet-header">
         <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">🐱 Agents</div>
@@ -321,6 +304,7 @@ function renderAgentFeline(el){
     </div>
   `;
   renderAfChatThread();
+  KosmicChatGlass.setSummary('afSummary',multiAgent?'Multi-Agent':afAgentLabel(selectedAgent));
 }
 
 function openAfSettings(){
@@ -345,11 +329,67 @@ function toggleAfMultiAgent(checked){
   renderAgentFeline(document.getElementById("moduleContent"));
   openAfSettings();
 }
+function afSessions(){
+  if(!Array.isArray(S.afChatSessions))S.afChatSessions=(typeof gs==="function"?gs("af_chat_sessions",[]):[])||[];
+  return S.afChatSessions;
+}
+function afSaveSessions(){
+  S.afChatSessions=afSessions().slice(0,15);
+  saveSetting("af_chat_sessions",S.afChatSessions);
+}
+function afArchiveCurrent(){
+  const real=(S.afChatHistory||[]).filter(m=>m.type!=="loading");
+  if(!real.length)return;
+  afSessions().unshift({id:"afs_"+Date.now(),title:generateSessionTitle(real),messages:real,createdAt:new Date().toISOString()});
+  afSaveSessions();
+}
 function startNewAfChat(){
+  afArchiveCurrent();
   S.afChatHistory=[];
   save("afChatHistory");
   renderAfChatThread();
-  toast("🆕 New chat started","");
+  toast("🆕 New chat started — your last one is in History","");
+}
+async function deleteCurrentAfChat(){
+  if(!(S.afChatHistory||[]).length){toast("This chat is already empty","");return;}
+  if(!(await showConfirmDialog("Delete this chat permanently?",{danger:true,okLabel:"Delete"})))return;
+  S.afChatHistory=[];
+  save("afChatHistory");
+  renderAfChatThread();
+  toast("🗑️ Chat deleted","success");
+}
+function openAfChatHistory(){
+  const kc=KosmicChatGlass;
+  const cur=(S.afChatHistory||[]).filter(m=>m.type!=="loading");
+  kc.openHistory({
+    title:"Feline chats",
+    current:cur.length?{title:generateSessionTitle(cur),meta:cur.length+" messages"}:null,
+    sessions:afSessions().map(x=>({id:x.id,title:x.title,meta:x.messages.length+" messages · "+kc.ago(x.createdAt)})),
+    load:"loadAfChatSession",del:"deleteAfChatSession",clear:"clearAllAfChatSessions",newChat:"startNewAfChat"
+  });
+}
+function loadAfChatSession(id){
+  const sess=afSessions().find(x=>x.id===id);
+  if(!sess)return;
+  afArchiveCurrent();
+  S.afChatSessions=afSessions().filter(x=>x.id!==id);
+  S.afChatHistory=sess.messages;
+  afSaveSessions();
+  save("afChatHistory");
+  renderAfChatThread();
+  toast("📂 Chat loaded","success");
+}
+async function deleteAfChatSession(id){
+  if(!(await showConfirmDialog("Delete this saved chat permanently?",{danger:true,okLabel:"Delete"})))return;
+  S.afChatSessions=afSessions().filter(x=>x.id!==id);
+  afSaveSessions();
+  openAfChatHistory();
+}
+async function clearAllAfChatSessions(){
+  if(!(await showConfirmDialog("Delete all "+afSessions().length+" saved chats permanently?",{danger:true,okLabel:"Delete All"})))return;
+  S.afChatSessions=[];
+  afSaveSessions();
+  toast("🗑️ Cleared","success");
 }
 function handleAfChatKeydown(e){
   if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();sendAfPrompt();}
@@ -438,11 +478,8 @@ function renderAfChatThread(){
   const thread=document.getElementById("afChatThread");
   if(!thread)return;
   if(!S.afChatHistory.length){
-    thread.innerHTML=`<div class="ig-empty-chat">
-      <div style="font-size:36px;margin-bottom:10px;opacity:0.5">🐱</div>
-      <div style="font-size:13px;font-weight:600;color:var(--textm)">Ask Agent Feline anything</div>
-      <div style="font-size:11px;color:var(--texts);margin-top:4px">Pick an agent (or leave it on Auto), or turn on Multi-Agent to hear from everyone at once</div>
-    </div>`;
+    thread.innerHTML=KosmicChatGlass.empty({inputId:"afChatInput",icon:"🐱",title:"Ask Agent Feline anything",sub:"Pick an agent (or leave it on Auto), or turn on Multi-Agent to hear from everyone at once. Tap the sliders to choose.",
+      ideas:["Write a 30-second teaser script for a cyberpunk cat detective series","Compare my best options for a consistent character across shots","Draw a neon rainy street at night in anime style"]});
     return;
   }
   const html=[];

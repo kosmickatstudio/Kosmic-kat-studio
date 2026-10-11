@@ -3345,37 +3345,18 @@ function renderImageGen(el){
   const hasOpenAI=!!gs("api_openai");
   const hasKey=hasFal||hasReplicate||hasOpenAI;
   el.innerHTML=`
-    <div class="ig-chat-shell">
-      <div class="ig-chat-header">
-        <button class="ig-icon-btn" onclick="openIgChatHistory()" title="Chat History">☰</button>
-        <div style="flex:1;text-align:center">
-          <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">🖼 Image</div>
-          <div style="font-size:10px;color:var(--textm);margin-top:1px">${hasKey?'<span style="color:var(--green);font-weight:700">●</span> Ready':'<span style="color:var(--red);font-weight:700">●</span> No key configured'}${gs("active_director","")?' · '+pIcon('film',10)+' '+(getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name:''}</div>
-        </div>
-        <button class="ig-icon-btn" onclick="startNewIgChat()" title="New Chat">➕</button>
-      </div>
-      <div id="igGalleryView" style="display:none"></div>
-
-      <div class="ig-chat-thread" id="igChatThread"></div>
-
-      <div id="igAttachmentBar" style="display:none;padding:6px 14px;border-top:1px solid var(--border);background:var(--pearl2);font-size:11px;color:var(--textm);align-items:center;gap:8px"></div>
-
-      <div class="ig-chat-inputbar">
-        <div class="ig-input-shell">
-          <textarea class="ig-input-textarea-v2" id="igChatInput" rows="1" placeholder="${hasKey?'Describe the image you want…':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleIgChatKeydown(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,240)+'px'"></textarea>
-          <div class="ig-input-toolbar">
-            <button class="ig-tool-btn" onclick="toggleIgSettings()" title="Settings">⚙</button>
-            <button class="ig-tool-btn" onclick="magicPrompt()" title="Magic Prompt"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4M22 5h-4M4 17v2M5 18H3"/></svg></button>
-            <button class="ig-tool-btn" id="igVoiceBtn" onclick="toggleIgVoiceInput()" title="Voice Message"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></button>
-            <button class="ig-send-round" id="igSendBtn" ${!hasKey?'disabled':''} onclick="sendIgChatPrompt()" title="Generate">➤</button>
-          </div>
-          <div style="font-size:9px;color:var(--texts);padding:2px 4px 0;display:flex;justify-content:space-between"><span id="igCostHint" style="font-weight:700;color:var(--gold)"></span><span>Enter for a new line · <b>Ctrl+Enter</b> to generate</span></div>
-        </div>
-      </div>
+    <div class="kc" id="igKc">
+      ${KosmicChatGlass.header({hist:"openIgChatHistory()",newChat:"startNewIgChat()",delChat:"deleteCurrentIgChat()",title:"Image Studio",subId:"igSubt",sub:(hasKey?'<span style="color:var(--green);font-weight:700">●</span> Ready':'<span style="color:var(--red);font-weight:700">●</span> No key configured')+(gs("active_director","")?' · '+pIcon('film',10)+' '+((getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name||''):'')})}
+      <div id="igGalleryView" class="kc-gal" style="display:none"></div>
+      <div class="ig-chat-thread kc-thread" id="igChatThread"></div>
+      <div id="igAttachmentBar" class="kc-attach kc-glass" style="display:none"></div>
+      ${KosmicChatGlass.composer({inputId:"igChatInput",placeholder:hasKey?'Describe the image you want…':'Add an API key in Settings first…',disabled:!hasKey,keydown:"handleIgChatKeydown(event)",settings:"toggleIgSettings()",summaryId:"igSummary",sendId:"igSendBtn",send:"sendIgChatPrompt()",
+        tools:[{onclick:"magicPrompt()",title:"Magic Prompt",icon:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4M22 5h-4M4 17v2M5 18H3"/></svg>`},{id:"igVoiceBtn",onclick:"toggleIgVoiceInput()",title:"Voice Message",icon:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg>`}],
+        hint:'<div class="kc-hint"><span id="igCostHint" style="font-weight:700;color:var(--gold)"></span><span>Ctrl+Enter to generate</span></div>'})}
     </div>
 
     <div class="ig-settings-backdrop" id="igSettingsBackdrop" onclick="toggleIgSettings()"></div>
-    <div class="ig-settings-sheet" id="igSettingsPanel">
+    <div class="ig-settings-sheet kc-sheet" id="igSettingsPanel">
       <div class="ig-sheet-handle" ontouchstart="sheetSwipeStart(event)" ontouchmove="sheetSwipeMove(event,'igSettingsPanel')" ontouchend="sheetSwipeEnd(event,'igSettingsPanel','toggleIgSettings')"></div>
       <div class="ig-sheet-header">
         <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">⚙ Settings</div>
@@ -3447,16 +3428,16 @@ function renderImageGen(el){
           <select class="f-select" id="igBatchCount" onchange="updateIgCostHint();renderVisualTrigger('igBatchCount','count')" style="display:none"><option value="1">1 image</option><option value="2">2 images</option><option value="4">4 images</option><option value="8">8 images</option></select>
           <div id="igBatchCountTrigger" onclick="openVisualPicker('igBatchCount','Choose Batch Count','count')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
         </div>
+        <div class="kc-tools">
+          <div class="f-label">🧹 Background Removal</div>
+          <div style="font-size:12px;color:var(--textm);margin-bottom:8px">Upload any image to remove its background — real-time, via fal.ai's rembg model.</div>
+          <input type="file" accept="image/*" id="bgRemoveFile" style="display:none" onchange="handleBgRemove(event)">
+          <button class="btn btn-outline btn-sm" ${!hasKey?'disabled':''} onclick="document.getElementById('bgRemoveFile').click()">📤 Upload & Remove Background</button>
+          <div id="bgRemoveResult" style="margin-top:10px"></div>
+        </div>
       </div>
     </div>
 
-    <div class="panel" style="margin-top:14px">
-      <div class="panel-title">🧹 Background Removal</div>
-      <div style="font-size:12px;color:var(--textm);margin-bottom:8px">Upload any image to remove its background — real-time, via fal.ai's rembg model.</div>
-      <input type="file" accept="image/*" id="bgRemoveFile" style="display:none" onchange="handleBgRemove(event)">
-      <button class="btn btn-outline btn-sm" ${!hasKey?'disabled':''} onclick="document.getElementById('bgRemoveFile').click()">📤 Upload & Remove Background</button>
-      <div id="bgRemoveResult" style="margin-top:10px"></div>
-    </div>
   `;
   updateIgModelUI();
   updateIgAttachmentBar();
@@ -3466,6 +3447,16 @@ function renderImageGen(el){
   renderVisualTrigger("igBatchCount","count");
   updateIgRefOverrideWarning();
   updateIgLoraNote();
+  updateIgSummary();
+}
+
+function updateIgSummary(){
+  const m=document.getElementById("igModel"),r=document.getElementById("igRatio");
+  if(!m||typeof KosmicChatGlass==="undefined")return;
+  const opt=m.options[m.selectedIndex];
+  let name=opt?opt.textContent.trim():"Image";
+  if(name.length>26)name=name.slice(0,25)+"…";
+  KosmicChatGlass.setSummary("igSummary",name+(r&&r.value?" · "+r.value:""));
 }
 
 // ── INLINE GALLERY VIEW — shows images generated in this chat, no navigation away ──
@@ -3538,29 +3529,23 @@ async function startNewIgChat(){
 }
 
 function openIgChatHistory(){
-  const overlay=document.createElement("div");
-  overlay.className="modal-overlay show";
-  overlay.id="igChatHistoryModal";
-  const sessions=S.igChatSessions;
-  overlay.innerHTML=`
-    <div class="modal" style="max-height:75vh;display:flex;flex-direction:column">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">☰ Chat History</div>
-        <button class="ig-icon-btn" onclick="document.getElementById('igChatHistoryModal').remove()">✕</button>
-      </div>
-      ${sessions.length?`<button class="btn btn-outline btn-xs" style="align-self:flex-end;margin-bottom:8px;color:var(--red)" onclick="clearAllIgChatSessions()">🗑️ Clear All (frees up storage)</button>`:''}
-      <div style="overflow-y:auto;flex:1">
-        ${sessions.length===0?`<div class="empty-desc">No past chats yet — start a new chat and your current one will be saved here.</div>`
-        :sessions.map(s=>`<div style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
-          <div style="flex:1;cursor:pointer" onclick="loadIgChatSession('${s.id}')">
-            <div style="font-size:13px;font-weight:600;color:var(--text)">${s.title}</div>
-            <div style="font-size:10px;color:var(--textm);margin-top:2px">${s.messages.length} messages · ${new Date(s.createdAt).toLocaleDateString()}</div>
-          </div>
-          <button onclick="deleteIgChatSession('${s.id}')" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>
-        </div>`).join('')}
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
+  const kc=KosmicChatGlass;
+  const n=S.igChatHistory.length;
+  kc.openHistory({
+    title:"Image chats",
+    current:n?{title:generateSessionTitle(S.igChatHistory),meta:n+" messages"}:null,
+    sessions:S.igChatSessions.map(x=>({id:x.id,title:x.title,meta:x.messages.length+" messages · "+kc.ago(x.createdAt)})),
+    load:"loadIgChatSession",del:"deleteIgChatSession",clear:"clearAllIgChatSessions",newChat:"startNewIgChat"
+  });
+}
+
+async function deleteCurrentIgChat(){
+  if(!S.igChatHistory.length){toast("This chat is already empty","");return;}
+  if(!(await showConfirmDialog("Delete this chat? Images already generated stay in your Gallery.",{danger:true,okLabel:"Delete"})))return;
+  S.igChatHistory=[];
+  save("igChatHistory");
+  renderIgChatThread();
+  toast("🗑️ Chat deleted","success");
 }
 
 async function clearAllIgChatSessions(){
@@ -3601,6 +3586,7 @@ function toggleIgSettings(){
   const backdrop=document.getElementById("igSettingsBackdrop");
   if(!panel)return;
   const opening=!panel.classList.contains("open");
+  if(!opening&&typeof updateIgSummary==="function")updateIgSummary();
   panel.classList.toggle("open",opening);
   if(backdrop)backdrop.classList.toggle("show",opening);
 }
@@ -3646,11 +3632,8 @@ function renderIgChatThread(){
   const thread=document.getElementById("igChatThread");
   if(!thread)return;
   if(!S.igChatHistory.length){
-    thread.innerHTML=`<div class="ig-empty-chat">
-      <div style="font-size:36px;margin-bottom:10px;opacity:0.5">✨</div>
-      <div style="font-size:13px;font-weight:600;color:var(--textm)">Describe an image below to get started</div>
-      <div style="font-size:11px;color:var(--texts);margin-top:4px">Your generations stay here like a conversation — scroll up to see past ones</div>
-    </div>`;
+    thread.innerHTML=KosmicChatGlass.empty({inputId:"igChatInput",title:"Describe an image to get started",sub:"Your generations stay here like a conversation. Tap the sliders to pick a model, style and ratio.",
+      ideas:["A cinematic portrait of a cosmic cat astronaut, volumetric light","Neon-lit alley in the rain, 35mm film, shallow depth of field","Epic fantasy castle on a floating island at golden hour"]});
     return;
   }
   thread.innerHTML=S.igChatHistory.map((msg,idx)=>{
@@ -3800,6 +3783,7 @@ function updateIgRatioOptions(cap){
 function updateIgModelUI(){
   const model=document.getElementById("igModel").value;
   renderModelTrigger("igModel");
+  if(typeof updateIgSummary==="function")updateIgSummary();
   const cap=IMAGE_MODEL_CAPABILITIES[model]||{};
   updateIgRatioOptions(cap);
   updateIgCostHint();
@@ -12347,6 +12331,7 @@ window.addEventListener("resize",()=>{initStars();});
 <script src="directors.js"></script>
 <script src="home.js"></script>
 <script src="kosmicengine.js"></script>
+<script src="chat-glass.js"></script>
 <script src="agentfeline.js"></script>
 <div id="toast" class="toast"></div>
 </body>
