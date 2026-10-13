@@ -3343,14 +3343,14 @@ function renderImageGen(el){
   const hasFal=!!gs("api_falai");
   const hasReplicate=!!gs("api_replicate");
   const hasOpenAI=!!gs("api_openai");
-  const hasKey=hasFal||hasReplicate||hasOpenAI;
+  const hasKey=hasFal||hasReplicate||hasOpenAI||!!gs("api_gemini")||!!gs("api_evolink")||!!gs("api_bfl");
   el.innerHTML=`
     <div class="kc" id="igKc">
       ${KosmicChatGlass.header({hist:"openIgChatHistory()",newChat:"startNewIgChat()",delChat:"deleteCurrentIgChat()",title:"Image Studio",subId:"igSubt",sub:(hasKey?'<span style="color:var(--green);font-weight:700">●</span> Ready':'<span style="color:var(--red);font-weight:700">●</span> No key configured')+(gs("active_director","")?' · '+pIcon('film',10)+' '+((getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name||''):'')})}
       <div id="igGalleryView" class="kc-gal" style="display:none"></div>
       <div class="ig-chat-thread kc-thread" id="igChatThread"></div>
       <div id="igAttachmentBar" class="kc-attach kc-glass" style="display:none"></div>
-      ${KosmicChatGlass.composer({inputId:"igChatInput",placeholder:hasKey?'Describe the image you want…':'Add an API key in Settings first…',disabled:!hasKey,keydown:"handleIgChatKeydown(event)",settings:"toggleIgSettings()",summaryId:"igSummary",sendId:"igSendBtn",send:"sendIgChatPrompt()",
+      ${KosmicChatGlass.composer({inputId:"igChatInput",placeholder:hasKey?'Describe the image you want…':'Add an API key in Settings first…',keydown:"handleIgChatKeydown(event)",settings:"toggleIgSettings()",summaryId:"igSummary",sendId:"igSendBtn",send:"sendIgChatPrompt()",
         tools:[{onclick:"magicPrompt()",title:"Magic Prompt",icon:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4M22 5h-4M4 17v2M5 18H3"/></svg>`},{id:"igVoiceBtn",onclick:"toggleIgVoiceInput()",title:"Voice Message",icon:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg>`}],
         hint:'<div class="kc-hint"><span id="igCostHint" style="font-weight:700;color:var(--gold)"></span><span>Ctrl+Enter to generate</span></div>'})}
     </div>

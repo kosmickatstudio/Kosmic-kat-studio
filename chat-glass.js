@@ -105,12 +105,12 @@ html .ig-settings-backdrop{background:rgba(15,8,32,.38)!important;-webkit-backdr
     const tools=(o.tools||[]).map(t=>`<button type="button" class="kc-tbtn"${t.id?` id="${t.id}"`:""} onclick="${t.onclick}" title="${esc(t.title)}" aria-label="${esc(t.title)}">${t.icon}</button>`).join("");
     return `<div class="kc-composer-wrap ig-chat-inputbar">
       <div class="kc-composer kc-glass">
-        <textarea class="kc-ta" id="${o.inputId}" rows="1" placeholder="${esc(o.placeholder)}" ${o.disabled?"disabled":""} onkeydown="${o.keydown}" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
+        <textarea class="kc-ta" id="${o.inputId}" rows="1" placeholder="${esc(o.placeholder)}" onkeydown="${o.keydown}" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
         <div class="kc-crow">
           <button type="button" class="kc-tbtn" onclick="${o.settings}" aria-label="Settings" title="Settings">${IC.sliders}</button>
           <button type="button" class="kc-summary" id="${o.summaryId}" onclick="${o.settings}"></button>
           ${tools}
-          <button type="button" class="kc-send" id="${o.sendId}" ${o.disabled?"disabled":""} onclick="${o.send}" aria-label="Send" title="Send">${IC.send}</button>
+          <button type="button" class="kc-send" id="${o.sendId}" onclick="${o.send}" aria-label="Send" title="Send">${IC.send}</button>
         </div>
         ${o.hint||""}
       </div>
