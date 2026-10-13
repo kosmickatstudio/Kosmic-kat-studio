@@ -479,7 +479,7 @@
   }
 
   /* ───────────── media uploads ───────────── */
-  const UP_STALL=45000;
+  const UP_STALL=30000,UP_START=12000;
   function upProgress(item,p){
     item.progress=p;
     const el=document.querySelector(`[data-up="${item.id}"]`);
@@ -492,10 +492,11 @@
       if(!key)return reject(new Error("No EvoLink key"));
       const x=new XMLHttpRequest();
       let timer;
-      const arm=()=>{clearTimeout(timer);timer=setTimeout(()=>{try{x.abort()}catch(_){}reject(new Error("EvoLink upload stalled"))},UP_STALL)};
+      let started=false;
+      const arm=()=>{clearTimeout(timer);timer=setTimeout(()=>{try{x.abort()}catch(_){}reject(new Error("EvoLink upload stalled"))},started?UP_STALL:UP_START)};
       x.open("POST","https://files-api.evolink.ai/api/v1/files/upload/stream");
       x.setRequestHeader("Authorization","Bearer "+key);
-      x.upload.onprogress=e=>{arm();if(e.lengthComputable)upProgress(item,e.loaded/e.total)};
+      x.upload.onprogress=e=>{started=true;arm();if(e.lengthComputable)upProgress(item,e.loaded/e.total)};
       x.onload=()=>{
         clearTimeout(timer);
         let d={};try{d=JSON.parse(x.responseText)}catch(_){}
@@ -516,28 +517,53 @@
       if(typeof fbStorage==="undefined")return reject(new Error("Storage isn't available"));
       const ext=(file.name.split(".").pop()||"bin").toLowerCase().replace(/[^a-z0-9]/g,"")||"bin";
       let task,timer;
-      const arm=()=>{clearTimeout(timer);timer=setTimeout(()=>{try{task&&task.cancel()}catch(_){}reject(new Error("Upload stalled — check your connection"))},UP_STALL+15000)};
+      let started=false;
+      const arm=()=>{clearTimeout(timer);timer=setTimeout(()=>{try{task&&task.cancel()}catch(_){}reject(new Error("Storage upload stalled"))},started?UP_STALL:UP_START+8000)};
       try{
-        const ref=fbStorage.ref(`asset-library/${Date.now()}_${rid()}.${ext}`);
-        task=ref.put(file);
+        const uid=(typeof S!=="undefined"&&S.user&&S.user.uid)||"";
+        if(!uid)return reject(new Error("Sign in to use storage upload"));
+        const pre=file.type&&file.type.indexOf("image")===0?"gallery-images":"gallery-videos";
+        const ref=fbStorage.ref(`${pre}/${uid}/${Date.now()}_${rid()}.${ext}`);
+        task=ref.put(file,{contentType:file.type||"application/octet-stream"});
         item.abort=()=>{try{task.cancel()}catch(_){}clearTimeout(timer);reject(new Error("Cancelled"))};
         arm();
-        task.on("state_changed",sn=>{arm();if(sn.totalBytes)upProgress(item,sn.bytesTransferred/sn.totalBytes)},
+        task.on("state_changed",sn=>{started=true;arm();if(sn.totalBytes)upProgress(item,sn.bytesTransferred/sn.totalBytes)},
           err=>{clearTimeout(timer);reject(err)},
           async()=>{clearTimeout(timer);try{resolve(await ref.getDownloadURL())}catch(e){reject(e)}});
       }catch(e){clearTimeout(timer);reject(e)}
     });
   }
+  // Last resort: fal.ai storage (only when the user has a fal key).
+  async function falUpload(file,item){
+    const k=gs("api_falai","");
+    if(!k||typeof uploadToFalStorage!=="function")throw new Error("No fal key");
+    return await Promise.race([uploadToFalStorage(file,k),new Promise((_,r)=>setTimeout(()=>r(new Error("fal upload stalled")),UP_STALL))]);
+  }
+  // Shrink big phone photos so uploads finish quickly on mobile data.
+  async function shrinkImage(file){
+    if(!/^image\/(jpe?g|png|webp)$/i.test(file.type)||file.size<1.2*1024*1024)return file;
+    try{
+      const bm=await createImageBitmap(file);
+      const sc=Math.min(1,2048/Math.max(bm.width,bm.height));
+      const c=document.createElement("canvas");c.width=Math.round(bm.width*sc);c.height=Math.round(bm.height*sc);
+      c.getContext("2d").drawImage(bm,0,0,c.width,c.height);
+      const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",0.88));
+      if(blob&&blob.size<file.size)return new File([blob],(file.name||"image").replace(/\.[^.]+$/,"")+".jpg",{type:"image/jpeg"});
+    }catch(_){}
+    return file;
+  }
+  function upLabel(item,t){const el=document.querySelector(`[data-up="${item.id}"]`);if(el)el.textContent=t}
   async function uploadFile(file,item){
-    let first;
-    try{return await evolinkUpload(file,item)}
-    catch(e){first=e;if(item.cancelled)throw e}
-    upProgress(item,0);
-    try{return await firebaseUpload(file,item)}
-    catch(e2){
-      if(item.cancelled)throw e2;
-      throw new Error(`${first.message}; ${e2.message}`);
+    file=await shrinkImage(file);
+    const errs=[];
+    const routes=[["EvoLink",evolinkUpload],["Storage",firebaseUpload],["fal",falUpload]];
+    for(const [name,fn] of routes){
+      if(item.cancelled)throw new Error("Cancelled");
+      upProgress(item,0);upLabel(item,"Uploading… ("+name+")");
+      try{return await fn(file,item)}
+      catch(e){if(item.cancelled)throw e;if(!/^No (EvoLink|fal) key$/.test(e.message))errs.push(name+": "+(e.message||e))}
     }
+    throw new Error(errs.join("; ")||"No upload route available");
   }
   function findInput(key){return route().inputs.find(i=>i.key===key)}
   function addMedia(key,item){

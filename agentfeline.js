@@ -275,7 +275,7 @@ function renderAgentFeline(el){
     <div class="kc" id="afKc">
       ${KosmicChatGlass.header({hist:"openAfChatHistory()",newChat:"startNewAfChat()",delChat:"deleteCurrentAfChat()",title:"🐱 Agent Feline",subId:"afSubt",sub:multiAgent?'Multi-Agent — every configured agent answers':afAgentLabel(selectedAgent)})}
       <div class="ig-chat-thread kc-thread" id="afChatThread"></div>
-      ${KosmicChatGlass.composer({inputId:"afChatInput",placeholder:anyKey?'Ask anything…':'Add an AI API key in Settings first…',disabled:!anyKey,keydown:"handleAfChatKeydown(event)",settings:"openAfSettings()",summaryId:"afSummary",sendId:"afSendBtn",send:"sendAfPrompt()",tools:[],
+      ${KosmicChatGlass.composer({inputId:"afChatInput",placeholder:anyKey?'Ask anything…':'Add an AI API key in Settings first…',keydown:"handleAfChatKeydown(event)",settings:"openAfSettings()",summaryId:"afSummary",sendId:"afSendBtn",send:"sendAfPrompt()",tools:[],
         hint:'<div class="kc-hint"><span></span><span>Ctrl+Enter to send</span></div>'})}
     </div>
 
