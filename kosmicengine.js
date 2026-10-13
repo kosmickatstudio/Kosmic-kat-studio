@@ -100,8 +100,8 @@ function renderKosmicEngineModule(el){
   // after innerHTML above, since it targets nodes that only exist now.
   KosmicEngine.setEngineTab(KosmicEngine.currentTab());
   KosmicEngine.renderRefStrip();
-  ensureEngineSelection();
-  renderEngineModePicker();
+  KosmicEngine.ensureEngineSelection();
+  KosmicEngine.renderEngineModePicker();
 }
 
 // ── KOSMIC ENGINE ENTRY GATE ── Reuses the exact Project card format and
@@ -1566,8 +1566,6 @@ const KosmicEngine=(function(){
       const subjectMatch=(raw||"").match(/SUBJECT:\s*([\s\S]*?)(?=\n?STYLE:|$)/i);
       const styleMatch=(raw||"").match(/STYLE:\s*([\s\S]*)/i);
       return {
-    setEngineTier,
-    setEngineModel,
         charDesc:subjectMatch?subjectMatch[1].trim():(raw||"").trim(), // untagged replies still work, just without a style split
         style:styleMatch?styleMatch[1].trim():""
       };
@@ -2497,6 +2495,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,editProjectRules,projectRules,handleRefUpload,removeRef,renderRefStrip,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode,dispatch:dispatchTasks};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,editProjectRules,projectRules,handleRefUpload,removeRef,renderRefStrip,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode,dispatch:dispatchTasks,setEngineTier,setEngineModel,ensureEngineSelection,renderEngineModePicker};
 })();
 
