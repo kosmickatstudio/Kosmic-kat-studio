@@ -520,8 +520,11 @@
       let started=false;
       const arm=()=>{clearTimeout(timer);timer=setTimeout(()=>{try{task&&task.cancel()}catch(_){}reject(new Error("Storage upload stalled"))},started?UP_STALL:UP_START+8000)};
       try{
-        const ref=fbStorage.ref(`asset-library/${Date.now()}_${rid()}.${ext}`);
-        task=ref.put(file);
+        const uid=(typeof S!=="undefined"&&S.user&&S.user.uid)||"";
+        if(!uid)return reject(new Error("Sign in to use storage upload"));
+        const pre=file.type&&file.type.indexOf("image")===0?"gallery-images":"gallery-videos";
+        const ref=fbStorage.ref(`${pre}/${uid}/${Date.now()}_${rid()}.${ext}`);
+        task=ref.put(file,{contentType:file.type||"application/octet-stream"});
         item.abort=()=>{try{task.cancel()}catch(_){}clearTimeout(timer);reject(new Error("Cancelled"))};
         arm();
         task.on("state_changed",sn=>{started=true;arm();if(sn.totalBytes)upProgress(item,sn.bytesTransferred/sn.totalBytes)},

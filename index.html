@@ -4318,6 +4318,7 @@ async function sendIgChatPrompt(){
   const inputEl=document.getElementById("igChatInput");
   const rawPrompt=inputEl.value.trim();
   if(!rawPrompt){toast("Type a prompt first","error");return;}
+  if(!["api_falai","api_replicate","api_openai","api_gemini","api_evolink","api_bfl"].some(k=>gs(k))){toast("Add an image API key in Settings first","error");return;}
   const directorStyle=getActiveDirectorPrompt();
   const styleVal=document.getElementById("igStyle").value;
   let prompt=rawPrompt;
