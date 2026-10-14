@@ -47,46 +47,45 @@ function renderKosmicEngineModule(el){
     renderKosmicEngineGate(el);
     return;
   }
+  const G=window.KosmicChatGlass;
+  const attachIc='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.6-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>';
+  const tierBtn=(t,label)=>`<button type="button" class="dc-tier" data-engine-tier="${t}" onclick="KosmicEngine.setEngineTier('${t}')">${label}</button>`;
   el.innerHTML=`
-    <div style="margin-bottom:10px">
-      <div style="font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--violet)">🎬 Kosmic Engine</div>
-      <div style="font-size:11px;color:var(--textm);margin-top:3px;line-height:1.5">One conversation drives the whole pipeline:</div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">
-        ${["Script","Character sheets","Locations","Storyboard","Scenes"].map((x,i)=>`<span style="font-size:10px;font-weight:700;color:var(--violet);background:var(--lav);border-radius:20px;padding:3px 9px">${i+1}. ${x}</span>`).join('')}
-      </div>
-    </div>
-    <div class="ig-chat-shell" style="min-height:60vh">
-      <div class="ig-chat-header">
-        <div>
-          <b onclick="KosmicEngine.renameDirector()" style="cursor:pointer;text-decoration:underline dotted" title="Tap to rename">${KosmicEngine.directorName()}</b>
-          <span style="font-size:10px;color:var(--textm)">· ${scopedProject.name}${S.directorChat.productionId?' · production in progress':''}</span>
-        </div>
-        <div style="display:flex;gap:6px;align-items:center">
-          <button class="btn btn-ghost btn-xs" onclick="KosmicEngine.toggleEngineMenu(event)" title="More actions">⋯</button>
-        </div>
-      </div>
-      <div id="dcTabs" style="display:flex;border-bottom:1px solid var(--border)"></div>
+    <style id="dcKcStyle">
+      .dc-tabs{display:flex;margin:6px 8px 0;border-radius:14px;overflow:hidden;flex:0 0 auto}
+      #dcTaskPanel{flex:0 0 auto;margin:0 8px}
+      #dcNotebook{flex:1 1 auto;min-height:0;overflow-y:auto;padding:8px 10px}
+      #dcInputBar{flex:0 0 auto;position:relative}
+      .dc-set{display:none;margin:0 10px 8px;padding:10px 12px;border-radius:18px;flex-direction:column;gap:9px}
+      .dc-set.open{display:flex}
+      .dc-set-l{font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:var(--texts)}
+      #dcEngineModes{display:flex;gap:6px}
+      .dc-tier{flex:1;min-width:0;border:1.5px solid var(--glass-brd,var(--border));border-radius:12px;padding:8px 6px;background:var(--glass,var(--surface));color:var(--text);font-size:11px;font-weight:800;cursor:pointer;font-family:inherit}
+      .dc-tier[disabled]{cursor:not-allowed}
+      #dcEngineModelRow select{flex:1;min-width:0;border:1.5px solid var(--glass-brd,var(--border));border-radius:11px;background:var(--glass,var(--surface));color:var(--text);padding:8px 9px;font-size:11px;font-family:inherit}
+      #dcRefStrip{margin:0 12px 6px}
+      .dc-more{align-self:flex-start;border:1px solid var(--glass-brd,var(--border));background:transparent;color:var(--violet);border-radius:11px;padding:7px 12px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit}
+    </style>
+    <div class="kc" id="dcKc">
+      ${G.header({hist:"KosmicEngine.openSessionRecovery()",newChat:"KosmicEngine.reset()",delChat:"KosmicEngine.deleteChat()",title:"🎬 Kosmic Engine",subId:"dcSubt",sub:`<span id="dcDirectorName" onclick="KosmicEngine.renameDirector()" style="cursor:pointer;text-decoration:underline dotted" title="Tap to rename">${KosmicEngine.directorName()}</span> · ${scopedProject.name}${S.directorChat&&S.directorChat.productionId?' · production in progress':''}`})}
+      <div id="dcTabs" class="dc-tabs kc-glass"></div>
       <div id="dcTaskPanel"></div>
-      <div class="ig-chat-thread" id="dcThread"></div>
-      <div id="dcNotebook" style="display:none;overflow-y:auto;max-height:60vh"></div>
-      <div id="dcInputBar" style="position:relative;background:var(--glass);backdrop-filter:blur(18px);border-top:1.5px solid var(--glass-brd);padding:10px 12px">
-        <div id="dcEngineModes" style="display:flex;gap:6px;margin-bottom:7px;overflow-x:auto;scrollbar-width:none">
-          <button type="button" data-engine-tier="lite" onclick="KosmicEngine.setEngineTier('lite')" style="flex:1;min-width:0;border:1.5px solid var(--border);border-radius:11px;padding:7px 8px;background:var(--surface);color:var(--text);font-size:10px;font-weight:800;cursor:pointer">⚡ Engine Lite</button>
-          <button type="button" data-engine-tier="advance" onclick="KosmicEngine.setEngineTier('advance')" style="flex:1;min-width:0;border:1.5px solid var(--border);border-radius:11px;padding:7px 8px;background:var(--surface);color:var(--text);font-size:10px;font-weight:800;cursor:pointer">◆ Engine Advance</button>
-          <button type="button" data-engine-tier="ultra" onclick="KosmicEngine.setEngineTier('ultra')" style="flex:1;min-width:0;border:1.5px solid var(--border);border-radius:11px;padding:7px 8px;background:var(--surface);color:var(--text);font-size:10px;font-weight:800;cursor:pointer">✦ Engine Ultra</button>
+      <div class="ig-chat-thread kc-thread" id="dcThread"></div>
+      <div id="dcNotebook" style="display:none"></div>
+      <div id="dcInputBar">
+        <div id="kgSettingsPanel" class="dc-set kc-glass" aria-label="Engine settings">
+          <div class="dc-set-l">Engine</div>
+          <div id="dcEngineModes">${tierBtn("lite","⚡ Lite")}${tierBtn("advance","◆ Advance")}${tierBtn("ultra","✦ Ultra")}</div>
+          <div id="dcEngineModelRow" style="display:flex;align-items:center;gap:8px">
+            <span class="dc-set-l">Brain</span>
+            <select id="dcEngineModel" onchange="KosmicEngine.setEngineModel(this.value)"></select>
+            <span id="dcEngineLock" style="display:none;font-size:9px;color:var(--green);font-weight:800;white-space:nowrap">LOCKED</span>
+          </div>
+          <button type="button" class="dc-more" onclick="KosmicEngine.toggleEngineMenu(event)">More actions…</button>
         </div>
-        <div id="dcEngineModelRow" style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
-          <span style="font-size:9px;font-weight:800;color:var(--textm);white-space:nowrap">BRAIN</span>
-          <select id="dcEngineModel" onchange="KosmicEngine.setEngineModel(this.value)" style="flex:1;min-width:0;border:1.5px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);padding:7px 9px;font-size:10px;font-weight:700"></select>
-          <span id="dcEngineLock" style="display:none;font-size:9px;color:var(--green);font-weight:800;white-space:nowrap">LOCKED</span>
-        </div>
-        <div id="dcRefStrip" style="display:none;gap:7px;flex-wrap:wrap;margin-bottom:9px"></div>
-        <div style="display:flex;gap:8px;align-items:flex-end">
-          <input type="file" accept="image/*" multiple id="dcRefFile" style="display:none" onchange="KosmicEngine.handleRefUpload(event)">
-          <button onclick="document.getElementById('dcRefFile').click()" title="Add a reference image" style="width:36px;height:36px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--violet);font-size:19px;line-height:1;cursor:pointer;flex-shrink:0">+</button>
-          <textarea class="ig-input-textarea-v2" id="dcInput" placeholder="Type your reply…" rows="1" style="flex:1;min-height:38px;background:var(--surface);border:1.5px solid var(--border);border-radius:16px;padding:9px 14px" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();KosmicEngine.send();}"></textarea>
-          <button class="ig-send-btn" onclick="KosmicEngine.send()">➤</button>
-        </div>
+        <div id="dcRefStrip" style="display:none;gap:7px;flex-wrap:wrap"></div>
+        <input type="file" accept="image/*" multiple id="dcRefFile" style="display:none" onchange="KosmicEngine.handleRefUpload(event)">
+        ${G.composer({inputId:"dcInput",placeholder:"Tell me the story you want to make…",keydown:"if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();KosmicEngine.send();}",settings:"KosmicEngine.toggleSettings()",summaryId:"dcSummary",sendId:"dcSend",send:"KosmicEngine.send()",tools:[{onclick:"document.getElementById('dcRefFile').click()",title:"Add a reference image",icon:attachIc}],hint:'<div class="kc-hint"><span></span><span>Ctrl+Enter to send</span></div>'})}
       </div>
     </div>
   `;
@@ -243,9 +242,9 @@ const KosmicEngine=(function(){
     const cur=engineSelection();
     tierEl.querySelectorAll("[data-engine-tier]").forEach(b=>{
       const active=b.getAttribute("data-engine-tier")===cur.tier;
-      b.style.borderColor=active?"var(--violet)":"var(--border)";
-      b.style.background=active?"var(--lav)":"var(--surface)";
-      b.style.color=active?"var(--violet)":"var(--text)";
+      b.style.borderColor=active?"var(--violet)":"";
+      b.style.background=active?"var(--lav)":"";
+      b.style.color=active?"var(--violet)":"";
       b.disabled=cur.locked;
       b.style.opacity=cur.locked&&!active?"0.5":"1";
     });
@@ -253,6 +252,8 @@ const KosmicEngine=(function(){
     sel.disabled=cur.locked;
     sel.style.opacity=cur.locked?"0.72":"1";
     if(lockEl)lockEl.style.display=cur.locked?"inline":"none";
+    const m=(ENGINE_MODES[cur.tier].models.find(x=>x.id===cur.model)||{}).label||cur.model;
+    if(window.KosmicChatGlass)KosmicChatGlass.setSummary("dcSummary",ENGINE_MODES[cur.tier].label.replace("Engine ","")+" · "+String(m).split(" — ")[0]);
   }
   function setEngineTier(tier){
     const d=S.directorChat;
@@ -2049,6 +2050,15 @@ const KosmicEngine=(function(){
     </div>`;
     document.body.appendChild(overlay);
   }
+  function toggleSettings(){
+    const p=document.getElementById("kgSettingsPanel");if(p)p.classList.toggle("open");
+  }
+  function deleteChat(){
+    const go=()=>reset();
+    if(typeof showConfirmDialog==="function"){
+      Promise.resolve(showConfirmDialog("Delete this chat and start over? Anything already generated stays in the project.",{title:"Delete chat",okLabel:"Delete",danger:true})).then(ok=>{if(ok)go()}).catch(()=>{});
+    }else if(window.confirm("Delete this chat and start over?"))go();
+  }
   function runMenuAction(fn){
     closeEngineMenu();
     // switchKosmicEngineProject lives outside this IIFE (it owns the gate),
@@ -2504,6 +2514,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,editProjectRules,projectRules,handleRefUpload,removeRef,renderRefStrip,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode,dispatch:dispatchTasks,setEngineTier,setEngineModel,ensureEngineSelection,renderEngineModePicker};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,editProjectRules,projectRules,handleRefUpload,removeRef,renderRefStrip,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode,dispatch:dispatchTasks,setEngineTier,setEngineModel,ensureEngineSelection,renderEngineModePicker,toggleSettings,deleteChat};
 })();
 

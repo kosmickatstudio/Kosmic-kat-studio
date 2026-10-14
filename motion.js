@@ -222,6 +222,7 @@ function clearMotionBrush(){
   s.dataset.kosmicEngineStrategy="1";
   document.head.appendChild(s);
 })();
+(function(){const x=document.createElement("script");x.src="engine-vision-bridge.js";x.async=false;document.head.appendChild(x)})();
 (function(){const x=document.createElement("script");x.src="engine-recovery.js";x.async=false;x.dataset.kosmicEngineRecovery="1";document.head.appendChild(x)})();
 
 // VIDEO STUDIO — rebuilt from scratch, EvoLink-powered (Seedance + Kling). Single file.
