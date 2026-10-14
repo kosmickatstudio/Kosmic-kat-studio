@@ -184,27 +184,36 @@ const KosmicEngine=(function(){
   const ENGINE_MODES={
     lite:{label:"Engine Lite",models:[
       {id:"gemini-3.8-flash",provider:"gemini",label:"Gemini 3.8 Flash — FREE"},
-      {id:"gemini-3.7-flash",provider:"gemini",label:"Gemini 3.7 Flash — FREE"},
+      {id:"gemini-3.6-flash",provider:"gemini",label:"Gemini 3.6 Flash — FREE"},
+      {id:"gemini-3.5-flash-lite",provider:"gemini",label:"Gemini 3.5 Flash-Lite — FREE / fastest"},
       {id:"gemini-3.1-flash-lite",provider:"gemini",label:"Gemini 3.1 Flash-Lite — FREE"},
       {id:"openai/gpt-oss-120b",provider:"groq",label:"GPT-OSS 120B — FREE"},
       {id:"openai/gpt-oss-20b",provider:"groq",label:"GPT-OSS 20B — FREE / fast"},
-      {id:"qwen/qwen3.8-27b",provider:"groq",label:"Qwen 3.8 27B — FREE tier"}
+      {id:"qwen/qwen3.8-27b",provider:"groq",label:"Qwen 3.8 27B — FREE tier"},
+      {id:"llama-3.3-70b-versatile",provider:"groq",label:"Llama 3.3 70B — FREE"},
+      {id:"gemini-3.7-flash",provider:"gemini",label:"Gemini 3.7 Flash — FREE (older)"}
     ]},
     advance:{label:"Engine Advance",models:[
-      {id:"gpt-5.6-terra",provider:"openai",label:"GPT-5.6 Terra — balanced"},
-      {id:"gpt-5.6-luna",provider:"openai",label:"GPT-5.6 Luna — Lite"},
-      {id:"claude-sonnet-5",provider:"claude",label:"Claude Sonnet 5"},
-      {id:"claude-haiku-4-5-20251001",provider:"claude",label:"Claude Haiku 4.5 — fast"},
+      {id:"claude-sonnet-5-5",provider:"claude",label:"Claude Sonnet 5.5 — balanced"},
+      {id:"claude-haiku-5-5",provider:"claude",label:"Claude Haiku 5.5 — fast"},
+      {id:"gemini-3.1-pro-preview",provider:"gemini",label:"Gemini 3.1 Pro — best quality (preview)"},
+      {id:"gpt-6-luna",provider:"openai",label:"GPT-6 Luna — fast"},
+      {id:"deepseek-v4-pro",provider:"deepseek",label:"DeepSeek V4 Pro — reasoning"},
+      {id:"deepseek-flash",provider:"deepseek",label:"DeepSeek V4.1 Flash — cheap"},
       {id:"kimi-k3",provider:"kimi",label:"Kimi K3 — latest"},
-      {id:"grok-4.20-0309-reasoning",provider:"grok",label:"Grok 4.20 Reasoning — latest"},
-      {id:"grok-4.20-multi-agent-0309",provider:"grok",label:"Grok 4.20 Multi-Agent"},
-      {id:"grok-4.6",provider:"grok",label:"Grok 4.6"}
+      {id:"grok-4.7",provider:"grok",label:"Grok 4.7 — latest"},
+      {id:"claude-sonnet-5",provider:"claude",label:"Claude Sonnet 5 — older"},
+      {id:"gpt-5.6-terra",provider:"openai",label:"GPT-5.6 Terra — older"},
+      {id:"gpt-5.6-luna",provider:"openai",label:"GPT-5.6 Luna — older"},
+      {id:"grok-4.6",provider:"grok",label:"Grok 4.6 — older"}
     ]},
     ultra:{label:"Engine Ultra",models:[
-      {id:"gpt-6-astra",provider:"openai",label:"GPT-6 Astra"},
-      {id:"claude-fable-5-1",provider:"claude",label:"Claude Fable 5.1"},
-      {id:"claude-fable-5",provider:"claude",label:"Claude Fable 5"},
-      {id:"gpt-5.6-sol",provider:"openai",label:"GPT-5.6 Sol"}
+      {id:"claude-fable-5-1",provider:"claude",label:"Claude Fable 5.1 — frontier"},
+      {id:"gpt-6.1-sol",provider:"openai",label:"GPT-6.1 Sol — newest"},
+      {id:"claude-opus-5-5",provider:"claude",label:"Claude Opus 5.5 — advanced reasoning"},
+      {id:"gpt-6-astra",provider:"openai",label:"GPT-6 Astra — flagship"},
+      {id:"claude-fable-5",provider:"claude",label:"Claude Fable 5 — older"},
+      {id:"gpt-5.6-sol",provider:"openai",label:"GPT-5.6 Sol — older"}
     ]}
   };
   function engineSelection(){
@@ -269,7 +278,7 @@ const KosmicEngine=(function(){
   let _engineAiOverride=null;
   const _engineBaseCallAiSimple=window.callAiSimple;
   async function engineDirectCall(cfg,userPrompt,systemPrompt){
-    const keyName={openai:"api_openai",claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",grok:"api_xai",kimi:"api_evolink"}[cfg.provider];
+    const keyName={openai:"api_openai",claude:"api_anthropic",gemini:"api_gemini",groq:"api_groq",grok:"api_xai",deepseek:"api_deepseek",kimi:"api_evolink"}[cfg.provider];
     const key=keyName?String(gs(keyName,"")).trim():"";
     if(!key)throw new Error(`${cfg.label} is selected for Kosmic Engine, but its API key is missing. Add the ${cfg.label} key in Settings, then retry.`);
     const messages=[];
@@ -279,7 +288,7 @@ const KosmicEngine=(function(){
     if(cfg.provider==="claude"){
       const body={model:cfg.model,max_tokens:12000,messages:[{role:"user",content:userPrompt}]};
       if(systemPrompt)body.system=systemPrompt;
-      if(cfg.model!=="claude-haiku-4-5-20251001"&&cfg.model!=="claude-haiku-4-5")body.output_config={effort:"high"};
+      if(!/haiku/.test(cfg.model))body.output_config={effort:"high"};
       const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true","Content-Type":"application/json"},body:JSON.stringify(body)});
       const data=await res.json();
       if(!res.ok)throw new Error(data?.error?.message||`Anthropic error ${res.status}`);
@@ -293,9 +302,9 @@ const KosmicEngine=(function(){
       if(!res.ok)throw new Error(data?.error?.message||`Gemini error ${res.status}`);
       return (data.candidates||[]).flatMap(c=>c.content?.parts||[]).map(p=>p.text||"").join("")||"(No response)";
     }
-    const endpoints={openai:"https://api.openai.com/v1/chat/completions",groq:"https://api.groq.com/openai/v1/chat/completions",grok:"https://api.x.ai/v1/chat/completions",kimi:"https://direct.evolink.ai/v1/chat/completions"};
+    const endpoints={openai:"https://api.openai.com/v1/chat/completions",groq:"https://api.groq.com/openai/v1/chat/completions",grok:"https://api.x.ai/v1/chat/completions",deepseek:"https://api.deepseek.com/v1/chat/completions",kimi:"https://direct.evolink.ai/v1/chat/completions"};
     const body={model:cfg.model,messages,max_tokens:12000};
-    if(cfg.provider==="openai")body.reasoning_effort=cfg.model==="gpt-6-astra"?"high":"high";
+    if(cfg.provider==="openai")body.reasoning_effort="high";
     if(cfg.provider==="groq")body.reasoning_effort=cfg.model.includes("qwen")?"high":"medium";
     if(cfg.provider==="grok")body.reasoning_effort="high";
     if(cfg.provider==="kimi")body.reasoning_effort="high";
@@ -1009,7 +1018,7 @@ const KosmicEngine=(function(){
 
   function engineBrainPreflight(){
     const sel=engineSelection();
-    const c={claude:["api_anthropic","Claude"],gemini:["api_gemini","Gemini"],openai:["api_openai","OpenAI"],groq:["api_groq","Groq"],grok:["api_xai","Grok"],kimi:["api_evolink","Kimi"]},i=c[sel.provider];
+    const c={claude:["api_anthropic","Claude"],gemini:["api_gemini","Gemini"],openai:["api_openai","OpenAI"],groq:["api_groq","Groq"],grok:["api_xai","Grok"],deepseek:["api_deepseek","DeepSeek"],kimi:["api_evolink","Kimi"]},i=c[sel.provider];
     if(!i)return{ok:false,error:`Unsupported Engine model "${sel.model}". Re-select an available Engine model.`};
     if(!String(gs(i[0],"")).trim())return{ok:false,error:`${sel.label} is selected for Kosmic Engine, but its API key is missing. Add the ${i[1]} API key in Settings, then tap Retry.`};
     return{ok:true};
