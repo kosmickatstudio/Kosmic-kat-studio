@@ -1272,7 +1272,71 @@
     say("🎬 Image added as the first frame","success");
   };
 
-  window.KosmicVideo={MODELS,state:K,buildBody,validate,extractUrl,render,allJobs,messages,activeSession};
+
+  /* ───────────── Kosmic Engine bridge ─────────────
+   * Headless generation for productions: picks text / image / reference route from what the
+   * shot supplies, clamps duration / quality / ratio to the route, submits and polls. */
+  const ENGINE_VIDEO=[
+    {id:"seedance-2.5",label:"Seedance 2.5",note:"newest, native audio, up to 30s — best all-round default"},
+    {id:"seedance-2.0-fast",label:"Seedance 2.0 Fast",note:"cheaper and quicker, up to 720p"},
+    {id:"kling-v3",label:"Kling 3.0",note:"strong motion and image-to-video, up to 4K, first+last frame"},
+    {id:"kling-o3",label:"Kling O3",note:"character reference shots (up to 4 reference images)"}
+  ];
+  async function engineGenerate(modelId,o){
+    const m=MODELS.find(x=>x.id===modelId);
+    if(!m)throw new Error("Unknown EvoLink video model: "+modelId);
+    const refs=Array.isArray(o.ref)?o.ref.filter(r=>r&&r.url):[];
+    const single=typeof o.ref==="string"?o.ref:(refs[0]&&refs[0].url)||"";
+    let mode="text";
+    if(refs.length&&m.routes.reference)mode="reference";
+    else if(single&&m.routes.image)mode="image";
+    const r=m.routes[mode];
+    if(!r)throw new Error(m.name+" has no usable route for this shot");
+    let prompt=String(o.prompt||"");
+    const body={model:r.model};
+    body.duration=r.fixedDur?-1:clamp(Math.round(o.duration)||r.dur[0],r.dur[0],r.dur[1]);
+    const order=["480p","720p","1080p","4k"];
+    const want=order.indexOf(o.quality);
+    body.quality=r.q.includes(o.quality)?o.quality
+      :(r.q.filter(q=>order.indexOf(q)<=want).sort((a,b)=>order.indexOf(b)-order.indexOf(a))[0]||r.dq);
+    if(r.ar)body.aspect_ratio=r.ar.includes(o.ratio)?o.ratio:r.dar;
+    if(r.audio==="seed")body.generate_audio=true;
+    if(r.audio==="kling")body.sound="on";
+    if(r.neg&&o.negative)body.negative_prompt=String(o.negative);
+    const inp=k=>(r.inputs||[]).find(i=>i.key===k);
+    if(mode==="reference"){
+      const max=(inp("image_urls")||{max:4}).max;
+      const use=refs.slice(0,max);
+      body.image_urls=use.map(x=>x.url);
+      const kling=modelId.indexOf("kling")===0;
+      const tags=use.map((x,i)=>`${kling?`<<<image_${i+1}>>>`:`@image${i+1}`} is ${x.name||"a character"} — keep their appearance exactly consistent.`).join(" ");
+      prompt=tags+" "+prompt;
+    }else if(mode==="image"){
+      if(inp("image_start")){body.image_start=single;if(o.endImage&&inp("image_end"))body.image_end=o.endImage}
+      else{body.image_urls=o.endImage?[single,o.endImage]:[single]}
+    }
+    body.prompt=prompt.slice(0,r.pmax||2500);
+    const res=await api("/v1/videos/generations",{method:"POST",body:JSON.stringify(body)});
+    const taskId=res&&(res.id||res.task_id||(res.data&&res.data.id));
+    if(!taskId)throw new Error("EvoLink did not return a task ID");
+    const started=Date.now();let fails=0;
+    while(Date.now()-started<25*60000){
+      await sleep(Date.now()-started>90000?6000:4000);
+      let d;
+      try{d=await api("/v1/tasks/"+encodeURIComponent(taskId));fails=0}
+      catch(e){if(e.status===401||e.status===402||++fails>5)throw e;continue}
+      const st=String(d.status||"").toLowerCase();
+      if(st==="completed"){
+        const url=extractUrl(d);
+        if(!url)throw new Error("EvoLink finished but returned no video URL");
+        return url;
+      }
+      if(st==="failed")throw new Error((d.error&&d.error.message)||"EvoLink generation failed");
+    }
+    throw new Error("EvoLink generation timed out");
+  }
+
+  window.KosmicVideo={ENGINE_VIDEO,engineGenerate,MODELS,state:K,buildBody,validate,extractUrl,render,allJobs,messages,activeSession};
 
   loadForm();loadChats();
   try{

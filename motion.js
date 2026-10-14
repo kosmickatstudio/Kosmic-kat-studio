@@ -229,7 +229,7 @@ function clearMotionBrush(){
 (function loadKosmicVideoStudio(){
   if(document.querySelector('script[data-kosmic-video-studio="1"]'))return;
   const s=document.createElement("script");
-  s.src="kosmic-video.js?v=20261013-1";
+  s.src="kosmic-video.js?v=20261014-1";
   s.async=false;
   s.dataset.kosmicVideoStudio="1";
   document.head.appendChild(s);

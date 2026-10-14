@@ -603,10 +603,19 @@ const KosmicEngine=(function(){
       // is meaningfully cheaper. Neither needs LoRA training to stay
       // consistent, unlike FLUX.
       const VALID_IMAGE=["fal-ai/nano-banana-pro","fal-ai/bytedance/seedream/v5/pro/text-to-image"];
-      const VALID_VIDEO=["bytedance/seedance-2.0/fast/reference-to-video","bytedance/seedance-2.0/reference-to-video"];
+      // Video options depend on which keys the user has: Seedance / Kling run through
+      // EvoLink; the Seedance 2.0 reference models still run through fal.ai.
+      const VIDEO_OPTIONS=[
+        ...(gs("api_evolink","")?((window.KosmicVideo&&KosmicVideo.ENGINE_VIDEO)||[]).map(m=>({id:"evolink:"+m.id,label:m.label,note:m.note+" (EvoLink)"})):[]),
+        ...(gs("api_falai","")?[
+          {id:"bytedance/seedance-2.0/fast/reference-to-video",label:"Seedance 2.0 Fast",note:"cheaper, quicker turnaround (fal.ai)"},
+          {id:"bytedance/seedance-2.0/reference-to-video",label:"Seedance 2.0 Standard",note:"higher quality, more expensive (fal.ai)"}]:[])
+      ];
+      if(!VIDEO_OPTIONS.length)throw new Error("No video provider key found — add an EvoLink key (Seedance / Kling) or a fal.ai key in Settings, then retry.");
+      const VALID_VIDEO=VIDEO_OPTIONS.map(o=>o.id);
       try{
         const reply=await callAiSimple(
-          `Story: "${p.concept}"\nCharacter: ${p.characterDesc.slice(0,300)}\n\nPick the best-fit models for this production from these REAL options — base this on the story's actual needs, not a default guess:\n\nIMAGE MODELS:\n- fal-ai/nano-banana-pro: best for multi-character scenes and consistency (holds identity across up to 5 people/scenes with no fine-tuning), native 4K — good default for character-driven stories\n- fal-ai/bytedance/seedream/v5/pro/text-to-image: better for complex/branded/text-heavy prompts (deep multi-step prompt reasoning, native multilingual text rendering), meaningfully cheaper — better when the brief has lots of specific detail to track\n\nVIDEO MODELS:\n- bytedance/seedance-2.0/fast/reference-to-video: cheaper, quicker turnaround — good default\n- bytedance/seedance-2.0/reference-to-video: standard tier, higher quality output, more expensive — better for hero/high-stakes shots\n\nReply in EXACTLY this format, nothing else:\nIMAGE: <model id>\nVIDEO: <model id>\nREASON: <one short sentence>`,
+          `Story: "${p.concept}"\nCharacter: ${p.characterDesc.slice(0,300)}\n\nPick the best-fit models for this production from these REAL options — base this on the story's actual needs, not a default guess:\n\nIMAGE MODELS:\n- fal-ai/nano-banana-pro: best for multi-character scenes and consistency (holds identity across up to 5 people/scenes with no fine-tuning), native 4K — good default for character-driven stories\n- fal-ai/bytedance/seedream/v5/pro/text-to-image: better for complex/branded/text-heavy prompts (deep multi-step prompt reasoning, native multilingual text rendering), meaningfully cheaper — better when the brief has lots of specific detail to track\n\nVIDEO MODELS:\n${VIDEO_OPTIONS.map(o=>`- ${o.id}: ${o.note}`).join("\n")}\n\nReply in EXACTLY this format, nothing else:\nIMAGE: <model id>\nVIDEO: <model id>\nREASON: <one short sentence>`,
           "You are a technical producer choosing generation models based on real production needs and cost tradeoffs. Only ever pick from the exact model ids given — never invent a different one.",
           p.brainModel
         );
@@ -623,7 +632,7 @@ const KosmicEngine=(function(){
         const clamped=clampQualityToModel(p);
         if(clamped)push("agent",`Note: ${clamped.was} isn't available on the chosen video model — using ${clamped.now}.`);
         save2Productions();
-        return{summary:`🧠 Models chosen — Image: ${p.imageModel.includes('nano-banana')?'Nano Banana Pro':'Seedream 5.0 Pro'}, Video: ${p.videoModel.includes('/fast/')?'Seedance 2.0 Fast':'Seedance 2.0 Standard'}.${reasonMatch?' '+reasonMatch[1].trim():''}`};
+        return{summary:`🧠 Models chosen — Image: ${p.imageModel.includes('nano-banana')?'Nano Banana Pro':'Seedream 5.0 Pro'}, Video: ${(VIDEO_OPTIONS.find(o=>o.id===p.videoModel)||{}).label||p.videoModel}.${reasonMatch?' '+reasonMatch[1].trim():''}`};
       }catch(err){
         // Model selection is a required production checkpoint. Never silently
         // substitute a paid generation strategy after the selected brain fails.

@@ -1709,6 +1709,10 @@ const COST_TABLE={
   // only (no 1080p/4K, unlike 2.0). Rate below is from a third-party
   // platform quoting EvoLink's own credits, not independently confirmed
   // as EvoLink's exact number — flagged, not asserted as certain. 5s @ 480p.
+  "evolink:seedance-2.5":{options:Array.from({length:27},(_,i)=>i+4),format:n=>String(n)},
+  "evolink:seedance-2.0-fast":{options:[4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
+  "evolink:kling-v3":{options:[3,4,5,6,7,8,9,10,11,12,13,14,15],format:n=>String(n)},
+  "evolink:kling-o3":{options:[3,4,5,6,7,8,9,10],format:n=>String(n)},
   "evolink/seedance-2.5/text-to-video":1.15,
   // MiniMax H3 on EvoLink: confirmed $0.13/s at 2K, 768p billed at 8/13 of
   // that rate (~$0.08/s) — both numbers directly confirmed via EvoLink's
@@ -9367,6 +9371,11 @@ function findCharacterVoice(name){
 }
 
 async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImageUrl,negativePrompt,endImageUrl){
+  // EvoLink-routed models (Seedance / Kling) are stored as "evolink:<model-id>".
+  if(typeof model==="string"&&model.indexOf("evolink:")===0){
+    if(!window.KosmicVideo||!KosmicVideo.engineGenerate)throw new Error("Video Studio hasn't finished loading — try again in a moment");
+    return KosmicVideo.engineGenerate(model.slice(8),{prompt,ratio,duration,quality,ref:refImageUrl,negative:negativePrompt,endImage:endImageUrl});
+  }
   const apiKey=gs("api_falai","");
   if(!apiKey)throw new Error("Add a fal.ai API key in Settings first");
   let endpoint=model;
@@ -9518,25 +9527,26 @@ async function generateEpisodeScene(prodId,epIndex,retryOnly=false){
     }
     // The Multi-Reference and Start→End Frame models always need a reference —
     // when chaining didn't supply one, use this shot's own storyboard frame.
-    if(!refImage&&(p.videoModel.includes("/reference-to-video")||p.videoModel.includes("/image-to-video")))refImage=sb.url;
+    const evoVid=String(p.videoModel||"").indexOf("evolink:")===0;
+    if(!refImage&&(evoVid||p.videoModel.includes("/reference-to-video")||p.videoModel.includes("/image-to-video")))refImage=sb.url;
     // Real multi-character reference: if this specific shot's own description
     // names 2+ characters who each have an approved sheet, and the video
     // model actually supports multiple reference images, give each character
     // their own labeled visual anchor instead of relying on a single chained
     // frame + combined text description to hold both identities apart.
     let videoRef=refImage;
-    if(p.videoModel.includes("/reference-to-video")){
+    if(p.videoModel.includes("/reference-to-video")||(evoVid&&/seedance|kling-o3/.test(p.videoModel))){
       // Was flat-capped at 4 for both models "to be safe" — but that was
       // needlessly conservative for Seedance, which genuinely supports up
       // to 9 reference images. Only Kling O3's reference-to-video is
       // actually capped at 4 characters.
-      const realMaxRefs=p.videoModel.includes("bytedance/seedance")?9:4;
+      const realMaxRefs=(p.videoModel.includes("seedance"))?9:4;
       const shotChars=detectShotCharacters(sb.desc,p.characterSheets).slice(0,realMaxRefs);
       if(shotChars.length>=2)videoRef=shotChars.map(c=>({url:c.sheetUrl,name:c.name}));
     }
     // Start→End Frame mode: end each shot on the NEXT shot's storyboard frame
     // so consecutive clips flow into each other; the last shot has no end frame.
-    const endImage=p.videoModel.includes("/image-to-video")&&e.storyboard[i+1]?e.storyboard[i+1].url:null;
+    const endImage=(evoVid||p.videoModel.includes("/image-to-video"))&&e.storyboard[i+1]?e.storyboard[i+1].url:null;
     try{
       const videoUrl=await runProductionVideoGen(p.videoModel,`${sb.desc}, ${p.characterDesc}`,p.aspectRatio,e.duration,p.quality,videoRef,e.negativePrompt,endImage);
       e.shots.push({shotIndex:i,videoUrl,refImage,model:p.videoModel||null});
