@@ -7,7 +7,7 @@
   function installVisionBridge(){
     const original=window.callAiVision;if(typeof original!=="function"||original.__kosmicEngineVisionRouter)return true;
     const routed=async function(refs,prompt,system){
-      const d=window.S&&S.directorChat?S.directorChat:null,draft=d&&d.draft?d.draft:null,provider=draft&&draft.brainModel,model=draft&&d.engineModel;
+      const d=typeof S!=="undefined"&&S.directorChat?S.directorChat:null,draft=d&&d.draft?d.draft:null,provider=draft&&draft.brainModel,model=draft&&d.engineModel;
       if(!d||!d.productionId||!model||!(provider==="grok"||provider==="kimi"))return original.apply(this,arguments);
       const keyName=provider==="grok"?"api_xai":"api_evolink",key=typeof window.gs==="function"?String(gs(keyName,"")).trim():"";
       if(!key)throw new Error(`${provider==="grok"?"Grok":"Kimi"} API key is missing for the selected Kosmic Engine model.`);

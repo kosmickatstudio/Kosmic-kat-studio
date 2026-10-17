@@ -72,6 +72,7 @@ function renderKosmicEngineModule(el){
       <div id="dcTaskPanel"></div>
       <div class="ig-chat-thread kc-thread" id="dcThread"></div>
       <div id="dcNotebook" style="display:none"></div>
+      <div id="dcFinal" style="display:none;flex:1 1 auto;min-height:0;overflow-y:auto"></div>
       <div id="dcInputBar">
         <div id="kgSettingsPanel" class="dc-set kc-glass" aria-label="Engine settings">
           <div class="dc-set-l">Engine</div>
@@ -1806,23 +1807,26 @@ const KosmicEngine=(function(){
   // correct even after a session restore, a New Chat, or a resumed
   // production where the narration no longer exists.
   function setEngineTab(tab){
-    _engineTab=tab==="notebook"?"notebook":"chat";
+    _engineTab=tab==="notebook"||tab==="final"?tab:"chat";
     const chat=document.getElementById("dcThread");
     const nb=document.getElementById("dcNotebook");
+    const fin=document.getElementById("dcFinal");
     const bar=document.getElementById("dcInputBar");
     const tabs=document.getElementById("dcTabs");
     if(chat)chat.style.display=_engineTab==="chat"?"":"none";
     if(nb)nb.style.display=_engineTab==="notebook"?"":"none";
-    // The input bar is meaningless on the Notebook — there is nothing to
-    // reply to there — and on a phone it costs real vertical space.
+    if(fin)fin.style.display=_engineTab==="final"?"":"none";
+    // The input bar is meaningless on the Notebook and Final cut — there is
+    // nothing to reply to there — and on a phone it costs real vertical space.
     if(bar)bar.style.display=_engineTab==="chat"?"":"none";
     if(tabs)tabs.innerHTML=engineTabsHTML();
     if(_engineTab==="notebook")renderNotebook();
+    else if(_engineTab==="final"){if(window.KosmicAssembly&&fin)KosmicAssembly.render(fin);}
     else renderThread();
   }
   function engineTabsHTML(){
     const mk=(id,label)=>`<button onclick="KosmicEngine.setEngineTab('${id}')" style="flex:1;padding:8px 4px;border:none;background:none;cursor:pointer;font-size:11.5px;font-weight:${_engineTab===id?'800':'600'};color:${_engineTab===id?'var(--violet)':'var(--textm)'};border-bottom:2px solid ${_engineTab===id?'var(--violet)':'transparent'}">${label}</button>`;
-    return mk("chat","Chat")+mk("notebook","Notebook");
+    return mk("chat","Chat")+mk("notebook","Notebook")+mk("final","Final cut");
   }
   function nbSection(n,title,sub,body){
     return `<div style="margin-bottom:22px">
@@ -2523,6 +2527,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,editProjectRules,projectRules,handleRefUpload,removeRef,renderRefStrip,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode,dispatch:dispatchTasks,setEngineTier,setEngineModel,ensureEngineSelection,renderEngineModePicker,toggleSettings,deleteChat};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,editProjectRules,projectRules,handleRefUpload,removeRef,renderRefStrip,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode,dispatch:dispatchTasks,setEngineTier,setEngineModel,ensureEngineSelection,renderEngineModePicker,toggleSettings,deleteChat,withBrain:withEngineAiOverride};
 })();
 

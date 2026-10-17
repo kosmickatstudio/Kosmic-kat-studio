@@ -15,7 +15,7 @@
     style();
     let box=document.getElementById("kgProductionStrategy");
     if(!box){box=document.createElement("div");box.id="kgProductionStrategy";box.className="kg-production-strategy";panel.appendChild(box)}
-    const d=window.S&&S.directorChat?S.directorChat:null;
+    const d=typeof S!=="undefined"&&S.directorChat?S.directorChat:null;
     if(!d||!d.productionId){setBox(box,'<div class="kg-production-strategy-head"><span>Production strategy</span><span>PRE-START</span></div><div class="kg-production-strategy-note">Your selected Engine brain locks at production start. Generation models will be chosen from the production strategy checkpoint.</div>');return}
     const p=(S.productions||[]).find(x=>x.id===d.productionId),draft=d.draft||{};
     const engine=draft.engineModel||d.engineTier||"selected",brain=draft.brainSubModel||draft.engineModel||"selected",provider=draft.brainModel||"provider";
