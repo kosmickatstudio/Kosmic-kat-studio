@@ -15,7 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -446,6 +447,12 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 .page-loader.hidden{display:none}
 .loader-logo{width:64px;height:64px;border-radius:50%;background:#fff;border:2px solid var(--lav2);display:flex;align-items:center;justify-content:center;box-shadow:var(--sh);animation:float 2s ease-in-out infinite}
 .loader-logo img{width:58px;height:58px;object-fit:contain;border-radius:50%}
+.loader-orb{position:relative;width:88px;height:88px;display:grid;place-items:center;animation:float 2s ease-in-out infinite}
+.loader-orb::before{content:"";position:absolute;inset:6px;border-radius:50%;background:#fff;box-shadow:var(--sh)}
+.loader-ring{position:absolute;inset:0;border-radius:50%;background:conic-gradient(#ff5f6d,#ffc371,#7cf29a,#4dd0ff,#9b7fd4,#ff5f6d);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 4px));mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 4px));animation:kkRingSpin 1.1s linear infinite;filter:drop-shadow(0 0 7px rgba(155,127,212,.55))}
+.loader-cat{position:relative;width:48px;height:48px}
+@keyframes kkRingSpin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.loader-ring{animation-duration:3s}}
 .loader-text{font-family:'Cinzel',serif;font-size:13px;color:var(--violet);letter-spacing:0.08em}
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -610,7 +617,19 @@ input[type="range"]::-moz-range-track{height:4px;border-radius:4px;background:va
 
 <!-- Page Loader -->
 <div class="page-loader" id="pageLoader">
-  <div class="loader-logo"><img id="loader-logo-img" src="" alt="KK"></div>
+  <div class="loader-orb" aria-hidden="true">
+    <span class="loader-ring"></span>
+    <svg class="loader-cat" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="lcG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6240B0"/><stop offset="1" stop-color="#3D1F7A"/></linearGradient></defs>
+      <path d="M11 27 L15 8 L28 18 Q32 17.4 36 18 L49 8 L53 27 Q57 37 51 46 Q45 57 32 57 Q19 57 13 46 Q7 37 11 27Z" fill="url(#lcG)"/>
+      <path d="M17 14 L24 19.5 L17.5 24Z M47 14 L40 19.5 L46.5 24Z" fill="#D4789A" opacity=".75"/>
+      <ellipse cx="23" cy="33" rx="4.6" ry="5.4" fill="#E8C060"/><ellipse cx="41" cy="33" rx="4.6" ry="5.4" fill="#E8C060"/>
+      <ellipse cx="23" cy="33" rx="1.5" ry="4.2" fill="#1b0f3a"/><ellipse cx="41" cy="33" rx="1.5" ry="4.2" fill="#1b0f3a"/>
+      <path d="M29.5 41 L34.5 41 L32 44Z" fill="#D4789A"/>
+      <path d="M32 44 Q32 47.5 28.5 48 M32 44 Q32 47.5 35.5 48" stroke="#fff" stroke-width="1.2" fill="none" stroke-linecap="round" opacity=".85"/>
+      <path d="M20 43 L8 41 M20 46 L9 48 M44 43 L56 41 M44 46 L55 48" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".7"/>
+    </svg>
+  </div>
   <div class="loader-text">Loading Studio…</div>
 </div>
 
@@ -10262,8 +10281,18 @@ function updateUserUI(){
   if(S.user&&S.user.email!=="guest"){
     const displayName=preferredName||S.user.name||S.user.email.split("@")[0];
     btn.classList.add("sign-in-btn-avatar");
+    btn.style.setProperty("padding","0","important");
     if(S.user.photo){
-      btn.innerHTML=`<img src="${S.user.photo}" alt="${displayName}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+      // Google profile photos refuse to load when a Referer header is sent, so
+      // no-referrer is required; if it still fails, fall back to the initial.
+      const initial=(displayName.charAt(0)||"?").toUpperCase();
+      btn.innerHTML=`<img src="${S.user.photo}" alt="" referrerpolicy="no-referrer" style="display:block;width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+      const im=btn.querySelector("img");
+      im.onerror=()=>{
+        btn.innerHTML=`<span style="width:100%;height:100%;border-radius:50%;background:var(--vm);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">${initial}</span>`;
+      };
+      btn.style.setProperty("padding","0","important");btn.style.setProperty("overflow","hidden","important");
+      btn.style.setProperty("background","transparent","important");btn.style.boxShadow="none";
     } else {
       btn.innerHTML=`<span style="width:100%;height:100%;border-radius:50%;background:var(--vm);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">${displayName.charAt(0).toUpperCase()}</span>`;
     }
@@ -10275,7 +10304,7 @@ function updateUserUI(){
     if(signedOutEl)signedOutEl.style.display="none";
     if(signedInEl)signedInEl.style.display="block";
     const photoEl=document.getElementById("spProfilePhoto");
-    if(photoEl)photoEl.src=S.user.photo||"";
+    if(photoEl){photoEl.referrerPolicy="no-referrer";photoEl.src=S.user.photo||"";}
     const emailEl=document.getElementById("spProfileEmail");
     if(emailEl)emailEl.textContent=maskEmail(S.user.email);
     const founderEl=document.getElementById("spProfileFounderBadge");
@@ -10284,6 +10313,7 @@ function updateUserUI(){
     if(nameInput&&document.activeElement!==nameInput)nameInput.value=preferredName||S.user.name||"";
   } else {
     btn.classList.remove("sign-in-btn-avatar");
+    ["background","box-shadow","padding","overflow"].forEach(k=>btn.style.removeProperty(k));
     btn.textContent="Sign In";
     btn.title="";
     if(badge)badge.style.display="none";
@@ -12307,6 +12337,15 @@ if("serviceWorker" in navigator){
   // Auto-heal stale installs: when a new service worker takes control
   // (i.e. we just deployed an update), do a one-time reload so the page
   // actually runs the new code instead of a frozen old snapshot.
+  // The service worker now serves cached files instantly and refreshes them in the
+  // background; when it finds newer files it tells us so we can offer a reload.
+  navigator.serviceWorker.addEventListener("message",e=>{
+    if(!e.data||e.data.type!=="kk-update"||document.getElementById("kkUpdateBar"))return;
+    const bar=document.createElement("div");bar.id="kkUpdateBar";
+    bar.style.cssText="position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:99999;display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:16px;background:rgba(61,31,122,.96);color:#fff;font-size:12.5px;font-weight:600;box-shadow:0 12px 34px rgba(30,10,70,.35)";
+    bar.innerHTML='<span style="flex:1">✨ A new version is ready</span><button style="border:0;border-radius:11px;padding:8px 14px;background:#fff;color:#3D1F7A;font-weight:800;font-size:12px;cursor:pointer" onclick="location.reload()">Reload</button><button aria-label="Dismiss" style="border:0;background:transparent;color:#fff;font-size:16px;cursor:pointer" onclick="this.parentNode.remove()">✕</button>';
+    document.body.appendChild(bar);
+  });
   let swRefreshed=false;
   navigator.serviceWorker.addEventListener("controllerchange",()=>{
     if(swRefreshed)return;

@@ -1,10 +1,10 @@
-// Network-first service worker. Cache version is bumped whenever deploy-relevant
-// runtime layers change so an offline client does not retain a stale catalog.
-// Requests use cache:"no-cache" (always revalidate with the server via ETag, so a deploy is
-// never served stale, but unchanged files come back as tiny 304s instead of full re-downloads).
-// If the network is slow (>3s) the cached copy is served so the app still opens quickly, while
-// the fresh copy keeps downloading in the background for the next load.
-const CACHE_NAME = "kosmic-kat-studio-v49";
+// Stale-while-revalidate service worker.
+// Cached files are served instantly (no waiting on a slow network); each request also
+// refreshes its cache entry in the background, and when a file has really changed the page
+// is told ("kk-update") so it can offer a one-tap reload. Firebase / Google Fonts files
+// (versioned, immutable) are cached after first use so later visits skip those downloads.
+// The cache version is bumped whenever deploy-relevant layers change.
+const CACHE_NAME = "kosmic-kat-studio-v50";
 const ASSETS = [
   "/index.html","/audio.js","/adstudio.js","/editor.js","/team.js","/costs.js","/upscaler.js","/display.js",
   "/flow.js","/nodecanvas.js","/motion.js","/assets.js","/gallery.js","/characters.js","/directors.js","/home.js",
@@ -15,21 +15,36 @@ const ASSETS = [
 ];
 self.addEventListener("install",event=>{event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(ASSETS)).catch(()=>{}));self.skipWaiting()});
 self.addEventListener("activate",event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim()});
+const CROSS=/^https:\/\/(www\.gstatic\.com\/firebasejs\/|fonts\.googleapis\.com\/|fonts\.gstatic\.com\/)/;
+let notified=false;
+async function tellClients(){
+  if(notified)return;notified=true;
+  const cs=await self.clients.matchAll({type:"window"});
+  cs.forEach(c=>c.postMessage({type:"kk-update"}));
+}
+function changed(a,b){
+  const ea=a.headers.get("etag"),eb=b.headers.get("etag");
+  if(ea&&eb)return ea!==eb;
+  const la=a.headers.get("last-modified"),lb=b.headers.get("last-modified");
+  if(la&&lb)return la!==lb;
+  return a.headers.get("content-length")!==b.headers.get("content-length");
+}
 self.addEventListener("fetch",event=>{
   if(event.request.method!=="GET")return;
   const url=new URL(event.request.url);
-  if(url.origin!==self.location.origin)return;
+  const same=url.origin===self.location.origin;
+  if(!same&&!CROSS.test(event.request.url))return;
   event.respondWith((async()=>{
     const cache=await caches.open(CACHE_NAME);
-    const network=fetch(event.request,{cache:"no-cache"}).then(res=>{
-      if(res&&res.ok)cache.put(event.request,res.clone()).catch(()=>{});
+    const cached=await cache.match(event.request);
+    const refresh=fetch(event.request,same?{cache:"no-cache"}:undefined).then(res=>{
+      if(res&&(res.ok||res.type==="opaque")){
+        if(same&&cached&&res.ok&&changed(cached,res))tellClients();
+        cache.put(event.request,res.clone()).catch(()=>{});
+      }
       return res;
     });
-    const cached=await cache.match(event.request);
-    if(!cached)return network;
-    return Promise.race([
-      network.catch(()=>cached),
-      new Promise(resolve=>setTimeout(()=>resolve(cached),3000))
-    ]);
+    if(cached){event.waitUntil(refresh.catch(()=>{}));return cached}
+    return refresh;
   })());
 });
