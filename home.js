@@ -257,6 +257,11 @@ function renderHome(el){
               {id:"fal-ai/nano-banana-2",label:"Nano Banana 2 (fal)",ready:hasFal},
               {id:"fal-ai/nano-banana-pro",label:"Nano Banana Pro (fal)",ready:hasFal},
               {id:"openai/gpt-image-2",label:"GPT Image 2 (fal)",ready:hasFal},
+              {id:"blackforestlabs/flux-3/text-to-image",label:"FLUX 3 Image",ready:hasFal},
+              {id:"blackforestlabs/flux-3/klein/text-to-image",label:"FLUX 3 Klein",ready:hasFal},
+              {id:"fal-ai/flux-2/klein/9b",label:"FLUX.2 Klein 9B",ready:hasFal},
+              {id:"google/nano-banana-2.1",label:"Nano Banana 2.1 (fal)",ready:hasFal},
+              {id:"krea/v3/text-to-image",label:"Krea v3",ready:hasFal},
             ].map(m=>{const active=defaultImageModel===m.id;return `<div onclick="setDefaultModel('image','${m.id}')" style="padding:4px 2px;cursor:pointer;display:flex;align-items:baseline;gap:4px">
                 ${m.ready?'':'<span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;border:1.3px solid var(--textm);opacity:0.6;margin-top:3px"></span>'}
                 <span style="font-size:10.5px;font-weight:${active?'800':'400'};color:${active?'var(--green)':'var(--text)'};line-height:1.35;text-shadow:${active?'0 0 8px rgba(16,185,129,0.35)':'none'}">${m.label}</span>
