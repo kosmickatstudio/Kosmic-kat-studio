@@ -40,12 +40,14 @@
     ["fal-ai/ideogram/v3","Ideogram V3"],["fal-ai/recraft/v3/text-to-image","Recraft V3"],["fal-ai/stable-diffusion-v35-large","Stable Diffusion 3.5"],
     ["fal-ai/flux-2","FLUX.2 Dev"],["fal-ai/flux-2-pro","FLUX.2 Pro"],["fal-ai/flux-2/flash","FLUX.2 Flash"],
     ["gemini-3.1-flash-image","Nano Banana 2"],["gemini-3-pro-image","Nano Banana Pro"],["gpt-image-2","GPT Image 2"],
-    ["fal-ai/nano-banana-2","Nano Banana 2 (fal)"],["fal-ai/nano-banana-pro","Nano Banana Pro (fal)"],["openai/gpt-image-2","GPT Image 2 (fal)"]
+    ["fal-ai/nano-banana-2","Nano Banana 2 (fal)"],["fal-ai/nano-banana-pro","Nano Banana Pro (fal)"],["openai/gpt-image-2","GPT Image 2 (fal)"],
+    ["blackforestlabs/flux-3/text-to-image","FLUX 3 Image"],["blackforestlabs/flux-3/klein/text-to-image","FLUX 3 Klein"],["fal-ai/flux-2/klein/9b","FLUX.2 Klein 9B"],
+    ["google/nano-banana-2.1","Nano Banana 2.1 (fal)"],["krea/v3/text-to-image","Krea v3"]
   ];
 
   function esc(v){return String(v).replace(/[&<>\\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\\":"&#92;","\"":"&quot;"}[c]));}
   function readyFor(id){
-    if(id.indexOf("fal-ai/")===0)return !!(typeof gs==="function"&&gs("api_falai",""));
+    if(id.indexOf("fal-ai/")===0||id.indexOf("blackforestlabs/")===0||id.indexOf("google/")===0||id.indexOf("krea/")===0)return !!(typeof gs==="function"&&gs("api_falai",""));
     if(id.indexOf("gpt-")===0||id.indexOf("openai/")===0)return !!(typeof gs==="function"&&gs("api_openai",""));
     if(id.indexOf("gemini")===0)return !!(typeof gs==="function"&&gs("api_gemini",""));
     return true;
