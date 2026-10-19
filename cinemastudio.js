@@ -1,128 +1,58 @@
 // ══════════════════════════════════════════════════════════════════════
-// KAT FILMS 4K / CAMERA CRAFTS 4K — Higgsfield's Cinema Studio 4K (under
-// Video) and Cinematic Camera (under Image) are the same tool shown
-// under two names AND the same tool internally toggles between an Image
-// mode and a Video mode via a switcher next to the prompt box — that
-// toggle is what actually determines which of the two names applies at
-// any given moment, confirmed directly. One module, S.csMode
-// ("image"|"video") driving both which generation pipeline runs and
-// which name/branding shows.
-// Reached from two sidebar entries that each set the starting mode —
-// "Kat Films 4K" inside Video Studio (video), "Camera Crafts 4K" inside
-// Image Studio (image) — the in-composer toggle can switch either way
-// afterward without leaving the module. Not related to Kosmic Engine.
+// KAT FILMS 4K / CAMERA CRAFTS 4K — the film-making workspace.
 //
-// UI, rebuilt to match Image Gen / Video Canvas's actual chat pattern
-// exactly (not just visually similar) — same CSS classes, same
-// mechanism, per direct instruction to stop hand-rolling a compacted
-// form: .ig-chat-shell/.ig-chat-header/.ig-chat-thread for the
-// conversation, .ig-chat-inputbar/.ig-input-shell/.ig-input-textarea-v2/
-// .ig-input-toolbar/.ig-send-round for the composer, and every control
-// that used to be a cramped inline <select> row (Genre, Camera Movement,
-// Speed Ramp, Duration, Aspect Ratio, and the new Kat Films tier) now
-// lives behind the ⚙ Settings bottom sheet (.ig-settings-sheet,
-// toggleCsSettings, same swipeable/backdrop mechanism as
-// toggleIgSettings/toggleVcSettings), using the app's existing generic
-// pickers (renderSimpleTrigger/openSimplePicker for flat lists) instead
-// of new one-off styling.
+// One module, two faces: Higgsfield's Cinema Studio 4K (video) and
+// Cinematic Camera (image) are the same tool internally toggling between an
+// Image and a Video mode. Here S.csMode ("image"|"video") decides which
+// pipeline runs and which name shows: "Kat Films 4K" (video) or "Camera
+// Crafts 4K" (image). Two sidebar entries set the starting mode; the
+// in-studio switch flips it without leaving. Not related to Kosmic Engine.
 //
-// KAT FILMS TIERS — new for this pass. A real walkthrough showed
-// Higgsfield's Cinema Studio has 3 selectable model versions (2.5, 3,
-// 3.5) with different feature sets, not one fixed tool. This app mirrors
-// that shape with 4 tiers (KAT_FILMS_TIERS below) rather than copying
-// Higgsfield's own version numbers as branding:
-//   - "Kat Films — Signature 1": deliberately EMPTY per direct
-//     instruction — a reserved slot, not a placeholder pretending to be
-//     a feature. Selecting it shows an honest "nothing here yet" state
-//     and disables Generate.
-//   - "Kat Films 1" ≈ Cinema Studio 2.5, fully built. That version's exact
-//     tagline was confirmed via careful OCR sweep (image-viewing was down
-//     this session — see note below) as "Camera selection, style presets,
-//     and AI director" — all three now genuinely wired in: the 14-option
-//     Camera Movement list, Style Preset (reuses this app's real
-//     STYLE_PRESETS/openVisualPicker, the same system Image Gen uses —
-//     not a second invented style list), and AI Director (reuses this
-//     app's real getActiveDirectorPrompt()/Directorial Studio, not a new
-//     director concept). Genre, Speed Ramp, Duration with Custom round
-//     out the rest of the confirmed 2.5 feature set.
-//   - "Kat Films 1.5" ≈ Cinema Studio 3. A dedicated Cinema Studio 3
-//     walkthrough (separate from the 2.5 one) was OCR-reviewed and
-//     confirmed its actual "enhanced camera and speed ramp control" means
-//     a genuinely different Speed Ramp preset list — Auto, Ramp Up, Flash
-//     In, Flash Out, Bullet Time, Hero Moment (SPEED_RAMPS_ENHANCED) — not
-//     a vague "more control" gesture. That's now really wired in. Camera
-//     Movement itself is the same confirmed 14-option list as 2.5, not
-//     different. "Shot Control" (Smart vs Custom Multishot) — flagged as
-//     an unconfirmed gap earlier — was later confirmed directly from a
-//     real screenshot and is now built (see Shot Control section below).
-//   - "Kat Films 2" ≈ Cinema Studio 3.5. A dedicated 3.5 walkthrough
-//     (120s, OCR-reviewed same as the others — image viewing was still
-//     down this session too) confirmed a genuinely new layer beyond 2.5/
-//     3.0: a "Style Settings" panel with three named tabs — Color
-//     Palette, Lighting, Camera Moveset Style — now really wired in
-//     (CS35_COLOR_PALETTES/CS35_LIGHTING/CS35_CAMERA_MOVESET_STYLES).
-//     Also added two genuinely new Genre values seen in this tier's
-//     picker, Noir and Epic (not duplicates of the existing list).
-//     HONEST GAPS, flagged rather than guessed at: only one or two preset
-//     names were legible per Style Settings tab, so those lists are
-//     almost certainly incomplete, and which exact tab "Dreamy" belongs
-//     under is a best-effort read, not a certainty. The same video also
-//     showed a separate "Camera Settings" panel repeatedly later on —
-//     confirmed to exist, but its fields weren't legible enough via OCR
-//     to build. Inherits the enhanced Speed Ramp list from tier 1.5 as a
-//     reasonable inference (later tiers building on earlier ones is the
-//     pattern actually observed across 2.5→3→3.5).
-// Built in parts per direct instruction — this pass completed Kat Films
-// 1.5's real Speed Ramp differentiator and Kat Films 2's Style Settings
-// panel. Shot Control (Smart/Custom Multishot, see below) was confirmed
-// and built in a later pass. The "Camera Settings" panel and fuller
-// preset lists per Style Settings tab remain open for a future pass.
+// ARCHITECTURE (rebuilt — this file used to read its inputs from ~25 hidden
+// <select>s and build prompts inline inside one 170-line send function):
 //
-// "Cinema Studio 3.5" etc. as named models are Higgsfield's own in-house
-// model brand, not reachable via fal.ai — invented endpoints aren't
-// shipped here. Each tier maps to a REAL fal model under the hood
-// (KAT_FILMS_TIERS[].videoModel/imageModel) rather than a fake one.
-// "Speed Ramp" and "Camera Movement" aren't real Seedance/Kling API
-// parameters (checked against genViaSeedanceReference's actual accepted
-// body fields) — they're prompt-injection phrases, not literal fields,
-// same as this app's existing app-wide CAMERA_MOVES elsewhere.
-// Character @mentions in Image mode use genViaFluxEdit (real multi-
-// reference image composition, already used elsewhere in this app) so a
-// mentioned character's actual reference photo is genuinely used.
-// Beyond named Characters, a "+" button next to the prompt (matching
-// Higgsfield's own "+ | @" composer pattern) lets you attach ANY image
-// ad-hoc and reference it as @Image1, @Image2, etc. — real uploads,
-// really passed into the actual generation call alongside whatever
-// Character mentions are also present. Attachments are ephemeral (not
-// persisted, cleared after each send) same as the prompt text itself.
-// A dedicated "@" button sits right next to "+", also matching
-// Higgsfield's pattern exactly — it's not just decorative, it inserts @
-// and opens the same real Character dropdown typing "@" does
-// (openCsMentionPicker), since relying on someone already knowing to
-// type "@" isn't discoverable on its own.
+//   cinema-registry.js   PURE DATA — tiers + capabilities, camera bodies,
+//                        lenses, focal lengths, apertures, rig looks, camera
+//                        moves, speed ramps, genres, durations. The UI
+//                        renders from it; new gear is a data edit.
+//   1  STATE             S.csForm is the single source of truth for every
+//                        control (persisted as cs_form). The DOM never holds
+//                        state — it is rendered FROM S.csForm.
+//   2  PROMPT COMPILER   csCompile() — one function turns form + prompt +
+//                        tier + scene into the final prompt, and returns its
+//                        labelled parts (shown to the user as "Compiled
+//                        prompt" so nothing is hidden).
+//   3  PLAN + RUNNER     csBuildPlan() turns one Generate press into 1..N
+//                        jobs (single shot / multishot scenes / location
+//                        batch); csRunJob() executes a job; failures are
+//                        isolated per job and can be retried.
+//   4  UI                Same Kosmic glass kit as Video Studio / Image Gen
+//                        (chat-glass.js): header, thread, composer with a
+//                        summary chip, and a "shutter" settings sheet built
+//                        from cards, rails and chips (.ks-* classes).
 //
-// SESSION NOTE: direct image/frame viewing was non-functional for this
-// entire session (confirmed by testing on multiple fresh extractions and
-// even a previously-working uploaded screenshot — an infrastructure
-// issue, not a file problem). Analysis for this pass came from a
-// thorough OCR sweep instead: ~36 full-1920x1080 frames across the whole
-// 60s video, contrast/sharpness-enhanced and 2x upscaled before running
-// tesseract in sparse-text mode. That's a lower-confidence method than
-// actually looking at the UI — treat facts below as OCR-confirmed, not
-// visually verified, and worth a real visual pass once viewing works
-// again.
+// HONEST NOTES (unchanged): "Cinema Studio 3.5" etc. are Higgsfield's own
+// in-house models, not reachable via fal.ai — every tier maps to a REAL fal
+// model (CS_TIERS[].model); no invented endpoints. Camera body / lens /
+// focal length / aperture / camera move / speed ramp are NOT API parameters
+// on Seedance or FLUX — they are cinematography phrases the compiler folds
+// into the prompt. Character @mentions in image mode use genViaFluxEdit
+// (real multi-reference composition) so a mentioned character's photo is
+// genuinely used. Custom Multishot has no native Seedance parameter: each
+// scene is its own real generation, landing in order in the Video Editor.
 //
-// LOAD ORDER: after index.html's main inline script — needs S, gs, save,
-// saveSetting, toast, escapeHtml, pIcon, SE_MODEL_ALLOWED,
-// modelOptionsHTML, renderSimpleTrigger, openSimplePicker,
-// selectSimpleOption, openVisualPicker, renderVisualTrigger,
-// STYLE_PRESETS, getAllDirectors, sheetSwipeStart/Move/End,
-// genViaSeedanceReference, genViaFal, genViaFluxEdit, uploadRefsToFal,
-// downscaleImageFile, createVideoAsset, createImageAsset, logCost, showPromptDialog,
-// downloadWithName, sanitizeFilenamePart, openCollectionPicker,
-// VC_RESULT_ICONS. Also needs getActiveDirectorPrompt from directors.js,
-// which must be loaded too.
+// LOAD ORDER: cinema-registry.js, then this file, after index.html's main
+// inline script — needs S, gs, saveSetting, toast, pIcon, STYLE_PRESETS,
+// stylePreviewHTML, getAllDirectors, getActiveDirectorPrompt (directors.js),
+// sheetSwipeStart/Move/End, genViaSeedanceReference, genViaFal,
+// genViaFluxEdit, uploadRefsToFal, downscaleImageFile, createVideoAsset,
+// createImageAsset, addToSequence, logCost, estimateVideoCost,
+// estimateImageCost, formatCostLine, showPromptDialog, downloadWithName,
+// sanitizeFilenamePart, openCollectionPicker, switchMod. KosmicChatGlass
+// (chat-glass.js) loads after this file but is only used at render time.
 // ══════════════════════════════════════════════════════════════════════
+
+/* ───────────────────────── 1 · STATE ───────────────────────── */
 
 S.csProjects=S.csProjects||gs("cs_projects",[])||[];
 S.csActiveProjectId=S.csActiveProjectId||gs("cs_active_project",null);
@@ -130,791 +60,348 @@ S.csFavorites=S.csFavorites||gs("cs_favorites",[])||[];
 S.csView=S.csView||"home";
 S.csMode=S.csMode||"video";
 S.csTier=S.csTier||gs("cs_tier","katfilms1")||"katfilms1";
-S.csChatHistory=S.csChatHistory||gs("cs_chat_history",[])||[];
+// A generation that was mid-flight when the page closed can never finish —
+// drop stale loading bubbles instead of showing them forever.
+S.csChatHistory=(S.csChatHistory||gs("cs_chat_history",[])||[]).filter(m=>m&&m.type!=="loading");
 S.csMentionOpen=false;
-// Ad-hoc reference images — tagged @Image1, @Image2 etc., the generic
-// counterpart to @CharacterName mentions. Deliberately NOT persisted
-// (data URLs get large fast) and cleared per-generation, same lifecycle
-// as the prompt text itself — these are "attachments to this message,"
-// not a saved library. csRefImageCounter is monotonic so a removed tag's
-// number is never reused mid-session, avoiding collisions with text
-// someone already typed.
+S.csBusy=false;
+S.csDraft=S.csDraft||"";
+// Ephemeral per-message attachments (data URLs get large fast): ad-hoc
+// reference images tagged @Image1.. and the Soul HEX colour reference.
+// csRefImageCounter is monotonic so a removed tag's number is never reused.
 S.csRefImages=S.csRefImages||[];
 S.csRefImageCounter=S.csRefImageCounter||0;
-// Soul HEX — a single dedicated color-reference image, deliberately kept
-// separate from the generic @mention/ad-hoc ref system above. Soul HEX's
-// real purpose (confirmed via OCR) is singular and specific — match a
-// palette — not a multi-image subject composition.
 S.csSoulHexRef=S.csSoulHexRef||null;
-// Shot Control — confirmed directly from a real Cinema Studio 3
-// screenshot: a "Smart" (single continuous shot, existing Duration field
-// applies) vs "Custom Multishot" (break ONE generation into sequential
-// scene segments, all sharing the same scene description, each with its
-// own duration + pacing) toggle. Ephemeral like the ref image
-// attachments — scoped to "this generation," not a saved preference.
-S.csShotControl=S.csShotControl||"smart";
+// Custom Multishot scenes: [{id,duration,speedRamp,cameraMove}] — "" for
+// speedRamp/cameraMove means "inherit the studio setting".
 S.csScenes=S.csScenes||[];
 S.csSceneCounter=S.csSceneCounter||0;
 
-const KAT_FILMS_TIERS=[
-  {id:"signature1",label:"Kat Films — Signature 1",sub:"Empty — reserved for a future tier",empty:true,videoOnly:true},
-  {id:"katfilms1",label:"Kat Films 1",sub:"≈ Cinema Studio 2.5 — Camera selection, Style Presets, AI Director (fully built)",
-    videoModel:"bytedance/seedance-2.0/fast/text-to-video",imageModel:"fal-ai/flux/dev",videoOnly:true},
-  {id:"katfilms1_5",label:"Kat Films 1.5",sub:"≈ Cinema Studio 3 — adds enhanced Speed Ramp presets (Flash In/Out, Bullet Time, Hero Moment)",
-    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,partial:true,videoOnly:true},
-  {id:"katfilms2",label:"Kat Films 2",sub:"≈ Cinema Studio 3.5 — adds Style Settings (Color Palette/Lighting/Camera Moveset Style); research ongoing",
-    videoModel:"bytedance/seedance-2.0/text-to-video",imageModel:"fal-ai/flux/dev",enhancedSpeedRamp:true,styleSettingsPanel:true,partial:true,videoOnly:true},
-  // Soul Cinema's real structure (confirmed via OCR of a dedicated
-  // walkthrough) is 4 SEPARATELY selectable models — AI Cast, Cinematic
-  // Locations, Soul HEX, Cinematic Cameras — shown together in one
-  // "Cinematic models" list, not stacked as toggles inside one bundled
-  // tier. Kept genuinely separate here per direct instruction, mirroring
-  // how Kat Films' own tiers are separate rather than one mega-tier with
-  // checkboxes. All 4 image-only (no Soul video model was found), all
-  // fall back to the same fal-ai/flux/dev every other tier uses — no
-  // invented "Soul" fal model.
-  {id:"aicast",label:"AI Cast",sub:"Character building — already built, lives in Persona Studio's 🎬 Cinema tab rather than duplicated here.",
-    empty:true,imageOnly:true,linksToFn:"openPersonaStudioScreen",linksToLabel:"Open Persona Studio"},
-  {id:"soulhex",label:"Soul HEX",sub:"Upload a reference image and match its color palette, tones and mood in your generation.",
-    imageModel:"fal-ai/flux/dev",imageOnly:true,soulHex:true},
-  {id:"cinematiclocations",label:"Cinematic Locations",sub:"Rich environments with cinematic lighting — describe a place, generate 1-10 variations of it, no characters.",
-    imageModel:"fal-ai/flux/dev",imageOnly:true,cinematicLocations:true},
-  {id:"cinematiccameras",label:"Cinematic Cameras",sub:"Image generation with camera control — confirmed pairing: Studio Digital S35 / Premium Modern Prime / 35mm.",
-    imageModel:"fal-ai/flux/dev",imageOnly:true,cinematicCameras:true},
-];
-// Tiers visible in the picker for the CURRENT mode. Full separation, not
-// just different labels: Camera Crafts (image) only ever offers the 4
-// Soul Cinema tiers above; Kat Films (video) only ever offers the 4
-// videoOnly tiers.
-function csTiersForMode(mode){
-  return KAT_FILMS_TIERS.filter(t=>!(t.imageOnly&&mode!=="image")&&!(t.videoOnly&&mode!=="video"));
+const CS_FORM_DEFAULTS={
+  genre:"General",style:"",ratio:"16:9",
+  cameraMove:"auto",speedRamp:"auto",duration:6,customDuration:false,
+  look:"",body:"Auto",lens:"Auto",focal:"Auto",aperture:"Auto",
+  palette:"auto",lighting:"auto",moveset:"auto",
+  locations:3,shot:"smart",
+};
+function csLoadForm(){
+  const saved=gs("cs_form",{});
+  const f=Object.assign({},CS_FORM_DEFAULTS,(saved&&typeof saved==="object")?saved:{});
+  f.shot="smart"; // multishot scenes are ephemeral, so the toggle is too
+  return f;
 }
-function getCsTier(){return KAT_FILMS_TIERS.find(t=>t.id===S.csTier)||KAT_FILMS_TIERS[1];}
-// Shared by openCinemaStudio (fresh sidebar entry) and setCsMode
-// (in-composer toggle) so a tier restricted to the other mode can never
-// stay selected once we're not in its mode, however we got here.
-function ensureCsTierValidForMode(mode){
-  if(!csTiersForMode(mode).some(t=>t.id===S.csTier)){
-    S.csTier=csTiersForMode(mode)[0]?.id||S.csTier;
-    saveSetting("cs_tier",S.csTier);
+S.csForm=S.csForm||csLoadForm();
+// Failed jobs kept for Retry (runtime only — cleared on reload).
+const CS_JOBS={};
+
+/* ───────────────────── ACCESSORS ───────────────────── */
+
+const csEsc=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const csEl=id=>document.getElementById(id);
+const csIsVideo=()=>S.csMode==="video";
+const csBrand=()=>csIsVideo()?"Kat Films 4K":"Camera Crafts 4K";
+function csTiersForMode(mode){return CS_TIERS.filter(t=>t.mode===mode);}
+// Falls back to the tier last used in this mode, then the first tier that
+// can actually generate (never an empty reserved slot).
+function csTier(){
+  const mode=S.csMode;
+  return CS_TIERS.find(t=>t.id===S.csTier&&t.mode===mode)
+    ||CS_TIERS.find(t=>t.id===gs("cs_tier_"+mode,"")&&t.mode===mode)
+    ||csTiersForMode(mode).find(t=>!t.empty)||CS_TIERS[1];
+}
+function csCaps(){return new Set(csTier().caps||[]);}
+const csHas=cap=>csCaps().has(cap);
+const csOpt=(list,id)=>list.find(o=>o.id===id);
+const csRampList=tier=>(tier.caps||[]).includes("speedRampPro")?CS_SPEED_RAMPS_PRO:CS_SPEED_RAMPS;
+
+// Keeps the form valid for the CURRENT tier/mode. Called after any change
+// that can invalidate a value (tier switch, mode switch, load).
+function csNormalize(){
+  const f=S.csForm,tier=csTier(),caps=new Set(tier.caps||[]);
+  if(S.csTier!==tier.id){S.csTier=tier.id;saveSetting("cs_tier",tier.id);}
+  if(gs("cs_tier_"+S.csMode,"")!==tier.id)saveSetting("cs_tier_"+S.csMode,tier.id);
+  if(!csOpt(csRampList(tier),f.speedRamp))f.speedRamp="auto";
+  if(!csOpt(CS_CAMERA_MOVES,f.cameraMove))f.cameraMove="auto";
+  if(!CS_RATIOS.includes(f.ratio))f.ratio="16:9";
+  if(!CINEMA_GENRES.some(g=>g.label===f.genre))f.genre="General";
+  f.duration=Math.max(3,Math.min(15,Math.round(+f.duration)||6));
+  f.locations=Math.max(1,Math.min(10,Math.round(+f.locations)||3));
+  for(const k of ["palette","lighting","moveset"])if(!csOpt(CS_STYLE_SETTINGS[k].options,f[k]))f[k]="auto";
+  if(!caps.has("multishot")||S.csMode!=="video")f.shot="smart";
+  f.look=csMatchLook();
+}
+function csMatchLook(){
+  const f=S.csForm;
+  const hit=CS_RIG_LOOKS.find(l=>l.body===f.body&&l.lens===f.lens&&l.focal===f.focal&&l.aperture===f.aperture);
+  return hit?hit.id:"";
+}
+function csSaveForm(){
+  const f=Object.assign({},S.csForm);delete f.shot;
+  saveSetting("cs_form",f);
+}
+
+// The single entry point for every control. Rendering never mutates state.
+function csSet(k,v){
+  const f=S.csForm;
+  if(k==="duration"){f.duration=+v;f.customDuration=false;}
+  else if(k==="durationCustom"){f.customDuration=true;f.duration=+v;}
+  else if(k==="locations")f.locations=+v;
+  else if(k==="look"){
+    const l=CS_RIG_LOOKS.find(x=>x.id===v);
+    if(l){f.body=l.body;f.lens=l.lens;f.focal=l.focal;f.aperture=l.aperture;}
+    else{f.body=f.lens=f.focal=f.aperture="Auto";} // "" = clear rig
   }
-}
-
-const CINEMA_GENRES=[
-  {label:"General",frag:""},
-  {label:"Action/Fight",frag:"high-energy action cinematography, dynamic kinetic movement"},
-  {label:"Romance/Emotional",frag:"intimate emotional cinematography, soft warm tones"},
-  {label:"Horror/Suspense",frag:"tense suspenseful cinematography, unsettling atmosphere"},
-  {label:"Comedy",frag:"bright playful cinematography, comedic timing"},
-  {label:"Dialogue/Drama",frag:"grounded dramatic cinematography, natural character-focused framing"},
-  {label:"Chase/Pursuit",frag:"kinetic pursuit cinematography, fast tracking movement"},
-  {label:"Noir",frag:"film noir cinematography, high-contrast shadows, moody atmosphere"},
-  {label:"Epic",frag:"epic sweeping cinematography, grand scale, dramatic grandeur"},
-];
-
-// Cinematic Cameras (image-only) — confirmed via OCR: a camera+lens chip
-// reading "Studio Digital S35" / "Premium Modern Prime" / "35mm"
-// (aperture value illegible). Only that one pairing is actually confirmed
-// from the source video. Camera/Lens/Focal Length/Aperture aren't real
-// fal API parameters (same honest note as Kat Films' Camera Movement/
-// Speed Ramp) — they're prompt-injection phrases, so the extra options
-// below beyond the confirmed pairing are real, well-known cinematography
-// vocabulary added for a genuinely usable picker, NOT additional
-// confirmed Higgsfield presets.
-const CS_SOUL_CAMERAS=["Auto","Studio Digital S35","ARRI Alexa","RED Komodo","Sony Venice","Blackmagic URSA"];
-const CS_SOUL_LENSES=["Auto","Premium Modern Prime","Anamorphic","Vintage Prime","Wide Angle Prime","Telephoto Zoom","Macro"];
-const CS_SOUL_FOCAL_LENGTHS=["Auto","24mm","35mm","50mm","85mm","100mm","135mm"];
-const CS_SOUL_APERTURES=["Auto","f/1.4","f/1.8","f/2.8","f/4","f/5.6","f/8"];
-
-// The full 14-option list confirmed directly from the reference video's
-// Camera Movement grid (Handheld through Dolly Right) — deliberately
-// separate from the app-wide CAMERA_MOVES array (used by Edit Video,
-// storyboards, etc.) rather than overwriting it, since that one has its
-// own different, already-working option set used elsewhere.
-const KAT_FILMS_CAMERA_MOVES=[
-  {label:"Auto",value:""},
-  {label:"Handheld",value:"handheld camera with natural shake, documentary feel"},
-  {label:"Zoom In",value:"camera zooms in toward the subject"},
-  {label:"Zoom Out",value:"camera zooms out from the subject"},
-  {label:"Camera Follows",value:"camera tracks and follows the subject's movement"},
-  {label:"Pan Left",value:"smooth camera pan to the left"},
-  {label:"Pan Right",value:"smooth camera pan to the right"},
-  {label:"Tilt Up",value:"camera tilts upward"},
-  {label:"Tilt Down",value:"camera tilts downward"},
-  {label:"Orbit Around",value:"camera orbits slowly around the subject"},
-  {label:"Dolly In",value:"camera dollies in toward the subject"},
-  {label:"Dolly Out",value:"camera dollies out away from the subject"},
-  {label:"Dolly Left",value:"camera dollies laterally to the left"},
-  {label:"Dolly Right",value:"camera dollies laterally to the right"},
-  {label:"Drone Shot",value:"sweeping aerial drone shot"},
-];
-
-// Only "Slow-Mo" and "Auto" were clearly legible in the Cinema Studio 2.5
-// video; the rest of this list is a reasonable, clearly-labeled set
-// rather than a guess at Higgsfield's exact remaining option names for
-// that tier.
-const SPEED_RAMPS=[
-  {label:"Auto",value:""},
-  {label:"None — constant speed",value:"constant real-time speed throughout, no speed ramping"},
-  {label:"Slow-Mo",value:"dramatic slow-motion throughout"},
-  {label:"Ramp Up (slow → fast)",value:"speed ramps from slow motion into fast real-time motion"},
-  {label:"Ramp Down (fast → slow)",value:"speed ramps from fast motion down into dramatic slow-motion"},
-];
-
-// Cinema Studio 3's actual Speed Ramp option list, OCR-confirmed directly
-// from its Director's Panel (a genuinely different, more cinema-specific
-// preset set than 2.5's — this IS the concrete substance behind 3.0's
-// "enhanced camera and speed ramp control" tagline, not a guess at what
-// "enhanced" might mean):
-const SPEED_RAMPS_ENHANCED=[
-  {label:"Auto",value:""},
-  {label:"Ramp Up",value:"speed ramps from slow motion into fast real-time motion"},
-  {label:"Flash In",value:"a rapid flash-cut speed surge into the shot"},
-  {label:"Flash Out",value:"a rapid flash-cut speed surge out of the shot"},
-  {label:"Bullet Time",value:"dramatic bullet-time effect, motion freezes as the camera orbits around the subject"},
-  {label:"Hero Moment",value:"motion eases into a slow, powerful hero moment emphasizing the subject"},
-];
-// UPDATE: "Shot Control" (mentioned once here as an unconfirmed OCR
-// find) was later confirmed directly from a real screenshot — Smart vs
-// Custom Multishot — and is now built. See S.csShotControl / Scene Cards
-// further down this file.
-
-// Duration includes "Custom" (confirmed in the reference video) — since
-// Seedance only accepts specific durations, a custom entry gets snapped
-// to the nearest valid one (see snapToKatFilmsDuration) rather than
-// silently failing or pretending arbitrary lengths work.
-const KAT_FILMS_DURATIONS=[4,5,6,8,10,12,15];
-function snapToKatFilmsDuration(seconds){
-  return KAT_FILMS_DURATIONS.find(d=>d>=seconds)||KAT_FILMS_DURATIONS[KAT_FILMS_DURATIONS.length-1];
-}
-
-// Cinema Studio 3.5-exclusive "Style Settings" panel — a genuinely new
-// layer confirmed via OCR, distinct from Genre/Style Preset/AI Director:
-// three named tabs (Color Palette / Lighting / Camera Moveset Style),
-// each with its own presets. HONEST GAP: only one or two preset names
-// were legible per tab in the source video, and which specific preset
-// belongs under which tab is a best-effort reading, not a certainty —
-// "Dreamy" in particular could plausibly sit under Lighting or be a
-// separate top-level field ("Style: Dreamy" appeared once on its own).
-// Placed under Lighting here since a soft dreamy quality is usually a
-// lighting characteristic, flagged rather than silently assumed correct.
-// Each tab almost certainly has more real presets than shown here — this
-// is what was legible, not a claim that these are the complete lists.
-const CS35_COLOR_PALETTES=[
-  {label:"Auto",value:""},
-  {label:"Hyper Neon",value:"hyper-saturated neon color grading, vivid electric hues"},
-  {label:"Raw Chaos",value:"raw chaotic color grading, gritty desaturated clash of tones"},
-];
-const CS35_LIGHTING=[
-  {label:"Auto",value:""},
-  {label:"Overhead Fall",value:"dramatic overhead lighting falling downward onto the subject"},
-  {label:"Dreamy",value:"soft dreamy diffused lighting, gentle glow"},
-];
-const CS35_CAMERA_MOVESET_STYLES=[
-  {label:"Auto",value:""},
-  {label:"Epic Scale",value:"epic large-scale camera work, sweeping grandeur"},
-];
-// KNOWN GAP, flagged rather than guessed at: the same video also showed
-// a separate "Camera Settings" panel later on (distinct from Style
-// Settings) repeatedly, but the on-screen text wasn't legible enough via
-// OCR to know its actual fields — not built yet.
-
-// Entry point from the sidebar — each of the two buttons calls this with
-// its own mode so opening "Camera Crafts 4K" actually starts in Image
-// mode and "Kat Films 4K" starts in Video mode, before the in-composer
-// toggle can take over.
-function openCinemaStudio(mode,el){
-  S.csMode=mode;
-  ensureCsTierValidForMode(mode);
-  switchMod("cinemastudio",el);
-}
-
-// Keeps whichever of the two sidebar buttons matches the CURRENT mode
-// highlighted as active, even when the mode was changed via the
-// in-composer toggle rather than by clicking a sidebar button.
-function syncCsSidebarActive(){
-  document.querySelectorAll('[data-mod="cinemastudio"]').forEach(b=>{
-    b.classList.toggle("active",b.dataset.csmode===S.csMode);
-  });
-}
-
-function renderCinemaStudio(el){
-  const tabsEl=document.getElementById("moduleTabs");
-  if(tabsEl){tabsEl.style.display="none";tabsEl.innerHTML="";}
-  el.innerHTML=`
-    <div style="max-width:600px;margin:0 auto;padding:10px 8px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-        <button class="ig-icon-btn" onclick="openCsNavMenu()" title="Menu">☰</button>
-        <div style="flex:1;min-width:0">
-          <div id="csTitle" style="font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--violet);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${S.csMode==="video"?"🎬 Kat Films 4K":"📷 Camera Crafts 4K"}</div>
-          <div id="csTierBadge" style="font-size:10px;color:var(--textm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${csHeaderSubtitle()}</div>
-        </div>
-        <button class="ig-icon-btn" onclick="openCsTierPicker()" title="Change Tier">${S.csMode==="video"?'🎬':'📷'}</button>
-      </div>
-      <div id="csViewBody"></div>
-    </div>`;
-  syncCsSidebarActive();
-  renderCsViewBody();
-}
-
-// Full-width on phones was the whole point of this rebuild — a permanent
-// 128px inner sidebar (Home/My Generations/etc + Projects) ate a huge
-// share of a real phone viewport and squeezed the actual chat into a
-// cramped corner column. Same fix Image Gen already uses for its own
-// nav-ish overlay (☰ Chat History → openIgChatHistory, a centered
-// .modal-overlay, not a permanent column) — mirrored here exactly rather
-// than inventing a new mobile pattern.
-const CS_VIEW_LABELS={home:"Home",generations:"My Generations",elements:"My Elements",favorites:"My Favorites",community:"Community",academy:"Academy"};
-
-function csHeaderSubtitle(){
-  const hasKey=gs("api_falai");
-  const tier=getCsTier();
-  const director=gs("active_director","")?(getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name:"";
-  return `${hasKey?'<span style="color:var(--green);font-weight:700">●</span>':'<span style="color:var(--red);font-weight:700">●</span>'} ${escapeHtml(tier.label)}${tier.partial?' <span style="color:var(--gold)">(partial)</span>':''} · ${CS_VIEW_LABELS[S.csView]||'Home'}${director?' · '+pIcon('film',10)+' '+escapeHtml(director):''}`;
-}
-
-function openCsNavMenu(){
-  const overlay=document.createElement("div");
-  overlay.className="modal-overlay show";
-  overlay.id="csNavModal";
-  overlay.innerHTML=`
-    <div class="modal" style="max-height:80vh;display:flex;flex-direction:column">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--violet)">${S.csMode==="video"?"🎬 Kat Films 4K":"📷 Camera Crafts 4K"}</div>
-        <button class="ig-icon-btn" onclick="document.getElementById('csNavModal').remove()">✕</button>
-      </div>
-      <div style="overflow-y:auto;flex:1">
-        ${Object.entries(CS_VIEW_LABELS).map(([id,label])=>{
-          const icons={home:"🏠",generations:"🎞",elements:"🎭",favorites:"⭐",community:"👥",academy:"🎓"};
-          return `<button class="btn btn-sm" style="width:100%;text-align:left;margin-bottom:4px;background:${S.csView===id?'var(--violet)':'transparent'};color:${S.csView===id?'#fff':'var(--text)'};border:${S.csView===id?'none':'1px solid var(--border)'};padding:10px 12px" onclick="setCsView('${id}');document.getElementById('csNavModal').remove()">${icons[id]} ${label}</button>`;
-        }).join('')}
-        <div style="margin:14px 0 8px;padding-top:10px;border-top:1px solid var(--glass-brd)">
-          <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--textm);margin-bottom:8px">Projects</div>
-          <button class="btn btn-outline btn-sm" style="width:100%;margin-bottom:8px" onclick="document.getElementById('csNavModal').remove();newCsProject()">+ New Project</button>
-          <select class="f-select" id="csProjectLoader" onchange="loadCsProject(this.value)">
-            <option value="">Load Project…</option>
-            ${S.csProjects.slice().reverse().map(p=>`<option value="${p.id}" ${p.id===S.csActiveProjectId?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}
-          </select>
-        </div>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-}
-
-function setCsView(id){
-  S.csView=id;
-  const badge=document.getElementById("csTierBadge");
-  if(badge)badge.innerHTML=csHeaderSubtitle();
-  renderCsViewBody();
-}
-function loadCsProject(id){
-  S.csActiveProjectId=id||null;
-  saveSetting("cs_active_project",S.csActiveProjectId);
-  document.getElementById("csNavModal")?.remove();
-  toast(id?"Project loaded":"No project selected — generations save unfiled","success");
-}
-
-function renderCsViewBody(){
-  const wrap=document.getElementById("csViewBody");
-  if(!wrap)return;
-  if(S.csView==="home")return renderCsHome(wrap);
-  if(S.csView==="generations")return renderCsGenerations(wrap);
-  if(S.csView==="favorites")return renderCsFavorites(wrap);
-  if(S.csView==="elements")return renderCsElements(wrap);
-  if(S.csView==="community")return renderCsCommunity(wrap);
-  if(S.csView==="academy")return renderCsAcademy(wrap);
-}
-
-// Community/Academy are Higgsfield's creator-showcase and course pages —
-// real content that lives on their platform, not a generation tool this
-// app can build. Shown honestly as what they are rather than skipped
-// silently, since the person specifically pointed at them being part of
-// the real nav — but not faked with invented courses/creators.
-function renderCsCommunity(wrap){
-  wrap.innerHTML=`<div style="font-size:12px;color:var(--textm);padding:20px 0;text-align:center">Community is Higgsfield's own creator-showcase feed — not something to fake here. This space is reserved for whatever the equivalent should actually be for Kosmic Kat (e.g. your own Facebook Page activity) once that's decided.</div>`;
-}
-function renderCsAcademy(wrap){
-  wrap.innerHTML=`<div style="font-size:12px;color:var(--textm);padding:20px 0;text-align:center">Academy is Higgsfield's own course library — not something to fake here. Reserved for real tutorial content if you ever want one built.</div>`;
-}
-
-// ── HOME — rebuilt on the exact ig-chat-shell pattern Image Gen/Video
-// Canvas use: thread + settings bottom sheet + composer, instead of a
-// hand-rolled compact form. ──
-function renderCsHome(wrap){
-  const hasKey=gs("api_falai");
-  const tier=getCsTier();
-  const isVideo=S.csMode==="video";
-
-  if(tier.empty){
-    wrap.innerHTML=`<div class="ig-chat-shell" style="padding:40px 20px;text-align:center">
-      <div style="font-size:32px;margin-bottom:10px;opacity:0.5">🎬</div>
-      <div style="font-size:14px;font-weight:700;color:var(--textm)">${escapeHtml(tier.label)}${tier.linksToFn?'':' is empty right now'}</div>
-      <div style="font-size:12px;color:var(--texts);margin-top:6px">${tier.linksToFn?escapeHtml(tier.sub):"This slot is reserved for a future tier — nothing to generate with yet."}</div>
-      ${tier.linksToFn?`<button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="${tier.linksToFn}()">${escapeHtml(tier.linksToLabel||"Open")}</button>`:''}
-      <button class="btn btn-outline btn-sm" style="margin-top:${tier.linksToFn?'8':'14'}px" onclick="openCsTierPicker()">Choose a different tier</button>
-    </div>`;
-    return;
+  else if(k==="shot"){
+    f.shot=v==="custom"?"custom":"smart";
+    if(f.shot==="custom"&&!S.csScenes.length){csAddScene(true);csAddScene(true);}
   }
-
-  wrap.innerHTML=`
-    <div class="ig-chat-shell">
-      <div class="ig-chat-thread" id="csChatThread"></div>
-
-      <div class="ig-settings-backdrop" id="csSettingsBackdrop" onclick="toggleCsSettings()"></div>
-      <div class="ig-settings-sheet" id="csSettingsPanel">
-        <div class="ig-sheet-handle" ontouchstart="sheetSwipeStart(event)" ontouchmove="sheetSwipeMove(event,'csSettingsPanel')" ontouchend="sheetSwipeEnd(event,'csSettingsPanel','toggleCsSettings')"></div>
-        <div class="ig-sheet-header">
-          <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">⚙ Settings</div>
-          <button class="ig-icon-btn" onclick="toggleCsSettings()" title="Close">✕</button>
-        </div>
-        <div style="padding:14px 16px" id="csSettingsBody"></div>
-      </div>
-
-      <div class="ig-chat-inputbar">
-        <div class="ig-input-shell">
-          <div id="csSceneCardsRow" style="display:none;gap:8px;overflow-x-auto;margin-bottom:8px"></div>
-          <div style="display:flex;gap:4px;margin-bottom:6px;background:var(--pearl2);border-radius:9px;padding:3px;width:fit-content">
-            <button id="csModeImage" onclick="setCsMode('image')" style="border:none;border-radius:7px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;background:${!isVideo?'var(--violet)':'transparent'};color:${!isVideo?'#fff':'var(--textm)'}">📷 Image</button>
-            <button id="csModeVideo" onclick="setCsMode('video')" style="border:none;border-radius:7px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;background:${isVideo?'var(--violet)':'transparent'};color:${isVideo?'#fff':'var(--textm)'}">🎬 Video</button>
-          </div>
-          <textarea class="ig-input-textarea-v2" id="csPrompt" rows="1" placeholder="${hasKey?'Describe your scene — use @ to add a character or reference image':'Add an API key in Settings first…'}" ${!hasKey?'disabled':''} onkeydown="handleCsChatKeydown(event)" oninput="handleCsPromptInput(event);this.style.height='auto';this.style.height=Math.min(this.scrollHeight,200)+'px'"></textarea>
-          <div id="csMentionDropdown" style="display:none;position:absolute;left:10px;right:10px;background:var(--pearl2);border:1.5px solid var(--glass-brd);border-radius:10px;padding:4px;z-index:10;max-height:160px;overflow-y:auto"></div>
-          <input type="file" accept="image/*" id="csRefImageFile" style="display:none" onchange="handleCsRefImageUpload(event)">
-          <div id="csRefImageStrip" style="display:flex;gap:6px;flex-wrap:wrap;margin:0 2px 6px"></div>
-          <div class="ig-input-toolbar">
-            <button class="ig-tool-btn" onclick="document.getElementById('csRefImageFile').click()" title="Attach a reference image">+</button>
-            <button class="ig-tool-btn" onclick="openCsMentionPicker()" title="Add a character">@</button>
-            ${isVideo?`<select class="f-select" id="csShotControl" style="display:none" onchange="onCsShotControlChange()"><option value="smart">Smart</option><option value="custom">Custom Multishot</option></select>
-            <div id="csShotControlTrigger" onclick="openSimplePicker('csShotControl','Shot Control')" style="font-size:10.5px;padding:4px 8px;border-radius:8px;border:1px solid var(--glass-brd);background:var(--pearl2);cursor:pointer;white-space:nowrap"></div>`:''}
-            <button class="ig-tool-btn" onclick="toggleCsSettings()" title="Settings">⚙</button>
-            <button class="ig-send-round" id="csGenBtn" ${!hasKey?'disabled':''} onclick="sendCinemaStudioGen()" title="Generate">➤</button>
-          </div>
-          <div style="font-size:9px;color:var(--texts);padding:2px 4px 0;display:flex;justify-content:space-between"><span id="csCostHint" style="font-weight:700;color:var(--gold)"></span><span>Enter for a new line · <b>Ctrl+Enter</b> to generate</span></div>
-        </div>
-      </div>
-    </div>`;
-  renderCsSettingsBody();
-  renderCsChatThread();
-  renderCsRefImageStrip();
-  if(isVideo){renderSimpleTrigger("csShotControl");renderCsSceneCards();}
-  updateCsCostHint();
+  else f[k]=v;
+  csNormalize();csSaveForm();csRefreshAll();
 }
 
-function renderCsSettingsBody(){
-  const body=document.getElementById("csSettingsBody");
-  if(!body)return;
-  const isVideo=S.csMode==="video";
-  const tier=getCsTier();
-  body.innerHTML=`
-    ${tier.partial?`<div style="background:rgba(230,126,34,0.12);border:1px solid rgba(230,126,34,0.3);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--textm);margin-bottom:12px">⚠️ ${escapeHtml(tier.label)} is a partial build — flagged, not hidden. Full parity coming once more source material is confirmed.</div>`:''}
-    <div class="f-group">
-      <label class="f-label">${isVideo?"Kat Films":"Camera Crafts"} Tier</label>
-      <select class="f-select" id="csTierSelect" style="display:none" onchange="renderSimpleTrigger('csTierSelect')">${csTiersForMode(S.csMode).map(t=>`<option value="${t.id}" ${t.id===S.csTier?'selected':''}>${escapeHtml(t.label)} — ${escapeHtml(t.sub)}</option>`).join('')}</select>
-      <div id="csTierSelectTrigger" onclick="openCsTierPicker()" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-    </div>
-    <div class="f-group">
-      <label class="f-label">Genre</label>
-      <select class="f-select" id="csGenre" style="display:none" onchange="renderSimpleTrigger('csGenre');updateCsCostHint()">${CINEMA_GENRES.map(g=>`<option value="${g.label}">${g.label}</option>`).join('')}</select>
-      <div id="csGenreTrigger" onclick="openSimplePicker('csGenre','Choose Genre')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-    </div>
-    <div class="f-group">
-      <label class="f-label">Style Preset <span style="font-weight:400;color:var(--texts)">— part of Cinema Studio 2.5's real feature set (camera selection + style presets + AI director)</span></label>
-      <select class="f-select" id="csStyle" style="display:none" onchange="renderVisualTrigger('csStyle','style')">${STYLE_PRESETS.map(s=>`<option value="${s.value.replace(/"/g,'&quot;')}">${s.label}</option>`).join('')}</select>
-      <div id="csStyleTrigger" onclick="openVisualPicker('csStyle','Choose Style','style')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-    </div>
-    ${isVideo?`
-    <div class="f-group">
-      <label class="f-label">Camera Movement</label>
-      <select class="f-select" id="csCameraMove" style="display:none" onchange="renderSimpleTrigger('csCameraMove')">${KAT_FILMS_CAMERA_MOVES.map(c=>`<option value="${c.value}">${c.label}</option>`).join('')}</select>
-      <div id="csCameraMoveTrigger" onclick="openSimplePicker('csCameraMove','Camera Movement')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-    </div>
-    <div class="f-group">
-      <label class="f-label">Speed Ramp${tier.enhancedSpeedRamp?' <span style="font-weight:400;color:var(--gold)">— enhanced (Cinema Studio 3+)</span>':''}</label>
-      <select class="f-select" id="csSpeedRamp" style="display:none" onchange="renderSimpleTrigger('csSpeedRamp')">${(tier.enhancedSpeedRamp?SPEED_RAMPS_ENHANCED:SPEED_RAMPS).map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}</select>
-      <div id="csSpeedRampTrigger" onclick="openSimplePicker('csSpeedRamp','Speed Ramp')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-    </div>` : ''}
-    <div class="f-group">
-      <label class="f-label">AI Director <span style="font-weight:400;color:var(--texts)">— the 3rd pillar of Cinema Studio 2.5's feature set</span></label>
-      <div style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;background:var(--surface)">
-        <span style="flex:1;font-size:13px;font-weight:600;color:var(--text)">${gs("active_director","")?escapeHtml((getAllDirectors().find(d=>d.id===gs("active_director",""))||{}).name||"Unknown"):"No director active"}</span>
-        <button class="btn btn-outline btn-xs" onclick="switchMod('directors',document.querySelector('[data-mod=directors]'))">Change</button>
-      </div>
-    </div>
-    ${tier.styleSettingsPanel?`
-    <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
-      <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Style Settings <span style="color:var(--textm);font-weight:400;text-transform:none">— Cinema Studio 3.5</span></div>
-      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Each list below is what was legible in the source video — likely not the complete preset set for each tab yet.</div>
-    </div>
-    <div class="f-group">
-      <label class="f-label">Color Palette</label>
-      <select class="f-select" id="csColorPalette" style="display:none" onchange="renderSimpleTrigger('csColorPalette')">${CS35_COLOR_PALETTES.map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}</select>
-      <div id="csColorPaletteTrigger" onclick="openSimplePicker('csColorPalette','Color Palette')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-    </div>
-    <div class="f-group">
-      <label class="f-label">Lighting</label>
-      <select class="f-select" id="csLighting" style="display:none" onchange="renderSimpleTrigger('csLighting')">${CS35_LIGHTING.map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}</select>
-      <div id="csLightingTrigger" onclick="openSimplePicker('csLighting','Lighting')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-    </div>
-    <div class="f-group">
-      <label class="f-label">Camera Moveset Style</label>
-      <select class="f-select" id="csCameraMovesetStyle" style="display:none" onchange="renderSimpleTrigger('csCameraMovesetStyle')">${CS35_CAMERA_MOVESET_STYLES.map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}</select>
-      <div id="csCameraMovesetStyleTrigger" onclick="openSimplePicker('csCameraMovesetStyle','Camera Moveset Style')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-    </div>`:''}
-    ${tier.soulHex?`
-    <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
-      <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Soul HEX <span style="color:var(--textm);font-weight:400;text-transform:none">— color palette matching</span></div>
-      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Upload a reference image and Soul HEX brings its colors into your generation. Optional — leave empty for a normal generation.</div>
-    </div>
-    <div class="f-group">
-      <input type="file" accept="image/*" id="csSoulHexUpload" style="display:none" onchange="handleCsSoulHexUpload(event)">
-      ${S.csSoulHexRef?`
-        <div style="display:flex;align-items:center;gap:10px">
-          <img src="${S.csSoulHexRef}" style="width:44px;height:44px;object-fit:cover;border-radius:8px">
-          <span style="flex:1;font-size:12px;color:var(--textm)">Color reference attached</span>
-          <button class="btn btn-ghost btn-xs" onclick="S.csSoulHexRef=null;renderCsSettingsBody()">✕ Remove</button>
-        </div>`:`
-        <button class="btn btn-outline btn-full" onclick="document.getElementById('csSoulHexUpload').click()">+ Add color reference</button>`}
-    </div>`:''}
-    ${tier.cinematicLocations?`
-    <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
-      <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Cinematic Locations <span style="color:var(--textm);font-weight:400;text-transform:none">— rich environments, no characters</span></div>
-      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Describe a place — generates this many environment variations of it. Works alongside Soul HEX if that's also attached.</div>
-    </div>
-    <div class="f-group">
-      <label class="f-label">How many variations? (1-10)</label>
-      <input type="number" class="f-input" id="csLocationsBatch" min="1" max="10" value="3">
-    </div>`:''}
-    ${tier.cinematicCameras?`
-    <div style="margin:14px 0 10px;padding-top:10px;border-top:1px solid var(--glass-brd)">
-      <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--gold);margin-bottom:2px">Cinematic Cameras <span style="color:var(--textm);font-weight:400;text-transform:none">— camera + lens control</span></div>
-      <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Confirmed pairing from the source: Studio Digital S35 / Premium Modern Prime / 35mm. Leave on Auto for a normal generation.</div>
-    </div>
-    <div class="f-row">
-      <div class="f-group">
-        <label class="f-label">Camera</label>
-        <select class="f-select" id="csSoulCamera" style="display:none" onchange="renderSimpleTrigger('csSoulCamera')">${CS_SOUL_CAMERAS.map(c=>`<option value="${c}">${c}</option>`).join('')}</select>
-        <div id="csSoulCameraTrigger" onclick="openSimplePicker('csSoulCamera','Camera')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-      </div>
-      <div class="f-group">
-        <label class="f-label">Lens</label>
-        <select class="f-select" id="csSoulLens" style="display:none" onchange="renderSimpleTrigger('csSoulLens')">${CS_SOUL_LENSES.map(l=>`<option value="${l}">${l}</option>`).join('')}</select>
-        <div id="csSoulLensTrigger" onclick="openSimplePicker('csSoulLens','Lens')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-      </div>
-    </div>
-    <div class="f-row">
-      <div class="f-group">
-        <label class="f-label">Focal Length</label>
-        <select class="f-select" id="csSoulFocal" style="display:none" onchange="renderSimpleTrigger('csSoulFocal')">${CS_SOUL_FOCAL_LENGTHS.map(f=>`<option value="${f}">${f}</option>`).join('')}</select>
-        <div id="csSoulFocalTrigger" onclick="openSimplePicker('csSoulFocal','Focal Length')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-      </div>
-      <div class="f-group">
-        <label class="f-label">Aperture</label>
-        <select class="f-select" id="csSoulAperture" style="display:none" onchange="renderSimpleTrigger('csSoulAperture')">${CS_SOUL_APERTURES.map(a=>`<option value="${a}">${a}</option>`).join('')}</select>
-        <div id="csSoulApertureTrigger" onclick="openSimplePicker('csSoulAperture','Aperture')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-      </div>
-    </div>`:''}
-    <div class="f-row" style="margin-top:${tier.styleSettingsPanel?'10px':'0'}">
-      <div class="f-group">
-        <label class="f-label">Aspect Ratio</label>
-        <select class="f-select" id="csRatio" style="display:none" onchange="renderSimpleTrigger('csRatio')">
-          <option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option>
-        </select>
-        <div id="csRatioTrigger" onclick="openSimplePicker('csRatio','Aspect Ratio')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-      </div>
-      ${isVideo&&S.csShotControl!=="custom"?`<div class="f-group">
-        <label class="f-label">Duration</label>
-        <select class="f-select" id="csDuration" style="display:none" onchange="renderSimpleTrigger('csDuration');updateCsCostHint()">${KAT_FILMS_DURATIONS.map(d=>`<option value="${d}" ${d===6?'selected':''}>${d}s</option>`).join('')}<option value="custom">Custom…</option></select>
-        <div id="csDurationTrigger" onclick="openSimplePicker('csDuration','Duration')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-      </div>`:''}
-      ${isVideo&&S.csShotControl==="custom"?`<div class="f-group">
-        <label class="f-label">Duration</label>
-        <div style="border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;background:var(--surface);font-size:13px;color:var(--textm)">Set per scene below (${S.csScenes.reduce((sum,s)=>sum+s.duration,0)}s total)</div>
-      </div>`:''}
-    </div>
-    <div id="csCustomDurationWrap" style="display:none" class="f-group">
-      <label class="f-label">Custom Duration (seconds) <span style="font-weight:400;color:var(--texts)">— snapped to the nearest length the model supports</span></label>
-      <input type="number" class="f-input" id="csCustomDuration" min="3" max="15" value="6" oninput="updateCsCostHint()">
-    </div>
-    <div style="font-size:10px;color:var(--textm);margin-top:4px">Powered by: <b>${escapeHtml(isVideo?tier.videoModel:tier.imageModel)}</b></div>`;
-  renderSimpleTrigger("csTierSelect");
-  renderSimpleTrigger("csGenre");
-  renderVisualTrigger("csStyle","style");
-  if(isVideo){renderSimpleTrigger("csCameraMove");renderSimpleTrigger("csSpeedRamp");renderSimpleTrigger("csDuration");}
-  if(tier.styleSettingsPanel){renderSimpleTrigger("csColorPalette");renderSimpleTrigger("csLighting");renderSimpleTrigger("csCameraMovesetStyle");}
-  if(tier.cinematicCameras){renderSimpleTrigger("csSoulCamera");renderSimpleTrigger("csSoulLens");renderSimpleTrigger("csSoulFocal");renderSimpleTrigger("csSoulAperture");}
-  renderSimpleTrigger("csRatio");
-  const durSel=document.getElementById("csDuration");
-  if(durSel)durSel.addEventListener("change",()=>{
-    document.getElementById("csCustomDurationWrap").style.display=durSel.value==="custom"?"block":"none";
-  });
-}
+/* ─────────────────── 2 · PROMPT COMPILER ─────────────────── */
 
-function toggleCsSettings(){
-  const panel=document.getElementById("csSettingsPanel");
-  const backdrop=document.getElementById("csSettingsBackdrop");
-  if(!panel)return;
-  const opening=!panel.classList.contains("open");
-  panel.classList.toggle("open",opening);
-  if(backdrop)backdrop.classList.toggle("show",opening);
-}
-
-// ── KAT FILMS TIER PICKER — same bottom-sheet chrome as the model
-// picker, custom (not openModelPicker/openSimplePicker) so each row can
-// show its sub-label and an "empty"/"partial" flag inline. ──
-function openCsTierPicker(){
-  closeModelPicker();
-  const overlay=document.createElement("div");
-  overlay.id="modelPickerOverlay";
-  overlay.style.cssText="position:fixed;inset:0;background:rgba(20,10,40,0.45);z-index:400;display:flex;align-items:flex-end";
-  overlay.onclick=(e)=>{if(e.target===overlay)closeModelPicker();};
-  overlay.innerHTML=`
-    <div class="picker-sheet">
-      <div style="position:sticky;top:0;background:var(--surface);padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;z-index:2">
-        <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">Choose a ${S.csMode==="video"?"Kat Films":"Camera Crafts"} Tier</div>
-        <button onclick="closeModelPicker()" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--lav);color:var(--textm);cursor:pointer">${pIcon('back',12)}</button>
-      </div>
-      <div style="padding:10px 14px 24px">
-        ${csTiersForMode(S.csMode).map(t=>{
-          const selected=t.id===S.csTier;
-          return `<div onclick="selectCsTier('${t.id}')" style="display:flex;align-items:center;gap:11px;padding:12px 12px;border-radius:12px;cursor:pointer;margin-bottom:6px;border:1.5px solid ${selected?'var(--vs)':'transparent'};background:${selected?'var(--lav)':'transparent'}">
-            <div style="flex:1;min-width:0">
-              <div style="font-size:13.5px;font-weight:700;color:var(--text)">${escapeHtml(t.label)}${t.empty?' <span style="color:var(--textm);font-weight:400">(empty)</span>':t.partial?' <span style="color:var(--gold);font-weight:400">(partial)</span>':''}</div>
-              <div style="font-size:11px;color:var(--textm);margin-top:1px">${escapeHtml(t.sub)}</div>
-            </div>
-            ${selected?`<div style="color:var(--violet)">${pIcon('check',16)}</div>`:''}
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-}
-function selectCsTier(tierId){
-  S.csTier=tierId;
-  saveSetting("cs_tier",tierId);
-  closeModelPicker();
-  renderCinemaStudio(document.getElementById("moduleContent"));
-}
-
-// Switching the Image/Video toggle is what makes this module BE Camera
-// Crafts 4K vs Kat Films 4K at any given moment. Re-renders the whole
-// Home view (simplest correct way to keep header/thread/settings/tier
-// note all in sync) — the chat thread itself persists via S.csChatHistory
-// regardless.
-function setCsMode(mode){
-  if(S.csMode===mode)return;
-  S.csMode=mode;
-  ensureCsTierValidForMode(mode);
-  const titleEl=document.getElementById("csTitle");
-  if(titleEl)titleEl.textContent=mode==="video"?"🎬 Kat Films 4K":"📷 Camera Crafts 4K";
-  const tierBtn=document.querySelector('[title="Change Tier"]');
-  if(tierBtn)tierBtn.textContent=mode==="video"?"🎬":"📷";
-  renderCsHome(document.getElementById("csViewBody"));
-  syncCsSidebarActive();
-}
-
-async function handleCsSoulHexUpload(event){
-  const file=event.target.files&&event.target.files[0];
-  event.target.value="";
-  if(!file)return;
-  try{
-    S.csSoulHexRef=await downscaleImageFile(file,1024,0.9);
-    renderCsSettingsBody();
-  }catch(err){
-    toast("Couldn't read that reference image: "+err.message,"error");
+// One place that decides what the model is told. Returns the final string
+// and its labelled parts. Order is deliberate and matches the original
+// module: genre → your prompt → camera move → style → style settings →
+// speed ramp → location → camera rig → Soul HEX → director → variation.
+// `scene` (multishot) overrides camera move / speed ramp when it sets them.
+function csCompile(o){
+  const f=S.csForm,tier=o.tier||csTier(),caps=new Set(tier.caps||[]),video=(o.mode||S.csMode)==="video",parts=[];
+  const add=(key,label,text)=>{if(text)parts.push({key,label,text});};
+  const genre=CINEMA_GENRES.find(g=>g.label===f.genre)||CINEMA_GENRES[0];
+  if(caps.has("genre"))add("genre","Genre",genre.frag);
+  add("prompt","Your prompt",o.prompt);
+  if(video&&caps.has("cameraMove")){
+    const mv=csOpt(CS_CAMERA_MOVES,(o.scene&&o.scene.cameraMove)||f.cameraMove);
+    add("move","Camera move",mv&&mv.value);
   }
-}
-
-function updateCsCostHint(){
-  const tier=getCsTier();
-  const hint=document.getElementById("csCostHint");
-  if(!hint)return;
-  if(S.csMode==="video"){
-    if(S.csShotControl==="custom"&&S.csScenes.length){
-      const totalSeconds=S.csScenes.reduce((sum,s)=>sum+snapToKatFilmsDuration(s.duration),0);
-      const est=estimateVideoCost(tier.videoModel,totalSeconds,"720p",false);
-      hint.textContent=est?`${formatCostLine(est)} (${S.csScenes.length} scenes)`:"";
-    }else{
-      const durVal=document.getElementById("csDuration")?.value;
-      const seconds=durVal==="custom"?parseInt(document.getElementById("csCustomDuration")?.value,10)||6:parseInt(durVal,10)||6;
-      const est=estimateVideoCost(tier.videoModel,seconds,"720p",false);
-      hint.textContent=est?formatCostLine(est):"";
+  if(caps.has("style"))add("style","Style",f.style);
+  if(caps.has("styleSettings")){
+    for(const k of ["palette","lighting","moveset"]){
+      const opt=csOpt(CS_STYLE_SETTINGS[k].options,f[k]);
+      add(k,CS_STYLE_SETTINGS[k].label,opt&&opt.value);
     }
+  }
+  if(video&&caps.has("speedRamp")){
+    const r=csOpt(csRampList(tier),(o.scene&&o.scene.speedRamp)||f.speedRamp);
+    add("ramp","Speed ramp",r&&r.value);
+  }
+  if(caps.has("locations"))add("location","Location",CS_LOCATION_FRAG);
+  if(caps.has("rig")){
+    const rig=[[CS_CAMERA_BODIES,f.body],[CS_LENSES,f.lens],[CS_FOCAL_LENGTHS,f.focal],[CS_APERTURES,f.aperture]]
+      .map(([list,id])=>(csOpt(list,id)||{}).frag).filter(Boolean);
+    add("rig","Camera rig",rig.join(", "));
+  }
+  if(o.soulHex)add("soulhex","Soul HEX",CS_SOULHEX_FRAG);
+  add("director","Director",o.director);
+  add("variation","Variation",o.variation);
+  return {text:parts.map(p=>p.text).join(", "),parts};
+}
+
+/* ─────────────────── 3 · PLAN + RUNNER ─────────────────── */
+
+// One Generate press → 1..N jobs. Pure: no network, no DOM.
+function csBuildPlan(o){
+  const f=S.csForm,tier=csTier(),caps=new Set(tier.caps||[]),video=csIsVideo(),jobs=[];
+  const provider=csBrand();
+  const base={model:tier.model,ratio:f.ratio,provider,raw:o.raw};
+  const uid=()=>"csjob_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  const ctx={tier,mode:S.csMode,prompt:o.prompt,director:o.director,soulHex:o.soulHex};
+  if(video){
+    const multi=f.shot==="custom"&&S.csScenes.length>0&&caps.has("multishot");
+    if(multi){
+      S.csScenes.forEach((sc,i)=>jobs.push(Object.assign({},base,{
+        id:uid(),kind:"video",sequence:true,
+        label:`Scene ${i+1}/${S.csScenes.length}…`,
+        duration:snapToKatFilmsDuration(sc.duration),
+        prompt:csCompile(Object.assign({scene:sc},ctx)).text,
+        costNote:`${tier.label} — Scene ${i+1}`,
+        displayProvider:`${provider} — Scene ${i+1}`,
+      })));
+    }else{
+      jobs.push(Object.assign({},base,{
+        id:uid(),kind:"video",label:"Rolling camera…",
+        duration:snapToKatFilmsDuration(f.duration),
+        prompt:csCompile(ctx).text,costNote:tier.label,displayProvider:provider,
+      }));
+    }
+  }else if(caps.has("locations")){
+    const n=f.locations;
+    for(let i=0;i<n;i++)jobs.push(Object.assign({},base,{
+      id:uid(),kind:"image",label:`Composing location ${i+1}/${n}…`,
+      prompt:csCompile(Object.assign({variation:`variation ${i+1} of ${n}, different angle or time of day than the other variations`},ctx)).text,
+      costNote:`${provider} (location ${i+1}/${n})`,displayProvider:provider,
+    }));
   }else{
-    const est=estimateImageCost(tier.imageModel,1);
-    hint.textContent=est?formatCostLine(est):"";
+    jobs.push(Object.assign({},base,{
+      id:uid(),kind:"image",label:"Composing shot…",
+      prompt:csCompile(ctx).text,costNote:`${provider} (${tier.label})`,displayProvider:provider,
+    }));
+  }
+  return jobs;
+}
+
+// Executes ONE job and returns the chat message to show. Throws on failure.
+async function csRunJob(job,imageUrls){
+  const projectId=S.csActiveProjectId||"";
+  if(job.kind==="video"){
+    const url=await genViaSeedanceReference(job.prompt,job.model,job.ratio,job.duration,imageUrls,[],[]);
+    const asset=createVideoAsset(url,job.prompt,projectId,{model:job.model,providerLabel:job.provider},true);
+    if(projectId)addCsGenerationToProject(projectId,asset.id);
+    if(job.sequence&&typeof addToSequence==="function")addToSequence(asset.id);
+    logCost(job.model,job.costNote);
+    return {type:"video",content:url,meta:{prompt:job.prompt,raw:job.raw,providerLabel:job.displayProvider,assetId:asset.id}};
+  }
+  // Mentioned characters / Soul HEX → real multi-reference composition;
+  // otherwise plain text-to-image on the tier's model.
+  const useEdit=imageUrls.length>0;
+  const model=useEdit?CS_IMAGE_EDIT_MODEL:job.model;
+  const result=useEdit
+    ?await genViaFluxEdit(job.prompt,imageUrls,job.ratio,CS_IMAGE_EDIT_MODEL)
+    :await genViaFal(job.prompt,"",job.model,job.ratio,false);
+  const asset=await createImageAsset(result.url,job.prompt,projectId,{model,providerLabel:job.provider});
+  if(projectId)addCsGenerationToProject(projectId,asset.id);
+  logCost(model,job.costNote);
+  return {type:"image",content:result.url,meta:{prompt:job.prompt,raw:job.raw,providerLabel:job.displayProvider,assetId:asset.id}};
+}
+
+// Runs a job inside a loading bubble; success or failure both land in the
+// thread. A failed job keeps its inputs so Retry can re-run exactly it.
+async function csExecuteJob(job,imageUrls,bubbleId){
+  csReplaceBubble(bubbleId,{id:bubbleId,type:"loading",content:job.label});
+  try{
+    const msg=await csRunJob(job,imageUrls);
+    delete CS_JOBS[job.id];
+    csReplaceBubble(bubbleId,msg);
+    return true;
+  }catch(err){
+    CS_JOBS[job.id]={job,imageUrls};
+    csReplaceBubble(bubbleId,{type:"error",content:err&&err.message||"Generation failed",jobId:job.id});
+    return false;
   }
 }
-
-function handleCsChatKeydown(e){
-  if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();sendCinemaStudioGen();}
+async function csRetryJob(jobId){
+  const entry=CS_JOBS[jobId];
+  if(!entry||S.csBusy)return;
+  const idx=S.csChatHistory.findIndex(m=>m.jobId===jobId);
+  if(idx<0)return;
+  S.csBusy=true;csSetBusy(true);
+  const bubbleId="csLoading_"+Date.now();
+  S.csChatHistory[idx]={id:bubbleId,type:"loading",content:entry.job.label};
+  csRenderThread();
+  const ok=await csExecuteJob(entry.job,entry.imageUrls,bubbleId);
+  toast(ok?"✨ Generated":"❌ Still failing — check the message above",ok?"success":"error");
+  S.csBusy=false;csSetBusy(false);
 }
 
-// ── SHOT CONTROL — confirmed via screenshot: Smart (default, single
-// continuous shot) vs Custom Multishot (break this generation into
-// sequential scene segments, same shared description, each segment with
-// its own duration + Speed Ramp). Seedance has no native multi-scene
-// parameter, so Custom Multishot is real, not simulated: each scene
-// becomes its own real generation call, all landing in order in Video
-// Editor's sequence — the closest honest equivalent to "one generate
-// button, one multi-part result" this app's actual capabilities allow. ──
-function onCsShotControlChange(){
-  S.csShotControl=document.getElementById("csShotControl")?.value||"smart";
-  if(S.csShotControl==="custom"&&!S.csScenes.length){
-    addCsScene();addCsScene();
-  }
-  renderCsSceneCards();
-  updateCsCostHint();
-}
+async function sendCinemaStudioGen(){
+  if(S.csBusy)return;
+  const apiKey=gs("api_falai","");
+  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
+  const tier=csTier();
+  if(tier.empty){toast(`${tier.label} is empty — choose a different tier`,"error");return;}
+  const ta=csEl("csPrompt");
+  const rawPrompt=ta&&ta.value.trim();
+  if(!rawPrompt){toast("Describe your scene first","error");return;}
+  const f=S.csForm;
+  if(f.shot==="custom"&&!S.csScenes.length){toast("Add at least one scene, or switch Shot Control to Smart","error");return;}
 
-function addCsScene(){
-  S.csScenes.push({id:++S.csSceneCounter,duration:4,speedRamp:""});
-  renderCsSceneCards();
-  updateCsCostHint();
-}
-function removeCsScene(id){
-  S.csScenes=S.csScenes.filter(s=>s.id!==id);
-  if(!S.csScenes.length)S.csShotControl="smart";
-  renderCsSceneCards();
-  const sel=document.getElementById("csShotControl");
-  if(sel){sel.value=S.csShotControl;renderSimpleTrigger("csShotControl");}
-  updateCsCostHint();
-}
-function updateCsSceneDuration(id,val){
-  const s=S.csScenes.find(x=>x.id===id);
-  if(s){s.duration=Math.max(3,Math.min(15,parseInt(val,10)||4));updateCsCostHint();}
-}
-function updateCsSceneSpeedRamp(id,val){
-  const s=S.csScenes.find(x=>x.id===id);
-  if(s)s.speedRamp=val;
-}
-
-function renderCsSceneCards(){
-  const row=document.getElementById("csSceneCardsRow");
-  if(!row)return;
-  if(S.csShotControl!=="custom"){row.style.display="none";return;}
-  row.style.display="flex";
-  const tier=getCsTier();
-  const rampList=tier.enhancedSpeedRamp?SPEED_RAMPS_ENHANCED:SPEED_RAMPS;
-  row.innerHTML=S.csScenes.map((s,i)=>`<div class="panel" style="min-width:110px;padding:8px;flex-shrink:0">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <span style="font-size:11px;font-weight:700;color:var(--violet)">Scene ${i+1}</span>
-      <button onclick="removeCsScene(${s.id})" style="width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:9px;cursor:pointer;line-height:1">✕</button>
-    </div>
-    <select style="width:100%;font-size:10px;padding:3px;border-radius:6px;border:1px solid var(--glass-brd);background:var(--pearl2);margin-bottom:4px" onchange="updateCsSceneSpeedRamp(${s.id},this.value)">
-      ${rampList.map(r=>`<option value="${r.value}" ${r.value===s.speedRamp?'selected':''}>${r.label}</option>`).join('')}
-    </select>
-    <input type="number" min="3" max="15" value="${s.duration}" style="width:100%;font-size:10px;padding:3px;border-radius:6px;border:1px solid var(--glass-brd);background:var(--pearl2)" onchange="updateCsSceneDuration(${s.id},this.value)">
-  </div>`).join('')+`<button onclick="addCsScene()" class="panel" style="min-width:44px;flex-shrink:0;border:1.5px dashed var(--glass-brd);background:transparent;cursor:pointer;font-size:18px;color:var(--violet)">+</button>`;
-}
-
-
-function handleCsPromptInput(e){
-  const ta=e.target;
-  const cursor=ta.selectionStart;
-  const upToCursor=ta.value.slice(0,cursor);
-  const match=upToCursor.match(/@([a-zA-Z0-9_]*)$/);
-  const dd=document.getElementById("csMentionDropdown");
-  if(!match){dd.style.display="none";return;}
-  const query=match[1].toLowerCase();
-  const candidates=(S.characters||[]).filter(c=>c.name.toLowerCase().includes(query)).slice(0,6);
-  if(!candidates.length){dd.style.display="none";return;}
-  dd.style.display="block";
-  dd.innerHTML=candidates.map(c=>`<div style="padding:6px 10px;cursor:pointer;font-size:12px;border-radius:6px" onmousedown="insertCsMention('${c.name.replace(/'/g,"\\'")}')" onmouseover="this.style.background='var(--glass-brd)'" onmouseout="this.style.background='transparent'">🎭 ${escapeHtml(c.name)}</div>`).join('');
-}
-function insertCsMention(name){
-  const ta=document.getElementById("csPrompt");
-  const cursor=ta.selectionStart;
-  const before=ta.value.slice(0,cursor).replace(/@([a-zA-Z0-9_]*)$/,"");
-  const after=ta.value.slice(cursor);
-  ta.value=`${before}@${name} ${after}`;
-  document.getElementById("csMentionDropdown").style.display="none";
-  ta.focus();
-}
-
-// Dedicated @ button next to + — matches Higgsfield's own composer,
-// which has both as separate icons rather than only supporting @ via
-// typing it manually. Inserts @ at the cursor and immediately shows the
-// same character dropdown handleCsPromptInput would, so the mention
-// feature is discoverable without already knowing the shortcut.
-function openCsMentionPicker(){
-  const ta=document.getElementById("csPrompt");
-  if(!ta||ta.disabled)return;
-  if(!(S.characters||[]).length){
-    toast("No characters yet — build one in the Character Library first","error");
+  S.csBusy=true;csSetBusy(true);
+  const chips=csPromptChips();
+  csPushMessage({role:"user",content:rawPrompt,chips});
+  ta.value="";ta.style.height="auto";S.csDraft="";
+  const refs=S.csRefImages.slice();
+  S.csRefImages=[];csRenderRefStrip();
+  const prepId="csLoading_"+Date.now();
+  csPushMessage({id:prepId,type:"loading",content:"Preparing references…"});
+  let jobs=[],imageUrls=[];
+  try{
+    const resolved=await csResolveMentions(rawPrompt,apiKey,refs);
+    imageUrls=resolved.imageUrls;
+    let soulHex=false;
+    if(csHas("soulHex")&&S.csSoulHexRef){
+      try{
+        const hosted=await uploadRefsToFal([{dataUrl:S.csSoulHexRef,name:"soulhex-ref"}],apiKey);
+        if(hosted&&hosted[0]){imageUrls.push(hosted[0]);soulHex=true;}
+      }catch(err){console.warn("Soul HEX reference upload failed",err.message);}
+    }
+    jobs=csBuildPlan({prompt:resolved.cleanPrompt,raw:rawPrompt,director:getActiveDirectorPrompt(),soulHex});
+  }catch(err){
+    csReplaceBubble(prepId,{type:"error",content:err.message});
+    toast("❌ "+err.message,"error");
+    S.csBusy=false;csSetBusy(false);
     return;
   }
-  const cursor=ta.selectionStart??ta.value.length;
-  const before=ta.value.slice(0,cursor);
-  const after=ta.value.slice(cursor);
-  ta.value=`${before}@${after}`;
-  ta.focus();
-  ta.selectionStart=ta.selectionEnd=cursor+1;
-  handleCsPromptInput({target:ta});
+  csRemoveBubble(prepId);
+  if(jobs.length>1)toast(`🎬 Running ${jobs.length} ${csIsVideo()?"scenes":"variations"}…`,"success");
+  let failed=0;
+  for(const job of jobs){
+    const bubbleId="csLoading_"+job.id;
+    csPushMessage({id:bubbleId,type:"loading",content:job.label});
+    const ok=await csExecuteJob(job,imageUrls,bubbleId);
+    if(!ok)failed++;
+  }
+  if(jobs.length>1)toast(failed?"⚠️ Finished with some errors — retry the failed ones above":(csIsVideo()?"✨ Multishot complete — all scenes added to Video Editor in order":`✅ ${jobs.length} variations done`),failed?"error":"success");
+  else toast(failed?"❌ Generation failed":"✨ Generated",failed?"error":"success");
+  if(csIsVideo()&&f.shot==="custom"){S.csScenes=[];f.shot="smart";}
+  S.csBusy=false;csSetBusy(false);
+  csRefreshAll();
 }
 
-// ── AD-HOC REFERENCE IMAGES — the generic counterpart to @CharacterName.
-// Higgsfield's own composer has a "+" next to its "@" for exactly this:
-// tag any uploaded image (not just a saved library entry) as @Image1,
-// @Image2, etc. ──
-async function handleCsRefImageUpload(event){
-  const file=event.target.files[0];
-  event.target.value="";
-  if(!file)return;
-  if(!file.type.startsWith("image/")){toast("Images only","error");return;}
-  try{
-    const dataUrl=await downscaleImageFile(file);
-    const tag="Image"+(++S.csRefImageCounter);
-    S.csRefImages.push({tag,dataUrl,name:file.name});
-    insertCsRefTag(tag);
-    renderCsRefImageStrip();
-  }catch(err){toast(err.message,"error");}
-}
-function insertCsRefTag(tag){
-  const ta=document.getElementById("csPrompt");
-  if(!ta)return;
-  const cursor=ta.selectionStart;
-  const before=ta.value.slice(0,cursor);
-  const after=ta.value.slice(cursor);
-  ta.value=`${before}@${tag} ${after}`;
-  ta.focus();
-}
-function renderCsRefImageStrip(){
-  const strip=document.getElementById("csRefImageStrip");
-  if(!strip)return;
-  strip.innerHTML=S.csRefImages.map((r,i)=>`<div style="position:relative;width:44px;height:44px">
-    <img src="${r.dataUrl}" style="width:44px;height:44px;border-radius:8px;object-fit:cover">
-    <div style="position:absolute;bottom:-2px;left:-2px;right:-2px;text-align:center;background:rgba(0,0,0,0.65);color:#fff;font-size:7px;border-radius:4px;padding:1px">@${r.tag}</div>
-    <button onclick="removeCsRefImage(${i})" style="position:absolute;top:-5px;right:-5px;width:15px;height:15px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:8px;cursor:pointer;line-height:1">✕</button>
-  </div>`).join('');
-}
-function removeCsRefImage(i){
-  const removed=S.csRefImages[i];
-  if(!removed)return;
-  S.csRefImages.splice(i,1);
-  const ta=document.getElementById("csPrompt");
-  if(ta)ta.value=ta.value.replace(new RegExp(`@${removed.tag}\\b\\s?`,"gi"),"");
-  renderCsRefImageStrip();
+// Short chips shown under the user's message so a thread reads like a
+// shot log: what camera/look this prompt was sent with.
+function csPromptChips(){
+  const f=S.csForm,caps=csCaps(),out=[];
+  if(caps.has("genre")&&f.genre!=="General")out.push(f.genre);
+  if(csIsVideo()){
+    if(f.shot==="custom")out.push(`${S.csScenes.length} scenes`);
+    else out.push(snapToKatFilmsDuration(f.duration)+"s");
+    const mv=csOpt(CS_CAMERA_MOVES,f.cameraMove);
+    if(caps.has("cameraMove")&&mv&&mv.value)out.push(mv.label);
+  }
+  if(caps.has("rig")){
+    const l=CS_RIG_LOOKS.find(x=>x.id===f.look);
+    if(l)out.push(l.label);
+    else{for(const id of [f.body,f.lens,f.focal,f.aperture])if(id&&id!=="Auto")out.push(id);}
+  }
+  out.push(f.ratio);
+  return out.slice(0,6);
 }
 
+function csEstimate(){
+  const tier=csTier(),f=S.csForm;
+  if(tier.empty||!tier.model)return null;
+  if(csIsVideo()){
+    if(f.shot==="custom"&&S.csScenes.length){
+      let cost=0,approx=false;
+      for(const sc of S.csScenes){
+        const e=estimateVideoCost(tier.model,snapToKatFilmsDuration(sc.duration),"720p",false);
+        if(!e)return null;cost+=e.cost;approx=approx||e.approx;
+      }
+      return {cost,approx,note:`${S.csScenes.length} scenes`};
+    }
+    return estimateVideoCost(tier.model,snapToKatFilmsDuration(f.duration),"720p",false);
+  }
+  return estimateImageCost(tier.model,csHas("locations")?f.locations:1);
+}
 
-// Resolves every @Tag mention in the prompt against TWO real sources:
-// (1) this app's Character library (@CharacterName — substituted with a
-// plain, model-readable name + lock description, since fal models don't
-// understand "@Name" syntax; that's this app's own UI convention) and
-// (2) ad-hoc attached reference images (@Image1 etc. — the tag itself is
-// stripped from the visible prompt since there's no name to substitute;
-// the image does the work via image_urls instead). Both real image
-// uploads happen here, hosted for the actual API call. Unmatched @Words
-// are left as-is — most likely just part of the sentence.
-async function resolveCsCharacterMentions(text,apiKey,refImages){
+/* ─────────────────── REFERENCES & @MENTIONS ─────────────────── */
+
+// Resolves every @Tag in the prompt against two real sources: (1) the app's
+// Character library (@Name → plain name + lock description, since fal
+// models don't understand "@Name"; the character's reference photo is
+// uploaded and passed as an image input) and (2) ad-hoc attached images
+// (@Image1.. — tag stripped, the image does the work). Unmatched @Words are
+// left as-is — most likely just part of the sentence.
+async function csResolveMentions(text,apiKey,refImages){
   const mentioned=[...text.matchAll(/@([a-zA-Z0-9_]+)/g)].map(m=>m[1]);
   let cleanPrompt=text;
   const imageUrls=[];
   for(const tag of mentioned){
     const c=(S.characters||[]).find(ch=>ch.name.toLowerCase()===tag.toLowerCase());
     if(c){
-      const re=new RegExp(`@${tag}\\b`,"gi");
-      cleanPrompt=cleanPrompt.replace(re,c.lock?`${c.name} (${c.lock})`:c.name);
+      cleanPrompt=cleanPrompt.replace(new RegExp(`@${tag}\\b`,"gi"),c.lock?`${c.name} (${c.lock})`:c.name);
       if(c.refImg){
         try{
           const hosted=await uploadRefsToFal([{dataUrl:c.refImg,name:c.name}],apiKey);
@@ -925,8 +412,7 @@ async function resolveCsCharacterMentions(text,apiKey,refImages){
     }
     const ref=(refImages||S.csRefImages).find(r=>r.tag.toLowerCase()===tag.toLowerCase());
     if(ref){
-      const re=new RegExp(`@${tag}\\b\\s?`,"gi");
-      cleanPrompt=cleanPrompt.replace(re,"").trim();
+      cleanPrompt=cleanPrompt.replace(new RegExp(`@${tag}\\b\\s?`,"gi"),"").trim();
       try{
         const hosted=await uploadRefsToFal([{dataUrl:ref.dataUrl,name:ref.name}],apiKey);
         if(hosted&&hosted[0])imageUrls.push(hosted[0]);
@@ -936,279 +422,582 @@ async function resolveCsCharacterMentions(text,apiKey,refImages){
   return {cleanPrompt,imageUrls};
 }
 
-// ── CHAT THREAD — same ig-bubble-user/assistant/loading pattern Image
-// Gen and Video Canvas already use. ──
-function renderCsChatThread(){
-  const thread=document.getElementById("csChatThread");
-  if(!thread)return;
-  if(!S.csChatHistory.length){
-    thread.innerHTML=`<div class="ig-empty-chat">
-      <div style="font-size:32px;margin-bottom:8px;opacity:0.5">✨</div>
-      <div style="font-size:13px;font-weight:600;color:var(--textm)">Describe a scene below to get started</div>
-      <div style="font-size:11px;color:var(--texts);margin-top:4px">Your generations stay here like a conversation — scroll up to see past ones</div>
-    </div>`;
+async function handleCsRefImageUpload(event){
+  const file=event.target.files&&event.target.files[0];
+  event.target.value="";
+  if(!file)return;
+  if(!file.type.startsWith("image/")){toast("Images only","error");return;}
+  try{
+    const dataUrl=await downscaleImageFile(file);
+    const tag="Image"+(++S.csRefImageCounter);
+    S.csRefImages.push({tag,dataUrl,name:file.name});
+    csInsertAtCursor(`@${tag} `);
+    csRenderRefStrip();
+  }catch(err){toast(err.message,"error");}
+}
+function removeCsRefImage(i){
+  const removed=S.csRefImages[i];
+  if(!removed)return;
+  S.csRefImages.splice(i,1);
+  const ta=csEl("csPrompt");
+  if(ta)ta.value=ta.value.replace(new RegExp(`@${removed.tag}\\b\\s?`,"gi"),"");
+  csRenderRefStrip();
+}
+async function handleCsSoulHexUpload(event){
+  const file=event.target.files&&event.target.files[0];
+  event.target.value="";
+  if(!file)return;
+  try{S.csSoulHexRef=await downscaleImageFile(file,1024,0.9);csRenderSheet();}
+  catch(err){toast("Couldn't read that reference image: "+err.message,"error");}
+}
+function csInsertAtCursor(text){
+  const ta=csEl("csPrompt");
+  if(!ta)return;
+  const c=ta.selectionStart??ta.value.length;
+  ta.value=ta.value.slice(0,c)+text+ta.value.slice(c);
+  ta.focus();
+  ta.selectionStart=ta.selectionEnd=c+text.length;
+}
+function csOnPromptInput(ta){
+  S.csDraft=ta.value;
+  ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,140)+"px";
+  const dd=csEl("csMention");
+  if(!dd)return;
+  const m=ta.value.slice(0,ta.selectionStart).match(/@([a-zA-Z0-9_]*)$/);
+  if(!m){dd.style.display="none";return;}
+  const q=m[1].toLowerCase();
+  const found=(S.characters||[]).filter(c=>c.name.toLowerCase().includes(q)).slice(0,6);
+  if(!found.length){dd.style.display="none";return;}
+  dd.style.display="block";
+  dd.innerHTML=found.map(c=>`<button type="button" data-cs="mention" data-v="${csEsc(c.name)}">🎭 ${csEsc(c.name)}</button>`).join("");
+}
+function csPickMention(name){
+  const ta=csEl("csPrompt");
+  if(!ta)return;
+  const c=ta.selectionStart;
+  const before=ta.value.slice(0,c).replace(/@([a-zA-Z0-9_]*)$/,"");
+  ta.value=`${before}@${name} ${ta.value.slice(c)}`;
+  const dd=csEl("csMention");if(dd)dd.style.display="none";
+  ta.focus();S.csDraft=ta.value;
+}
+function openCsMentionPicker(){
+  const ta=csEl("csPrompt");
+  if(!ta||ta.disabled)return;
+  if(!(S.characters||[]).length){toast("No characters yet — build one in the Character Library first","error");return;}
+  csInsertAtCursor("@");
+  csOnPromptInput(ta);
+}
+function handleCsChatKeydown(e){
+  if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();sendCinemaStudioGen();}
+}
+
+/* ─────────────────── MULTISHOT SCENES ─────────────────── */
+
+function csAddScene(silent){
+  S.csScenes.push({id:++S.csSceneCounter,duration:4,speedRamp:"",cameraMove:""});
+  if(!silent)csRefreshAll();
+}
+function csRemoveScene(id){
+  S.csScenes=S.csScenes.filter(s=>s.id!==id);
+  if(!S.csScenes.length)S.csForm.shot="smart";
+  csRefreshAll();
+}
+function csUpdateScene(id,field,val){
+  const s=S.csScenes.find(x=>x.id===id);
+  if(!s)return;
+  if(field==="duration")s.duration=Math.max(3,Math.min(15,parseInt(val,10)||4));
+  else s[field]=val;
+  csRenderCost();csRenderSummary();
+  if(csEl("csSheetBody")&&csEl("csSettingsPanel").classList.contains("open"))csRenderSheet();
+}
+
+/* ───────────────────────── 4 · UI ───────────────────────── */
+
+function csInjectCss(){
+  if(csEl("cs-css"))return;
+  const s=document.createElement("style");s.id="cs-css";
+  s.textContent=`
+.cs-modebar{display:flex;gap:8px;align-items:center;justify-content:space-between;margin:0 10px 6px;flex:0 0 auto;z-index:2}
+.cs-modebar .ks-seg{margin:0;flex:0 0 auto}
+.cs-modebar .ks-seg button{padding:7px 12px;font-size:11.5px}
+.cs-scenes{display:none;gap:8px;overflow-x:auto;margin:0 10px 6px;padding:2px 2px 6px;flex:0 0 auto;scrollbar-width:none;z-index:2}
+.cs-scenes::-webkit-scrollbar{display:none}
+.cs-scene{flex:0 0 156px;border-radius:14px;padding:9px;display:flex;flex-direction:column;gap:6px}
+.cs-scene-h{display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:800;color:var(--violet,#3d1f7a)}
+.cs-scene .ks-sel{padding:6px 8px;font-size:11px;border-radius:9px}
+.cs-x{width:20px;height:20px;border-radius:50%;border:0;background:#3d1f7a;color:#fff;font-size:9px;cursor:pointer;flex:0 0 auto;padding:0}
+.cs-addscene{flex:0 0 52px;border:1.5px dashed var(--glass-brd,rgba(61,31,122,.3));background:transparent;color:var(--violet,#3d1f7a);border-radius:14px;font-size:22px;cursor:pointer}
+.cs-refs{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.cs-ref{position:relative;width:44px;height:44px}
+.cs-ref img{width:44px;height:44px;border-radius:9px;object-fit:cover}
+.cs-ref i{position:absolute;bottom:-3px;left:-3px;right:-3px;text-align:center;background:rgba(0,0,0,.66);color:#fff;font-size:7.5px;border-radius:4px;padding:1px;font-style:normal}
+.cs-ref .cs-x{position:absolute;top:-6px;right:-6px;width:17px;height:17px;font-size:8px}
+.cs-mention{display:none;position:absolute;left:14px;right:14px;bottom:168px;z-index:7;border-radius:14px;padding:4px;max-height:176px;overflow-y:auto}
+.cs-mention button{display:block;width:100%;text-align:left;border:0;background:transparent;color:var(--text,#1e1230);padding:9px 11px;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit}
+.cs-mention button:active{background:rgba(98,64,176,.14)}
+.cs-mini{font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:99px;background:rgba(255,255,255,.2);color:inherit}
+.cs-chiprow{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;justify-content:flex-end}
+.cs-bub{align-self:flex-end;max-width:84%;display:flex;flex-direction:column;align-items:flex-end}
+.cs-media{width:100%;max-width:360px;border-radius:14px;display:block;background:#0f0c16}
+.cs-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.cs-act{border:1px solid var(--glass-brd,rgba(61,31,122,.14));background:rgba(98,64,176,.10);color:var(--textm,#5a4880);border-radius:11px;padding:7px 11px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.cs-meta{font-size:10.5px;color:var(--texts,#9488ae);margin-top:6px}
+.cs-view{flex:1;min-height:0;overflow-y:auto;padding:12px 12px 24px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.cs-back{display:inline-flex;align-items:center;gap:6px;margin-bottom:12px}
+.cs-card{border-radius:16px;padding:10px;margin-bottom:12px}
+.cs-card .cs-media{max-width:none}
+.cs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.cs-gcard{border-radius:14px;padding:6px;display:flex;flex-direction:column;gap:6px}
+.cs-gcard img,.cs-gcard video{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;background:#0f0c16}
+.cs-gcard .cs-ph{width:100%;aspect-ratio:1;border-radius:10px;background:rgba(98,64,176,.12);display:grid;place-items:center;font-size:22px}
+.cs-gcard small{font-size:10.5px;color:var(--textm,#5a4880);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-note{font-size:12px;color:var(--textm,#5a4880);line-height:1.5;padding:18px 6px;text-align:center}
+.cs-empty{margin:auto;text-align:center;padding:26px 18px;max-width:420px}
+.cs-badge{font-size:9px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;border-radius:99px;padding:2px 7px;background:rgba(230,126,34,.16);color:#b8651b}
+.cs-badge.empty{background:rgba(98,64,176,.14);color:var(--textm,#5a4880)}
+.cs-warn{background:rgba(230,126,34,.12);border:1px solid rgba(230,126,34,.3);border-radius:14px;padding:10px 12px;font-size:11px;color:var(--textm,#5a4880);margin-bottom:10px;line-height:1.45}
+.cs-group{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--texts,#9488ae);margin:8px 2px 5px}
+.cs-director{display:flex;align-items:center;gap:10px}
+.cs-director span{flex:1;font-size:13px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-pp{font-size:11px;line-height:1.5;color:var(--textm,#5a4880);margin-top:8px}
+.cs-pp div{margin-bottom:5px;overflow-wrap:anywhere}
+.cs-pp small{display:inline-block;min-width:78px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;font-size:9px;color:var(--texts,#9488ae)}
+.cs-sum{cursor:pointer;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--textm,#5a4880);list-style:none}
+.cs-sum::-webkit-details-marker{display:none}
+.cs-foot{font-size:10px;color:var(--texts,#9488ae);margin:2px 2px 10px;overflow-wrap:anywhere}
+`;
+  document.head.appendChild(s);
+}
+
+// ── SHELL ──
+function renderCinemaStudio(el){
+  csInjectCss();
+  if(typeof KosmicChatGlass!=="undefined")KosmicChatGlass.injectCss();
+  const tabsEl=csEl("moduleTabs");
+  if(tabsEl){tabsEl.style.display="none";tabsEl.innerHTML="";}
+  csNormalize();
+  const IC=KosmicChatGlass.IC;
+  const home=S.csView==="home";
+  el.innerHTML=`
+    <div class="kc" id="csKc">
+      <div class="kc-head kc-glass">
+        <button type="button" class="kc-ibtn" data-cs="nav" aria-label="Menu" title="Menu">${IC.menu}</button>
+        <div class="kc-htitle"><div class="kc-title" id="csTitle"></div><div class="kc-subt" id="csSubt"></div></div>
+        ${home?`<button type="button" class="kc-ibtn" data-cs="settings" aria-label="Cinema settings" title="Cinema settings">${IC.sliders}</button>
+        <button type="button" class="kc-ibtn" data-cs="clearchat" aria-label="Clear chat" title="Clear chat">${IC.trash}</button>`:''}
+      </div>
+      ${home?`
+      <div class="ig-chat-thread kc-thread" id="csChatThread"></div>
+      <div class="cs-mention kc-glass" id="csMention"></div>
+      <div class="cs-modebar" id="csModebar"></div>
+      <div class="cs-scenes" id="csScenes"></div>
+      <div id="csAttachBar" class="kc-attach kc-glass" style="display:none"></div>
+      ${KosmicChatGlass.composer({inputId:"csPrompt",placeholder:"Describe your scene — use @ to add a character or reference image",keydown:"handleCsChatKeydown(event)",settings:"toggleCsSettings()",summaryId:"csSummary",sendId:"csGenBtn",send:"sendCinemaStudioGen()",
+        tools:[
+          {onclick:"csEl('csRefFile').click()",title:"Attach a reference image",icon:IC.plus},
+          {onclick:"openCsMentionPicker()",title:"Add a character",icon:'<b style="font-size:16px;line-height:1">@</b>'},
+        ],
+        hint:'<div class="kc-hint"><span id="csCostHint" style="font-weight:700;color:var(--gold)"></span><span>Ctrl+Enter to generate</span></div>'})}
+      <input type="file" accept="image/*" id="csRefFile" style="display:none">`
+      :`<div class="cs-view" id="csViewBody"></div>`}
+    </div>
+    ${home?`
+    <div class="ig-settings-backdrop" id="csSettingsBackdrop" data-cs="settings"></div>
+    <div class="ig-settings-sheet kc-sheet" id="csSettingsPanel">
+      <div class="ig-sheet-handle" ontouchstart="sheetSwipeStart(event)" ontouchmove="sheetSwipeMove(event,'csSettingsPanel')" ontouchend="sheetSwipeEnd(event,'csSettingsPanel','toggleCsSettings')"></div>
+      <div class="ig-sheet-header"><div>Cinema settings</div><button type="button" class="ks-btn sm" data-cs="settings">Done</button></div>
+      <div class="ks-body" id="csSheetBody"></div>
+      <input type="file" accept="image/*" id="csSoulHexFile" style="display:none">
+    </div>`:''}`;
+  el.onclick=csClick;el.onchange=csChange;el.oninput=csInput;
+  syncCsSidebarActive();
+  csRenderHeader();
+  if(home){
+    const ta=csEl("csPrompt");
+    if(ta){
+      ta.value=S.csDraft||"";
+      if(!gs("api_falai")){ta.disabled=true;ta.placeholder="Add a fal.ai API key in Settings first…";}
+      if(ta.value){ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,140)+"px";}
+    }
+    const go=csEl("csGenBtn");if(go&&!gs("api_falai"))go.disabled=true;
+    csRenderModebar();csRenderScenes();csRenderRefStrip();csRenderThread();csRenderSummary();csRenderCost();csRenderSheet();
+  }else csRenderView();
+}
+
+// Entry point from the sidebar — each of the two buttons passes its mode so
+// "Camera Crafts 4K" opens in Image mode and "Kat Films 4K" in Video mode.
+function openCinemaStudio(mode,el){
+  S.csMode=mode;
+  S.csView="home";
+  csNormalize();
+  switchMod("cinemastudio",el);
+}
+// Keeps whichever sidebar button matches the CURRENT mode highlighted, even
+// when the mode was changed via the in-studio toggle.
+function syncCsSidebarActive(){
+  document.querySelectorAll('[data-mod="cinemastudio"]').forEach(b=>{
+    b.classList.toggle("active",b.dataset.csmode===S.csMode);
+  });
+}
+function csCaptureDraft(){const ta=csEl("csPrompt");if(ta)S.csDraft=ta.value;}
+function csRerender(){csCaptureDraft();renderCinemaStudio(csEl("moduleContent"));}
+
+function setCsMode(mode){
+  if(S.csMode===mode)return;
+  S.csMode=mode;
+  S.csForm.shot="smart";
+  csNormalize();
+  csRerender();
+}
+function setCsView(id){S.csView=id;csRerender();}
+
+function csViewLabel(){return (CS_VIEWS.find(v=>v.id===S.csView)||CS_VIEWS[0]).label;}
+function csRenderHeader(){
+  const t=csEl("csTitle"),s=csEl("csSubt");
+  if(t)t.textContent=(csIsVideo()?"🎬 ":"📷 ")+csBrand();
+  if(!s)return;
+  const tier=csTier(),hasKey=gs("api_falai");
+  const dirId=gs("active_director","");
+  const dir=dirId?(getAllDirectors().find(d=>d.id===dirId)||{}).name:"";
+  s.innerHTML=`<span style="color:var(--${hasKey?'green':'red'});font-weight:700">●</span> ${csEsc(tier.label)}${tier.partial?' <span style="color:var(--gold)">(partial)</span>':''} · ${csEsc(csViewLabel())}${dir?' · '+pIcon('film',10)+' '+csEsc(dir):''}`;
+}
+function csRenderSummary(){
+  const el=csEl("csSummary");
+  if(!el)return;
+  const f=S.csForm,tier=csTier();
+  if(tier.empty){el.textContent=tier.short;return;}
+  const bits=[tier.short,f.ratio];
+  if(csIsVideo())bits.push(f.shot==="custom"?`${S.csScenes.length} scenes`:snapToKatFilmsDuration(f.duration)+"s");
+  const look=CS_RIG_LOOKS.find(l=>l.id===f.look);
+  if(csHas("rig")&&look)bits.push(look.label);
+  el.textContent=bits.join(" · ");
+}
+function csRenderCost(){
+  const el=csEl("csCostHint");
+  if(!el)return;
+  const est=csEstimate();
+  el.textContent=est?formatCostLine(est)+(est.note?` (${est.note})`:""):"";
+}
+function csSetBusy(on){
+  const b=csEl("csGenBtn");
+  if(b){b.disabled=on||!gs("api_falai");b.setAttribute("aria-busy",on?"true":"false");b.style.opacity=on?".55":"";}
+}
+function csRefreshAll(){
+  if(!csEl("csKc"))return;
+  csRenderHeader();csRenderModebar();csRenderScenes();csRenderSummary();csRenderCost();csRenderSheet();
+  const empty=!!csTier().empty;
+  if(S.csThreadEmpty!==empty)csRenderThread();
+}
+
+// ── MODE BAR + SCENES + REFS ──
+function csRenderModebar(){
+  const bar=csEl("csModebar");
+  if(!bar)return;
+  const video=csIsVideo(),multi=S.csForm.shot==="custom";
+  bar.innerHTML=`<div class="ks-seg">
+      <button type="button" class="${!video?'on':''}" data-cs="mode" data-v="image">📷 Image</button>
+      <button type="button" class="${video?'on':''}" data-cs="mode" data-v="video">🎬 Video</button>
+    </div>
+    ${video&&csHas("multishot")?`<div class="ks-seg" title="Shot Control">
+      <button type="button" class="${!multi?'on':''}" data-cs="set" data-k="shot" data-v="smart">Smart</button>
+      <button type="button" class="${multi?'on':''}" data-cs="set" data-k="shot" data-v="custom">Multishot</button>
+    </div>`:''}`;
+}
+function csRenderScenes(){
+  const row=csEl("csScenes");
+  if(!row)return;
+  if(!(csIsVideo()&&S.csForm.shot==="custom")){row.style.display="none";row.innerHTML="";return;}
+  row.style.display="flex";
+  const ramps=csRampList(csTier());
+  const moves=CS_CAMERA_MOVES.filter(m=>m.id!=="auto");
+  row.innerHTML=S.csScenes.map((s,i)=>`<div class="cs-scene kc-glass">
+      <div class="cs-scene-h"><span>Scene ${i+1}</span><button type="button" class="cs-x" data-cs="rmscene" data-v="${s.id}" aria-label="Remove scene">✕</button></div>
+      <select class="ks-sel" data-scene="${s.id}" data-field="cameraMove"><option value="">Camera: studio</option>${moves.map(m=>`<option value="${m.id}"${m.id===s.cameraMove?' selected':''}>${csEsc(m.label)}</option>`).join('')}</select>
+      <select class="ks-sel" data-scene="${s.id}" data-field="speedRamp"><option value="">Ramp: studio</option>${ramps.filter(r=>r.id!=="auto").map(r=>`<option value="${r.id}"${r.id===s.speedRamp?' selected':''}>${csEsc(r.label)}</option>`).join('')}</select>
+      <select class="ks-sel" data-scene="${s.id}" data-field="duration">${[3,4,5,6,8,10,12,15].map(d=>`<option value="${d}"${d===s.duration?' selected':''}>${d}s</option>`).join('')}</select>
+    </div>`).join('')+`<button type="button" class="cs-addscene" data-cs="addscene" aria-label="Add scene">+</button>`;
+}
+function csRenderRefStrip(){
+  const bar=csEl("csAttachBar");
+  if(!bar)return;
+  if(!S.csRefImages.length){bar.style.display="none";bar.innerHTML="";return;}
+  bar.style.display="flex";
+  bar.innerHTML=`<div class="cs-refs">${S.csRefImages.map((r,i)=>`<div class="cs-ref"><img src="${r.dataUrl}" alt=""><i>@${csEsc(r.tag)}</i><button type="button" class="cs-x" data-cs="rmref" data-v="${i}" aria-label="Remove">✕</button></div>`).join('')}</div>`;
+}
+
+// ── SETTINGS SHUTTER ──
+function toggleCsSettings(force){
+  const panel=csEl("csSettingsPanel"),backdrop=csEl("csSettingsBackdrop");
+  if(!panel)return;
+  const opening=typeof force==="boolean"?force:!panel.classList.contains("open");
+  if(opening)csRenderSheet();
+  panel.classList.toggle("open",opening);
+  if(backdrop)backdrop.classList.toggle("show",opening);
+}
+
+// Builders. Every control is a button carrying data-cs — one delegated
+// handler (csClick) routes them all; no inline JS strings to escape.
+const csChip=(k,v,label,on,extra)=>`<button type="button" class="ks-chip ks-glow${on?' on':''}" data-cs="set" data-k="${k}" data-v="${csEsc(v)}">${extra||''}${csEsc(label)}</button>`;
+const csCard=(k,v,title,sub,on,pre)=>`<button type="button" class="ks-mcard ks-glow${on?' on':''}" data-cs="set" data-k="${k}" data-v="${csEsc(v)}">${pre||''}<b>${csEsc(title)}</b>${sub?`<small>${csEsc(sub)}</small>`:''}</button>`;
+const csRail=(key,html)=>`<div class="ks-rail" data-rail="${key}">${html}</div>`;
+const csSection=(title,small,body)=>`<div class="ks-card"><div class="ks-lab"><span>${title}</span>${small?`<small>${small}</small>`:''}</div>${body}</div>`;
+
+function csRenderSheet(){
+  const body=csEl("csSheetBody"),panel=csEl("csSettingsPanel");
+  if(!body||!panel)return;
+  // keep scroll positions across the re-render (vertical on the sheet,
+  // horizontal on every rail) so tapping a chip never jumps the view
+  const top=panel.scrollTop;
+  const rails={};body.querySelectorAll("[data-rail]").forEach(r=>{rails[r.dataset.rail]=r.scrollLeft;});
+  const openPP=!!(body.querySelector("details[data-pp]")||{}).open;
+  const f=S.csForm,tier=csTier(),caps=new Set(tier.caps||[]),video=csIsVideo();
+  let h="";
+  if(tier.partial)h+=`<div class="cs-warn">⚠️ ${csEsc(tier.label)} is a partial build — flagged, not hidden. Full parity once more source material is confirmed.</div>`;
+
+  // Tier
+  h+=csSection(`${video?"Kat Films":"Camera Crafts"} tier`,"",csRail("tier",csTiersForMode(S.csMode).map(t=>
+    `<button type="button" class="ks-mcard ks-glow${t.id===tier.id?' on':''}" data-cs="tier" data-v="${t.id}" style="min-width:170px;max-width:220px"><b>${csEsc(t.label)} ${t.empty?'<span class="cs-badge empty">empty</span>':t.partial?'<span class="cs-badge">partial</span>':''}</b><small>${csEsc(t.sub)}</small></button>`).join("")));
+
+  if(tier.empty){
+    h+=`<div class="ks-card"><div class="ks-hint" style="margin:0">${csEsc(tier.sub)}</div>${tier.link?`<div class="ks-row" style="margin-top:10px"><button type="button" class="ks-btn" data-cs="tierlink">${csEsc(tier.link.label)}</button></div>`:''}</div>`;
+    body.innerHTML=h;
+    csRestoreScroll(panel,body,top,rails);
     return;
   }
-  thread.innerHTML=S.csChatHistory.map(msg=>{
-    if(msg.role==="user")return `<div style="align-self:flex-end;max-width:82%;display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-      <div class="ig-bubble-user" style="align-self:stretch;max-width:none">${escapeHtml(msg.content)}</div>
-    </div>`;
-    if(msg.type==="loading")return `<div class="ig-bubble-loading" id="${msg.id}"><span class="ig-dot"></span><span class="ig-dot"></span><span class="ig-dot"></span>&nbsp;${msg.content}</div>`;
-    if(msg.type==="error")return `<div class="ig-bubble-assistant" style="color:var(--red)">❌ ${msg.content}</div>`;
-    if(msg.type==="image")return `<div class="ig-bubble-assistant">
-        <img src="${msg.content}" style="width:100%;max-width:320px;border-radius:12px;display:block;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span class="badge badge-gray">via ${msg.meta.providerLabel}</span><span class="badge badge-green">✓ Saved</span></div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-outline btn-xs" onclick="downloadWithName('${msg.content.replace(/'/g,"\\'")}','KatFilms_${sanitizeFilenamePart(msg.meta.prompt)}.png')">⬇</button>
-          ${msg.meta.assetId?`<button class="btn btn-outline btn-xs" onclick="openCollectionPicker('asset','${msg.meta.assetId}')">📁 Collection</button>`:''}
-          <button class="btn btn-outline btn-xs" onclick="toggleCsFavorite('${msg.meta.assetId}');toast('Favorites updated','success')">⭐</button>
-        </div>
-      </div>`;
-    if(msg.type==="video")return `<div class="ig-bubble-assistant" style="background:none;box-shadow:none;padding:0;border:none">
-        <video src="${msg.content}" controls style="width:100%;max-width:320px;border-radius:12px;display:block"></video>
-        <div class="vc-result-actions">
-          <button class="vc-result-icon-btn" title="Download" onclick="downloadWithName('${msg.content.replace(/'/g,"\\'")}','KatFilms_${sanitizeFilenamePart(msg.meta.prompt)}.mp4')">${VC_RESULT_ICONS.download}</button>
-          ${msg.meta.assetId?`<button class="vc-result-icon-btn" title="Add to Collection" onclick="openCollectionPicker('asset','${msg.meta.assetId}')">${VC_RESULT_ICONS.collection}</button>`:''}
-          <button class="vc-result-icon-btn" title="Favorite" onclick="toggleCsFavorite('${msg.meta.assetId}');toast('Favorites updated','success')">⭐</button>
-        </div>
-      </div>`;
-    return '';
-  }).join('');
+
+  // Motion (video)
+  if(video&&caps.has("cameraMove")){
+    const groups=[...new Set(CS_CAMERA_MOVES.map(m=>m.group))];
+    h+=csSection("Camera movement","",groups.map(g=>`<div class="cs-group">${g}</div><div class="ks-chips" style="margin-bottom:2px">${CS_CAMERA_MOVES.filter(m=>m.group===g).map(m=>csChip("cameraMove",m.id,m.label,f.cameraMove===m.id)).join("")}</div>`).join(""));
+  }
+  if(video&&caps.has("speedRamp")){
+    const pro=caps.has("speedRampPro");
+    h+=csSection("Speed ramp",pro?"Pro presets":"",`<div class="ks-chips">${csRampList(tier).map(r=>csChip("speedRamp",r.id,r.label,f.speedRamp===r.id)).join("")}</div>`);
+  }
+  if(video&&caps.has("duration")){
+    if(f.shot==="custom"){
+      h+=csSection("Duration","per scene",`<div class="ks-hint" style="margin:0">Set on each scene card above the composer — ${S.csScenes.reduce((n,s)=>n+snapToKatFilmsDuration(s.duration),0)}s total.</div>`);
+    }else{
+      const snapped=snapToKatFilmsDuration(f.duration);
+      h+=csSection("Duration",`<b>${snapped}s</b>`,`<div class="ks-chips">${KAT_FILMS_DURATIONS.map(d=>csChip("duration",d,d+"s",!f.customDuration&&snapped===d)).join("")}${csChip("durationCustom",f.duration,"Custom",f.customDuration)}</div>
+        ${f.customDuration?`<input type="range" class="ks-range" data-cs-range="durationCustom" min="3" max="15" step="1" value="${f.duration}" style="--ksf:${(f.duration-3)/12*100}%"><div class="ks-hint" data-range-val="durationCustom">${f.duration}s requested → ${snapped}s (the model only accepts ${KAT_FILMS_DURATIONS.join(", ")}s)</div>`:''}`);
+    }
+  }
+
+  // Camera rig
+  if(caps.has("rig")){
+    const lookCards=csCard("look","","No rig","Let the model decide",!f.look&&f.body==="Auto"&&f.lens==="Auto"&&f.focal==="Auto"&&f.aperture==="Auto")
+      +CS_RIG_LOOKS.map(l=>csCard("look",l.id,l.label,l.sub,f.look===l.id)).join("");
+    h+=csSection("Camera rig",f.look?(CS_RIG_LOOKS.find(l=>l.id===f.look)||{}).label:"custom",
+      `<div class="cs-group" style="margin-top:0">Looks</div>${csRail("looks",lookCards)}
+       <div class="cs-group">Body</div>${csRail("body",CS_CAMERA_BODIES.map(b=>csCard("body",b.id,b.label,b.sub,f.body===b.id)).join(""))}
+       <div class="cs-group">Lens</div>${csRail("lens",CS_LENSES.map(l=>csCard("lens",l.id,l.label,l.sub,f.lens===l.id)).join(""))}
+       <div class="cs-group">Focal length</div><div class="ks-chips">${CS_FOCAL_LENGTHS.map(x=>csChip("focal",x.id,x.label,f.focal===x.id)).join("")}</div>
+       <div class="cs-group">Aperture</div><div class="ks-chips">${CS_APERTURES.map(x=>csChip("aperture",x.id,x.label,f.aperture===x.id)).join("")}</div>
+       <div class="ks-hint" style="margin:8px 0 0">Folded into the prompt as real photography language — "Auto" says nothing.</div>`);
+  }
+
+  // Look
+  if(caps.has("genre"))h+=csSection("Genre","",`<div class="ks-chips">${CINEMA_GENRES.map(g=>csChip("genre",g.label,g.label,f.genre===g.label)).join("")}</div>`);
+  if(caps.has("style")){
+    h+=csSection("Style","",csRail("style",STYLE_PRESETS.map(s=>`<button type="button" class="ks-mcard ks-glow${f.style===s.value?' on':''}" data-cs="set" data-k="style" data-v="${csEsc(s.value)}">${typeof stylePreviewHTML==="function"?stylePreviewHTML(s.label):''}<b>${csEsc(s.label)}</b></button>`).join("")));
+  }
+  if(caps.has("director")){
+    const dirId=gs("active_director","");
+    const dir=dirId?(getAllDirectors().find(d=>d.id===dirId)||{}).name:"";
+    h+=csSection("AI Director","",`<div class="cs-director"><span>${dir?csEsc(dir):"No director active"}</span><button type="button" class="ks-btn sm" data-cs="director">Change</button></div>`);
+  }
+  if(caps.has("styleSettings")){
+    h+=csSection("Style settings","Cinema Studio 3.5-style",Object.entries(CS_STYLE_SETTINGS).map(([k,def])=>`<div class="cs-group" style="margin-top:0">${def.label}</div><div class="ks-chips" style="margin-bottom:4px">${def.options.map(o=>csChip(k,o.id,o.label,f[k]===o.id)).join("")}</div>`).join("")+`<div class="ks-hint" style="margin:4px 0 0">Each list is what was legible in the source — likely not the complete preset set.</div>`);
+  }
+  if(caps.has("soulHex")){
+    h+=csSection("Soul HEX","color palette matching",`<div class="ks-hint" style="margin-top:0">Upload a reference image and its colors, tones and mood carry into your generation. Optional.</div>${S.csSoulHexRef
+      ?`<div class="ks-row"><div class="ks-thumb"><img src="${S.csSoulHexRef}" alt=""></div><span style="flex:1;font-size:12px">Color reference attached</span><button type="button" class="ks-btn ghost" data-cs="soulhex-rm">✕ Remove</button></div>`
+      :`<button type="button" class="ks-btn" style="width:100%" data-cs="soulhex-add">+ Add color reference</button>`}`);
+  }
+  if(caps.has("locations")){
+    h+=csSection("Variations",`<b data-range-val="locations">${f.locations}</b>`,`<input type="range" class="ks-range" data-cs-range="locations" min="1" max="10" step="1" value="${f.locations}" style="--ksf:${(f.locations-1)/9*100}%"><div class="ks-hint" style="margin:0">Describe a place — get this many environment variations of it.</div>`);
+  }
+  if(caps.has("ratio"))h+=csSection("Aspect ratio","",`<div class="ks-chips">${CS_RATIOS.map(r=>csChip("ratio",r,r,f.ratio===r,ksMiniRatio(r))).join("")}</div>`);
+
+  // Transparency: exactly what will be sent
+  const ta=csEl("csPrompt");
+  const sample=(ta&&ta.value.trim())||"your scene description";
+  const firstScene=(video&&f.shot==="custom"&&S.csScenes[0])||null;
+  const compiled=csCompile({tier,mode:S.csMode,prompt:sample,scene:firstScene,director:typeof getActiveDirectorPrompt==="function"?getActiveDirectorPrompt():"",soulHex:caps.has("soulHex")&&!!S.csSoulHexRef});
+  h+=`<details class="ks-card" data-pp${openPP?' open':''}><summary class="cs-sum">Compiled prompt</summary><div class="cs-pp">${compiled.parts.map(p=>`<div><small>${csEsc(p.label)}</small>${csEsc(p.text)}</div>`).join("")}</div></details>`;
+  const est=csEstimate();
+  h+=`<div class="cs-foot">Powered by <b>${csEsc(tier.model)}</b>${est?` · ${csEsc(formatCostLine(est))}${est.note?` (${csEsc(est.note)})`:''}`:''}</div>`;
+
+  body.innerHTML=h;
+  csRestoreScroll(panel,body,top,rails);
+}
+function csRestoreScroll(panel,body,top,rails){
+  body.querySelectorAll("[data-rail]").forEach(r=>{
+    if(rails[r.dataset.rail]!=null)r.scrollLeft=rails[r.dataset.rail];
+    else{const on=r.querySelector(".on");if(on)r.scrollLeft=Math.max(0,on.offsetLeft-12);}
+  });
+  panel.scrollTop=top;
+}
+
+// ── THREAD ──
+function csRenderThread(){
+  const thread=csEl("csChatThread");
+  if(!thread)return;
+  const tier=csTier();
+  S.csThreadEmpty=!!tier.empty;
+  if(tier.empty){
+    thread.innerHTML=`<div class="cs-empty"><div class="kc-orb" style="margin-bottom:14px">🎬</div>
+      <div class="kc-etitle">${csEsc(tier.label)}${tier.link?'':' is empty right now'}</div>
+      <div class="kc-esub">${csEsc(tier.link?tier.sub:"This slot is reserved for a future tier — nothing to generate with yet.")}</div>
+      ${tier.link?`<button type="button" class="ks-btn" data-cs="tierlink" style="width:100%;margin-bottom:8px">${csEsc(tier.link.label)}</button>`:''}
+      <button type="button" class="ks-btn" data-cs="settings" style="width:100%">Choose a different tier</button></div>`;
+    return;
+  }
+  if(!S.csChatHistory.length){
+    const ideas=csIsVideo()
+      ?["A lone astronaut crosses a red desert at dusk, long shadows, dust drifting past camera","Rain-slicked neon alley, a courier sprints toward camera and vaults a railing","Slow reveal of a candle-lit library as a figure turns a page"]
+      :["Rooftop at golden hour, a detective in a trench coat looks over the city","Empty diner at 3am, neon sign flickering on wet glass","Abandoned observatory, shafts of light through a broken dome"];
+    thread.innerHTML=KosmicChatGlass.empty({icon:KosmicChatGlass.IC.spark,title:csIsVideo()?"Roll camera":"Compose a shot",sub:"Your generations stay here like a shot log — scroll up to see earlier ones. Tap the sliders to set the camera rig, movement and look.",ideas,inputId:"csPrompt"});
+    return;
+  }
+  thread.innerHTML=S.csChatHistory.map((m,i)=>csMessageHTML(m,i)).join("");
   thread.scrollTop=thread.scrollHeight;
 }
-
-function pushCsChatMessage(msg){
+function csMessageHTML(msg,i){
+  if(msg.role==="user"){
+    const chips=(msg.chips||[]).map(c=>`<span class="cs-mini">${csEsc(c)}</span>`).join("");
+    return `<div class="cs-bub"><div class="ig-bubble-user" style="align-self:stretch;max-width:none">${csEsc(msg.content)}${chips?`<div class="cs-chiprow">${chips}</div>`:''}</div></div>`;
+  }
+  if(msg.type==="loading")return `<div class="ig-bubble-loading" id="${csEsc(msg.id)}"><span class="ig-dot"></span><span class="ig-dot"></span><span class="ig-dot"></span>&nbsp;${csEsc(msg.content)}</div>`;
+  if(msg.type==="error"){
+    const canRetry=msg.jobId&&CS_JOBS[msg.jobId];
+    return `<div class="ig-bubble-assistant" style="color:var(--red)">❌ ${csEsc(msg.content)}${canRetry?`<div class="cs-actions"><button type="button" class="cs-act" data-cs="retry" data-v="${csEsc(msg.jobId)}">↻ Retry</button></div>`:''}</div>`;
+  }
+  const meta=msg.meta||{},url=csEsc(msg.content),isVid=msg.type==="video";
+  const fname=`KatFilms_${sanitizeFilenamePart(meta.prompt||"shot")}.${isVid?"mp4":"png"}`;
+  const fav=meta.assetId&&S.csFavorites.includes(meta.assetId);
+  const actions=`<div class="cs-actions">
+      <button type="button" class="cs-act" data-cs="dl" data-url="${url}" data-name="${csEsc(fname)}">⬇ Save</button>
+      ${meta.assetId?`<button type="button" class="cs-act" data-cs="coll" data-v="${csEsc(meta.assetId)}">📁 Collection</button>
+      <button type="button" class="cs-act" data-cs="fav" data-v="${csEsc(meta.assetId)}">${fav?'★':'☆'} Favorite</button>`:''}
+      ${meta.raw?`<button type="button" class="cs-act" data-cs="reuse" data-v="${i}">↺ Reuse prompt</button>`:''}
+    </div>`;
+  return `<div class="ig-bubble-assistant">
+      ${isVid?`<video class="cs-media" src="${url}" controls playsinline preload="metadata"></video>`:`<img class="cs-media" src="${url}" alt="">`}
+      <div class="cs-meta">via ${csEsc(meta.providerLabel||csBrand())}</div>${actions}</div>`;
+}
+function csPushMessage(msg){
   S.csChatHistory.push(msg);
   if(S.csChatHistory.length>60)S.csChatHistory=S.csChatHistory.slice(-60);
-  saveSetting("cs_chat_history",S.csChatHistory);
-  renderCsChatThread();
+  csPersistHistory();
+  csRenderThread();
 }
-function replaceCsLoadingBubble(loadingId,newMsg){
-  const idx=S.csChatHistory.findIndex(m=>m.id===loadingId);
-  if(idx>=0)S.csChatHistory[idx]=newMsg;else S.csChatHistory.push(newMsg);
-  saveSetting("cs_chat_history",S.csChatHistory);
-  renderCsChatThread();
+function csReplaceBubble(id,msg){
+  const idx=S.csChatHistory.findIndex(m=>m.id===id);
+  if(idx>=0)S.csChatHistory[idx]=msg;else S.csChatHistory.push(msg);
+  csPersistHistory();
+  csRenderThread();
+}
+function csRemoveBubble(id){
+  S.csChatHistory=S.csChatHistory.filter(m=>m.id!==id);
+  csPersistHistory();csRenderThread();
+}
+// Loading bubbles are runtime-only, so they never reach storage.
+function csPersistHistory(){saveSetting("cs_chat_history",S.csChatHistory.filter(m=>m.type!=="loading"));}
+function csClearChat(){
+  if(!S.csChatHistory.length)return;
+  S.csChatHistory=[];csPersistHistory();csRenderThread();
+  toast("Chat cleared — your generations are still in My Generations","success");
 }
 
-async function sendCinemaStudioGen(){
-  const apiKey=gs("api_falai","");
-  if(!apiKey){toast("Add a fal.ai API key in Settings first","error");return;}
-  const tier=getCsTier();
-  if(tier.empty){toast(`${tier.label} is empty — choose a different tier`,"error");return;}
-  const promptEl=document.getElementById("csPrompt");
-  const rawPrompt=promptEl?.value.trim();
-  if(!rawPrompt){toast("Describe your scene first","error");return;}
-  const isVideo=S.csMode==="video";
-  const genre=CINEMA_GENRES.find(g=>g.label===document.getElementById("csGenre")?.value)||CINEMA_GENRES[0];
-  const cameraMove=isVideo?(document.getElementById("csCameraMove")?.value||""):"";
-  const speedRamp=isVideo?(document.getElementById("csSpeedRamp")?.value||""):"";
-  const ratio=document.getElementById("csRatio")?.value||"16:9";
-  let duration=6;
-  if(isVideo){
-    const durVal=document.getElementById("csDuration")?.value;
-    duration=durVal==="custom"?snapToKatFilmsDuration(parseInt(document.getElementById("csCustomDuration")?.value,10)||6):snapToKatFilmsDuration(parseInt(durVal,10)||6);
+// ── NAV SHEET (views + projects), same chrome as the chat-history sheet ──
+function csOpenNav(){
+  const old=csEl("kchRoot");if(old)old.remove();
+  const root=document.createElement("div");root.id="kchRoot";
+  const projRows=S.csProjects.slice().reverse().map(p=>`<div class="kch-row${p.id===S.csActiveProjectId?' cur':''}"><button type="button" class="kch-main" data-cs="loadproject" data-v="${csEsc(p.id)}"><b>${csEsc(p.name)}</b><small>${(p.generations||[]).length} shot${(p.generations||[]).length===1?'':'s'}${p.id===S.csActiveProjectId?' · active':''}</small></button></div>`).join("");
+  root.innerHTML=`<div class="kch-back" data-cs="navclose"></div>
+    <div class="kch-sheet" role="dialog" aria-label="Studio menu">
+      <div class="kch-grab" data-cs="navclose"></div>
+      <div class="kch-head"><b>${csEsc(csBrand())}</b><button type="button" class="kch-btn" data-cs="newproject">＋ New project</button></div>
+      <div class="kch-body">
+        ${CS_VIEWS.map(v=>`<div class="kch-row${S.csView===v.id?' cur':''}"><button type="button" class="kch-main" data-cs="view" data-v="${v.id}"><b>${csEsc(v.label)}</b><small>${csEsc(v.sub)}</small></button></div>`).join("")}
+        <div class="cs-group" style="margin:14px 4px 6px">Projects</div>
+        ${S.csActiveProjectId?`<div class="kch-row"><button type="button" class="kch-main" data-cs="loadproject" data-v=""><b>No project</b><small>Generations save unfiled</small></button></div>`:''}
+        ${projRows||'<div class="kch-none">No projects yet — start one to group shots into a film.</div>'}
+      </div>
+    </div>`;
+  root.onclick=csClick;
+  document.body.appendChild(root);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>root.classList.add("kch-open")));
+}
+function csCloseNav(){if(typeof KosmicChatGlass!=="undefined")KosmicChatGlass.closeHistory();}
+
+// ── OTHER VIEWS ──
+function csAssetCard(a,actions){
+  return `<div class="cs-gcard kc-glass">
+    ${a.type==="video"?`<video src="${csEsc(a.url)}" controls playsinline preload="metadata"></video>`:`<img src="${csEsc(a.url)}" alt="" loading="lazy">`}
+    <small title="${csEsc(a.prompt||"")}">${csEsc((a.prompt||"").slice(0,60))}</small>${actions||''}</div>`;
+}
+const csFavBtn=a=>`<button type="button" class="cs-act" data-cs="favview" data-v="${csEsc(a.id)}">${S.csFavorites.includes(a.id)?'★ Favorited':'☆ Favorite'}</button>`;
+function csRenderView(){
+  const wrap=csEl("csViewBody");
+  if(!wrap)return;
+  const back=`<button type="button" class="ks-btn cs-back" data-cs="view" data-v="home">← Back to studio</button>`;
+  if(S.csView==="project")return csRenderProject(wrap,back);
+  if(S.csView==="generations"){
+    const gens=(S.assets||[]).filter(a=>a.providerLabel==="Kat Films 4K"||a.providerLabel==="Camera Crafts 4K").slice().reverse();
+    wrap.innerHTML=back+(gens.length?`<div class="cs-grid">${gens.map(a=>csAssetCard(a,csFavBtn(a))).join("")}</div>`:`<div class="cs-note">No generations yet — make one in the studio.</div>`);
+    return;
   }
-  const model=isVideo?tier.videoModel:tier.imageModel;
-  const btn=document.getElementById("csGenBtn");
-  btn.disabled=true;btn.textContent="⏳";
-
-  pushCsChatMessage({role:"user",content:rawPrompt});
-  promptEl.value="";
-  promptEl.style.height="auto";
-  const refImagesSnapshot=S.csRefImages.slice();
-  S.csRefImages=[];
-  renderCsRefImageStrip();
-  const isMultishot=isVideo&&S.csShotControl==="custom"&&S.csScenes.length>0;
-  const loadingId="csLoading_"+Date.now();
-  if(!isMultishot)pushCsChatMessage({id:loadingId,type:"loading",content:isVideo?"Rolling camera…":"Composing shot…"});
-
-  try{
-    const {cleanPrompt,imageUrls}=await resolveCsCharacterMentions(rawPrompt,apiKey,refImagesSnapshot);
-    const style=document.getElementById("csStyle")?.value||"";
-    const directorPrompt=getActiveDirectorPrompt();
-    const colorPalette=tier.styleSettingsPanel?(document.getElementById("csColorPalette")?.value||""):"";
-    const lighting=tier.styleSettingsPanel?(document.getElementById("csLighting")?.value||""):"";
-    const cameraMovesetStyle=tier.styleSettingsPanel?(document.getElementById("csCameraMovesetStyle")?.value||""):"";
-    const projectId=S.csActiveProjectId||"";
-    const providerLabel=isVideo?"Kat Films 4K":"Camera Crafts 4K";
-    const basePromptParts=[genre.frag,cleanPrompt,cameraMove,style,colorPalette,lighting,cameraMovesetStyle];
-
-    if(isMultishot){
-      // CUSTOM MULTISHOT — real, not simulated: each scene is its own
-      // Seedance call sharing the same base description, differing only
-      // in its own duration + Speed Ramp. Seedance has no native
-      // multi-scene parameter, so this is the honest way to deliver
-      // "one press, one multi-part result": every scene lands in order
-      // in Video Editor's sequence, ready to play through as one piece.
-      let anyFailed=false;
-      for(let i=0;i<S.csScenes.length;i++){
-        const scene=S.csScenes[i];
-        const sceneLoadingId="csLoading_"+Date.now()+"_"+i;
-        pushCsChatMessage({id:sceneLoadingId,type:"loading",content:`Scene ${i+1}/${S.csScenes.length}…`});
-        const sceneParts=[...basePromptParts,scene.speedRamp,directorPrompt].filter(Boolean);
-        const scenePrompt=sceneParts.join(", ");
-        const sceneDuration=snapToKatFilmsDuration(scene.duration);
-        try{
-          const videoUrl=await genViaSeedanceReference(scenePrompt,model,ratio,sceneDuration,imageUrls,[],[]);
-          const savedAsset=createVideoAsset(videoUrl,scenePrompt,projectId,{model,providerLabel},true);
-          if(projectId)addCsGenerationToProject(projectId,savedAsset.id);
-          addToSequence(savedAsset.id);
-          logCost(model,providerLabel+" ("+tier.label+" — Scene "+(i+1)+")");
-          replaceCsLoadingBubble(sceneLoadingId,{type:"video",content:videoUrl,meta:{prompt:scenePrompt,providerLabel:providerLabel+" — Scene "+(i+1),assetId:savedAsset.id}});
-        }catch(err){
-          anyFailed=true;
-          replaceCsLoadingBubble(sceneLoadingId,{type:"error",content:`Scene ${i+1}: `+err.message});
-        }
-      }
-      toast(anyFailed?"⚠️ Multishot finished with some errors — check scenes above":"✨ Multishot complete — all scenes added to Video Editor in order","success");
-      S.csScenes=[];
-      S.csShotControl="smart";
-      const shotSel=document.getElementById("csShotControl");
-      if(shotSel){shotSel.value="smart";renderSimpleTrigger("csShotControl");}
-      renderCsSceneCards();
-      renderCsSettingsBody();
-    } else if(isVideo){
-      const parts=[...basePromptParts,speedRamp,directorPrompt].filter(Boolean);
-      const finalPrompt=parts.join(", ");
-      const videoUrl=await genViaSeedanceReference(finalPrompt,model,ratio,duration,imageUrls,[],[]);
-      const savedAsset=createVideoAsset(videoUrl,finalPrompt,projectId,{model,providerLabel},true);
-      if(projectId)addCsGenerationToProject(projectId,savedAsset.id);
-      logCost(model,providerLabel+" ("+tier.label+")");
-      replaceCsLoadingBubble(loadingId,{type:"video",content:videoUrl,meta:{prompt:finalPrompt,providerLabel,assetId:savedAsset.id}});
-      toast("✨ Generated","success");
-    } else {
-      // Soul HEX — real, not just a UI toggle: upload the reference the
-      // same way Character mentions already get uploaded, and add it to
-      // the SAME imageUrls array genViaFluxEdit already consumes below,
-      // so it's genuinely composited in, not just described in text.
-      let soulHexFrag="";
-      if(tier.soulHex&&S.csSoulHexRef){
-        try{
-          const hosted=await uploadRefsToFal([{dataUrl:S.csSoulHexRef,name:"soulhex-ref"}],apiKey);
-          if(hosted&&hosted[0]){
-            imageUrls.push(hosted[0]);
-            soulHexFrag="match the color palette, tones and mood of the attached reference image";
-          }
-        }catch(err){console.warn("Soul HEX reference upload failed",err.message);}
-      }
-      // Cinematic Cameras — Camera/Lens/Focal Length/Aperture aren't real
-      // fal API parameters (same honest note as Kat Films' Camera
-      // Movement/Speed Ramp) — folded into the prompt as a real
-      // photography description instead. "Auto" on any field = no-op.
-      let cinematicCameraFrag="";
-      if(tier.cinematicCameras){
-        const cam=document.getElementById("csSoulCamera")?.value||"Auto";
-        const lens=document.getElementById("csSoulLens")?.value||"Auto";
-        const focal=document.getElementById("csSoulFocal")?.value||"Auto";
-        const aperture=document.getElementById("csSoulAperture")?.value||"Auto";
-        const camBits=[];
-        if(cam!=="Auto")camBits.push(`shot on a ${cam} camera`);
-        if(lens!=="Auto")camBits.push(`${lens} lens`);
-        if(focal!=="Auto")camBits.push(`${focal} focal length`);
-        if(aperture!=="Auto")camBits.push(`${aperture} aperture`);
-        cinematicCameraFrag=camBits.join(", ");
-      }
-      if(tier.cinematicLocations){
-        // Cinematic Locations — its own dedicated tier now (not a
-        // checkbox on a shared tier), so selecting it IS the location
-        // framing. One bubble per variation, generated and replaced in
-        // sequence — same proven pattern Aesthetic Reel already uses.
-        const batchCount=Math.min(10,Math.max(1,parseInt(document.getElementById("csLocationsBatch")?.value,10)||3));
-        const locationFrag="wide establishing shot of the location itself, rich environmental detail, cinematic lighting, no visible characters or people";
-        toast(`📍 Generating ${batchCount} location variation${batchCount>1?'s':''}…`,"success");
-        for(let i=0;i<batchCount;i++){
-          const parts=[...basePromptParts,locationFrag,cinematicCameraFrag,soulHexFrag,directorPrompt,`variation ${i+1} of ${batchCount}, different angle or time of day than the other variations`].filter(Boolean);
-          const finalPrompt=parts.join(", ");
-          const sceneLoadingId="csLoading_"+Date.now()+"_"+i;
-          pushCsChatMessage({id:sceneLoadingId,type:"loading",content:`Composing location ${i+1}/${batchCount}…`});
-          try{
-            const result=imageUrls.length
-              ?await genViaFluxEdit(finalPrompt,imageUrls,ratio,"fal-ai/flux-2/flash/edit")
-              :await genViaFal(finalPrompt,"",model,ratio,false);
-            const savedAsset=await createImageAsset(result.url,finalPrompt,projectId,{model:imageUrls.length?"fal-ai/flux-2/flash/edit":model,providerLabel});
-            if(projectId)addCsGenerationToProject(projectId,savedAsset.id);
-            logCost(imageUrls.length?"fal-ai/flux-2/flash/edit":model,providerLabel+" (location "+(i+1)+"/"+batchCount+")");
-            replaceCsLoadingBubble(sceneLoadingId,{type:"image",content:result.url,meta:{prompt:finalPrompt,providerLabel,assetId:savedAsset.id}});
-          }catch(err){
-            replaceCsLoadingBubble(sceneLoadingId,{type:"error",content:err.message});
-          }
-        }
-        toast(`✅ ${batchCount} location variation${batchCount>1?'s':''} done`,"success");
-        btn.disabled=false;btn.textContent="➤";
-        return;
-      }
-      const parts=[...basePromptParts,cinematicCameraFrag,soulHexFrag,directorPrompt].filter(Boolean);
-      const finalPrompt=parts.join(", ");
-      // Character mentions (and now Soul HEX) in Image mode get a REAL
-      // multi-reference composition (genViaFluxEdit, already used
-      // elsewhere in this app for multi-character storyboard shots)
-      // instead of plain text-to-image, so a mentioned character's
-      // actual photo — or Soul HEX's color reference — is genuinely used.
-      const result=imageUrls.length
-        ?await genViaFluxEdit(finalPrompt,imageUrls,ratio,"fal-ai/flux-2/flash/edit")
-        :await genViaFal(finalPrompt,"",model,ratio,false);
-      const savedAsset=await createImageAsset(result.url,finalPrompt,projectId,{model:imageUrls.length?"fal-ai/flux-2/flash/edit":model,providerLabel});
-      if(projectId)addCsGenerationToProject(projectId,savedAsset.id);
-      logCost(imageUrls.length?"fal-ai/flux-2/flash/edit":model,providerLabel+" ("+tier.label+")");
-      replaceCsLoadingBubble(loadingId,{type:"image",content:result.url,meta:{prompt:finalPrompt,providerLabel,assetId:savedAsset.id}});
-      toast("✨ Generated","success");
-    }
-  }catch(err){
-    replaceCsLoadingBubble(loadingId,{type:"error",content:err.message});
-    toast("❌ "+err.message,"error");
+  if(S.csView==="favorites"){
+    const favs=(S.assets||[]).filter(a=>S.csFavorites.includes(a.id));
+    wrap.innerHTML=back+(favs.length?`<div class="cs-grid">${favs.map(a=>csAssetCard(a,csFavBtn(a))).join("")}</div>`:`<div class="cs-note">Nothing favorited yet — star generations you like to keep them here.</div>`);
+    return;
   }
-  btn.disabled=false;btn.textContent="➤";
+  if(S.csView==="elements"){
+    const chars=S.characters||[];
+    wrap.innerHTML=back+`<div class="cs-note" style="padding-top:0">Elements are this app's Characters — build one there, then type @ and their name in the prompt to bring them into a scene.</div>
+      <button type="button" class="ks-btn" style="width:100%;margin-bottom:12px" data-cs="characters">🎭 Open Character Library</button>
+      <div class="cs-grid">${chars.map(c=>`<div class="cs-gcard kc-glass">${c.refImg?`<img src="${csEsc(c.refImg)}" alt="">`:`<div class="cs-ph">🎭</div>`}<small>${csEsc(c.name)}</small></div>`).join("")||'<div class="cs-note" style="grid-column:1/-1">No characters yet.</div>'}</div>`;
+  }
 }
-
+// PROJECT — the film's shot list: every generation filed to the active
+// project, in order, with one tap to send all the videos to the Video
+// Editor's sequence.
+function csRenderProject(wrap,back){
+  const p=S.csProjects.find(x=>x.id===S.csActiveProjectId);
+  if(!p){
+    wrap.innerHTML=back+`<div class="cs-note">No active project. A project groups your shots into a film — new generations are filed to it automatically.</div>
+      <button type="button" class="ks-btn" style="width:100%" data-cs="newproject">＋ New project</button>`;
+    return;
+  }
+  const assets=(p.generations||[]).map(id=>(S.assets||[]).find(a=>a.id===id)).filter(Boolean);
+  const vids=assets.filter(a=>a.type==="video");
+  wrap.innerHTML=back+`<div class="ks-lab"><span>${csEsc(p.name)}</span><small>${assets.length} shot${assets.length===1?'':'s'}</small></div>
+    <div class="ks-row" style="margin-bottom:12px">
+      <button type="button" class="ks-btn" data-cs="projeditor"${vids.length?'':' disabled'}>🎞 Send ${vids.length} video${vids.length===1?'':'s'} to Editor</button>
+    </div>
+    ${assets.length?`<div class="cs-grid">${assets.map((a,i)=>csAssetCard(a,`<button type="button" class="cs-act" data-cs="projremove" data-v="${csEsc(a.id)}">Remove from project</button>`)).join("")}</div>`:`<div class="cs-note">No shots in this project yet — generate from the studio and they land here.</div>`}`;
+}
 function addCsGenerationToProject(projectId,assetId){
   const p=S.csProjects.find(pr=>pr.id===projectId);
   if(p){p.generations=p.generations||[];p.generations.push(assetId);saveSetting("cs_projects",S.csProjects);}
 }
-
-// ── MY GENERATIONS — every asset (image or video) created through this
-// tool in either mode, newest first, regardless of project. ──
-function renderCsGenerations(wrap){
-  const gens=(S.assets||[]).filter(a=>a.providerLabel==="Kat Films 4K"||a.providerLabel==="Camera Crafts 4K").slice().reverse();
-  if(!gens.length){wrap.innerHTML=`<div style="font-size:12px;color:var(--textm);padding:20px 0;text-align:center">No generations yet — make one from Home.</div>`;return;}
-  wrap.innerHTML=`<div style="display:flex;flex-direction:column;gap:12px">${gens.map(a=>`<div class="panel" style="padding:8px">
-    ${a.type==="video"?`<video src="${a.url}" controls style="width:100%;border-radius:8px;display:block;margin-bottom:6px"></video>`:`<img src="${a.url}" style="width:100%;border-radius:8px;display:block;margin-bottom:6px">`}
-    <div style="font-size:11px;color:var(--textm)">${escapeHtml((a.prompt||"").slice(0,90))}</div>
-    <button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="toggleCsFavorite('${a.id}');renderCsGenerations(document.getElementById('csViewBody'))">${S.csFavorites.includes(a.id)?'⭐ Favorited':'☆ Favorite'}</button>
-  </div>`).join('')}</div>`;
-}
-
 function toggleCsFavorite(assetId){
   const idx=S.csFavorites.indexOf(assetId);
   if(idx>=0)S.csFavorites.splice(idx,1);else S.csFavorites.push(assetId);
   saveSetting("cs_favorites",S.csFavorites);
 }
-
-function renderCsFavorites(wrap){
-  const favs=(S.assets||[]).filter(a=>S.csFavorites.includes(a.id));
-  if(!favs.length){wrap.innerHTML=`<div style="font-size:12px;color:var(--textm);padding:20px 0;text-align:center">Nothing favorited yet — mark generations you like to keep them here.</div>`;return;}
-  wrap.innerHTML=`<div style="display:flex;flex-direction:column;gap:12px">${favs.map(a=>`<div class="panel" style="padding:8px">
-    ${a.type==="video"?`<video src="${a.url}" controls style="width:100%;border-radius:8px;display:block;margin-bottom:6px"></video>`:`<img src="${a.url}" style="width:100%;border-radius:8px;display:block;margin-bottom:6px">`}
-    <div style="font-size:11px;color:var(--textm)">${escapeHtml((a.prompt||"").slice(0,90))}</div>
-    <button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="toggleCsFavorite('${a.id}');renderCsFavorites(document.getElementById('csViewBody'))">Remove from Favorites</button>
-  </div>`).join('')}</div>`;
+function loadCsProject(id){
+  S.csActiveProjectId=id||null;
+  saveSetting("cs_active_project",S.csActiveProjectId);
+  csCloseNav();
+  toast(id?"Project loaded":"No project selected — generations save unfiled","success");
+  if(S.csView==="project")csRenderView();
 }
-
-// ── MY ELEMENTS — real link into the app's actual Character library
-// rather than a second, duplicate system for the same idea. ──
-function renderCsElements(wrap){
-  const chars=S.characters||[];
-  wrap.innerHTML=`
-    <div style="font-size:12px;color:var(--textm);margin-bottom:12px">Elements here are this app's Characters — build one there, then type @ their name in the prompt here to bring them into a scene.</div>
-    <button class="btn btn-outline btn-sm" style="margin-bottom:12px" onclick="switchMod('characters',document.querySelector('[data-mod=characters]'))">🎭 Open Character Library</button>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-      ${chars.map(c=>`<div class="card" style="padding:6px;text-align:center">
-        ${c.refImg?`<img src="${c.refImg}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px">`:`<div style="width:100%;aspect-ratio:1;border-radius:6px;background:var(--pearl2);display:flex;align-items:center;justify-content:center;font-size:20px">🎭</div>`}
-        <div style="font-size:10px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.name)}</div>
-      </div>`).join('')||'<div style="font-size:11px;color:var(--textm);grid-column:1/-1">No characters yet.</div>'}
-    </div>`;
-}
-
 async function newCsProject(){
+  csCloseNav();
   const name=await showPromptDialog("Name this project","");
   if(!name)return;
   const p={id:"cs_"+Date.now(),name,createdAt:new Date().toISOString(),generations:[]};
@@ -1217,5 +1006,67 @@ async function newCsProject(){
   saveSetting("cs_projects",S.csProjects);
   saveSetting("cs_active_project",S.csActiveProjectId);
   toast(`🎬 "${name}" created and set active`,"success");
-  renderCinemaStudio(document.getElementById("moduleContent"));
+  csRerender();
+}
+
+// ── EVENTS — one delegated handler per event type ──
+function csClick(e){
+  const t=e.target.closest&&e.target.closest("[data-cs]");
+  if(!t)return;
+  const a=t.dataset.cs,v=t.dataset.v;
+  switch(a){
+    case"set":csSet(t.dataset.k,v);break;
+    case"tier":S.csTier=v;saveSetting("cs_tier",v);csNormalize();csSaveForm();csRefreshAll();break;
+    case"tierlink":{const fn=csTier().link&&csTier().link.fn;if(fn&&typeof window[fn]==="function")window[fn]();break;}
+    case"mode":setCsMode(v);break;
+    case"settings":toggleCsSettings();break;
+    case"nav":csOpenNav();break;
+    case"navclose":csCloseNav();break;
+    case"view":csCloseNav();setCsView(v);break;
+    case"clearchat":csClearChat();break;
+    case"loadproject":loadCsProject(v);break;
+    case"newproject":newCsProject();break;
+    case"projremove":{const p=S.csProjects.find(x=>x.id===S.csActiveProjectId);if(p){p.generations=(p.generations||[]).filter(id=>id!==v);saveSetting("cs_projects",S.csProjects);csRenderView();}break;}
+    case"projeditor":{
+      const p=S.csProjects.find(x=>x.id===S.csActiveProjectId);
+      const vids=((p&&p.generations)||[]).map(id=>(S.assets||[]).find(x=>x.id===id)).filter(x=>x&&x.type==="video");
+      vids.forEach(x=>addToSequence(x.id));
+      toast(`🎞 ${vids.length} video${vids.length===1?'':'s'} added to the Video Editor in order`,"success");
+      break;
+    }
+    case"mention":csPickMention(v);break;
+    case"rmref":removeCsRefImage(+v);break;
+    case"addscene":csAddScene();break;
+    case"rmscene":csRemoveScene(+v);break;
+    case"retry":csRetryJob(v);break;
+    case"dl":downloadWithName(t.dataset.url,t.dataset.name);break;
+    case"coll":openCollectionPicker("asset",v);break;
+    case"fav":toggleCsFavorite(v);t.textContent=(S.csFavorites.includes(v)?"★":"☆")+" Favorite";break;
+    case"favview":toggleCsFavorite(v);if(S.csView==="favorites")csRenderView();else t.textContent=S.csFavorites.includes(v)?"★ Favorited":"☆ Favorite";break;
+    case"reuse":{const m=S.csChatHistory[+v],ta=csEl("csPrompt");if(m&&m.meta&&ta){ta.value=m.meta.raw;S.csDraft=ta.value;ta.focus();ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,140)+"px";}break;}
+    case"director":switchMod("directors",document.querySelector("[data-mod=directors]"));break;
+    case"characters":switchMod("characters",document.querySelector("[data-mod=characters]"));break;
+    case"soulhex-add":{const f=csEl("csSoulHexFile");if(f)f.click();break;}
+    case"soulhex-rm":S.csSoulHexRef=null;csRenderSheet();break;
+  }
+}
+function csChange(e){
+  const t=e.target;
+  if(t.id==="csRefFile")return handleCsRefImageUpload(e);
+  if(t.id==="csSoulHexFile")return handleCsSoulHexUpload(e);
+  if(t.dataset&&t.dataset.scene)return csUpdateScene(+t.dataset.scene,t.dataset.field,t.value);
+  if(t.dataset&&t.dataset.csRange){csSaveForm();csRenderSheet();}
+}
+function csInput(e){
+  const t=e.target;
+  if(t.id==="csPrompt")return csOnPromptInput(t);
+  if(t.dataset&&t.dataset.csRange){
+    const k=t.dataset.csRange,val=+t.value,f=S.csForm;
+    if(k==="locations")f.locations=val;else{f.duration=val;f.customDuration=true;}
+    const min=+t.min,max=+t.max;
+    t.style.setProperty("--ksf",((val-min)/(max-min)*100)+"%");
+    const lab=document.querySelector(`[data-range-val="${k}"]`);
+    if(lab)lab.textContent=k==="locations"?val:`${val}s requested → ${snapToKatFilmsDuration(val)}s (the model only accepts ${KAT_FILMS_DURATIONS.join(", ")}s)`;
+    csRenderSummary();csRenderCost();
+  }
 }

@@ -4,11 +4,11 @@
 // is told ("kk-update") so it can offer a one-tap reload. Firebase / Google Fonts files
 // (versioned, immutable) are cached after first use so later visits skip those downloads.
 // The cache version is bumped whenever deploy-relevant layers change.
-const CACHE_NAME = "kosmic-kat-studio-v50";
+const CACHE_NAME = "kosmic-kat-studio-v51";
 const ASSETS = [
   "/index.html","/audio.js","/adstudio.js","/editor.js","/team.js","/costs.js","/upscaler.js","/display.js",
   "/flow.js","/nodecanvas.js","/motion.js","/assets.js","/gallery.js","/characters.js","/directors.js","/home.js",
-  "/kosmicengine.js","/cinemastudio.js","/settings-layer-guard.js","/kosmic-video.js","/chat-glass.js","/ui-v2-evolink-route.css","/ui-v2.css","/ui-v2-phase1.css",
+  "/kosmicengine.js","/cinema-registry.js","/cinemastudio.js","/settings-layer-guard.js","/kosmic-video.js","/chat-glass.js","/ui-v2-evolink-route.css","/ui-v2.css","/ui-v2-phase1.css",
   "/ui-v2-phase2.css","/ui-v2-phase3.css","/ui-v2-phase4.css","/ui-v2-phase5.css","/ui-v2-phase6.css","/ui-v2-phase7.css","/ui-v2-phase8.css","/ui-v2-phase9.css",
   "/ui-v2-phase10.css","/ui-v2-home-latest.css","/ui-v2-settings-fix.css","/ui-v2-settings-immune.css","/ui-v2-layer-arbiter.css","/engine-vision-bridge.js","/engine-assembly.js","/engine-asset-review.js","/engine-strategy-ui.js",
   "/engine-recovery.js","/manifest.json","/icon-192.png","/icon-512.png"
