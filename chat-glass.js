@@ -69,6 +69,51 @@ html .ig-settings-backdrop{background:rgba(15,8,32,.38)!important;-webkit-backdr
 .kc-sheet .ig-sheet-header>div{font-family:inherit!important;font-weight:800!important;font-size:15px!important}
 .kc-sheet .ig-icon-btn{border-radius:12px!important}
 .kc-tools{margin-top:14px;border-top:1px solid var(--glass-brd,rgba(61,31,122,.12));padding-top:12px}
+/* settings shutter controls (same look as Video Studio's shutter) */
+.ks-body{padding:4px 14px 18px}
+.ks-lab{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;font-weight:800;color:var(--textm,#5a4880);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+.ks-lab small{font-weight:600;text-transform:none;letter-spacing:0;color:var(--texts,#9488ae)}
+.ks-lab b{color:var(--violet,#3d1f7a);font-size:13px;text-transform:none;letter-spacing:0}
+.ks-hint{font-size:10.5px;color:var(--texts,#9488ae);line-height:1.4;margin:2px 0 8px}
+.ks-hint:empty{display:none}
+.ks-card{background:var(--glass,rgba(255,255,255,.55));border:1px solid var(--glass-brd,rgba(61,31,122,.1));border-radius:16px;padding:12px;margin-bottom:10px}
+.ks-warn{font-size:11px;line-height:1.4;color:var(--gold,#9a6b00);background:var(--gold-p,rgba(212,160,23,.14));border-radius:10px;padding:8px 10px;margin-bottom:8px}
+.ks-seg{display:flex;background:rgba(98,64,176,.10);border-radius:13px;padding:3px;margin-bottom:6px;overflow-x:auto;scrollbar-width:none;gap:2px}.ks-seg::-webkit-scrollbar{display:none}
+.ks-seg button{flex:1 0 auto;border:0;background:transparent;color:var(--textm,#5a4880);padding:9px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit}
+.ks-seg button.on{background:var(--surface,#fff);color:var(--violet,#3d1f7a);box-shadow:0 1px 8px rgba(61,31,122,.14)}
+.ks-rail{position:relative;display:flex;gap:10px;overflow-x:auto;padding:8px 8px 14px;margin:-2px -8px 0;scrollbar-width:none;isolation:isolate;-webkit-overflow-scrolling:touch}.ks-rail::-webkit-scrollbar{display:none}
+.ks-card .ks-rail{margin:0 -6px}
+.ks-mcard{flex:0 0 auto;min-width:118px;max-width:190px;text-align:left;border:1px solid var(--glass-brd,rgba(61,31,122,.12));background:var(--glass,rgba(255,255,255,.55));color:var(--text,#1e1230);border-radius:15px;padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;gap:5px;font-family:inherit}
+.ks-mcard b{font-size:12.5px;line-height:1.25}.ks-mcard small{font-size:9.5px;color:var(--texts,#9488ae);line-height:1.3}
+.ks-mcard.on{background:var(--glass-solid,#fcfaff)!important}
+.ks-chips{display:flex;flex-wrap:wrap;gap:8px;padding:3px;isolation:isolate}
+.ks-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--glass-brd,rgba(61,31,122,.14));background:rgba(98,64,176,.08);color:var(--textm,#5a4880);border-radius:999px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.ks-chip.on{background:linear-gradient(135deg,#6240b0,#3d1f7a);color:#fff;border-color:transparent}
+.ks-ratio{display:inline-block;border:1.6px solid currentColor;border-radius:3px;opacity:.85;flex:0 0 auto}
+.ks-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ks-btn{flex:1 1 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--glass-brd,rgba(61,31,122,.14));background:rgba(98,64,176,.10);color:var(--textm,#5a4880);border-radius:11px;padding:9px 11px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.ks-btn.sm{flex:0 0 auto;padding:7px 13px}
+.ks-btn.ghost{background:transparent}
+.ks-btn:disabled{opacity:.45;cursor:not-allowed}
+.ks-ta,.ks-sel{width:100%;border:1px solid var(--glass-brd,rgba(61,31,122,.12));background:rgba(98,64,176,.06);color:var(--text,#1e1230);border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;line-height:1.45;outline:0}
+.ks-ta{resize:vertical}.ks-ta:focus,.ks-sel:focus{border-color:var(--vm,#6240b0)}
+.ks-thumb{width:56px;height:56px;border-radius:12px;background:rgba(98,64,176,.14);color:var(--violet,#3d1f7a);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:0 0 auto;cursor:pointer}
+.ks-thumb img{width:100%;height:100%;object-fit:cover}
+.ks-range{-webkit-appearance:none!important;appearance:none!important;width:100%;height:34px!important;margin:0!important;padding:0;background:transparent!important;outline:0;--ksf:0%;touch-action:pan-y}
+.ks-range::-webkit-slider-runnable-track{height:8px;border-radius:99px;border:0!important;background:linear-gradient(90deg,#6240b0 0,#5ed2e1 var(--ksf),rgba(98,64,176,.18) var(--ksf))!important}
+.ks-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:26px;height:26px;margin-top:-9px;border-radius:50%;background:#fff!important;border:3px solid #6240b0!important;box-shadow:0 2px 10px rgba(98,64,176,.5)!important}
+.ks-range::-moz-range-track{height:8px;border-radius:99px;background:rgba(98,64,176,.18)}
+.ks-range::-moz-range-progress{height:8px;border-radius:99px;background:linear-gradient(90deg,#6240b0,#5ed2e1)}
+.ks-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#fff;border:3px solid #6240b0}
+/* multi-colour glowing outline on the selected option */
+@property --ksa{syntax:"<angle>";inherits:false;initial-value:0deg}
+@keyframes ksSpin{to{--ksa:360deg}}
+.ks-glow{position:relative}
+.ks-glow.on{border-color:transparent!important}
+.ks-glow.on::before,.ks-glow.on::after{content:"";position:absolute;pointer-events:none;border-radius:inherit;background:conic-gradient(from var(--ksa),#ff4fb8,#ffb347,#f5f545,#4dff9e,#4fd8ff,#6a7cff,#c04fff,#ff4fb8);animation:ksSpin 3.6s linear infinite}
+.ks-glow.on::before{inset:-2px;padding:2px;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);mask-composite:exclude}
+.ks-glow.on::after{inset:0;z-index:-1;filter:blur(8px);opacity:.55}
+@media (prefers-reduced-motion:reduce){.ks-glow.on::before,.ks-glow.on::after{animation:none}}
 /* history sheet */
 .kch-back{position:fixed;inset:0;z-index:2147481000;background:rgba(15,8,32,.38);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);opacity:0;transition:opacity .25s ease}
 .kch-sheet{position:fixed;left:0;right:0;bottom:0;z-index:2147481001;max-height:78vh;display:flex;flex-direction:column;border-radius:26px 26px 0 0;transform:translateY(104%);transition:transform .32s cubic-bezier(.2,.8,.2,1);padding-bottom:env(safe-area-inset-bottom,0px);background:var(--glass-solid,rgba(252,250,255,.96));-webkit-backdrop-filter:blur(26px) saturate(1.6);backdrop-filter:blur(26px) saturate(1.6);border:1px solid var(--glass-brd,rgba(61,31,122,.14));border-bottom:0;box-shadow:0 -12px 48px rgba(61,31,122,.22);color:var(--text,#1e1230);max-width:640px;margin:0 auto}

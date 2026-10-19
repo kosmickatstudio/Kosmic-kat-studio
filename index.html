@@ -3130,7 +3130,63 @@ function modelTriggerLabelHTML(selectId,kind){
 }
 function renderModelTrigger(selectId,kind){
   const trigger=document.getElementById(selectId+"Trigger");
-  if(trigger)trigger.innerHTML=modelTriggerLabelHTML(selectId,kind||trigger.dataset.kind||"image");
+  if(!trigger)return;
+  if(trigger.dataset.layout==="models"){trigger.innerHTML=ksModelsHTML(selectId,kind||trigger.dataset.kind||"image");ksScrollOn(trigger);return;}
+  trigger.innerHTML=modelTriggerLabelHTML(selectId,kind||trigger.dataset.kind||"image");
+}
+
+// ── SETTINGS SHUTTER CONTROLS — the same look as Video Studio's shutter:
+// a model rail (grouped by a segmented control), option chips, and a swatch
+// rail. They render FROM the hidden <select>s, which stay the single source
+// of truth, so every existing reader (genViaFal, updateIgModelUI, …) is untouched.
+function ksEsc(v){return String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function ksMiniRatio(value){
+  const p=String(value).split(":").map(Number),w=p[0]||1,h=p[1]||1,box=14;
+  const bw=w>=h?box:Math.max(5,Math.round(box*w/h)),bh=h>w?box:Math.max(5,Math.round(box*h/w));
+  return `<span class="ks-ratio" style="width:${bw}px;height:${bh}px"></span>`;
+}
+function ksOptionsHTML(selectId,kind,layout){
+  const sel=document.getElementById(selectId);
+  if(!sel)return "";
+  const cur=sel.selectedIndex;
+  const opts=[...sel.options];
+  if(layout==="rail"){
+    return `<div class="ks-rail">${opts.map((o,i)=>`<button type="button" class="ks-mcard ks-glow${i===cur?' on':''}" onclick="igPickOption('${selectId}',${i})">${kind==="style"?stylePreviewHTML(o.textContent):''}<b>${ksEsc(o.textContent)}</b></button>`).join('')}</div>`;
+  }
+  return opts.map((o,i)=>`<button type="button" class="ks-chip ks-glow${i===cur?' on':''}" onclick="igPickOption('${selectId}',${i})">${kind==="ratio"?ksMiniRatio(o.value):''}${ksEsc(o.textContent)}</button>`).join('');
+}
+function igPickOption(selectId,idx){
+  const sel=document.getElementById(selectId);
+  if(!sel||!sel.options[idx])return;
+  sel.selectedIndex=idx;
+  sel.dispatchEvent(new Event("change"));
+}
+const KS_GROUP={};
+function ksModelGroups(kind){
+  const groups=(MODEL_PICKER_SOURCES[kind]||[]).map(g=>({label:g.label,items:g.items}));
+  const custom=kind==="image"?(gs("custom_image_models",[])||[]).map(m=>({value:m.endpoint,name:m.label,sub:"custom"})):[];
+  if(custom.length)groups.push({label:"Custom",items:custom});
+  return groups;
+}
+function ksModelsHTML(selectId,kind){
+  const sel=document.getElementById(selectId);
+  const value=sel?sel.value:"";
+  const groups=ksModelGroups(kind);
+  if(!groups.length)return "";
+  let gi=KS_GROUP[selectId];
+  if(gi==null||!groups[gi])gi=Math.max(0,groups.findIndex(g=>g.items.some(i=>i.value===value)));
+  const short=l=>l.replace(/\s*\(.*?\)\s*/g," ").trim()||l;
+  return `<div class="ks-seg">${groups.map((g,i)=>`<button type="button" class="${i===gi?'on':''}" onclick="ksPickGroup('${selectId}','${kind}',${i})">${ksEsc(short(g.label))}</button>`).join('')}</div>
+    <div class="ks-rail">${groups[gi].items.map(i=>`<button type="button" class="ks-mcard ks-glow${i.value===value?' on':''}" onclick="selectModelOption('${selectId}','${i.value}','${kind}')">${modelBadgeHtml(i.value,26)}<b>${ksEsc(i.name)}</b>${i.sub?`<small>${ksEsc(i.sub)}</small>`:''}</button>`).join('')}</div>`;
+}
+function ksPickGroup(selectId,kind,idx){KS_GROUP[selectId]=idx;renderModelTrigger(selectId,kind);}
+function ksScrollOn(host){
+  requestAnimationFrame(()=>{
+    host.querySelectorAll(".ks-rail").forEach(r=>{
+      const on=r.querySelector(".on");
+      if(on)r.scrollLeft=Math.max(0,on.offsetLeft-12);
+    });
+  });
 }
 function openModelPicker(selectId,kind,allowed){
   kind=kind||"image";
@@ -3281,6 +3337,8 @@ function renderVisualTrigger(selectId,kind){
   const sel=document.getElementById(selectId);
   const trigger=document.getElementById(selectId+"Trigger");
   if(!sel||!trigger)return;
+  const layout=trigger.dataset.layout;
+  if(layout){trigger.innerHTML=ksOptionsHTML(selectId,kind,layout);if(layout==="rail")ksScrollOn(trigger);return;}
   const opt=sel.options[sel.selectedIndex];
   const label=opt?opt.textContent:"Choose…";
   const value=sel.value;
@@ -3391,81 +3449,85 @@ function renderImageGen(el){
     <div class="ig-settings-sheet kc-sheet" id="igSettingsPanel">
       <div class="ig-sheet-handle" ontouchstart="sheetSwipeStart(event)" ontouchmove="sheetSwipeMove(event,'igSettingsPanel')" ontouchend="sheetSwipeEnd(event,'igSettingsPanel','toggleIgSettings')"></div>
       <div class="ig-sheet-header">
-        <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--violet);font-size:14px">⚙ Settings</div>
-        <button class="ig-icon-btn" onclick="toggleIgSettings()" title="Close">✕</button>
+        <div>Image settings</div>
+        <button type="button" class="ks-btn sm" onclick="toggleIgSettings()">Done</button>
       </div>
-      <div style="padding:14px 16px">
-        ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:10px">Add a <b>fal.ai</b>, <b>Replicate</b>, <b>OpenAI</b>, or <b>Gemini</b> API key in Settings to enable generation.</div>`:''}
-        <div style="display:flex;gap:6px;margin-bottom:12px">
-          <button type="button" class="btn btn-outline btn-sm" style="flex:1" onclick="openPromptLibrary()">${pIcon('doc',13)} Prompt Library</button>
-        </div>
-        <div class="f-row">
-          <div class="f-group">
-            <label class="f-label">Style Preset</label>
-            <select class="f-select" id="igStyle" onchange="renderVisualTrigger('igStyle','style')" style="display:none">${STYLE_PRESETS.map(s=>`<option value="${s.value.replace(/"/g,'&quot;')}">${s.label}</option>`).join('')}</select>
-            <div id="igStyleTrigger" onclick="openVisualPicker('igStyle','Choose Style','style')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-          </div>
-          <div class="f-group">
-            <label class="f-label">Aspect Ratio</label>
-            <select class="f-select" id="igRatio" onchange="renderVisualTrigger('igRatio','ratio')" style="display:none"><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="9:16">9:16</option><option value="4:3">4:3</option><option value="3:4">3:4</option></select>
-            <div id="igRatioTrigger" onclick="openVisualPicker('igRatio','Choose Aspect Ratio','ratio')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-          </div>
-        </div>
-        <div class="f-group"><label class="f-label">Negative Prompt <span style="font-weight:400;color:var(--texts)">(optional)</span></label><input class="f-input" id="igNegPrompt" placeholder="e.g. blurry, low quality, watermark"></div>
-        <div class="f-group">
-          <label class="f-label">Model</label>
-          <select class="f-select" id="igModel" onchange="updateIgModelUI()" style="display:none">
-            ${imageModelOptionsHTML()}
-          </select>
-          <div id="igModelTrigger" onclick="openModelPicker('igModel')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-          <div id="igModelNote" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
-        </div>
-        ${S.projects.length?`<div class="f-group"><label class="f-label">Save to Project</label><select class="f-select" id="igProject"><option value="">No project</option>${S.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`:''}
+      <div class="ks-body">
+        ${!hasKey?`<div class="ks-card"><div class="ks-hint" style="margin:0">Add a <b>fal.ai</b>, <b>Replicate</b>, <b>OpenAI</b>, or <b>Gemini</b> API key in Settings to enable generation.</div></div>`:''}
 
-        ${(S.characters||[]).some(c=>c.loraStatus&&c.loraStatus.state==="ready")?`<div class="f-group" id="igLoraWrap" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-          <label class="f-label">${pIcon('sparkle',12)} Character LoRA <span style="font-weight:400;color:var(--texts)">(optional — locks in a trained character's exact look, overrides Model above)</span></label>
-          <select class="f-select" id="igLoraSelect" onchange="updateIgLoraNote()">
+        <div class="ks-lab"><span>Model</span></div>
+        <select class="f-select" id="igModel" onchange="updateIgModelUI()" style="display:none">
+          ${imageModelOptionsHTML()}
+        </select>
+        <div id="igModelTrigger" data-layout="models" data-kind="image"></div>
+        <div id="igModelNote" class="ks-hint"></div>
+
+        <div class="ks-card">
+          <div class="ks-lab"><span>Aspect ratio</span></div>
+          <select class="f-select" id="igRatio" onchange="renderVisualTrigger('igRatio','ratio')" style="display:none"><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="9:16">9:16</option><option value="4:3">4:3</option><option value="3:4">3:4</option></select>
+          <div id="igRatioTrigger" class="ks-chips" data-layout="chips"></div>
+        </div>
+
+        <div class="ks-card">
+          <div class="ks-lab"><span>Style</span></div>
+          <select class="f-select" id="igStyle" onchange="renderVisualTrigger('igStyle','style')" style="display:none">${STYLE_PRESETS.map(s=>`<option value="${s.value.replace(/"/g,'&quot;')}">${s.label}</option>`).join('')}</select>
+          <div id="igStyleTrigger" data-layout="rail"></div>
+        </div>
+
+        <div class="ks-card" id="igBatchWrap" style="display:none">
+          <div class="ks-lab"><span id="igBatchLabel">Number of images</span></div>
+          <select class="f-select" id="igBatchCount" onchange="updateIgCostHint();renderVisualTrigger('igBatchCount','count')" style="display:none"><option value="1">1 image</option><option value="2">2 images</option><option value="4">4 images</option><option value="8">8 images</option></select>
+          <div id="igBatchCountTrigger" class="ks-chips" data-layout="chips"></div>
+        </div>
+
+        <div class="ks-card">
+          <div class="ks-lab"><span>Negative prompt</span><small>optional</small></div>
+          <textarea class="ks-ta" id="igNegPrompt" rows="2" placeholder="What to avoid — e.g. blurry, low quality, watermark"></textarea>
+        </div>
+
+        ${(S.characters||[]).some(c=>c.loraStatus&&c.loraStatus.state==="ready")?`<div class="ks-card" id="igLoraWrap">
+          <div class="ks-lab"><span>Character LoRA</span><small>optional</small></div>
+          <div class="ks-hint">Locks in a trained character's exact look and overrides the model above.</div>
+          <select class="ks-sel" id="igLoraSelect" onchange="updateIgLoraNote()">
             <option value="">None</option>
             ${S.characters.filter(c=>c.loraStatus&&c.loraStatus.state==="ready").map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
           </select>
-          <div id="igLoraNote" style="font-size:11px;color:var(--textm);margin-top:6px"></div>
+          <div id="igLoraNote" class="ks-hint" style="margin-top:6px"></div>
         </div>`:''}
 
-        <div class="f-group" id="igSingleRefWrap" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-          <label class="f-label">${pIcon('image',12)} Reference Image <span style="font-weight:400;color:var(--texts)">(optional)</span></label>
-          <div id="igRefOverrideWarning" style="display:none;font-size:11px;color:var(--gold);background:var(--gold-p);border-radius:8px;padding:7px 10px;margin-bottom:8px;line-height:1.4">${pIcon('search',11)} Attaching an image here <b>switches generation to FLUX Dev Image-to-Image</b>, replacing whatever model you picked above — the model you selected doesn't support single-image reference yet, only FLUX Dev does.</div>
+        <div class="ks-card" id="igSingleRefWrap">
+          <div class="ks-lab"><span>Reference image</span><small>optional</small></div>
+          <div id="igRefOverrideWarning" class="ks-warn" style="display:none">${pIcon('search',11)} Attaching an image here <b>switches generation to FLUX Dev Image-to-Image</b>, replacing the model you picked above — the selected model doesn't support single-image reference yet, only FLUX Dev does.</div>
           <input type="file" accept="image/*" id="igRefFile" style="display:none" onchange="handleIgRefUpload(event)">
-          <div style="display:flex;align-items:center;gap:10px">
-            <div id="igRefPreview" style="width:56px;height:56px;border-radius:8px;background:var(--lav);color:var(--violet);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;cursor:pointer" onclick="document.getElementById('igRefFile').click()">${pIcon('camera',22)}</div>
-            <div style="flex:1">
-              <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('igRefFile').click()">Choose Image</button>
-              <button type="button" class="btn btn-ghost btn-sm" id="igRefClearBtn" style="display:none" onclick="clearIgRef()">✕ Remove</button>
-            </div>
+          <div class="ks-row">
+            <div id="igRefPreview" class="ks-thumb" onclick="document.getElementById('igRefFile').click()">${pIcon('camera',22)}</div>
+            <button type="button" class="ks-btn" onclick="document.getElementById('igRefFile').click()">Choose image</button>
+            <button type="button" class="ks-btn ghost" id="igRefClearBtn" style="display:none" onclick="clearIgRef()">✕ Remove</button>
           </div>
-          <div id="igStrengthWrap" style="display:none;margin-top:8px">
-            <label class="f-label">Transformation Strength: <span id="igStrengthVal">0.75</span></label>
-            <input type="range" id="igStrength" min="0.1" max="1" step="0.05" value="0.75" style="width:100%;--range-fill:72.22%" oninput="document.getElementById('igStrengthVal').textContent=this.value">
+          <div id="igStrengthWrap" style="display:none;margin-top:12px">
+            <div class="ks-lab"><span>Transformation strength</span><b id="igStrengthVal">0.75</b></div>
+            <input type="range" class="ks-range" id="igStrength" min="0.1" max="1" step="0.05" value="0.75" style="--ksf:72.22%" oninput="document.getElementById('igStrengthVal').textContent=this.value;this.style.setProperty('--ksf',((this.value-this.min)/(this.max-this.min)*100)+'%')">
           </div>
         </div>
 
-        <div class="f-group" id="igMultiRefWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-          <label class="f-label">${pIcon('image',12)} Reference Images <span style="font-weight:400;color:var(--texts)" id="igMultiRefLabel">(up to 4 — multi-reference editing)</span></label>
+        <div class="ks-card" id="igMultiRefWrap" style="display:none">
+          <div class="ks-lab"><span>Reference images</span><small id="igMultiRefLabel">(up to 4 — multi-reference editing)</small></div>
           <input type="file" accept="image/*" multiple id="igMultiRefFile" style="display:none" onchange="handleIgMultiRefUpload(event)">
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px" id="igMultiRefPreview"></div>
-          <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('igMultiRefFile').click()">${pIcon('upload',13)} Add Reference Images</button>
+          <div class="ks-row" id="igMultiRefPreview" style="margin-bottom:8px"></div>
+          <button type="button" class="ks-btn" onclick="document.getElementById('igMultiRefFile').click()">${pIcon('upload',13)} Add reference images</button>
         </div>
 
-        <div class="f-group" id="igBatchWrap" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-          <label class="f-label" id="igBatchLabel">Batch Count <span style="font-weight:400;color:var(--texts)">(GPT Image 2 can generate up to 8 at once)</span></label>
-          <select class="f-select" id="igBatchCount" onchange="updateIgCostHint();renderVisualTrigger('igBatchCount','count')" style="display:none"><option value="1">1 image</option><option value="2">2 images</option><option value="4">4 images</option><option value="8">8 images</option></select>
-          <div id="igBatchCountTrigger" onclick="openVisualPicker('igBatchCount','Choose Batch Count','count')" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--surface)"></div>
-        </div>
-        <div class="kc-tools">
-          <div class="f-label">🧹 Background Removal</div>
-          <div style="font-size:12px;color:var(--textm);margin-bottom:8px">Upload any image to remove its background — real-time, via fal.ai's rembg model.</div>
+        ${S.projects.length?`<div class="ks-card"><div class="ks-lab"><span>Save to project</span></div><select class="ks-sel" id="igProject"><option value="">No project</option>${S.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`:''}
+
+        <div class="ks-card">
+          <div class="ks-lab"><span>Tools</span></div>
+          <div class="ks-row">
+            <button type="button" class="ks-btn" onclick="openPromptLibrary()">${pIcon('doc',13)} Prompt library</button>
+            <button type="button" class="ks-btn" ${!hasKey?'disabled':''} onclick="document.getElementById('bgRemoveFile').click()">Remove background</button>
+          </div>
           <input type="file" accept="image/*" id="bgRemoveFile" style="display:none" onchange="handleBgRemove(event)">
-          <button class="btn btn-outline btn-sm" ${!hasKey?'disabled':''} onclick="document.getElementById('bgRemoveFile').click()">📤 Upload & Remove Background</button>
-          <div id="bgRemoveResult" style="margin-top:10px"></div>
+          <div class="ks-hint" style="margin-top:8px">Upload any image to remove its background — real-time, via fal.ai's rembg model.</div>
+          <div id="bgRemoveResult" style="margin-top:6px"></div>
         </div>
       </div>
     </div>
