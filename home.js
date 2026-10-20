@@ -276,6 +276,7 @@ function renderHome(el){
               {id:"bytedance/seedance-2.0/text-to-video",label:"Seedance 2.0"},
               {id:"fal-ai/kling-video/v2.1/master/text-to-video",label:"Kling 2.1 Master"},
               {id:"fal-ai/kling-video/v2.6/pro/text-to-video",label:"Kling 2.6 Pro"},
+              {id:"blackforestlabs/flux-3-max/text-to-video",label:"FLUX 3 Max (video)"},
               {id:"fal-ai/kling-video/v3/standard/text-to-video",label:"Kling 3.0 Standard"},
               {id:"fal-ai/kling-video/v3/pro/text-to-video",label:"Kling 3.0 Pro"},
               {id:"fal-ai/kling-video/o3/pro/reference-to-video",label:"Kling O3 Pro"},

@@ -8,6 +8,7 @@
   window.__kosmicHomePremiumV2=true;
 
   const VIDEO=[
+    {id:"blackforestlabs/flux-3-max/text-to-video",label:"FLUX 3 Max",meta:"Black Forest Labs · T2V/I2V · 5–20s · audio"},
     {id:"seedance-2.5-text-to-video",label:"Seedance 2.5",meta:"T2V · 4–30s · 480/720/1080"},
     {id:"seedance-2.0-text-to-video",label:"Seedance 2.0",meta:"T2V/I2V/R2V · 4–15s"},
     {id:"seedance-2.0-fast-text-to-video",label:"Seedance 2.0 Fast",meta:"Fast · T2V/I2V/R2V"},

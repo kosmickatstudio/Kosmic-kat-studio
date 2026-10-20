@@ -114,6 +114,7 @@ function renderCosts(el){
           ["fal-ai/flux/dev","FLUX Dev (image)"],
           ["bytedance/seedance-2.0/fast/text-to-video","Seedance 2.0 Fast (video)"],
           ["fal-ai/kling-video/v2.1/master/text-to-video","Kling 2.1 Master (video)"],
+          ["blackforestlabs/flux-3-max/text-to-video","FLUX 3 Max (video)"],
           ["fal-ai/kling-video/v3/standard/text-to-video","Kling 3.0 Standard (video)"],
           ["fal-ai/kling-video/v3/pro/text-to-video","Kling 3.0 Pro (video)"],
           ["fal-ai/kling-video/o3/pro/reference-to-video","Kling O3 Pro (video)"],

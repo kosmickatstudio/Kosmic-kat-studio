@@ -1722,6 +1722,8 @@ const COST_TABLE={
   // down: 8 × $0.2419 ≈ 1.94, 8 × $0.3034 ≈ 2.43. Real spend still varies
   // with actual duration and resolution (1080p is billed at $0.682/s
   // instead of $0.3034/s, well above this estimate).
+  // FLUX 3 Max: ~8s @720p at the launch promo ($0.0425/s) — list price $0.17/s after the promo.
+  "blackforestlabs/flux-3-max/text-to-video":0.34,
   "bytedance/seedance-2.0/fast/text-to-video":1.94,
   "bytedance/seedance-2.0/text-to-video":2.43,
   // Seedance 2.5 went live on EvoLink Aug 7 2026 (very recent) — 480p/720p
@@ -2990,6 +2992,9 @@ const VIDEO_MODEL_GROUPS=[
     {value:"bytedance/seedance-2.0/reference-to-video",name:"Seedance 2.0 — Multi-Reference",sub:"Standard tier, up to 9 images/3 videos/3 audio refs"},
     {value:"bytedance/seedance-2.0/image-to-video",name:"Seedance 2.0 — Start→End Frame",sub:"Anchors a first and last frame"},
   ]},
+  {label:"FLUX 3 (Black Forest Labs)",items:[
+    {value:"blackforestlabs/flux-3-max/text-to-video",name:"FLUX 3 Max",sub:"New · 5–20s, 720p/1080p, native audio, start/end frame"},
+  ]},
   {label:"Kling",items:[
     {value:"fal-ai/kling-video/v2.1/master/text-to-video",name:"Kling 2.1 Master",sub:"1 reference image, older/cheaper tier"},
     {value:"fal-ai/kling-video/v2.6/pro/text-to-video",name:"Kling 2.6 Pro",sub:"1 reference image"},
@@ -3084,8 +3089,8 @@ function brainModelSetting(provider){return provider+"_brain_model";}
 function getBrainModel(provider){return gs(brainModelSetting(provider),(BRAIN_SUBMODELS[provider]&&BRAIN_SUBMODELS[provider][0].id)||"");}
 // Curated subsets for tools that don't offer every video model (e.g. no
 // multi-reference options where that tool has no reference-image input).
-const SE_MODEL_ALLOWED=["bytedance/seedance-2.0/fast/text-to-video","bytedance/seedance-2.0/text-to-video","evolink/seedance-2.5/text-to-video","evolink/minimax-h3/text-to-video","fal-ai/kling-video/v2.1/master/text-to-video","fal-ai/kling-video/v2.6/pro/text-to-video","fal-ai/kling-video/v3/standard/text-to-video","fal-ai/kling-video/v3/pro/text-to-video","fal-ai/veo3.1"];
-const PD_VIDEO_MODEL_ALLOWED=["bytedance/seedance-2.0/reference-to-video","bytedance/seedance-2.0/fast/reference-to-video","bytedance/seedance-2.0/image-to-video","fal-ai/kling-video/v2.1/master/text-to-video","fal-ai/kling-video/v2.6/pro/text-to-video","fal-ai/kling-video/v3/standard/text-to-video","fal-ai/kling-video/v3/pro/text-to-video","fal-ai/veo3.1"];
+const SE_MODEL_ALLOWED=["blackforestlabs/flux-3-max/text-to-video","bytedance/seedance-2.0/fast/text-to-video","bytedance/seedance-2.0/text-to-video","evolink/seedance-2.5/text-to-video","evolink/minimax-h3/text-to-video","fal-ai/kling-video/v2.1/master/text-to-video","fal-ai/kling-video/v2.6/pro/text-to-video","fal-ai/kling-video/v3/standard/text-to-video","fal-ai/kling-video/v3/pro/text-to-video","fal-ai/veo3.1"];
+const PD_VIDEO_MODEL_ALLOWED=["blackforestlabs/flux-3-max/text-to-video","bytedance/seedance-2.0/reference-to-video","bytedance/seedance-2.0/fast/reference-to-video","bytedance/seedance-2.0/image-to-video","fal-ai/kling-video/v2.1/master/text-to-video","fal-ai/kling-video/v2.6/pro/text-to-video","fal-ai/kling-video/v3/standard/text-to-video","fal-ai/kling-video/v3/pro/text-to-video","fal-ai/veo3.1"];
 function modelVisualMeta(value){
   if(value.includes("flux-2"))return{grad:"linear-gradient(135deg,#ff6b1a,#1a1a1a)",mono:"F2"};
   if(value.includes("flux"))return{grad:"linear-gradient(135deg,#ff9d5c,#3a2412)",mono:"FX"};
@@ -4951,6 +4956,7 @@ function buildKlingV3Elements(imageUrls,videoUrls,groupAsOneElement,voiceIds){
 function klingV3ElementsPossible(imageCount){ return imageCount>1; }
 
 const IMAGE_TO_VIDEO_MAP={
+  "blackforestlabs/flux-3-max/text-to-video":{endpoint:"blackforestlabs/flux-3-max/image-to-video",field:"image_url",endField:"end_image_url"},
   "bytedance/seedance-2.0/fast/text-to-video":{endpoint:"bytedance/seedance-2.0/fast/image-to-video",field:"image_url"},
   "bytedance/seedance-2.0/text-to-video":{endpoint:"bytedance/seedance-2.0/image-to-video",field:"image_url"},
   "fal-ai/kling-video/v2.1/master/text-to-video":{endpoint:"fal-ai/kling-video/v2.1/master/image-to-video",field:"image_url"},
@@ -5441,6 +5447,7 @@ async function pollFalVideoResult(model,submitData,apiKey){
 // not assumed. Reference-to-video variants are real, separate endpoints with
 // genuinely different multi-modal input support per model.
 const VIDEO_MODEL_CAPABILITIES={
+  "blackforestlabs/flux-3-max/text-to-video":{},
   "bytedance/seedance-2.0/fast/text-to-video":{},
   "bytedance/seedance-2.0/text-to-video":{},
   "bytedance/seedance-2.0/fast/reference-to-video":{multiRef:true,maxImages:9,maxVideos:3,maxAudio:3,provider:"seedance-ref",tagSyntax:"@Image1 / @Video1 / @Audio1"},
@@ -6403,6 +6410,7 @@ function seedanceFastCost(resolution,seconds,videoRefMultiplier){
   return cost;
 }
 const VIDEO_PRICING={
+  "blackforestlabs/flux-3-max/text-to-video":{flux3max:true,audioIncluded:true},
   "bytedance/seedance-2.0/fast/text-to-video":{fast:true,audioIncluded:true},
   "bytedance/seedance-2.0/text-to-video":{standard:true,audioIncluded:true},
   "bytedance/seedance-2.0/fast/reference-to-video":{fast:true,audioIncluded:true,videoRefMultiplier:0.6},
@@ -6475,6 +6483,11 @@ const VIDEO_PRICING={
 function estimateVideoCost(model,seconds,resolution,hasVideoRefs,usesElements){
   const p=VIDEO_PRICING[model];
   if(!p||!seconds)return null;
+  if(p.flux3max){
+    // Launch promo rates (720p $0.0425/s, 1080p $0.0725/s); list price is 4x after the promo, so flag as approximate.
+    const rate=resolution==="1080p"?0.0725:0.0425;
+    return{cost:rate*seconds,approx:true};
+  }
   if(p.standard){
     // The 0.6x multiplier on reference-to-video applies only when VIDEO
     // reference inputs are attached (per fal's pricing docs) — image-only
@@ -6979,6 +6992,8 @@ async function generateShotVideo(shotId){
     body.duration=formattedDuration;body.generate_audio=true;
   } else if(endpoint==="fal-ai/veo3.1"){
     body.duration=formattedDuration;body.audio=true;body.resolution=s.resolution==="1080p"?"1080p":"720p";
+  } else if(endpoint.startsWith("blackforestlabs/flux-3-max")){
+    body.duration=formattedDuration;body.resolution=s.resolution;body.generate_audio=true;
   } else {
     body.duration=formattedDuration;body.resolution=s.resolution;
   }
@@ -7117,6 +7132,7 @@ function getAllDirectors(){
 // - Veo 3.1: genuinely fixed enum, only 4s/6s/8s, formatted as a string with
 //   the unit suffix — this one is NOT a range, unlike the other two
 const VIDEO_MODEL_DURATIONS={
+  "blackforestlabs/flux-3-max/text-to-video":{options:[5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],format:n=>Number(n)},
   // Seedance 2.0's real duration range, confirmed directly against fal.ai's
   // own API docs: "Supports 4 to 15 seconds" — every integer in that
   // range is valid, not just a handful of discrete steps. The previous
@@ -7159,6 +7175,7 @@ const VIDEO_MODEL_DURATIONS={
 // expose a resolution parameter at all — output is fixed by model/tier — so
 // those map to null and the Resolution field hides itself for those models.
 const VIDEO_MODEL_RESOLUTIONS={
+  "blackforestlabs/flux-3-max/text-to-video":["720p","1080p"],
   "bytedance/seedance-2.0/fast/text-to-video":["480p","720p"],
   "bytedance/seedance-2.0/text-to-video":["480p","720p","1080p","4k"],
   "evolink/seedance-2.5/text-to-video":["480p","720p"],
@@ -7315,6 +7332,7 @@ async function cancelProductionWizard(){
 // ── VIDEO MODEL ASPECT RATIOS — verified per-model, not a universal fixed list.
 // Seedance genuinely supports the widest set; Veo is genuinely the most limited.
 const PD_ASPECT_RATIOS={
+  "blackforestlabs/flux-3-max/text-to-video":["16:9","9:16","1:1","4:3","3:4","21:9"],
   "bytedance/seedance-2.0/fast/text-to-video":["16:9","9:16","4:3","3:4","21:9","1:1"],
   "bytedance/seedance-2.0/text-to-video":["16:9","9:16","4:3","3:4","21:9","1:1"],
   "evolink/seedance-2.5/text-to-video":["16:9","9:16","1:1"],
@@ -9498,6 +9516,7 @@ async function runProductionVideoGen(model,prompt,ratio,duration,quality,refImag
   const formattedDuration=durationConfig?durationConfig.format(duration):String(duration);
   if(endpoint.startsWith("fal-ai/kling-video")){body.duration=formattedDuration;body.generate_audio=true;if(negativePrompt)body.negative_prompt=negativePrompt;}
   else if(endpoint==="fal-ai/veo3.1"){body.duration=formattedDuration;body.audio=true;body.resolution=quality;}
+  else if(endpoint.startsWith("blackforestlabs/flux-3-max")){body.duration=formattedDuration;body.resolution=quality;body.generate_audio=true;}
   else{body.duration=formattedDuration;body.resolution=quality;}
 
   normalizeKlingV3Body(endpoint,body);
