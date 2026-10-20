@@ -67,7 +67,16 @@
     image:{...base,model:`${prefix}-image-to-video`,ar:AR_SEED,dar:"adaptive",inputs:[frames(30)],hint:"Describe how the image should move…"},
     reference:{...base,model:`${prefix}-reference-to-video`,ar:AR_SEED,dar:"adaptive",anyInput:true,noAudioOnly:true,inputs:refs20(base===std20?50:50),hint:"Use @image1, @video1, @audio1 to point at your references…"}
   });
+  const AR_FLUX3=["16:9","9:16","1:1","4:3","3:4","21:9"];
+  const FLUX3={dur:[5,20],q:["720p","1080p"],dq:"720p",ar:AR_FLUX3,dar:"16:9",audio:"seed",pmax:4000,fal:true};
   const MODELS=[
+    {id:"flux-3-max",name:"FLUX 3 Max",sub:"New · Black Forest Labs · fal.ai · audio · 5–20s",family:"FLUX",routes:{
+      text:{...FLUX3,model:"blackforestlabs/flux-3-max/text-to-video",inputs:[],hint:"Describe the video you want…"},
+      image:{...FLUX3,model:"blackforestlabs/flux-3-max/image-to-video",inputs:[
+        {key:"image_start",kind:"image",single:true,label:"First frame",hint:"JPG/PNG · ≤10MB",min:1,max:1,fmt:IMG_KLING,maxMB:10},
+        {key:"image_end",kind:"image",single:true,label:"Last frame (optional)",hint:"JPG/PNG · ≤10MB",min:0,max:1,fmt:IMG_KLING,maxMB:10}],
+        hint:"Describe how the image should move…"}
+    }},
     {id:"seedance-2.5",name:"Seedance 2.5",sub:"Newest · audio · 4–30s",family:"Seedance",routes:{
       text:{...seedBase,model:"seedance-2.5-text-to-video",ar:AR_SEED,dar:"adaptive",web:true,inputs:[],
         hint:"Describe the video you want…"},
@@ -276,12 +285,20 @@
       if(!list.length)return;
       body[inp.key]=inp.single?list[0].url:list.map(x=>x.url);
     });
+    if(r.fal){
+      const f={prompt:body.prompt,duration:body.duration,resolution:body.quality,aspect_ratio:body.aspect_ratio,generate_audio:body.generate_audio!==false};
+      if(body.image_start){f.image_url=body.image_start;delete f.aspect_ratio}
+      if(body.image_end)f.end_image_url=body.image_end;
+      f.__fal=r.model;
+      return f;
+    }
     return body;
   }
   function validate(){
     normalize();
     const r=route();
-    if(!getKey())return"No EvoLink key found. Paste it in Settings → EvoLink";
+    if(r.fal){if(!gs("api_falai",""))return"No fal.ai key found. Add it in Settings → fal.ai"}
+    else if(!getKey())return"No EvoLink key found. Paste it in Settings → EvoLink";
     if(r.kind==="final"){
       if(!K.finalSource||!draftJobs().some(j=>j.taskId===K.finalSource))return"Pick a draft to upgrade first";
       return"";
@@ -386,6 +403,16 @@
       syncComposer();refreshHeader();
     }
     try{
+      if(r.fal){
+        const ep=body.__fal;delete body.__fal;
+        const fr=await fetch("https://queue.fal.run/"+ep,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Key "+gs("api_falai","")},body:JSON.stringify(body)});
+        const fd=await fr.json().catch(()=>({}));
+        if(!fr.ok)throw new Error((fd.detail&&(Array.isArray(fd.detail)?fd.detail[0]?.msg:fd.detail))||fd.error||("fal.ai error "+fr.status));
+        if(!fd.request_id)throw new Error("fal.ai did not return a request ID");
+        job.taskId=fd.request_id;job.fal={ep,status:fd.status_url||`https://queue.fal.run/${ep}/requests/${fd.request_id}/status`,result:fd.response_url||`https://queue.fal.run/${ep}/requests/${fd.request_id}`};
+        job.status="pending";saveChats();syncCard(job);poll(job);
+        return;
+      }
       const res=await api("/v1/videos/generations",{method:"POST",body:JSON.stringify(body)});
       const taskId=res?.id||res?.task_id||res?.data?.id;
       if(!taskId)throw new Error("EvoLink did not return a task ID");
@@ -415,7 +442,19 @@
         await sleep(Date.now()-started>90000?6000:3000);
         if(job.dismissed)break;
         try{
-          const d=await api("/v1/tasks/"+encodeURIComponent(job.taskId));
+          let d;
+          if(job.fal){
+            const hd={headers:{"Authorization":"Key "+gs("api_falai","")}};
+            const sr=await fetch(job.fal.status,hd);const sd=await sr.json().catch(()=>({}));
+            if(!sr.ok){const e=new Error(sd.detail||sd.error||("fal.ai error "+sr.status));e.status=sr.status;throw e}
+            const fs=String(sd.status||"").toUpperCase();
+            if(fs==="COMPLETED"){
+              const rr=await fetch(job.fal.result,hd);const rd=await rr.json().catch(()=>({}));
+              d={status:"completed",video_url:rd?.video?.url||null,results:rd?.video?.url?[rd.video.url]:[]};
+              if(!rr.ok||!d.video_url)d={status:"failed",error:{message:(rd.detail&&(Array.isArray(rd.detail)?rd.detail[0]?.msg:rd.detail))||"fal.ai returned no video"}};
+            }else if(fs==="ERROR"||fs==="FAILED")d={status:"failed",error:{message:String(sd.error||"Generation failed on fal.ai")}};
+            else d={status:fs==="IN_QUEUE"?"pending":"processing"};
+          }else d=await api("/v1/tasks/"+encodeURIComponent(job.taskId));
           fails=0;
           if(Number.isFinite(d.progress))job.progress=clamp(d.progress,0,100);
           const st=String(d.status||"").toLowerCase();
@@ -450,7 +489,7 @@
     if(Number.isFinite(d?.video_duration))job.videoDur=d.video_duration;
     try{
       if(typeof createVideoAsset==="function"){
-        createVideoAsset(url,job.prompt,null,{model:job.route,providerLabel:"EvoLink · "+job.name,aspectRatio:job.aspect,resolution:job.quality,duration:job.videoDur||(job.dur>0?job.dur:null)});
+        createVideoAsset(url,job.prompt,null,{model:job.route,providerLabel:(job.fal?"fal.ai · ":"EvoLink · ")+job.name,aspectRatio:job.aspect,resolution:job.quality,duration:job.videoDur||(job.dur>0?job.dur:null)});
         const a=(S.assets||[])[S.assets.length-1];
         if(a&&a.url===url){
           job.assetId=a.id;
