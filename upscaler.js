@@ -168,7 +168,12 @@ async function upRunJob(job,srcUrl,over){
     if(!url)throw new Error("fal.ai returned no "+t.kind);
     job.out=url;job.status="done";job.doneAt=Date.now();job.err=null;
     upAutoSave(job,t);
-    try{logCost(t.ep,"Upscaler · "+job.label,1,0)}catch(_){}
+    try{
+      let est=null;const m=job.meta||await probeMedia(t.kind,job.srcUrl||"");
+      if(m)est=upEstimate(t,m,{model:job.model,factor:job.factor,fps:job.body&&job.body.target_fps});
+      job.cost=est?est.usd:null;job.costApprox=est?est.approx:null;
+      logCost(t.ep,"Upscaler · "+job.label,1,est?est.usd:(t.price&&t.price.k==="flat"?t.price.usd:0));
+    }catch(_){}
   }catch(e){
     if(job.cancelled){job.status="cancelled"}
     else{job.status="failed";job.err=e.message||"Failed"}
@@ -200,7 +205,10 @@ function newJob(t,srcUrl,srcName,thumb){
 
 /* ───────────── sources ───────────── */
 const assetsOf=kind=>(S.assets||[]).filter(a=>a&&a.type===kind&&a.url).slice().reverse();
-function setSrc(kind,o){UP.src[kind]=o;upRefreshAll()}
+function setSrc(kind,o){
+  UP.src[kind]=o;upRefreshAll();
+  if(o&&o.thumb){const mine=o;probeMedia(kind,o.thumb).then(m=>{if(UP.src[kind]===mine&&m){mine.meta=m;upRefreshSummary();upRefreshRun()}})}
+}
 async function uploadSrc(file){
   const key=gs("api_falai","");
   if(!key){toast("Add a fal.ai API key in Settings first","error");return}
@@ -214,6 +222,58 @@ async function uploadSrc(file){
     setSrc(kind,{url,thumb:local,name:file.name});
   }catch(e){setSrc(kind,null);toast("❌ Upload failed: "+e.message,"error")}
 }
+
+/* ───────────── cost estimates (fal.ai pricing, Oct 2026) ───────────── */
+// Reads each tool's `price` spec from the registry. Returns {usd,approx,note}
+// or null when there isn't enough information (e.g. source size unknown).
+function probeMedia(kind,url){
+  return new Promise(res=>{
+    let done=false;const fin=v=>{if(!done){done=true;res(v)}};
+    setTimeout(()=>fin(null),7000);
+    try{
+      if(kind==="image"){const i=new Image();i.onload=()=>fin({w:i.naturalWidth,h:i.naturalHeight});i.onerror=()=>fin(null);i.src=url}
+      else{const v=document.createElement("video");v.preload="metadata";v.muted=true;
+        v.onloadedmetadata=()=>fin({w:v.videoWidth,h:v.videoHeight,dur:v.duration});v.onerror=()=>fin(null);v.src=url}
+    }catch(_){fin(null)}
+  });
+}
+function upEstimate(t,meta,over){
+  const pr=t.price;if(!pr)return null;
+  over=over||{};
+  const model=over.model!==undefined?over.model:toolModel(t);
+  if(pr.k==="flat")return{usd:pr.usd,approx:true,note:"Flat estimate"};
+  if(!meta||!meta.w||!meta.h)return null;
+  const approxModel=!!(pr.approx&&Array.isArray(pr.approx)&&pr.approx.includes(model));
+  if(t.kind==="image"){
+    const f=over.factor||toolFactor(t)||1;
+    const mult=pr.out==="f2"?f*f:(typeof pr.out==="number"?pr.out:1);
+    const mp=meta.w*meta.h*mult/1e6;
+    let usd;
+    if(pr.k==="mp"){usd=mp*((pr.perModel&&pr.perModel[model])||pr.usd)}
+    else{const blk=(pr.perModelMp&&pr.perModelMp[model])||pr.mp;usd=Math.max(1,Math.ceil(mp/blk))*pr.usd}
+    return{usd,approx:approxModel,note:`${mp.toFixed(1)} MP output`};
+  }
+  // video
+  const dur=meta.dur;if(!dur||!isFinite(dur))return null;
+  const f=t.factor?(over.factor||toolFactor(t)):1;
+  const long=Math.max(meta.w,meta.h)*(t.fixed&&!t.factor?1:f);
+  const tier=(pr.minRes==="hd1080"&&long<1920)?"hd1080":(long<=1300?"hd720":(long<=2000?"hd1080":"uhd"));
+  const fps=over.fps!==undefined?over.fps:(t.fps?toolFps(t):null);
+  if(pr.k==="interp"){
+    const r=(pr.rates[model]||pr.rates.Apollo);
+    const per=r[tier==="uhd"?"uhd":"hd"];
+    const tgt=fps||60;const slow=toolParams(t).slowdown_factor||1;
+    const newFrames=Math.max(0,tgt-30)/30; // priced on newly generated frames (30→60 = 1.0)
+    const usd=per*dur*Math.max(newFrames,0.25)*slow;
+    return{usd,approx:true,note:`${tier==="uhd"?"4K":"≤1080p"} · ${dur.toFixed(0)}s`};
+  }
+  const rates={...pr.rates,...((pr.perModel&&pr.perModel[model])||{})};
+  let rate=rates[tier];
+  let mult=1;if(pr.fpsMult&&fps&&fps>30)mult=2;
+  const usd=rate*dur*mult;
+  return{usd,approx:!!(pr.approx||pr.approxRes||(pr.approxFps&&mult>1)),note:`${tier==="uhd"?"4K":tier==="hd1080"?"1080p":"720p"} output · ${dur.toFixed(0)}s`};
+}
+const money=u=>u<0.01?"$"+u.toFixed(4):"$"+u.toFixed(2);
 
 /* ───────────── UI: helpers ───────────── */
 const $=id=>document.getElementById(id);
@@ -317,7 +377,13 @@ function summaryHTML(t){
   if(t.h264&&UP.st.h264)p.push("H.264");
   const n=Object.keys(toolParams(t)).filter(k=>R.paramsFor(t,model).some(x=>x.k===k)).length;
   if(n)p.push(n+" custom");
-  return p.map(x=>`<span class="up-pill">${esc(x)}</span>`).join("");
+  let out=p.map(x=>`<span class="up-pill">${esc(x)}</span>`).join("");
+  const batch=S.upscaleMode==="batch";
+  const e=batch?null:upEstimate(t,(UP.src[t.kind]||{}).meta);
+  if(e)out+=`<span class="up-pill" style="background:rgba(40,180,120,.16);color:#1d8f5e" title="${esc(e.note||"")}">${e.approx?"≈ ":""}${money(e.usd)} est.</span>`;
+  else if(batch)out+=`<span class="up-pill">Cost shown per item</span>`;
+  else if(t.price&&UP.src[t.kind]&&UP.src[t.kind].url)out+=`<span class="up-pill">Reading size…</span>`;
+  return out;
 }
 function runLabel(t,batch){
   if(!hasKey())return"🔑 Add fal.ai key in Settings";
@@ -348,7 +414,7 @@ function jobHTML(j){
     body=`${media}<div class="up-acts"><button type="button" class="ks-btn" data-up="dl" data-v="${j.id}">⬇ Download</button><button type="button" class="ks-btn" data-up="coll" data-v="${j.id}">📁 Collection</button><button type="button" class="ks-btn" data-up="chain" data-v="${j.id}">↪ Use as source</button><button type="button" class="ks-btn ghost" data-up="rm" data-v="${j.id}">Remove</button></div>
       <div class="up-note">✓ Saved to Gallery</div>`;
   }
-  return `<div class="up-job" id="upj-${j.id}"><div class="up-jh"><div><div class="up-jt">${esc(t.name)} <span style="font-weight:600;color:var(--texts)">· ${esc(j.label||t.fixed||"")}</span></div><div class="up-js">${esc(j.srcName||"")}</div></div><span class="up-st ${st}">${stTxt}</span></div>${body}</div>`;
+  return `<div class="up-job" id="upj-${j.id}"><div class="up-jh"><div><div class="up-jt">${esc(t.name)} <span style="font-weight:600;color:var(--texts)">· ${esc(j.label||t.fixed||"")}</span></div><div class="up-js">${esc(j.srcName||"")}</div></div><span class="up-st ${st}">${stTxt}${st==="done"&&j.cost!=null?" · "+(j.costApprox?"≈":"")+money(j.cost):""}</span></div>${body}</div>`;
 }
 function jobsHTML(){
   const list=UP.jobs.filter(j=>j.kind===UP.st.kind);
@@ -387,6 +453,8 @@ function upRefreshRun(){
   const batch=S.upscaleMode==="batch";
   b.textContent=runLabel(t,batch);
   b.disabled=!canRun(t,batch);
+  const e=batch?null:upEstimate(t,(UP.src[t.kind]||{}).meta);
+  if(e&&!b.disabled)b.textContent+=`  ·  ${e.approx?'≈ ':''}${money(e.usd)}`;
 }
 function upRefreshJobs(){const el=$("upJobs");if(el)el.innerHTML=jobsHTML()}
 function upRefreshSummary(){const t=tool();const s=$("upSum");if(s)s.innerHTML=summaryHTML(t)}
@@ -448,7 +516,7 @@ function sheetHTML(){
   if(t.h264){
     h+=`<div class="ks-card"><div class="up-tg"><div><b>H.264 output</b><small>Wider device support · default is H.265</small></div><button type="button" class="up-sw${UP.st.h264?" on":""}" data-up="h264"></button></div></div>`;
   }
-  h+=`<div class="up-note" style="margin:0 4px 6px">Billed by fal.ai per output size. Pricing isn't shown here — check fal.ai/pricing. Cost log records these runs without an amount.</div>`;
+  h+=`<div class="up-note" style="margin:0 4px 6px">Estimates use fal.ai's published Topaz rates and your source size. Billing is per output size / duration; figures marked ≈ are approximate.</div>`;
   return h;
 }
 function upRefreshSheet(){
@@ -629,5 +697,5 @@ function saveUpscaleToGallery(url,silent,label){
   return asset;
 }
 Object.assign(window,{renderUpscaler,setUpscaleMode,upscaleImageUrl,saveUpscaleToGallery,toggleUpSettings,
-  KosmicUpscaler:{state:UP,buildBody:upBuildBody,registry:R}});
+  KosmicUpscaler:{state:UP,buildBody:upBuildBody,registry:R,estimate:upEstimate}});
 })();

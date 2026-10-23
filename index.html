@@ -1724,6 +1724,11 @@ const COST_TABLE={
   // instead of $0.3034/s, well above this estimate).
   // FLUX 3 Max: ~8s @720p at the launch promo ($0.0425/s) — list price $0.17/s after the promo.
   "blackforestlabs/flux-3-max/text-to-video":0.34,
+  // Topaz on fal.ai — flat defaults for Node Canvas / logging (≈1 MP source at 2×).
+  // The Upscaler screen computes real per-size estimates (upscaler.js).
+  "topaz/upscale/image/precision":0.08,"topaz/upscale/image/generative":0.04,"topaz/upscale/image/creative":0.16,
+  "topaz/upscale/image/transparent":0.08,"topaz/restore/image":0.08,"topaz/denoise/image":0.08,
+  "topaz/sharpen/image":0.08,"topaz/adjust/image":0.08,
   "bytedance/seedance-2.0/fast/text-to-video":1.94,
   "bytedance/seedance-2.0/text-to-video":2.43,
   // Seedance 2.5 went live on EvoLink Aug 7 2026 (very recent) — 480p/720p
@@ -6536,6 +6541,13 @@ const IMAGE_PRICING={
   "fal-ai/bytedance/seedream/v5/pro/text-to-image":0.0675,
   "bria/fibo/generate":0.035, // unconfirmed — see COST_TABLE comment on this same key
   "openai/gpt-image-2":0.07,
+  // Added from fal's own model pages (Oct 2026). Per-megapixel models are
+  // priced at 1 MP (1K) here — larger outputs cost proportionally more.
+  "blackforestlabs/flux-3/text-to-image":0.048,        // $0.048 per 1K image
+  "blackforestlabs/flux-3/klein/text-to-image":0.009,  // $0.009 at 1K (fal: final pricing not yet confirmed)
+  "fal-ai/flux-2/klein/9b":0.006,                      // $0.006 per megapixel
+  "google/nano-banana-2.1":0.04,                       // $0.040 at 1K, $0.059 2K, $0.134 4K
+  "krea/v3/text-to-image":0.025,                       // $0.025 per megapixel
 };
 function estimateImageCost(model,count){
   const rate=IMAGE_PRICING[model];
