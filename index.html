@@ -2091,7 +2091,10 @@ function handleTabSwitch(mod,name){
     // than fake separate views, each tab scrolls to the real section it
     // actually refers to.
     const anchors={"Generate":"audioGenerateAnchor","Voice Clone":"audioVoiceCloneAnchor","Library":"audioLibraryAnchor"};
-    document.getElementById(anchors[name])?.scrollIntoView({behavior:"smooth",block:"start"});
+    // Audio Studio is now a hub of sub-modules (audio.js) — each tab opens its
+    // sub-module instead of scrolling a long page. Falls back to scrolling if
+    // the hub isn't loaded.
+    if(!(window.auOpenByAnchor&&auOpenByAnchor(anchors[name])))document.getElementById(anchors[name])?.scrollIntoView({behavior:"smooth",block:"start"});
   }
   if(mod==="costs"){
     const anchors={"Overview":"costsOverviewAnchor","Breakdown":"costsBreakdownAnchor","Export":"costsExportAnchor"};
@@ -12362,6 +12365,7 @@ async function runCastSwap(){
 // scrolls to it — no timeout needed.
 function openAudioSubFromSidebar(anchorId,el){
   switchMod('audio',el);
+  if(window.auOpenByAnchor&&auOpenByAnchor(anchorId))return; // opens the matching sub-module
   const panel=document.getElementById(anchorId);
   if(!panel)return;
   panel.scrollIntoView({behavior:"smooth",block:"start"});

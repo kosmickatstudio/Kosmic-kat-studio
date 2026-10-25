@@ -146,10 +146,19 @@ function renderVoicePickerTrigger(selectId,triggerId){
     <span style="color:var(--textm);flex-shrink:0">${pIcon('chevron',14)}</span>`;
 }
 
-function renderAudio(el){
-  const hasKey=gs("api_elevenlabs");
-  const clonedVoices=gs("cloned_voices",[])||[];
-  el.innerHTML=`
+// ══════════════════════════════════════════════════════════════════════
+// AUDIO STUDIO — hub + sub-modules.
+// renderAudio() now draws a hub of sub-modules (Voice / Transform / Create /
+// Sync & Edit / Library) instead of one endless page. Each sub-module is a
+// registry entry (AU_MODULES) whose panel builder returns the SAME markup and
+// element ids the generation handlers below have always used, so none of
+// those handlers changed. Handlers that call renderAudio() to refresh (voice
+// cloned / designed / deleted, asset saved) land back on the sub-module that
+// was open, because the open module lives in AU.active.
+// ══════════════════════════════════════════════════════════════════════
+window.AU=window.AU||{active:null};
+
+function auBuild_voiceover(c){const {hasKey,clonedVoices}=c;return `
     <div class="panel" id="audioGenerateAnchor">
       <div class="panel-title">🎵 Voiceover ${hasKey?'<span class="badge badge-green">ACTIVE — ElevenLabs</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
       ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add an <b>ElevenLabs</b> API key in Settings to enable real voice generation. Free tier available at <a href="https://elevenlabs.io" target="_blank" style="color:var(--vm)">elevenlabs.io</a>.</div>`:''}
@@ -187,7 +196,8 @@ function renderAudio(el){
       <div class="panel-title">🔊 Result</div>
       <div id="audioResultContent"></div>
     </div>
-
+`;}
+function auBuild_clone(c){const {hasKey,clonedVoices}=c;return `
     <div class="panel" id="audioVoiceCloneAnchor" style="margin-top:14px">
       <div class="panel-title">🎙️ Voice Cloning ${hasKey?'<span class="badge badge-green">ACTIVE — ElevenLabs</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Upload a clean audio sample (30s–a few minutes, one speaker, minimal background noise) and clone a real, reusable voice — it'll appear in the Voice dropdown above for any future voiceover.</div>
@@ -212,7 +222,8 @@ function renderAudio(el){
         </div>
       </div>`:''}
     </div>
-
+`;}
+function auBuild_design(c){const {hasKey,clonedVoices}=c;return `
     <div class="panel" id="audioVoiceDesignAnchor" style="margin-top:14px">
       <div class="panel-title">${pIcon('sparkle')} Voice Design ${hasKey?'<span class="badge badge-green">ACTIVE — ElevenLabs</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Describe a voice in words — no audio sample needed. Good for original characters with no real-world reference to clone from.</div>
@@ -223,7 +234,8 @@ function renderAudio(el){
       <button class="btn btn-primary btn-full" id="vdGenBtn" ${!hasKey?'disabled':''} onclick="generateVoiceDesignPreviews()">${hasKey?pIcon('sparkle',13)+' Generate 3 Previews':pIcon('sparkle',13)+' Add API Key First'}</button>
       <div id="vdPreviewResult" style="margin-top:10px"></div>
     </div>
-
+`;}
+function auBuild_dialogue(c){const {hasKey,clonedVoices}=c;return `
     <div class="panel" id="audioDialogueAnchor" style="margin-top:14px">
       <div class="panel-title">${pIcon('chat')} Dialogue ${hasKey?'<span class="badge badge-green">ACTIVE — ElevenLabs</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Multiple characters, one natural conversation — generated together in a single pass instead of separate lines stitched together.</div>
@@ -232,7 +244,8 @@ function renderAudio(el){
       <button class="btn btn-primary btn-full" id="dialogueGenBtn" style="margin-top:8px" ${!hasKey?'disabled':''} onclick="generateDialogue()">${hasKey?pIcon('chat',13)+' Generate Dialogue':pIcon('chat',13)+' Add API Key First'}</button>
       <div id="dialogueResult" style="margin-top:10px"></div>
     </div>
-
+`;}
+function auBuild_changer(c){const {hasKey,clonedVoices}=c;return `
     <div class="panel" id="audioVoiceChangerAnchor" style="margin-top:14px">
       <div class="panel-title">${pIcon('swap')} Voice Changer ${hasKey?'<span class="badge badge-green">ACTIVE — ElevenLabs</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Re-record an existing performance in a different voice — keeps the original timing, pacing, and emotion, only the voice itself changes.</div>
@@ -258,7 +271,8 @@ function renderAudio(el){
       <button class="btn btn-primary btn-full" id="vcGenBtn" ${!hasKey?'disabled':''} onclick="runVoiceChanger()">${hasKey?pIcon('swap',13)+' Convert Voice':pIcon('swap',13)+' Add API Key First'}</button>
       <div id="vcResult" style="margin-top:10px"></div>
     </div>
-
+`;}
+function auBuild_dubbing(c){const {hasKey,clonedVoices}=c;return `
     <div class="panel" id="audioDubbingAnchor" style="margin-top:14px">
       <div class="panel-title">${pIcon('film')} Dubbing ${hasKey?'<span class="badge badge-green">ACTIVE — ElevenLabs</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Translate a video or audio file into another language — preserves the original speaker's voice, emotion, and timing. Takes a while to process; this stays open and polls for you.</div>
@@ -278,7 +292,8 @@ function renderAudio(el){
       <button class="btn btn-primary btn-full" id="dubGenBtn" ${!hasKey?'disabled':''} onclick="startDubbing()">${hasKey?pIcon('film',13)+' Start Dubbing':pIcon('film',13)+' Add API Key First'}</button>
       <div id="dubResult" style="margin-top:10px"></div>
     </div>
-
+`;}
+function auBuild_isolator(c){const {hasKey,clonedVoices}=c;return `
     <div class="panel" id="audioIsolatorAnchor" style="margin-top:14px">
       <div class="panel-title">${pIcon('mic')} Voice Isolator ${hasKey?'<span class="badge badge-green">ACTIVE — ElevenLabs</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Strip background noise/music from a real-world recording, leaving clean isolated vocals — useful before cloning a voice from a messy source.</div>
@@ -290,7 +305,8 @@ function renderAudio(el){
       <button class="btn btn-primary btn-full" id="isoGenBtn" ${!hasKey?'disabled':''} onclick="runVoiceIsolator()">${hasKey?pIcon('mic',13)+' Isolate Voice':pIcon('mic',13)+' Add API Key First'}</button>
       <div id="isoResult" style="margin-top:10px"></div>
     </div>
-
+`;}
+function auBuild_v2m(c){const {hasKey,clonedVoices}=c;return `
     <div class="panel" id="audioVideoToMusicAnchor" style="margin-top:14px">
       <div class="panel-title">${pIcon('sparkle')} Video → Music ${hasKey?'<span class="badge badge-green">ACTIVE — ElevenLabs</span>':'<span class="badge badge-red">NO KEY</span>'}</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Generate a custom soundtrack directly from a finished video clip — analyzes the actual footage, not just a text description.</div>
@@ -306,15 +322,8 @@ function renderAudio(el){
       <button class="btn btn-primary btn-full" id="v2mGenBtn" ${!hasKey?'disabled':''} onclick="runVideoToMusic()">${hasKey?pIcon('sparkle',13)+' Generate Soundtrack':pIcon('sparkle',13)+' Add API Key First'}</button>
       <div id="v2mResult" style="margin-top:10px"></div>
     </div>
-
-    <div class="panel" id="audioLibraryAnchor" style="margin-top:14px">
-      <div class="panel-title">🎧 Recent Voiceovers</div>
-      ${S.assets.filter(a=>a.type==='audio').length?`<div id="audioRecentList" style="display:flex;flex-direction:column;gap:8px">${S.assets.filter(a=>a.type==='audio').slice(-6).reverse().map(a=>`
-        <div style="display:flex;align-items:center;gap:10px;background:rgba(61,31,122,0.04);border-radius:8px;padding:8px">
-          <audio src="${a.url}" controls style="flex:1;height:32px"></audio>
-        </div>`).join('')}</div>`:`<div style="font-size:11px;color:var(--textm)">Generated voiceovers will show up here.</div>`}
-    </div>
-
+`;}
+function auBuild_music(c){const {hasKey,clonedVoices}=c;return `
     <div class="panel" style="margin-top:14px">
       <div class="panel-title">🎼 Music Generation <span class="badge ${gs('api_falai')?'badge-green':'badge-red'}">${gs('api_falai')?'ACTIVE — fal.ai':'NO KEY'}</span></div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Real instrumental music, up to 6 minutes, via Stable Audio 3.</div>
@@ -323,7 +332,8 @@ function renderAudio(el){
       <button class="btn btn-primary btn-full" ${!gs('api_falai')?'disabled':''} onclick="generateMusic()">🎼 Generate Music</button>
       <div id="musicResult" style="margin-top:10px"></div>
     </div>
-
+`;}
+function auBuild_sfx(c){const {hasKey,clonedVoices}=c;return `
     <div class="panel" style="margin-top:14px">
       <div class="panel-title">💥 SFX Generation <span class="badge ${gs('api_falai')?'badge-green':'badge-red'}">${gs('api_falai')?'ACTIVE — fal.ai':'NO KEY'}</span></div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Real sound effects, up to 30 seconds, generated in ~1 second.</div>
@@ -334,7 +344,8 @@ function renderAudio(el){
       <button class="btn btn-primary btn-full" ${!gs('api_falai')?'disabled':''} onclick="generateSFX()">💥 Generate SFX</button>
       <div id="sfxResult" style="margin-top:10px"></div>
     </div>
-
+`;}
+function auBuild_lipsync(c){const {hasKey,clonedVoices}=c;return `
     <div class="panel" style="margin-top:14px">
       <div class="panel-title">👄 Lipsync Studio <span class="badge ${gs('api_falai')?'badge-green':'badge-red'}">${gs('api_falai')?'ACTIVE — fal.ai':'NO KEY'}</span></div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Sync any audio to an existing video's face — real lip movement, not a filter.</div>
@@ -366,7 +377,8 @@ function renderAudio(el){
       <div style="font-size:10px;color:var(--texts);margin-top:6px;text-align:center">⏱ Takes 1-2 minutes — don't close this tab</div>
       <div id="lipsyncResult" style="margin-top:10px"></div>
     </div>
-
+`;}
+function auBuild_trim(c){const {hasKey,clonedVoices}=c;return `
     <div class="panel" style="margin-top:14px">
       <div class="panel-title">✂️ Audio Trim & Volume</div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Trim and adjust volume on any audio file — runs entirely in your browser, no upload needed.</div>
@@ -374,24 +386,148 @@ function renderAudio(el){
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('editAudioFile').click()">📤 Load Audio to Edit</button>
       <div id="audioEditorPanel" style="margin-top:10px"></div>
     </div>
-  `;
+`;}
+
+function auBuild_library(c){
+  const list=(S.assets||[]).filter(a=>a.type==='audio').slice().reverse().slice(0,60);
+  return `<div class="panel" id="audioLibraryAnchor">
+    <div class="panel-title">🎧 Audio library</div>
+    ${list.length?`<div class="au-lib">${list.map(a=>`
+      <div class="au-lib-item">
+        <div class="au-lib-t">${String(a.prompt||'Audio').replace(/[<>&]/g,ch=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[ch])).slice(0,90)}</div>
+        <audio src="${a.url}" controls preload="none"></audio>
+        <div class="au-lib-a">
+          <button class="btn btn-outline btn-sm" onclick="downloadWithName('${String(a.url).replace(/'/g,"\\'")}','KosmicKat_audio.mp3')">⬇ Download</button>
+          <button class="btn btn-outline btn-sm" onclick="openCollectionPicker('asset','${a.id}')">📁 Collection</button>
+        </div>
+      </div>`).join('')}</div>`
+    :`<div class="au-empty">Everything you generate in Audio Studio — voiceovers, dialogue, music and sound effects — is saved here automatically.</div>`}
+  </div>`;
+}
+
+const AU_GROUPS=["Voice","Transform","Create","Sync & Edit","Library"];
+const AU_MODULES=[
+  {id:"voiceover",g:"Voice",icon:"🎵",name:"Voiceover",tag:"Text to speech",key:"el",anchors:["audioGenerateAnchor"],build:auBuild_voiceover},
+  {id:"dialogue",g:"Voice",icon:"🎭",name:"Dialogue",tag:"Multi-character scenes",key:"el",anchors:["audioDialogueAnchor"],build:auBuild_dialogue},
+  {id:"clone",g:"Voice",icon:"🎙️",name:"Voice Clone",tag:"From an audio sample",key:"el",anchors:["audioVoiceCloneAnchor"],build:auBuild_clone},
+  {id:"design",g:"Voice",icon:"✨",name:"Voice Design",tag:"Describe a voice",key:"el",anchors:["audioVoiceDesignAnchor"],build:auBuild_design},
+  {id:"changer",g:"Transform",icon:"🔁",name:"Voice Changer",tag:"Swap who's speaking",key:"el",anchors:["audioVoiceChangerAnchor"],build:auBuild_changer},
+  {id:"dubbing",g:"Transform",icon:"🌍",name:"Dubbing",tag:"Translate video / audio",key:"el",anchors:["audioDubbingAnchor"],build:auBuild_dubbing},
+  {id:"isolator",g:"Transform",icon:"🧼",name:"Voice Isolator",tag:"Remove background noise",key:"el",anchors:["audioIsolatorAnchor"],build:auBuild_isolator},
+  {id:"music",g:"Create",icon:"🎼",name:"Music",tag:"Up to 6 min · Stable Audio 3",key:"fal",anchors:["audioMusicAnchor"],build:auBuild_music},
+  {id:"sfx",g:"Create",icon:"💥",name:"Sound Effects",tag:"Up to 30 s",key:"fal",anchors:["audioSfxAnchor"],build:auBuild_sfx},
+  {id:"v2m",g:"Create",icon:"🎬",name:"Video → Music",tag:"Score from footage",key:"el",anchors:["audioVideoToMusicAnchor"],build:auBuild_v2m},
+  {id:"lipsync",g:"Sync & Edit",icon:"👄",name:"Lipsync",tag:"Match audio to a face",key:"fal",anchors:["audioLipsyncAnchor"],build:auBuild_lipsync},
+  {id:"trim",g:"Sync & Edit",icon:"✂️",name:"Trim & Volume",tag:"Edit in your browser",key:null,anchors:["audioTrimAnchor"],build:auBuild_trim},
+  {id:"library",g:"Library",icon:"🎧",name:"Library",tag:"Everything you've made",key:null,anchors:["audioLibraryAnchor"],build:auBuild_library}
+];
+const AU_BY_ID={};AU_MODULES.forEach(m=>AU_BY_ID[m.id]=m);
+
+function auKeyOk(m){return !m.key||!!gs(m.key==="el"?"api_elevenlabs":"api_falai")}
+function auKeyName(m){return m.key==="el"?"ElevenLabs":m.key==="fal"?"fal.ai":""}
+function auCss(){
+  if(document.getElementById("auCss"))return;
+  const s=document.createElement("style");s.id="auCss";
+  s.textContent=`
+.au-wrap{max-width:760px;margin:0 auto;padding:2px 2px 90px}
+.au-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 2px 12px}
+.au-head h2{margin:0;font-size:18px;font-weight:800;color:var(--violet,#3d1f7a);display:flex;align-items:center;gap:8px}
+.au-keys{display:flex;gap:6px;flex-wrap:wrap}
+.au-kp{font-size:10px;font-weight:800;padding:4px 9px;border-radius:99px;background:rgba(40,180,120,.16);color:#1d8f5e;white-space:nowrap}
+.au-kp.off{background:rgba(220,60,80,.14);color:#c0334a}
+.au-gl{font-size:11px;font-weight:800;color:var(--textm,#5a4880);text-transform:uppercase;letter-spacing:.05em;margin:16px 4px 8px}
+.au-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.au-card{position:relative;text-align:left;border:1px solid var(--glass-brd,rgba(61,31,122,.12));background:var(--glass,rgba(255,255,255,.55));color:var(--text,#1e1230);border-radius:18px;padding:14px 12px 12px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;gap:3px;min-height:92px;-webkit-tap-highlight-color:transparent;transition:transform .12s}
+.au-card:active{transform:scale(.97)}
+.au-card .au-ic{font-size:24px;line-height:1;margin-bottom:6px}
+.au-card b{font-size:13.5px}.au-card small{font-size:10.5px;color:var(--texts,#9488ae);line-height:1.3}
+.au-card .au-dot{position:absolute;top:12px;right:12px;width:9px;height:9px;border-radius:50%;background:#2ec27e}
+.au-card .au-dot.off{background:#e0526a}
+.au-recent{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px}.au-recent::-webkit-scrollbar{display:none}
+.au-recent .ks-chip{flex:0 0 auto}
+.au-bar{position:sticky;top:0;z-index:5;margin:-2px -2px 8px;padding:6px 2px 8px;background:var(--bg,rgba(250,247,255,.92));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.au-top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.au-back{flex:0 0 auto;width:38px;height:38px;border-radius:12px;border:1px solid var(--glass-brd,rgba(61,31,122,.14));background:rgba(98,64,176,.10);color:var(--violet,#3d1f7a);font-size:18px;cursor:pointer;font-family:inherit}
+.au-ttl{flex:1;min-width:0}.au-ttl b{font-size:16px;font-weight:800;color:var(--violet,#3d1f7a);display:block}.au-ttl small{font-size:10.5px;color:var(--texts,#9488ae)}
+.au-rail{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding:2px}.au-rail::-webkit-scrollbar{display:none}
+.au-rail .ks-chip{flex:0 0 auto;padding:6px 12px;font-size:11.5px}
+.au-warn{font-size:11.5px;line-height:1.45;color:var(--gold,#9a6b00);background:var(--gold-p,rgba(212,160,23,.14));border-radius:12px;padding:10px 12px;margin-bottom:10px}
+/* restyle the existing feature panels to the glass look */
+.au-body .panel{background:var(--glass,rgba(255,255,255,.55))!important;border:1px solid var(--glass-brd,rgba(61,31,122,.12))!important;border-radius:18px!important;box-shadow:none!important;padding:14px!important;margin:0 0 12px!important}
+.au-body>.panel:not(#audioResultPanel)>.panel-title{display:none}
+.au-body #audioResultPanel>.panel-title{font-size:12px}
+.au-body .f-label{font-size:11px!important;font-weight:800!important;text-transform:uppercase;letter-spacing:.04em;color:var(--textm,#5a4880)!important}
+.au-body .f-input,.au-body .f-textarea,.au-body .f-select{border:1px solid var(--glass-brd,rgba(61,31,122,.12))!important;background:rgba(98,64,176,.06)!important;border-radius:12px!important}
+.au-body .btn-primary.btn-full{border-radius:16px!important;padding:14px!important;font-size:14.5px!important;font-weight:800!important;background:linear-gradient(135deg,#6240b0,#3d1f7a)!important;box-shadow:0 8px 24px rgba(98,64,176,.3)!important;border:0!important}
+.au-body .btn-primary.btn-full:disabled{opacity:.5;box-shadow:none!important}
+.au-body .btn-outline{border-radius:11px!important;background:rgba(98,64,176,.10)!important;border:1px solid var(--glass-brd,rgba(61,31,122,.14))!important}
+.au-body .badge{display:none}
+.au-body audio{width:100%;border-radius:12px}
+.au-lib{display:flex;flex-direction:column;gap:10px}
+.au-lib-item{background:rgba(98,64,176,.06);border-radius:14px;padding:10px}
+.au-lib-t{font-size:12px;font-weight:700;color:var(--text,#1e1230);margin-bottom:6px;word-break:break-word}
+.au-lib-a{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.au-empty{font-size:12px;color:var(--textm,#5a4880);line-height:1.5;padding:6px 2px}
+`;
+  document.head.appendChild(s);
+}
+function auCtx(){return{hasKey:!!gs("api_elevenlabs"),clonedVoices:gs("cloned_voices",[])||[]}}
+function auRecent(){let r=[];try{r=gs("au_recent",[])||[]}catch(_){}return Array.isArray(r)?r.filter(id=>AU_BY_ID[id]):[]}
+function auOpen(id){
+  const m=AU_BY_ID[id];if(!m)return false;
+  AU.active=id;
+  try{const r=[id,...auRecent().filter(x=>x!==id)].slice(0,4);saveSetting("au_recent",r)}catch(_){}
+  renderAudio(document.getElementById("moduleContent"));
+  window.scrollTo&&window.scrollTo(0,0);
+  const c=document.getElementById("moduleContent");if(c)c.scrollTop=0;
+  return true;
+}
+function auHome(){AU.active=null;renderAudio(document.getElementById("moduleContent"));window.scrollTo&&window.scrollTo(0,0)}
+function auOpenByAnchor(anchorId){
+  const m=AU_MODULES.find(x=>x.anchors.includes(anchorId));
+  if(!m)return false;
+  if(!document.getElementById("moduleContent")||!document.querySelector(".au-wrap")){AU.active=m.id;return true} // renderAudio will pick it up
+  return auOpen(m.id);
+}
+function auHubHTML(){
+  const el=!!gs("api_elevenlabs"),fal=!!gs("api_falai");
+  const rec=auRecent();
+  return `<div class="au-head"><h2>🎧 Audio Studio</h2><div class="au-keys"><span class="au-kp${el?"":" off"}">ElevenLabs ${el?"✓":"· no key"}</span><span class="au-kp${fal?"":" off"}">fal.ai ${fal?"✓":"· no key"}</span></div></div>
+    ${rec.length?`<div class="au-gl" style="margin-top:2px">Jump back in</div><div class="au-recent">${rec.map(id=>`<button type="button" class="ks-chip" onclick="auOpen('${id}')">${AU_BY_ID[id].icon} ${AU_BY_ID[id].name}</button>`).join("")}</div>`:""}
+    ${AU_GROUPS.map(g=>{
+      const ms=AU_MODULES.filter(m=>m.g===g);if(!ms.length)return"";
+      return `<div class="au-gl">${g}</div><div class="au-grid">${ms.map(m=>`<button type="button" class="au-card" onclick="auOpen('${m.id}')">${m.key?`<span class="au-dot${auKeyOk(m)?"":" off"}" title="${auKeyOk(m)?auKeyName(m)+" connected":"Needs "+auKeyName(m)+" key"}"></span>`:""}<span class="au-ic">${m.icon}</span><b>${m.name}</b><small>${m.tag}</small></button>`).join("")}</div>`;
+    }).join("")}`;
+}
+function auModuleHTML(m){
+  const ok=auKeyOk(m);
+  return `<div class="au-bar"><div class="au-top"><button type="button" class="au-back" onclick="auHome()" aria-label="Back to Audio Studio">‹</button>
+      <div class="au-ttl"><b>${m.icon} ${m.name}</b><small>${m.tag}${m.key?` · ${auKeyName(m)} ${ok?"connected":"key needed"}`:""}</small></div></div>
+    <div class="au-rail">${AU_MODULES.map(x=>`<button type="button" class="ks-chip${x.id===m.id?" on":""}" onclick="auOpen('${x.id}')">${x.icon} ${x.name}</button>`).join("")}</div></div>
+    ${ok?"":`<div class="au-warn">Add a <b>${auKeyName(m)}</b> API key in Settings to use ${m.name}.</div>`}
+    <div class="au-body" id="auBody">${m.build(auCtx())}</div>`;
+}
+function renderAudio(el){
+  el=el||document.getElementById("moduleContent");if(!el)return;
+  auCss();
+  const m=AU.active&&AU_BY_ID[AU.active];
+  el.innerHTML=`<div class="au-wrap">${m?auModuleHTML(m):auHubHTML()}</div>`;
   renderDialogueLines();
   renderVoicePickerTrigger("audioVoice","audioVoiceTrigger");
   renderSimpleTrigger("audioModel");
   renderVoicePickerTrigger("vcTargetVoice","vcTargetVoiceTrigger");
   renderSimpleTrigger("dubTargetLang");
-  // Warm the cache in the background so opening any picker feels instant,
-  // then refresh every visible trigger once real voice names/labels are in
-  // — otherwise triggers show only the hardcoded fallback names until the
-  // user manually opens a picker once.
+  // Warm the voice cache so pickers show real names once it resolves.
   fetchElevenLabsVoices().then(voices=>{
     if(!voices)return;
     S.voicePickerCurrentList=voices;
     renderVoicePickerTrigger("audioVoice","audioVoiceTrigger");
     renderVoicePickerTrigger("vcTargetVoice","vcTargetVoiceTrigger");
-    S.dialogueLinesData.forEach((line,i)=>renderVoicePickerTrigger(`dlVoiceSel_${i}`,`dlVoiceTrig_${i}`));
+    (S.dialogueLinesData||[]).forEach((line,i)=>renderVoicePickerTrigger(`dlVoiceSel_${i}`,`dlVoiceTrig_${i}`));
   });
 }
+Object.assign(window,{auOpen,auHome,auOpenByAnchor});
+
 
 // ── MUSIC GENERATION (fal-ai/stable-audio-3) ──
 async function generateMusic(){
