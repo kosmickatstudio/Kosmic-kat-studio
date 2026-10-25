@@ -6490,8 +6490,9 @@ function estimateVideoCost(model,seconds,resolution,hasVideoRefs,usesElements){
   if(!p||!seconds)return null;
   if(p.flux3max){
     // Launch promo rates (720p $0.0425/s, 1080p $0.0725/s); list price is 4x after the promo, so flag as approximate.
-    const rate=resolution==="1080p"?0.0725:0.0425;
-    return{cost:rate*seconds,approx:true};
+    const promo=Date.now()<Date.UTC(2026,10,8); // 75%-off launch promo ends Nov 7 2026
+    const rate=resolution==="1080p"?(promo?0.0725:0.29):(promo?0.0425:0.17);
+    return{cost:rate*seconds,approx:promo};
   }
   if(p.standard){
     // The 0.6x multiplier on reference-to-video applies only when VIDEO
@@ -6520,6 +6521,18 @@ function estimateVideoCost(model,seconds,resolution,hasVideoRefs,usesElements){
   const cost=rate*seconds;
   return{cost,approx:!p.audioIncluded||resolution!=="720p"};
 }
+
+// Show a per-second price next to each video model in the picker (where a rate
+// is known). Runs once the page has loaded so every table above is defined.
+window.addEventListener("load",()=>{
+  try{
+    VIDEO_MODEL_GROUPS.forEach(g=>g.items.forEach(it=>{
+      if(it._priced)return;
+      const e=estimateVideoCost(it.value,10,"720p",false,false);
+      if(e&&e.cost>0){it.sub=(it.sub?it.sub+" · ":"")+`${e.approx?"≈":""}$${(e.cost/10).toFixed((e.cost/10)<0.1?3:2)}/s @720p`;it._priced=true}
+    }));
+  }catch(err){console.warn("picker price hints skipped:",err)}
+});
 
 const IMAGE_PRICING={
   "fal-ai/flux/schnell":0.003,

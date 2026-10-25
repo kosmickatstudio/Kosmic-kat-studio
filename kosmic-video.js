@@ -753,20 +753,70 @@
     const m=cur(),r=route();
     const modes=Object.keys(m.routes);
     return`<div class="kv-lab"><span>Model</span></div>
-      <div class="kv-models">${MODELS.map(x=>`<button class="kv-model kv-glow${x.id===K.model?" on":""}" data-act="model" data-v="${x.id}"><b>${esc(x.name)}</b><small>${esc(x.sub)}</small></button>`).join("")}</div>
+      <div class="kv-models">${MODELS.map(x=>`<button class="kv-model kv-glow${x.id===K.model?" on":""}" data-act="model" data-v="${x.id}"><b>${esc(x.name)}</b><small>${esc(x.sub)}</small>${kvModelPrice(x)?`<small class="kv-price">${esc(kvModelPrice(x))}</small>`:""}</button>`).join("")}</div>
       <div class="kv-seg">${modes.map(x=>`<button class="${x===K.mode?"on":""}" data-act="mode" data-v="${x}">${MODE_LABEL[x]||x}</button>`).join("")}</div>
       ${mediaHTML()}
       <div class="kv-card" id="kvSettings">${settingsHTML()}</div>
       ${r.neg?`<div class="kv-card"><div class="kv-lab"><span>Negative prompt</span></div>
         <textarea class="kv-ta" data-f="negative" rows="2" placeholder="What to avoid (optional)">${esc(K.negative)}</textarea></div>`:""}`;
   }
+  /* ───────────── price estimates (EvoLink / fal.ai list rates, Oct 2026) ───────────── */
+  // USD per OUTPUT second. Estimates only — the real charge is read back from the
+  // API after generation and shown on the finished card. Rates marked approx are
+  // derived (promo ended / not published per resolution).
+  const KV_PRICE={
+    "seedance-2.5":{r:{"480p":.138,"720p":.296,"1080p":.739},v:{"480p":.084,"720p":.180,"1080p":.450}},
+    "seedance-2.0":{r:{"480p":.093,"720p":.199,"1080p":.497,"4k":1.013},v:{"480p":.057,"720p":.121,"1080p":.302,"4k":.626}},
+    "seedance-2.0-fast":{r:{"480p":.074,"720p":.159},v:{"480p":.045,"720p":.095},approx:true},
+    "seedance-2.0-mini":{r:{"480p":.0475,"720p":.10},v:{"480p":.030,"720p":.0625},approx:true},
+    "kling-v3":{k:{"720p":[.080,.120],"1080p":[.106,.159],"4k":[.398,.398]}},
+    "kling-o3":{k:{"720p":[.080,.120],"1080p":[.106,.159],"4k":[.398,.398]},refMult:1.5,approx:true},
+    "kling-v3-turbo":{r:{"720p":.106,"1080p":.133},approx:true},
+    "flux-3-max":{fx:true}
+  };
+  function kvRate(mid,mode,q,sound){
+    const p=KV_PRICE[mid];if(!p)return null;
+    if(p.fx){ // FLUX 3 Max on fal.ai — launch promo ends Nov 7 2026
+      const promo=Date.now()<Date.UTC(2026,10,8);
+      const t={"720p":[.0425,.17],"1080p":[.0725,.29]}[q];if(!t)return null;
+      return{rate:t[promo?0:1],approx:promo,mult:1};
+    }
+    let rate,mult=1,approx=!!p.approx;
+    if(p.k){const t=p.k[q];if(!t)return null;rate=t[sound?1:0];if(mode==="reference"&&p.refMult){mult=p.refMult}}
+    else if(mode==="reference"||mode==="edit"||mode==="extend"){
+      rate=(p.v&&p.v[q])||(p.r&&p.r[q]);if(rate==null)return null;
+      if(p.v&&p.v[q]){mult=2;approx=true} // billed on input + output seconds (input length unknown → assume equal)
+    }else{rate=p.r&&p.r[q];if(rate==null)return null}
+    return{rate:rate*mult,approx:approx||mult!==1,mult};
+  }
+  function kvEstimate(){
+    const r=route(),m=cur();
+    if(r.kind==="final"){const x=kvRate(m.id,"text","1080p");return x?{perSec:x.rate,approx:true}:null}
+    const q=(r.draft&&K.draft)?"480p":K.quality;
+    const x=kvRate(m.id,K.mode,q,K.sound);
+    if(!x)return null;
+    const known=!r.fixedDur&&!(r.auto&&K.durAuto)&&K.duration>0;
+    return{perSec:x.rate,total:known?x.rate*K.duration:null,approx:x.approx};
+  }
+  const kvMoney=u=>u<0.1?"$"+u.toFixed(3):"$"+u.toFixed(2);
+  function kvPriceText(){
+    const e=kvEstimate();if(!e)return"";
+    return e.total!=null?`${e.approx?"≈":""}${kvMoney(e.total)}`:`${e.approx?"≈":""}${kvMoney(e.perSec)}/s`;
+  }
+  function kvModelPrice(x){
+    // "from" rate at the model's default quality for its text route
+    const r=x.routes.text||Object.values(x.routes)[0];
+    const v=kvRate(x.id,"text",r&&r.dq,false);
+    return v?`${v.approx?"≈":""}${kvMoney(v.rate)}/s · ${r.dq==="4k"?"4K":r.dq}`:"";
+  }
   function summaryText(){
     const r=route(),m=cur();
-    if(r.kind==="final")return`${m.name} · Draft → 1080p${K.finalSource?" · draft selected":""}`;
+    if(r.kind==="final"){const pt=kvPriceText();return`${m.name} · Draft → 1080p${K.finalSource?" · draft selected":""}${pt?` · ${pt}`:""}`}
     const dur=r.fixedDur?"same length":(r.auto&&K.durAuto)?"Auto":K.duration+"s";
     const q=(r.draft&&K.draft)?"480p":K.quality;
     const n=r.inputs.reduce((a,i)=>a+mediaList(i.key).length,0);
-    return`${m.name} · ${MODE_LABEL[K.mode]||K.mode} · ${dur} · ${q==="4k"?"4K":q}${n?` · ${n} ref${n>1?"s":""}`:""}`;
+    const pt=kvPriceText();
+    return`${m.name} · ${MODE_LABEL[K.mode]||K.mode} · ${dur} · ${q==="4k"?"4K":q}${n?` · ${n} ref${n>1?"s":""}`:""}${pt?` · ${pt}`:""}`;
   }
   function userHTML(m){
     const media=(m.media||[]).map(x=>thumb(x)).join("");
@@ -1183,6 +1233,7 @@
 .kv-hint{font-size:10.5px;color:var(--texts,#9488ae);line-height:1.4;margin:2px 0 8px}
 .kv-models{display:flex;gap:10px;overflow-x:auto;padding:8px 8px 14px;margin:-2px -8px 4px;scrollbar-width:none;isolation:isolate}.kv-models::-webkit-scrollbar{display:none}
 .kv-model{flex:0 0 auto;min-width:132px;text-align:left;border:1px solid var(--glass-brd,rgba(61,31,122,.12));background:var(--glass,rgba(255,255,255,.55));color:var(--text,#1e1230);border-radius:15px;padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:3px}
+.kv-price{display:block;margin-top:3px;font-weight:800;color:#1d8f5e!important}
 .kv-model b{font-size:12.5px}.kv-model small{font-size:9.5px;color:var(--texts,#9488ae)}
 .kv-model.on,.kv-draft.on{background:var(--glass-solid,#fcfaff)!important}
 .kv-seg{display:flex;background:rgba(98,64,176,.10);border-radius:13px;padding:3px;margin-bottom:10px;overflow-x:auto;scrollbar-width:none;gap:2px}.kv-seg::-webkit-scrollbar{display:none}
@@ -1375,7 +1426,7 @@
     throw new Error("EvoLink generation timed out");
   }
 
-  window.KosmicVideo={ENGINE_VIDEO,engineGenerate,MODELS,state:K,buildBody,validate,extractUrl,render,allJobs,messages,activeSession};
+  window.KosmicVideo={summaryText,kvEstimate,kvRate,ENGINE_VIDEO,engineGenerate,MODELS,state:K,buildBody,validate,extractUrl,render,allJobs,messages,activeSession};
 
   loadForm();loadChats();
   try{
