@@ -4,9 +4,9 @@
 // is told ("kk-update") so it can offer a one-tap reload. Firebase / Google Fonts files
 // (versioned, immutable) are cached after first use so later visits skip those downloads.
 // The cache version is bumped whenever deploy-relevant layers change.
-const CACHE_NAME = "kosmic-kat-studio-v57";
+const CACHE_NAME = "kosmic-kat-studio-v58";
 const ASSETS = [
-  "/index.html","/audio.js","/adstudio.js","/editor.js","/team.js","/costs.js","/upscaler.js","/upscaler-registry.js","/display.js",
+  "/index.html","/audio.js","/audio-pro.js","/adstudio.js","/editor.js","/team.js","/costs.js","/upscaler.js","/upscaler-registry.js","/display.js",
   "/flow.js","/nodecanvas.js","/motion.js","/assets.js","/gallery.js","/characters.js","/directors.js","/home.js",
   "/kosmicengine.js","/cinema-registry.js","/cinemastudio.js","/settings-layer-guard.js","/kosmic-video.js","/chat-glass.js","/ui-v2-evolink-route.css","/ui-v2.css","/ui-v2-phase1.css",
   "/ui-v2-phase2.css","/ui-v2-phase3.css","/ui-v2-phase4.css","/ui-v2-phase5.css","/ui-v2-phase6.css","/ui-v2-phase7.css","/ui-v2-phase8.css","/ui-v2-phase9.css",

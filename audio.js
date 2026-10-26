@@ -21,23 +21,76 @@
 // fallback if the fetch fails or no key is set, so nothing breaks for
 // anyone without a key.
 S.elevenLabsVoicesCache=S.elevenLabsVoicesCache||null;
+S.elSub=S.elSub||null;
+// Plan tier ranks (ElevenLabs subscription.tier). Used to lock voices, models
+// and output formats the current plan can't use.
+const EL_TIER_RANK={free:0,starter:1,creator:2,pro:3,growing_business:4,scale:4,business:5,enterprise:6};
+const elTierRank=t=>{const r=EL_TIER_RANK[String(t||"").toLowerCase()];return r==null?-1:r};
+const elTierName=t=>{t=String(t||"");return t?t.charAt(0).toUpperCase()+t.slice(1).replace(/_/g," "):"Unknown"};
+async function fetchElevenLabsSub(force){
+  if(S.elSub&&!force)return S.elSub;
+  const apiKey=gs("api_elevenlabs","");if(!apiKey)return null;
+  try{
+    const r=await fetch("https://api.elevenlabs.io/v1/user/subscription",{headers:{"xi-api-key":apiKey}});
+    const d=await r.json();if(!r.ok)throw new Error(r.statusText);
+    S.elSub={tier:String(d.tier||"").toLowerCase(),status:d.status||"",used:d.character_count,limit:d.character_limit,
+      ivc:!!d.can_use_instant_voice_cloning,pvc:!!d.can_use_professional_voice_cloning,resetUnix:d.next_character_count_reset_unix||null};
+    return S.elSub;
+  }catch(err){console.warn("Couldn't read ElevenLabs plan:",err.message);return null}
+}
+// Which plan does a voice need? Returns the required tier name when the
+// current plan can't use it, else null. Unknown plan → never lock (we'd
+// rather let the API say no than hide a voice the user can use).
+function elVoiceLock(v){
+  const sub=S.elSub;if(!sub||elTierRank(sub.tier)<0)return null;
+  const mine=elTierRank(sub.tier);
+  if(Array.isArray(v.tiers)&&v.tiers.length){
+    const ranks=v.tiers.map(elTierRank).filter(x=>x>=0);
+    if(ranks.length&&!v.tiers.map(t=>String(t).toLowerCase()).includes(sub.tier)&&mine<Math.min(...ranks))return Object.keys(EL_TIER_RANK).find(k=>EL_TIER_RANK[k]===Math.min(...ranks));
+  }
+  if(mine===0&&(["professional","famous","high_quality"].includes(v.category)||v.freeAllowed===false))return"starter";
+  return null;
+}
 async function fetchElevenLabsVoices(force){
   if(S.elevenLabsVoicesCache&&!force)return S.elevenLabsVoicesCache;
   const apiKey=gs("api_elevenlabs","");
   if(!apiKey)return null;
+  const map=v=>({
+    id:v.voice_id,name:v.name,
+    category:v.category||"premade",
+    sub:[v.labels?.gender,v.labels?.accent,v.labels?.age].filter(Boolean).join(", "),
+    tiers:v.available_for_tiers||null,
+    preview:v.preview_url||"",
+    use:v.labels?.use_case||v.labels?.descriptive||""
+  });
   try{
-    const response=await fetch("https://api.elevenlabs.io/v1/voices",{headers:{"xi-api-key":apiKey}});
-    const data=await response.json();
-    if(!response.ok)throw new Error((data.detail&&(data.detail.message||JSON.stringify(data.detail)))||response.statusText);
-    S.elevenLabsVoicesCache=(data.voices||[]).map(v=>({
-      id:v.voice_id,name:v.name,
-      category:v.category||"premade",
-      sub:[v.labels?.gender,v.labels?.accent,v.labels?.age].filter(Boolean).join(", ")
-    }));
-    return S.elevenLabsVoicesCache;
+    await fetchElevenLabsSub();
+    // /v2/voices is paginated and includes saved library voices; walk up to 10 pages.
+    let out=[],token=null,pages=0;
+    do{
+      const q=new URLSearchParams({page_size:"100",include_total_count:"false"});
+      if(token)q.set("next_page_token",token);
+      const response=await fetch("https://api.elevenlabs.io/v2/voices?"+q,{headers:{"xi-api-key":apiKey}});
+      const data=await response.json();
+      if(!response.ok)throw new Error((data.detail&&(data.detail.message||JSON.stringify(data.detail)))||response.statusText);
+      out=out.concat((data.voices||[]).map(map));
+      token=data.has_more?data.next_page_token:null;pages++;
+    }while(token&&pages<10);
+    const seen=new Set();out=out.filter(v=>v.id&&!seen.has(v.id)&&seen.add(v.id));
+    S.elevenLabsVoicesCache=out;
+    return out;
   }catch(err){
-    console.warn("Couldn't fetch ElevenLabs voice library — falling back to the local cloned-voices list:",err.message);
-    return null;
+    console.warn("v2 voice list failed, trying v1:",err.message);
+    try{
+      const response=await fetch("https://api.elevenlabs.io/v1/voices",{headers:{"xi-api-key":apiKey}});
+      const data=await response.json();
+      if(!response.ok)throw new Error((data.detail&&(data.detail.message||JSON.stringify(data.detail)))||response.statusText);
+      S.elevenLabsVoicesCache=(data.voices||[]).map(map);
+      return S.elevenLabsVoicesCache;
+    }catch(err2){
+      console.warn("Couldn't fetch ElevenLabs voice library — falling back to the local cloned-voices list:",err2.message);
+      return null;
+    }
   }
 }
 function voiceMonogram(name){
@@ -84,30 +137,49 @@ async function openVoicePicker(selectId,triggerId){
   }
   S.voicePickerCurrentList=voices;
   S.voicePickerTargets={selectId,triggerId};
+  S.voicePickerFilter="all";
   renderVoicePickerList(voices);
 }
+const EL_VOICE_GROUPS=[["premade","Premade"],["cloned","Your cloned voices"],["generated","Your designed voices"],["professional","Voice library"],["famous","Famous"],["high_quality","High quality"]];
 function renderVoicePickerList(voices){
   const listEl=document.getElementById("voicePickerList");
   if(!listEl)return;
-  const groups={premade:[],cloned:[],generated:[]};
+  const filt=S.voicePickerFilter||"all";
+  const groups={};EL_VOICE_GROUPS.forEach(g=>groups[g[0]]=[]);
   voices.forEach(v=>(groups[v.category]||groups.premade).push(v));
-  const groupLabels={premade:"Premade",cloned:"Your Cloned Voices",generated:"Your Designed Voices"};
   const sel=document.getElementById(S.voicePickerTargets.selectId);
   const current=sel?sel.value:"";
-  listEl.innerHTML=Object.keys(groups).filter(g=>groups[g].length).map(g=>`
-    <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.4px;margin:12px 4px 6px">${groupLabels[g]}</div>
-    ${groups[g].map(v=>{
+  const chips=[["all","All"],["premade","Premade"],["cloned","Cloned"],["generated","Designed"],["professional","Library"],["open","Available"],["locked","🔒 Premium"]];
+  const chipHTML=`<div style="display:flex;gap:6px;overflow-x:auto;padding:2px 14px 8px;scrollbar-width:none">${chips.map(c=>`<button type="button" onclick="setVoicePickerFilter('${c[0]}')" style="flex:0 0 auto;border:1px solid var(--border);border-radius:99px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;background:${filt===c[0]?'var(--violet)':'var(--lav)'};color:${filt===c[0]?'#fff':'var(--textm)'}">${c[1]}</button>`).join('')}</div>`;
+  const pass=v=>{
+    const lock=elVoiceLock(v);
+    if(filt==="open")return !lock;
+    if(filt==="locked")return !!lock;
+    if(filt==="all")return true;
+    return v.category===filt;
+  };
+  const sub=S.elSub;
+  const planLine=sub&&sub.tier?`<div style="font-size:10.5px;color:var(--textm);padding:0 16px 6px">Your plan: <b>${elTierName(sub.tier)}</b> · 🔒 marks voices that need a higher plan</div>`:"";
+  const body=EL_VOICE_GROUPS.filter(g=>groups[g[0]].some(pass)).map(([key,label])=>`
+    <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:0.4px;margin:12px 4px 6px">${label}</div>
+    ${groups[key].filter(pass).map(v=>{
       const selected=v.id===current;
-      return `<div onclick="selectVoiceOption('${v.id.replace(/'/g,"\\'")}')" style="display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:12px;cursor:pointer;margin-bottom:4px;border:1.5px solid ${selected?'var(--vs)':'transparent'};background:${selected?'var(--lav)':'transparent'}">
+      const lock=elVoiceLock(v);
+      return `<div onclick="selectVoiceOption('${v.id.replace(/'/g,"\\'")}')" style="display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:12px;cursor:pointer;margin-bottom:4px;border:1.5px solid ${selected?'var(--vs)':'transparent'};background:${selected?'var(--lav)':'transparent'};${lock?'opacity:.62':''}">
         <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--vs),var(--violet));color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0">${voiceMonogram(v.name)}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;color:var(--text)">${v.name}</div>
+          <div style="font-size:13px;font-weight:700;color:var(--text)">${v.name}${lock?` <span style="font-size:9.5px;font-weight:800;color:var(--gold,#9a6b00);background:var(--gold-p,rgba(212,160,23,.16));padding:2px 7px;border-radius:99px;margin-left:4px">🔒 ${elTierName(lock)}+</span>`:''}</div>
           ${v.sub?`<div style="font-size:10.5px;color:var(--textm)">${v.sub}</div>`:''}
         </div>
+        ${v.preview?`<button type="button" onclick="event.stopPropagation();auPreviewVoice('${String(v.preview).replace(/'/g,"%27")}')" style="width:30px;height:30px;border-radius:50%;border:0;background:var(--lav);color:var(--violet);cursor:pointer;flex-shrink:0">▶</button>`:''}
         ${selected?`<span style="color:var(--violet)">${pIcon('check',15)}</span>`:''}
       </div>`;
-    }).join('')}`).join('')||`<div style="text-align:center;padding:20px;color:var(--textm);font-size:12px">No voices found.</div>`;
+    }).join('')}`).join('');
+  listEl.innerHTML=planLine+chipHTML+(body||`<div style="text-align:center;padding:20px;color:var(--textm);font-size:12px">No voices found.</div>`);
 }
+function setVoicePickerFilter(f){S.voicePickerFilter=f;filterVoicePickerList((document.getElementById("voicePickerSearch")||{}).value||"")}
+let _auPrev=null;
+function auPreviewVoice(url){try{if(_auPrev){_auPrev.pause()}_auPrev=new Audio(url);_auPrev.play().catch(()=>{})}catch(_){}}
 function filterVoicePickerList(query){
   const q=query.toLowerCase();
   const filtered=(S.voicePickerCurrentList||[]).filter(v=>v.name.toLowerCase().includes(q)||(v.sub||"").toLowerCase().includes(q));
@@ -115,6 +187,9 @@ function filterVoicePickerList(query){
 }
 function selectVoiceOption(voiceId){
   const {selectId,triggerId}=S.voicePickerTargets;
+  const pv=(S.voicePickerCurrentList||[]).find(v=>v.id===voiceId);
+  const need=pv&&elVoiceLock(pv);
+  if(need){toast(`🔒 "${pv.name}" needs the ${elTierName(need)} plan or higher on ElevenLabs`,"error");return;}
   const sel=document.getElementById(selectId);
   if(sel){
     // Voice options are added dynamically since we no longer hand-write a
@@ -164,7 +239,7 @@ function auBuild_voiceover(c){const {hasKey,clonedVoices}=c;return `
       ${!hasKey?`<div style="font-size:12px;color:var(--textm);margin-bottom:12px">Add an <b>ElevenLabs</b> API key in Settings to enable real voice generation. Free tier available at <a href="https://elevenlabs.io" target="_blank" style="color:var(--vm)">elevenlabs.io</a>.</div>`:''}
       <div class="f-group">
         <label class="f-label">Text to speak</label>
-        <textarea class="f-textarea" id="audioText" placeholder="Enter the line or narration to convert to speech…" style="min-height:80px" maxlength="2000"></textarea>
+        <textarea class="f-textarea" id="audioText" placeholder="Enter the line or narration to convert to speech…" style="min-height:80px" maxlength="10000"></textarea>
       </div>
       <div class="f-row">
         <div class="f-group">
@@ -190,6 +265,7 @@ function auBuild_voiceover(c){const {hasKey,clonedVoices}=c;return `
         </div>
       </div>
       ${S.characters.filter(c=>c.voice).length?`<div class="f-group"><label class="f-label">Or use a Character's Voice Profile</label><select class="f-select" id="audioCharVoice" onchange="applyCharVoice()"><option value="">— Select character —</option>${S.characters.filter(c=>c.voice).map(c=>`<option value="${c.voice}">${c.name}</option>`).join('')}</select></div>`:''}
+      ${auVoiceAdvancedHTML()}
       <button class="btn btn-primary btn-full" id="audioGenBtn" ${!hasKey?'disabled':''} onclick="generateAudio()">${hasKey?'🎵 Generate Voice':'🔑 Add API Key First'}</button>
     </div>
     <div class="panel" id="audioResultPanel" style="display:none;margin-top:14px">
@@ -405,6 +481,62 @@ function auBuild_library(c){
   </div>`;
 }
 
+
+// ── Voiceover advanced settings (voice_settings, language, seed, output format) ──
+const EL_OUTPUT_FORMATS=[["mp3_44100_128","MP3 · 128 kbps","free"],["mp3_22050_32","MP3 · small file (32 kbps)","free"],["mp3_44100_192","MP3 · 192 kbps high quality","creator"]];
+function auRangeHTML(id,label,min,max,step,val,hint){
+  const pct=((val-min)/(max-min))*100;
+  return `<div style="margin-bottom:10px"><div class="ks-lab"><span>${label}</span><b id="${id}Val">${val}</b></div>${hint?`<div class="ks-hint">${hint}</div>`:""}
+    <input type="range" class="ks-range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}" style="--ksf:${pct}%" oninput="document.getElementById('${id}Val').textContent=this.value;this.style.setProperty('--ksf',((this.value-this.min)/(this.max-this.min)*100)+'%')"></div>`;
+}
+function auVoiceAdvancedHTML(){
+  const sub=S.elSub,mine=sub?elTierRank(sub.tier):-1;
+  const fmtOpts=EL_OUTPUT_FORMATS.map(f=>{const need=elTierRank(f[2]);const locked=mine>=0&&mine<need;
+    return `<option value="${f[0]}" ${locked?"disabled":""}>${locked?"🔒 ":""}${f[1]}${locked?` (${elTierName(f[2])}+)`:""}</option>`}).join("");
+  return `<details class="au-adv" style="margin:6px 0 12px"><summary style="cursor:pointer;font-size:12px;font-weight:800;color:var(--violet);padding:6px 0">⚙ Voice settings &amp; output</summary>
+    <div style="padding-top:8px">
+    ${auRangeHTML("auStab","Stability",0,1,0.05,0.5,"Lower = more expressive, higher = steadier")}
+    ${auRangeHTML("auSim","Similarity",0,1,0.05,0.75,"How closely it sticks to the original voice")}
+    ${auRangeHTML("auStyle","Style exaggeration",0,1,0.05,0,"Adds style; can reduce stability")}
+    ${auRangeHTML("auSpeed","Speed",0.7,1.2,0.05,1,"")}
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="auBoost" checked> Speaker boost</label>
+    <div class="f-row">
+      <div class="f-group"><label class="f-label">Output</label><select class="f-select" id="auOutFmt">${fmtOpts}</select></div>
+      <div class="f-group"><label class="f-label">Language (optional)</label><input class="f-input" id="auLang" placeholder="e.g. en, hi, es" maxlength="5"></div>
+      <div class="f-group"><label class="f-label">Seed (optional)</label><input class="f-input" id="auSeed" type="number" min="0" placeholder="repeatable take"></div>
+    </div></div></details>`;
+}
+function auTtsBody(text,modelId){
+  const g=id=>document.getElementById(id);
+  const body={text,model_id:modelId};
+  if(g("auStab")){
+    body.voice_settings={stability:parseFloat(g("auStab").value),similarity_boost:parseFloat(g("auSim").value),style:parseFloat(g("auStyle").value),speed:parseFloat(g("auSpeed").value),use_speaker_boost:!!g("auBoost").checked};
+    const lang=(g("auLang").value||"").trim();if(lang)body.language_code=lang;
+    const seed=g("auSeed").value;if(seed!==""&&!isNaN(parseInt(seed,10)))body.seed=parseInt(seed,10);
+  }else body.voice_settings={stability:0.5,similarity_boost:0.75};
+  return body;
+}
+function auTtsQuery(){const f=document.getElementById("auOutFmt");return f&&f.value&&f.value!=="mp3_44100_128"?"?output_format="+encodeURIComponent(f.value):""}
+// Model list comes straight from ElevenLabs (GET /v1/models) so new models appear without an app update.
+async function fetchElevenLabsModels(){
+  if(S.elModels)return S.elModels;
+  const apiKey=gs("api_elevenlabs","");if(!apiKey)return null;
+  try{
+    const r=await fetch("https://api.elevenlabs.io/v1/models",{headers:{"xi-api-key":apiKey}});
+    const d=await r.json();if(!r.ok||!Array.isArray(d))throw new Error("models");
+    S.elModels=d;return d;
+  }catch(e){return null}
+}
+async function auLoadTtsModels(){
+  const sel=document.getElementById("audioModel");if(!sel)return;
+  const models=await fetchElevenLabsModels();if(!models)return;
+  const tts=models.filter(m=>m.can_do_text_to_speech);if(!tts.length)return;
+  const cur=sel.value;
+  sel.innerHTML=tts.map(m=>`<option value="${m.model_id}">${m.name||m.model_id}${m.maximum_text_length_per_request?` · ${Number(m.maximum_text_length_per_request).toLocaleString()} chars`:""}</option>`).join("");
+  sel.value=tts.some(m=>m.model_id===cur)?cur:(tts.find(m=>m.model_id==="eleven_multilingual_v2")||tts[0]).model_id;
+  renderSimpleTrigger("audioModel");
+}
+
 const AU_GROUPS=["Voice","Transform","Create","Sync & Edit","Library"];
 const AU_MODULES=[
   {id:"voiceover",g:"Voice",icon:"🎵",name:"Voiceover",tag:"Text to speech",key:"el",anchors:["audioGenerateAnchor"],build:auBuild_voiceover},
@@ -422,6 +554,8 @@ const AU_MODULES=[
   {id:"library",g:"Library",icon:"🎧",name:"Library",tag:"Everything you've made",key:null,anchors:["audioLibraryAnchor"],build:auBuild_library}
 ];
 const AU_BY_ID={};AU_MODULES.forEach(m=>AU_BY_ID[m.id]=m);
+// Modules sorted by hub group (extra modules register later from audio-pro.js).
+function auSorted(){return AU_MODULES.map((m,i)=>[m,i]).sort((a,b)=>(AU_GROUPS.indexOf(a[0].g)-AU_GROUPS.indexOf(b[0].g))||(a[1]-b[1])).map(x=>x[0])}
 
 function auKeyOk(m){return !m.key||!!gs(m.key==="el"?"api_elevenlabs":"api_falai")}
 function auKeyName(m){return m.key==="el"?"ElevenLabs":m.key==="fal"?"fal.ai":""}
@@ -492,7 +626,7 @@ function auOpenByAnchor(anchorId){
 function auHubHTML(){
   const el=!!gs("api_elevenlabs"),fal=!!gs("api_falai");
   const rec=auRecent();
-  return `<div class="au-head"><h2>🎧 Audio Studio</h2><div class="au-keys"><span class="au-kp${el?"":" off"}">ElevenLabs ${el?"✓":"· no key"}</span><span class="au-kp${fal?"":" off"}">fal.ai ${fal?"✓":"· no key"}</span></div></div>
+  return `<div class="au-head"><h2>🎧 Audio Studio</h2><div class="au-keys"><span class="au-kp${el?"":" off"}" id="auElPill">ElevenLabs ${el?(S.elSub&&S.elSub.tier?"· "+elTierName(S.elSub.tier):"✓"):"· no key"}</span><span class="au-kp${fal?"":" off"}">fal.ai ${fal?"✓":"· no key"}</span></div></div>
     ${rec.length?`<div class="au-gl" style="margin-top:2px">Jump back in</div><div class="au-recent">${rec.map(id=>`<button type="button" class="ks-chip" onclick="auOpen('${id}')">${AU_BY_ID[id].icon} ${AU_BY_ID[id].name}</button>`).join("")}</div>`:""}
     ${AU_GROUPS.map(g=>{
       const ms=AU_MODULES.filter(m=>m.g===g);if(!ms.length)return"";
@@ -503,12 +637,13 @@ function auModuleHTML(m){
   const ok=auKeyOk(m);
   return `<div class="au-bar"><div class="au-top"><button type="button" class="au-back" onclick="auHome()" aria-label="Back to Audio Studio">‹</button>
       <div class="au-ttl"><b>${m.icon} ${m.name}</b><small>${m.tag}${m.key?` · ${auKeyName(m)} ${ok?"connected":"key needed"}`:""}</small></div></div>
-    <div class="au-rail">${AU_MODULES.map(x=>`<button type="button" class="ks-chip${x.id===m.id?" on":""}" onclick="auOpen('${x.id}')">${x.icon} ${x.name}</button>`).join("")}</div></div>
+    <div class="au-rail">${auSorted().map(x=>`<button type="button" class="ks-chip${x.id===m.id?" on":""}" onclick="auOpen('${x.id}')">${x.icon} ${x.name}</button>`).join("")}</div></div>
     ${ok?"":`<div class="au-warn">Add a <b>${auKeyName(m)}</b> API key in Settings to use ${m.name}.</div>`}
     <div class="au-body" id="auBody">${m.build(auCtx())}</div>`;
 }
 function renderAudio(el){
   el=el||document.getElementById("moduleContent");if(!el)return;
+  if(gs("api_elevenlabs","")&&!S.elSub)fetchElevenLabsSub().then(sub=>{if(sub){const p=document.getElementById("auElPill");if(p)p.textContent="ElevenLabs · "+elTierName(sub.tier)}});
   auCss();
   const m=AU.active&&AU_BY_ID[AU.active];
   el.innerHTML=`<div class="au-wrap">${m?auModuleHTML(m):auHubHTML()}</div>`;
@@ -517,6 +652,8 @@ function renderAudio(el){
   renderSimpleTrigger("audioModel");
   renderVoicePickerTrigger("vcTargetVoice","vcTargetVoiceTrigger");
   renderSimpleTrigger("dubTargetLang");
+  auLoadTtsModels();
+  if(m&&typeof m.after==="function"){try{m.after()}catch(e){console.warn("sub-module init failed",e)}}
   // Warm the voice cache so pickers show real names once it resolves.
   fetchElevenLabsVoices().then(voices=>{
     if(!voices)return;
@@ -880,10 +1017,10 @@ async function generateAudio(){
   resultContent.innerHTML=`<div style="text-align:center;padding:20px;color:var(--textm);font-size:13px">🎙 Generating voice…</div>`;
 
   try{
-    const response=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,{
+    const response=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}${auTtsQuery()}`,{
       method:"POST",
       headers:{"Content-Type":"application/json","xi-api-key":apiKey,"Accept":"audio/mpeg"},
-      body:JSON.stringify({text,model_id:modelId,voice_settings:{stability:0.5,similarity_boost:0.75}})
+      body:JSON.stringify(auTtsBody(text,modelId))
     });
     if(!response.ok){
       let errMsg=response.statusText;
