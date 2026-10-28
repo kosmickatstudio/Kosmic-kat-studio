@@ -682,10 +682,11 @@ function setUpscaleMode(mode){
   const el=$("moduleContent");if(el&&$("upWrap"))renderUpscaler(el);
 }
 // Used by Node Canvas: engine is a registry endpoint id (or a legacy fal-ai/… id).
-async function upscaleImageUrl(url,engine,apiKey){
+async function upscaleImageUrl(url,engine,apiKey,opts){
+  opts=opts||{};
   const t=R.byEp[engine]||R.byEp["fal-ai/esrgan"];
   const src=await upEnsureUrl(url,apiKey);
-  const body=upBuildBody(t,src,{model:t.models.length?t.defModel:null,factor:t.factor?t.factor.def:undefined,fmt:"png",params:{},h264:false});
+  const body=upBuildBody(t,src,{model:t.models.length?(opts.model||t.defModel):null,factor:t.factor?(opts.factor||t.factor.def):undefined,fmt:"png",params:{},h264:false});
   const data=await falCall(t.ep,body,apiKey,{maxMs:20*60*1000});
   const u=outUrl(t,data);if(!u)throw new Error("No image URL in response");
   return u;
