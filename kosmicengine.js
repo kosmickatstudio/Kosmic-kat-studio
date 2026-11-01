@@ -540,6 +540,149 @@ const KosmicEngine=(function(){
     return{ran,passed,note:flagged.length?flagged.join(" | "):null,checks,reason:ran?null:"one or more quality checks did not run"};
   }
 
+  // ── CLIP QA ─────────────────────────────────────────────────────────
+  // Image QA stopped at storyboards, so a broken, frozen or off-model VIDEO
+  // clip — the expensive artifact — reached the approval card unchecked.
+  // This samples frames from each finished clip and asks the vision brain to
+  // compare them with the approved character sheet and the previous shot's
+  // last frame. It never blocks the pipeline: if frames can't be read (the
+  // clip host disallows cross-origin reads) or no vision key exists, the
+  // result says "didn't run" and the review card says why.
+  function videoQAMode(){const m=gs("ke_video_qa","check");return["off","check","retry"].includes(m)?m:"check";}
+  function setVideoQAMode(m){
+    if(!["off","check","retry"].includes(m))return;
+    saveSetting("ke_video_qa",m);
+    toast({off:"Clip checks off",check:"Clips will be checked and flagged",retry:"Clips will be checked and retried once if they fail"}[m],"success");
+    openPermissionSettings();
+  }
+  function grabFrames(url,fracs){
+    return new Promise((resolve,reject)=>{
+      const v=document.createElement("video");
+      v.crossOrigin="anonymous";v.muted=true;v.playsInline=true;v.preload="auto";
+      const frames=[],tiny=[];let i=0,done=false;
+      const finish=(err,val)=>{
+        if(done)return;done=true;clearTimeout(timer);
+        try{v.removeAttribute("src");v.load();}catch(e){}
+        err?reject(err):resolve(val);
+      };
+      const timer=setTimeout(()=>finish(new Error("timed out reading the clip")),30000);
+      const next=()=>{
+        if(i>=fracs.length){
+          let motion=null;
+          if(tiny.length>1){ // mean absolute pixel change, first → last frame (0–255)
+            let sum=0;const a=tiny[0],b=tiny[tiny.length-1];
+            for(let k=0;k<a.length;k++)sum+=Math.abs(a[k]-b[k]);
+            motion=sum/a.length;
+          }
+          return finish(null,{frames,motion});
+        }
+        v.currentTime=Math.max(0.05,Math.min(v.duration-0.05,v.duration*fracs[i]));
+      };
+      v.addEventListener("loadedmetadata",()=>{
+        if(!isFinite(v.duration)||v.duration<=0)return finish(new Error("the clip has no readable duration"));
+        next();
+      });
+      v.addEventListener("seeked",()=>{
+        try{
+          const w=v.videoWidth,h=v.videoHeight;if(!w||!h)throw new Error("the clip has no video frames");
+          const sc=Math.min(1,512/Math.max(w,h)),c=document.createElement("canvas");
+          c.width=Math.max(1,Math.round(w*sc));c.height=Math.max(1,Math.round(h*sc));
+          c.getContext("2d").drawImage(v,0,0,c.width,c.height);
+          frames.push(c.toDataURL("image/jpeg",0.72)); // throws if the canvas is CORS-tainted
+          const t=document.createElement("canvas");t.width=t.height=24;
+          const tc=t.getContext("2d");tc.drawImage(v,0,0,24,24);
+          tiny.push(tc.getImageData(0,0,24,24).data);
+          i++;next();
+        }catch(err){finish(err);}
+      });
+      v.addEventListener("error",()=>finish(new Error("the clip couldn't be loaded for checking")));
+      v.src=url;
+    });
+  }
+  async function runClipQA(shot,sb,sheetData,prevFrame){
+    let g;
+    try{g=await (window.KosmicEngineFrameGrabber||grabFrames)(shot.videoUrl,[0.05,0.5,0.95]);}
+    catch(err){return{ran:false,passed:false,note:null,reason:String(err.message||err)};}
+    const frames=g.frames||[];
+    const issues=[];
+    if(g.motion!=null&&g.motion<1.2)issues.push("the clip is almost static — start and end frames are nearly identical");
+    let verdict=null,reason=null;
+    try{
+      const imgs=[];
+      if(sheetData)imgs.push({dataUrl:sheetData});
+      frames.forEach(f=>imgs.push({dataUrl:f}));
+      if(prevFrame)imgs.push({dataUrl:prevFrame});
+      let k=1;const lab=[];
+      if(sheetData)lab.push(`Image ${k++} is the approved character reference sheet.`);
+      lab.push(`Images ${k}–${k+frames.length-1} are frames (start, middle, end) from ONE generated video clip.`);k+=frames.length;
+      if(prevFrame)lab.push(`Image ${k} is the last frame of the previous clip in the same film.`);
+      const r=await callAiVision(imgs,
+        `${lab.join(" ")}\nPlanned shot: "${String(sb.desc||sb.prompt||"").slice(0,400)}".\nCheck: (a) the frames are not broken, garbled, blank, or melting/distorted; (b) the main character looks like the same person and outfit as the reference sheet; (c) the setting and action reasonably match the planned shot; (d) if a previous-clip frame is given, character, outfit, lighting and place feel continuous with it.\nReply in EXACTLY this format:\nSTATUS: pass OR flag\nNOTE: one short sentence naming which check failed, or "none".`,
+        "You are doing a quick quality check on AI-generated film clips for a human who makes the final call. Be lenient: flag only clear problems (broken or distorted frames, a different-looking character, an unrelated scene, a visible continuity jump), not stylistic differences.");
+      const m=String(r).match(/STATUS:\s*(pass|flag)/i);
+      if(!m)reason="couldn't read the quality check's answer";
+      else if(m[1].toLowerCase()==="flag"){const n=String(r).match(/NOTE:\s*(.+)/i);verdict=(n&&n[1].trim().toLowerCase()!=="none")?n[1].trim():"possible quality issue — worth a closer look";}
+      else verdict="";
+    }catch(err){reason=String(err.message||err);}
+    if(verdict===null&&!issues.length)return{ran:false,passed:false,note:null,reason,lastFrame:frames[frames.length-1]||null};
+    const notes=[...(verdict?[verdict]:[]),...issues];
+    return{ran:true,passed:!notes.length,note:notes.length?notes.join("; "):null,reason:null,lastFrame:frames[frames.length-1]||null};
+  }
+  async function qaScene(prodId,epIndex,task){
+    const mode=videoQAMode();
+    if(mode==="off")return null;
+    try{
+      const read=()=>{const p=S.productions.find(x=>x.id===prodId);return{p,e:p&&getEpisode(p,epIndex)};};
+      let {p,e}=read();if(!e)return null;
+      const sheetUrl=(()=>{const mc=(p.characterSheets||[]).find(x=>x.tier==="MC");return mc?mc.sheetUrl:(p.characterSheet&&(p.characterSheet.threeQuarter||p.characterSheet.front))||null;})();
+      let sheetData=null;if(sheetUrl){try{sheetData=await urlToDataUrl(sheetUrl);}catch(err){}}
+      const check=async(only)=>{
+        ({p,e}=read());
+        const shots=(e.shots||[]).filter(x=>x.videoUrl).slice().sort((a,b)=>a.shotIndex-b.shotIndex);
+        const out=[];let prev=null;
+        for(const sh of shots){
+          if(only&&!only.includes(sh.shotIndex)){prev=null;continue;}
+          const r=await runClipQA(sh,(e.storyboard||[])[sh.shotIndex]||{},sheetData,prev);
+          r.shotIndex=sh.shotIndex;r.label=`Shot ${sh.shotIndex+1}`;out.push(r);prev=r.lastFrame||null;
+        }
+        return out;
+      };
+      let results=await check();
+      task.qaRetried=task.qaRetried||{};
+      const flagged=results.filter(r=>r.ran&&!r.passed&&!task.qaRetried[r.shotIndex]);
+      if(mode==="retry"&&flagged.length){
+        ({p,e}=read());
+        const per=vidCost(p.videoModel,e.duration||8,p.quality||"720p");
+        const cap=budgetCap();
+        if(cap&&per&&spentSoFar()+per.cost*flagged.length>cap){
+          push("agent",`⚠️ ${flagged.length} clip${flagged.length!==1?"s":""} failed the check, but retrying would pass your ${fmtUsd(cap)} budget cap — left as is for your review.`);
+        }else{
+          flagged.forEach(r=>{task.qaRetried[r.shotIndex]=true;});
+          e.shots=(e.shots||[]).filter(x=>!flagged.some(r=>r.shotIndex===x.shotIndex));
+          save2Productions();save();
+          push("agent",`🔁 ${flagged.map(r=>r.label).join(", ")} didn't pass the clip check — regenerating once${per?` (≈${fmtUsd(per.cost*flagged.length)})`:""}.`);
+          await generateEpisodeScene(prodId,epIndex,true);
+          const redo=await check(flagged.map(r=>r.shotIndex));
+          results=results.filter(r=>!redo.some(x=>x.shotIndex===r.shotIndex)).concat(redo).sort((a,b)=>a.shotIndex-b.shotIndex);
+        }
+      }
+      const ran=results.filter(r=>r.ran),bad=ran.filter(r=>!r.passed);
+      const notRun=results.filter(r=>!r.ran);
+      let note=null;
+      if(bad.length)note=`${bad.length} of ${results.length} clip${results.length!==1?"s":""} flagged — `+bad.map(r=>`${r.label}: ${r.note}`).join(" | ");
+      else if(ran.length&&!notRun.length)note=null;
+      if(notRun.length&&!ran.length)note=`Clip check didn't run: ${notRun[0].reason||"unknown reason"}`;
+      else if(notRun.length)note=(note?note+" | ":"")+`${notRun.length} clip${notRun.length!==1?"s":""} couldn't be checked`;
+      task.qa={ran:results.length>0&&notRun.length===0,passed:results.length>0&&notRun.length===0&&!bad.length,note,
+        checks:results.map(r=>({label:r.label,ran:r.ran,passed:r.passed,note:r.note,reason:r.reason}))};
+      return{results,note};
+    }catch(err){
+      console.warn("Clip QA skipped (not blocking):",err.message);
+      task.qa={ran:false,passed:false,note:`Clip check didn't run: ${err.message}`,checks:[]};
+      return{results:[],note:task.qa.note};
+    }
+  }
+
   function findTask(id){ return (S.directorChat.tasks||[]).find(t=>t.id===id); }
   function depsSatisfied(t){ return (t.deps||[]).every(id=>{const d=findTask(id);return d&&d.status==="done";}); }
 
@@ -840,8 +983,12 @@ const KosmicEngine=(function(){
       const p=S.productions.find(x=>x.id===prodId);
       const e=getEpisode(p,task.epIndex);
       if(e.sceneStatus==="pending")throw new Error("Scene generation failed — every shot errored out");
-      const firstShot=e.shots&&e.shots[0];
-      return{summary:`🎥 Episode ${task.epIndex} scene ready${e.sceneStatus==='partial'?' (partial — some shots failed)':''}:`,approval:{video:firstShot&&firstShot.videoUrl}};
+      const qs=await qaScene(prodId,task.epIndex,task);
+      const e2=getEpisode(S.productions.find(x=>x.id===prodId),task.epIndex)||e;
+      const ordered=(e2.shots||[]).filter(x=>x.videoUrl).slice().sort((a,b)=>a.shotIndex-b.shotIndex);
+      const flaggedIdx=new Set(((qs&&qs.results)||[]).filter(r=>r.ran&&!r.passed).map(r=>r.shotIndex));
+      return{summary:`🎥 Episode ${task.epIndex} scene ready${e2.sceneStatus==='partial'?' (partial — some shots failed)':''}:`,
+        approval:{video:ordered[0]&&ordered[0].videoUrl,videos:ordered.map(x=>({url:x.videoUrl,label:`Shot ${x.shotIndex+1}`,flag:flaggedIdx.has(x.shotIndex)})),qaNote:qs&&qs.note||null}};
     }
     throw new Error("Unknown task type: "+task.type);
   }
@@ -866,10 +1013,85 @@ const KosmicEngine=(function(){
     const m=gs("ke_permission_mode","always_allow");
     return ["always_allow","ask_videos","always_ask"].includes(m)?m:"always_allow";
   }
+  // ── COST ESTIMATES + BUDGET CAP ─────────────────────────────────────
+  // Built on the same price tables the rest of the app uses
+  // (estimateImageCost / estimateVideoCost). Anything whose shot count isn't
+  // known yet is flagged approximate: a labelled estimate helps a decision,
+  // silence doesn't. The old note here — "a wrong number is worse than none" —
+  // is why every figure below says "≈" when it is a guess.
+  const fmtUsd=c=>"$"+(c<0.1?c.toFixed(3):c.toFixed(2));
+  function prodOf(){return (S.productions||[]).find(x=>x.id===S.directorChat.productionId)||null;}
+  function imgCost(model){try{const e=estimateImageCost(model,1);return e?e.cost:null;}catch(e){return null;}}
+  function vidCost(model,secs,res){try{return estimateVideoCost(model,secs,res,false,false)||null;}catch(e){return null;}}
+  function epShots(p,e,d){
+    if(e&&e.storyboard&&e.storyboard.length)return{n:e.storyboard.length,exact:true};
+    if(e&&e.shotsExpected)return{n:e.shotsExpected,exact:true};
+    const eps=Math.max(1,(p&&p.episodes&&p.episodes.length)||d.episodeCount||1);
+    const total=Math.max(eps,Math.ceil((d.totalDurationRounded||8)/(d.clipLen||8)));
+    return{n:Math.max(1,Math.ceil(total/eps)),exact:false};
+  }
+  function estimateTask(t){
+    const kind=GENERATING_TASK_TYPES[t&&t.type];if(!kind)return null;
+    const p=prodOf(),d=S.directorChat.draft||{};
+    const im=(p&&p.imageModel)||d.imageModel,vm=(p&&p.videoModel)||d.videoModel;
+    if(t.type==="storyboard"){
+      const e=p&&getEpisode(p,t.epIndex),sh=epShots(p,e,d),c=imgCost(im);
+      return c==null?null:{cost:c*sh.n,approx:!sh.exact};
+    }
+    if(t.type==="scene"){
+      const e=p&&getEpisode(p,t.epIndex),sh=epShots(p,e,d);
+      const v=vidCost(vm,(e&&e.duration)||d.clipLen||8,(p&&p.quality)||d.quality||"720p");
+      return v?{cost:v.cost*sh.n,approx:!sh.exact||!!v.approx}:null;
+    }
+    const c=imgCost(im);
+    return c==null?null:{cost:c,approx:false};
+  }
+  function estimateBatch(batch){
+    let cost=0,approx=false,unknown=0;
+    (batch||[]).forEach(t=>{
+      const e=estimateTask(t);
+      if(!e){if(GENERATING_TASK_TYPES[t.type])unknown++;return;}
+      cost+=e.cost;if(e.approx)approx=true;
+    });
+    return{cost,approx,unknown};
+  }
+  // Everything still to generate. Characters / locations that haven't been
+  // planned yet are assumed to be 3 images each.
+  function estimatePlan(){
+    const left=(S.directorChat.tasks||[]).filter(t=>t.status!=="done");
+    const b=estimateBatch(left);
+    const c=imgCost((prodOf()&&prodOf().imageModel)||(S.directorChat.draft||{}).imageModel);
+    let extra=0;
+    const pend=id=>{const t=findTask(id);return !!t&&t.status!=="done";};
+    if(c!=null){if(pend("char_plan"))extra+=3*c;if(pend("loc_plan"))extra+=3*c;}
+    return{cost:b.cost+extra,approx:true,unknown:b.unknown};
+  }
+  function estimateDraft(d){ // before any production or task graph exists
+    d=d||S.directorChat.draft||{};
+    const eps=Math.max(1,d.episodeCount||1);
+    const shots=Math.max(eps,Math.ceil((d.totalDurationRounded||8)/(d.clipLen||8)));
+    const c=imgCost(d.imageModel),v=vidCost(d.videoModel,d.clipLen||8,d.quality||"720p");
+    if(c==null&&!v)return null;
+    return{cost:(c||0)*(shots+6)+(v?v.cost*shots:0),approx:true,shots,eps};
+  }
+  function budgetCap(){const v=parseFloat(gs("ke_budget_cap",0));return isFinite(v)&&v>0?v:0;}
+  function spentSoFar(){const p=prodOf();return p?(p.costSpent||0):0;}
+  function overBudget(batch){
+    const cap=budgetCap();if(!cap)return null;
+    const est=estimateBatch(batch),projected=spentSoFar()+est.cost;
+    return projected>cap?{cap,projected,est}:null;
+  }
+  function setBudgetCap(v){
+    saveSetting("ke_budget_cap",Number(v)||0);
+    toast(Number(v)?`Budget cap set to $${Number(v)} per production`:"Budget cap removed","success");
+    openPermissionSettings();
+  }
+
   function needsPermission(t){
     if(!t||t.permitted)return false; // already granted — never re-ask, including on retry
     const kind=GENERATING_TASK_TYPES[t.type];
     if(!kind)return false;
+    if(overBudget([t]))return true; // a budget cap stops the pipeline even in "Always allow"
     const mode=permissionMode();
     if(mode==="always_ask")return true;
     if(mode==="ask_videos")return kind==="video";
@@ -896,7 +1118,10 @@ const KosmicEngine=(function(){
     // figure changes a decision.
     const prod=(S.productions||[]).find(x=>x.id===S.directorChat.productionId);
     const sofar=prod&&prod.costSpent?` This production has cost about $${prod.costSpent.toFixed(2)} so far.`:"";
-    push("agent",`⏸ Ready to run ${describeBatch(batch)} — this spends real credits on your API keys.${sofar}\n\n${batch.map(t=>`• ${t.label}`).join("\n")}`,{permission:true});
+    const est=estimateBatch(batch),plan=estimatePlan(),ob=overBudget(batch);
+    const estLine=est.cost?`\nEstimated cost of this step: ${est.approx?"≈":""}${fmtUsd(est.cost)}${est.unknown?" (some items unpriced)":""}.${plan.cost>est.cost?` Everything still to run: ≈${fmtUsd(plan.cost)}.`:""}`:"";
+    const capLine=ob?`\n⚠️ That would take this production to ≈${fmtUsd(ob.projected)} — over your ${fmtUsd(ob.cap)} budget cap.`:"";
+    push("agent",`⏸ Ready to run ${describeBatch(batch)} — this spends real credits on your API keys.${sofar}${estLine}${capLine}\n\n${batch.map(t=>`• ${t.label}`).join("\n")}`,{permission:true});
   }
   function allowGeneration(){
     const ids=S.directorChat.awaitingPermissionIds||[];
@@ -959,6 +1184,12 @@ const KosmicEngine=(function(){
           <div style="font-size:11px;color:var(--textm);line-height:1.4;margin-top:2px">${o.d}</div>
         </div>
       </div>`).join('')}
+      <div style="font-size:12px;font-weight:700;color:var(--violet);margin:14px 0 6px">Budget cap per production</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${[0,5,10,25,50,100].map(v=>`<button class="btn ${budgetCap()===v?'btn-primary':'btn-outline'} btn-xs" onclick="KosmicEngine.setBudgetCap(${v})">${v?'$'+v:'No cap'}</button>`).join('')}</div>
+      <div style="font-size:10.5px;color:var(--textm);margin-top:4px;line-height:1.4">When the next step would pass this, Kosmic Engine stops and asks — even in “Always allow”.</div>
+      <div style="font-size:12px;font-weight:700;color:var(--violet);margin:14px 0 6px">Check finished video clips</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${[["off","Off"],["check","Check & flag"],["retry","Check & retry once"]].map(([v,l])=>`<button class="btn ${videoQAMode()===v?'btn-primary':'btn-outline'} btn-xs" onclick="KosmicEngine.setVideoQAMode('${v}')">${l}</button>`).join('')}</div>
+      <div style="font-size:10.5px;color:var(--textm);margin-top:4px;line-height:1.4">Looks at frames of each clip against your character sheet and the previous shot. “Retry” regenerates a failing clip once, which spends credits.</div>
       <div style="text-align:right;margin-top:14px"><button class="btn btn-ghost" onclick="KosmicEngine.closePermissionSettings()">Close</button></div>
     </div>`;
     document.body.appendChild(overlay);
@@ -985,6 +1216,10 @@ const KosmicEngine=(function(){
     // so it waits. Script and scene tasks have no image to check at all and
     // therefore always wait in this mode, which is correct: those are
     // creative calls, not quality calls.
+    // Scenes now carry a clip check too, but a passing check on a lenient
+    // vision model is still not enough to sign off the most expensive step:
+    // scenes only auto-approve when the user chose "approve everything".
+    if(t.type==="scene")return null;
     const qa=t.qa;
     if(qa&&qa.ran&&qa.passed)return "quality check passed";
     return null;
@@ -1084,7 +1319,11 @@ const KosmicEngine=(function(){
       // and location plates fan out to one task per character/location, so
       // per-task prompts would mean 5+ identical dialogs back to back for a
       // single logical step.
-      const gated=parallelReady.filter(needsPermission);
+      let gated=parallelReady.filter(needsPermission);
+      if(!gated.length){ // each task fits the cap on its own, but the batch together may not
+        const pend=parallelReady.filter(t=>!t.permitted);
+        if(pend.length&&overBudget(pend))gated=pend;
+      }
       if(gated.length){requestPermission(gated);return;}
       parallelReady.forEach(t=>t.status="running");
       save();
@@ -1217,6 +1456,7 @@ const KosmicEngine=(function(){
     // rather than a blind one.
     const prod=(S.productions||[]).find(x=>x.id===S.directorChat.productionId);
     const spent=prod?(prod.costSpent||0):0;
+    const left=doneCount<total?estimatePlan():null;
 
     // Group, preserving each group's first-appearance task order within it.
     const groups=[];
@@ -1257,6 +1497,7 @@ const KosmicEngine=(function(){
           </div>
           <div style="font-size:10px;font-weight:700;color:var(--textm);flex-shrink:0">${doneCount}/${total}</div>
           ${prod?`<div style="font-size:10px;font-weight:800;color:var(--gold);flex-shrink:0" title="Estimated spend on this production so far">$${spent.toFixed(2)}</div>`:''}
+          ${left&&left.cost>0?`<div style="font-size:9.5px;font-weight:700;color:var(--textm);flex-shrink:0" title="Rough estimate of what is still to run">≈${fmtUsd(left.cost)} left</div>`:''}
           <div style="color:var(--textm);transform:rotate(${_taskPanelCollapsed?0:180}deg);display:flex">${pIcon('chevron',13)}</div>
         </div>
         ${_taskPanelCollapsed?'':`<div id="dcTaskList" style="max-height:190px;overflow-y:auto;padding:2px 12px 10px">${listHTML}</div>`}
@@ -1281,9 +1522,9 @@ const KosmicEngine=(function(){
       let extra="";
       if(m.approval)extra=`<div class="dc-approval-card">
         ${m.approval.images?`<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px">${m.approval.images.filter(Boolean).map(u=>`<img src="${esc(u)}" onclick="KosmicEngine.viewGeneration('${esc(u)}','image')" style="width:150px;height:150px;object-fit:cover;flex-shrink:0;border-radius:10px;border:1px solid var(--glass-brd);cursor:pointer">`).join('')}</div>`:''}
-        ${m.approval.video?`<video src="${esc(m.approval.video)}" controls playsinline style="width:100%;border-radius:10px;border:1px solid var(--glass-brd)"></video>`:''}
+        ${m.approval.videos&&m.approval.videos.length?m.approval.videos.map(v=>`<div style="margin-bottom:6px"><div style="font-size:10px;font-weight:700;color:${v.flag?'var(--red)':'var(--textm)'};margin-bottom:2px">${esc(v.label)}${v.flag?' · ⚠ flagged by clip check':''}</div><video src="${esc(v.url)}" controls playsinline preload="metadata" style="width:100%;border-radius:10px;border:1px solid ${v.flag?'var(--red)':'var(--glass-brd)'}"></video></div>`).join(''):(m.approval.video?`<video src="${esc(m.approval.video)}" controls playsinline style="width:100%;border-radius:10px;border:1px solid var(--glass-brd)"></video>`:'')}
         ${m.approval.text?`<div style="font-size:11px;color:var(--text);white-space:pre-wrap">${m.approval.text}</div>`:''}
-        ${m.approval.qaNote?`<div style="font-size:10px;color:var(--gold);background:rgba(212,175,55,0.1);border-radius:6px;padding:5px 8px;margin-top:6px">🔍 QA note: ${m.approval.qaNote}</div>`:''}
+        ${m.approval.qaNote?`<div style="font-size:10px;color:var(--gold);background:rgba(212,175,55,0.1);border-radius:6px;padding:5px 8px;margin-top:6px">🔍 QA note: ${esc(m.approval.qaNote)}</div>`:''}
         <div class="dc-approval-actions">
           <button class="btn btn-primary btn-xs" onclick="KosmicEngine.approve()">✅ Approve</button>
           <button class="btn btn-danger btn-xs" onclick="KosmicEngine.reject()">❌ Reject</button>
@@ -1775,6 +2016,7 @@ const KosmicEngine=(function(){
 
     const contLabel={both:"narrative + visual",narrative:"narrative only",visual:"visual only",none:"none"}[cont];
     push("agent",`Locked in:\n• Episodes → ${eps}\n• Total length → ${dur}s\n• Resolution → ${qual}\n• Aspect ratio → ${ratio}\n• Continuity → ${contLabel}\n\nStarting now.`);
+    {const _e=estimateDraft(d);if(_e)push("agent",`💰 Rough cost for this plan: ≈${fmtUsd(_e.cost)} (${_e.shots} shot${_e.shots!==1?"s":""} + character, location and storyboard images). I'll show the exact figure for each step before it runs if you've set permissions to ask.`);}
 
     S.directorChat.tasks=buildTaskGraph(eps);
     save();
@@ -2239,6 +2481,164 @@ const KosmicEngine=(function(){
     push("user",text,attachedRefs.length?{refs:attachedRefs}:{});
     handleUserMessage(text);
   }
+  // ── CHAT INTENTS ────────────────────────────────────────────────────
+  // Chat used to be three regexes plus a canned "I'm mid-production" reply.
+  // Now: obvious phrases are matched locally (free, works offline), anything
+  // else goes to the selected Engine brain, which may only answer with one of
+  // a small set of actions. Every value is validated and clamped here, so the
+  // brain can never set something the pipeline can't run.
+  const GO_RE=/\b(go|start|begin|proceed|run it|let'?s go|do it)\b/i;
+  function regexParams(text){
+    const lower=text.toLowerCase(),d=S.directorChat.draft||{},out={};
+    const ep=lower.match(/(\d+)\s*episodes?/),du=lower.match(/(\d+)\s*(?:sec|second)/);
+    // Clamped: "500 episodes" once parsed straight into a 1,500-task graph.
+    if(ep)out.episodes=clampInt(ep[1],INTAKE_LIMITS.episodeCount.min,INTAKE_LIMITS.episodeCount.max,1);
+    if(du)out.durationSec=clampInt(du[1],INTAKE_LIMITS.duration.min,INTAKE_LIMITS.duration.max,8);
+    const cur=d.continuity||"both";
+    if(/no visual|visual off|without visual/.test(lower))out.continuity=cur==="both"?"narrative":"none";
+    else if(/no narrative|narrative off|without narrative/.test(lower))out.continuity=cur==="both"?"visual":"none";
+    else if(/narrative only/.test(lower))out.continuity="narrative";
+    else if(/visual only|visual chaining only/.test(lower))out.continuity="visual";
+    else if(/both continuity|narrative and visual/.test(lower))out.continuity="both";
+    return out;
+  }
+  function cleanParams(pr){
+    const o={};if(!pr||typeof pr!=="object")return o;
+    if(pr.episodes!=null){const n=clampInt(pr.episodes,INTAKE_LIMITS.episodeCount.min,INTAKE_LIMITS.episodeCount.max,null);if(n!=null)o.episodes=n;}
+    if(pr.durationSec!=null){const n=clampInt(pr.durationSec,INTAKE_LIMITS.duration.min,INTAKE_LIMITS.duration.max,null);if(n!=null)o.durationSec=n;}
+    if(["both","narrative","visual","none"].includes(pr.continuity))o.continuity=pr.continuity;
+    if(["16:9","9:16","1:1"].includes(pr.aspectRatio))o.aspectRatio=pr.aspectRatio;
+    if(["480p","720p","1080p"].includes(pr.quality))o.quality=pr.quality;
+    return o;
+  }
+  function fastIntent(text,planning){
+    const t=text.trim().toLowerCase().replace(/[.!]+$/,""),d=S.directorChat;
+    if(/^(status|progress|where are we|how'?s it going|what'?s (happening|next))\??$/.test(t))return{intent:"status"};
+    if(/^(cost|how much|spend|budget|what'?s the cost)(\b.*)?\??$/.test(t))return{intent:"cost"};
+    if(planning)return null;
+    const perm=!!(d.awaitingPermissionIds&&d.awaitingPermissionIds.length);
+    if(/^(pause|stop|hold on|wait)$/.test(t))return{intent:"pause"};
+    if(/^(resume|continue|carry on|keep going)$/.test(t))return{intent:"resume"};
+    if(perm){
+      if(/^(yes|ok|okay|go|go ahead|generate|allow|sure|do it)$/.test(t))return{intent:"allow"};
+      if(/^(no|not now|nope|cancel)$/.test(t))return{intent:"decline"};
+    }
+    if(d.awaitingApprovalTaskId){
+      if(/^(approve|approved|yes|ok|okay|looks good|lgtm|good|great|perfect|love it|next|accept)$/.test(t))return{intent:"approve"};
+      if(/^(reject|redo|no|nope|try again|regenerate)$/.test(t))return{intent:"reject"};
+    }
+    return null;
+  }
+  function sanitizeIntent(o,planning){
+    const okPlan=["set_params","go","status","cost","chat"],okRun=["approve","reject","allow","decline","pause","resume","status","cost","chat"];
+    if(!o||typeof o!=="object"||!(planning?okPlan:okRun).includes(o.intent))return null;
+    const r={intent:o.intent};
+    if(o.intent==="set_params"){r.params=cleanParams(o.params);r.go=o.go===true;if(!Object.keys(r.params).length&&!r.go)return null;}
+    if(o.intent==="chat")r.reply=String(o.reply||"").slice(0,400);
+    return r;
+  }
+  async function llmIntent(text){
+    const d=S.directorChat,planning=d.intakeStage==="confirm_plan",dr=d.draft||{};
+    const state=planning
+      ?`Stage: planning, not started. Current settings: episodes=${dr.episodeCount||1}, durationSec=${dr.totalDurationRounded||8}, quality=${dr.quality}, aspectRatio=${dr.aspectRatio}, continuity=${dr.continuity}.`
+      :`Stage: production running.${d.awaitingApprovalTaskId?" A step is waiting for the user's approval.":""}${d.awaitingPermissionIds&&d.awaitingPermissionIds.length?" The engine is waiting for permission to generate.":""}${d.permissionPaused?" Production is paused.":""}`;
+    const actions=planning
+      ?`{"intent":"set_params","params":{"episodes":1-10,"durationSec":4-60,"continuity":"both|narrative|visual|none","aspectRatio":"16:9|9:16|1:1","quality":"480p|720p|1080p"},"go":true|false}  (include only params the user asked to change; go:true only if they also said to start)\n{"intent":"go"}  (start now)\n`
+      :`{"intent":"approve"} or {"intent":"reject"}  (only if a step awaits approval)\n{"intent":"allow"} or {"intent":"decline"}  (only if the engine awaits permission)\n{"intent":"pause"} or {"intent":"resume"}\n`;
+    const sys=`You turn ONE chat message from a filmmaker into ONE action for a film-production assistant. Reply with a single JSON object and nothing else.\nAllowed actions:\n${actions}{"intent":"status"}  (asks for progress)\n{"intent":"cost"}  (asks about spend or budget)\n{"intent":"chat","reply":"one or two helpful sentences"}  (questions, comments, anything unclear). Never promise anything that is not in this list.`;
+    try{
+      const raw=await withEngineAiOverride(()=>window.callAiSimple(`${state}\nUser message: ${JSON.stringify(text.slice(0,600))}`,sys));
+      const a=String(raw).indexOf("{"),b=String(raw).lastIndexOf("}");
+      if(a<0||b<=a)return null;
+      return sanitizeIntent(JSON.parse(String(raw).slice(a,b+1)),planning);
+    }catch(err){console.warn("Intent step skipped:",err.message);return null;}
+  }
+  function statusText(){
+    const d=S.directorChat,tasks=d.tasks||[];
+    if(!tasks.length)return "Nothing has started yet — tell me what to change, or say \"go\".";
+    const done=tasks.filter(t=>t.status==="done").length;
+    const running=tasks.filter(t=>t.status==="running").map(t=>t.label);
+    const waiting=d.awaitingApprovalTaskId&&findTask(d.awaitingApprovalTaskId);
+    const err=tasks.filter(t=>t.status==="error").map(t=>t.label);
+    const lines=[`${done} of ${tasks.length} steps done.`];
+    if(running.length)lines.push(`Running: ${running.join(", ")}.`);
+    if(waiting)lines.push(`Waiting for you: ${waiting.label}.`);
+    if(d.awaitingPermissionIds&&d.awaitingPermissionIds.length)lines.push("Waiting for your permission to generate.");
+    if(d.permissionPaused)lines.push("Paused.");
+    if(err.length)lines.push(`Failed: ${err.join(", ")} — use Retry.`);
+    lines.push(costText());
+    return lines.map(esc).join("\n");
+  }
+  function costText(){
+    const d=S.directorChat;
+    if(d.intakeStage==="confirm_plan"){
+      const e=estimateDraft();
+      return e?`Rough cost for the current settings: ≈${fmtUsd(e.cost)} (${e.shots} shot${e.shots!==1?"s":""}, ${e.eps} episode${e.eps!==1?"s":""}). Exact figures appear per step.`:"I can't price the selected models yet.";
+    }
+    const plan=estimatePlan();
+    return `Spent so far ${fmtUsd(spentSoFar())}; still to run ≈${fmtUsd(plan.cost)}${plan.unknown?" (some items unpriced)":""}.${budgetCap()?` Budget cap ${fmtUsd(budgetCap())}.`:" No budget cap set."}`;
+  }
+  function applyParams(o){
+    const dr=S.directorChat.draft,lines=[];
+    if(o.episodes!=null){dr.episodeCount=o.episodes;lines.push(`Episodes → ${o.episodes}`);}
+    if(o.durationSec!=null){dr.totalDurationRequested=o.durationSec;dr.totalDurationRounded=o.durationSec;lines.push(`Total length → ${o.durationSec}s`);}
+    if(o.continuity){dr.continuity=o.continuity;lines.push(`Continuity → ${o.continuity}`);}
+    if(o.aspectRatio){dr.aspectRatio=o.aspectRatio;lines.push(`Aspect ratio → ${o.aspectRatio}`);}
+    if(o.quality){dr.quality=o.quality;lines.push(`Resolution → ${o.quality}`);}
+    save();
+    return lines;
+  }
+  async function startProduction(){
+    const d=S.directorChat;
+    if(d.intakeStage!=="confirm_plan"||!d.draft)return; // already started (double tap / stale)
+    // Stage advances BEFORE any await — a fast double "go" must not build the graph twice.
+    d.intakeStage="running";
+    const est=estimateDraft(d.draft);
+    if(est)push("agent",`▶ Starting — rough total ≈${fmtUsd(est.cost)}${budgetCap()?` (budget cap ${fmtUsd(budgetCap())})`:""}.`);
+    // Clamped at this choke point too: a draft restored from an older cloud
+    // session can still carry an unbounded episodeCount.
+    d.tasks=buildTaskGraph(clampInt(d.draft.episodeCount,INTAKE_LIMITS.episodeCount.min,INTAKE_LIMITS.episodeCount.max,1));
+    save();
+    await dispatchTasks();
+  }
+  async function applyIntent(it){
+    const d=S.directorChat;
+    switch(it.intent){
+      case "status":push("agent",statusText());return;
+      case "cost":push("agent",esc(costText()));return;
+      case "chat":push("agent",it.trusted?it.reply:esc(it.reply||"Noted."));return;
+      case "set_params":{
+        const lines=applyParams(it.params||{});
+        const e=estimateDraft();
+        if(lines.length)push("agent",`Updated:\n${lines.map(l=>"• "+l).join("\n")}${e?`\nRough cost now ≈${fmtUsd(e.cost)}.`:""}${it.go?"":'\nSay "go" to start.'}`);
+        if(it.go)await startProduction();
+        return;
+      }
+      case "go":await startProduction();return;
+      case "approve":
+        if(!d.awaitingApprovalTaskId){push("agent","Nothing is waiting for approval right now.");return;}
+        await approve();return;
+      case "reject":
+        if(!d.awaitingApprovalTaskId){push("agent","Nothing is waiting for review right now.");return;}
+        await reject();return;
+      case "allow":
+        if(!(d.awaitingPermissionIds&&d.awaitingPermissionIds.length)){push("agent","I'm not waiting for permission right now.");return;}
+        allowGeneration();return;
+      case "decline":
+        if(!(d.awaitingPermissionIds&&d.awaitingPermissionIds.length)){push("agent","I'm not waiting for permission right now.");return;}
+        declineGeneration();return;
+      case "pause":
+        if(d.permissionPaused){push("agent","Already paused. Say \"resume\" to continue.",{resumable:true});return;}
+        if(d.awaitingPermissionIds&&d.awaitingPermissionIds.length){declineGeneration();return;}
+        d.permissionPaused=true;save();
+        push("agent","⏸ Paused. Anything already generating will finish, but nothing new will start. Say \"resume\" to continue.",{resumable:true});
+        return;
+      case "resume":
+        if(!d.permissionPaused){push("agent","It isn't paused.");return;}
+        resumeProduction();return;
+    }
+  }
+
   async function handleUserMessage(text){
     const stage=S.directorChat.intakeStage;
     if(stage==="awaiting_brief"){
@@ -2285,49 +2685,26 @@ const KosmicEngine=(function(){
       save();
       S.directorChat.intakeStage="confirm_plan";
       S.directorChat.qaAnswers={};
-      push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}"${remembered.semantic?', recalled by meaning — '+Math.round(remembered.score*100)+'% match':''}) — I'll keep their approved look consistent unless you tell me otherwise.`:""} Before I start, set the ${intakeQuestions().length} things below — or just say "go" to run with the defaults (1 episode, ~8s, 720p, 16:9, narrative + visual continuity).`,{questions:true});
+      push("agent",`Got it.${remembered?` 🧠 This sounds like a character I already know ("${remembered.concept}"${remembered.semantic?', recalled by meaning — '+Math.round(remembered.score*100)+'% match':''}) — I'll keep their approved look consistent unless you tell me otherwise.`:""} Before I start, set the ${intakeQuestions().length} things below — or just say "go" to run with the defaults (1 episode, ~8s, 720p, 16:9, narrative + visual continuity).${(()=>{const e=estimateDraft();return e?` Rough cost at these settings: ≈${fmtUsd(e.cost)}.`:"";})()}`,{questions:true});
       save();
       return;
     }
     if(stage==="confirm_plan"){
-      const lower=text.toLowerCase();
-      const epMatch=lower.match(/(\d+)\s*episodes?/);
-      const durMatch=lower.match(/(\d+)\s*(?:sec|second)/);
-      // Clamped, where the original wasn't at all. "500 episodes" parsed
-      // straight through to buildTaskGraph(500) — 1506 tasks, every one of
-      // them re-serialized to localStorage AND pushed to Firebase on every
-      // single save() call, plus 500 episodes' worth of real paid generation
-      // queued behind it. Same reasoning for duration.
-      if(epMatch)S.directorChat.draft.episodeCount=clampInt(epMatch[1],INTAKE_LIMITS.episodeCount.min,INTAKE_LIMITS.episodeCount.max,1);
-      if(durMatch){
-        const dur=clampInt(durMatch[1],INTAKE_LIMITS.duration.min,INTAKE_LIMITS.duration.max,8);
-        S.directorChat.draft.totalDurationRequested=dur;
-        S.directorChat.draft.totalDurationRounded=dur;
+      let it=fastIntent(text,true);
+      if(!it){
+        const params=regexParams(text);
+        if(Object.keys(params).length)it={intent:"set_params",params,go:GO_RE.test(text)};
+        else if(/^(go|start|yes|proceed|begin)/i.test(text.trim()))it={intent:"go"};
       }
-      // Continuity as text overrides, same conversational pattern as episode
-      // count/duration above — defaults to both narrative+visual (set at
-      // draft creation) unless told otherwise.
-      let continuityMatch=false;
-      if(/no visual|visual off|without visual/.test(lower)){S.directorChat.draft.continuity=S.directorChat.draft.continuity==="both"?"narrative":"none";continuityMatch=true;}
-      else if(/no narrative|narrative off|without narrative/.test(lower)){S.directorChat.draft.continuity=S.directorChat.draft.continuity==="both"?"visual":"none";continuityMatch=true;}
-      else if(/narrative only/.test(lower)){S.directorChat.draft.continuity="narrative";continuityMatch=true;}
-      else if(/visual only|visual chaining only/.test(lower)){S.directorChat.draft.continuity="visual";continuityMatch=true;}
-      else if(/both continuity|narrative and visual/.test(lower)){S.directorChat.draft.continuity="both";continuityMatch=true;}
-      if(!/^(go|start|yes|proceed|begin)/i.test(lower)&&!epMatch&&!durMatch&&!continuityMatch){
-        push("agent",`Noted. Say "go" whenever you're ready to start.`);
-        return;
-      }
-      S.directorChat.intakeStage="running";
-      // Clamped again here on purpose, not just at parse time: a draft
-      // restored from a cloud session saved BEFORE the parse-time clamp
-      // existed can still carry an unbounded episodeCount, and this is the
-      // single choke point every start path funnels through.
-      S.directorChat.tasks=buildTaskGraph(clampInt(S.directorChat.draft.episodeCount,INTAKE_LIMITS.episodeCount.min,INTAKE_LIMITS.episodeCount.max,1));
-      save();
-      await dispatchTasks();
+      if(!it)it=await llmIntent(text);
+      if(!it)it={intent:"chat",trusted:true,reply:'Noted. Say "go" whenever you\'re ready to start, or tell me what to change (episodes, length, resolution, aspect ratio, continuity).'};
+      await applyIntent(it);
       return;
     }
-    push("agent","I'm mid-production right now — use Approve/Reject on the card above, or wait for the next step.");
+    // Production running: obvious phrases locally, anything else via the brain.
+    let it=fastIntent(text,false)||await llmIntent(text);
+    if(!it)it={intent:"chat",trusted:true,reply:"I'm mid-production right now — you can say approve, reject, pause, resume, status or cost, or use the buttons on the card above."};
+    await applyIntent(it);
   }
 
   async function approve(){
@@ -2527,6 +2904,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,editProjectRules,projectRules,handleRefUpload,removeRef,renderRefStrip,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode,dispatch:dispatchTasks,setEngineTier,setEngineModel,ensureEngineSelection,renderEngineModePicker,toggleSettings,deleteChat,withBrain:withEngineAiOverride};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,setBudgetCap,setVideoQAMode,estimateTask,estimateBatch,estimatePlan,estimateDraft,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,editProjectRules,projectRules,handleRefUpload,removeRef,renderRefStrip,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode,dispatch:dispatchTasks,setEngineTier,setEngineModel,ensureEngineSelection,renderEngineModePicker,toggleSettings,deleteChat,withBrain:withEngineAiOverride};
 })();
 
