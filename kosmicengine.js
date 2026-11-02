@@ -85,7 +85,7 @@ function renderKosmicEngineModule(el){
           <button type="button" class="dc-more" onclick="KosmicEngine.toggleEngineMenu(event)">More actions…</button>
         </div>
         <div id="dcRefStrip" style="display:none;gap:7px;flex-wrap:wrap"></div>
-        <input type="file" accept="image/*" multiple id="dcRefFile" style="display:none" onchange="KosmicEngine.handleRefUpload(event)">
+        <input type="file" accept="image/*,.txt,.md,.fountain,.srt,text/plain" multiple id="dcRefFile" style="display:none" onchange="KosmicEngine.handleRefUpload(event)">
         ${G.composer({inputId:"dcInput",placeholder:"Tell me the story you want to make…",keydown:"if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();KosmicEngine.send();}",settings:"KosmicEngine.toggleSettings()",summaryId:"dcSummary",sendId:"dcSend",send:"KosmicEngine.send()",tools:[{onclick:"document.getElementById('dcRefFile').click()",title:"Add a reference image",icon:attachIc}],hint:'<div class="kc-hint"><span></span><span>Ctrl+Enter to send</span></div>'})}
       </div>
     </div>
@@ -1748,10 +1748,11 @@ const KosmicEngine=(function(){
   function renderRefStrip(){
     const el=document.getElementById("dcRefStrip");
     if(!el)return;
-    const refs=pendingRefs();
-    if(!refs.length){el.style.display="none";el.innerHTML="";return;}
+    const refs=pendingRefs(),sc=S.directorChat.pendingScript;
+    if(!refs.length&&!sc){el.style.display="none";el.innerHTML="";return;}
     el.style.display="flex";
-    el.innerHTML=refs.map((r,i)=>`<div style="position:relative;flex-shrink:0">
+    const scChip=sc?`<div style="position:relative;flex-shrink:0;display:flex;align-items:center;gap:6px;padding:0 10px;height:46px;border-radius:9px;border:1px solid var(--glass-brd);font-size:11px">📄 ${esc(sc.name)} · ${sc.text.length.toLocaleString()} chars<button onclick="KosmicEngine.removeScript()" style="width:18px;height:18px;border-radius:50%;border:none;background:var(--red);color:#fff;font-size:11px;line-height:1">×</button></div>`:"";
+    el.innerHTML=scChip+refs.map((r,i)=>`<div style="position:relative;flex-shrink:0">
       <img src="${esc(r)}" style="width:46px;height:46px;object-fit:cover;border-radius:9px;border:1px solid var(--glass-brd)">
       <button onclick="KosmicEngine.removeRef(${i})" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;border:none;background:var(--red);color:#fff;font-size:11px;line-height:1;cursor:pointer">✕</button>
     </div>`).join('');
@@ -1762,9 +1763,29 @@ const KosmicEngine=(function(){
     save();
     renderRefStrip();
   }
+  const MAX_SCRIPT_CHARS=12000; // keeps the session (localStorage + Firestore 1MB doc) and the promptwriter context bounded
+  function removeScript(){delete S.directorChat.pendingScript;save();renderRefStrip();}
+  function readScriptFile(file){
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const raw=String(e.target.result||"").replace(/\r\n?/g,"\n").trim();
+      if(!raw){toast("That file is empty","error");return;}
+      const clipped=raw.length>MAX_SCRIPT_CHARS;
+      S.directorChat.pendingScript={name:file.name.slice(0,60),text:raw.slice(0,MAX_SCRIPT_CHARS)};
+      save();renderRefStrip();
+      toast(clipped?`Script added — first ${MAX_SCRIPT_CHARS.toLocaleString()} characters used`:"Script added — I'll build the story from it when you send","success");
+    };
+    reader.onerror=()=>toast("Couldn't read that file","error");
+    reader.readAsText(file);
+  }
   function handleRefUpload(event){
-    const files=[...(event.target.files||[])];
+    let files=[...(event.target.files||[])];
     event.target.value="";
+    if(!files.length)return;
+    const isText=f=>/^text\//.test(f.type)||/\.(txt|md|fountain|srt)$/i.test(f.name);
+    const scripts=files.filter(isText);
+    if(scripts.length)readScriptFile(scripts[0]);
+    files=files.filter(f=>!isText(f));
     if(!files.length)return;
     const refs=pendingRefs();
     const room=MAX_REFS-refs.length;
@@ -2668,12 +2689,15 @@ const KosmicEngine=(function(){
         else push("agent","I couldn't read that image (your AI Brain may not support vision) — I'll work from your text, and still pass the image to the character sheet if the image model accepts references.");
       }
       const rules=projectRules();
+      const scriptTxt=S.directorChat.pendingScript||null;
+      delete S.directorChat.pendingScript;
       // Order matters: the user's own words first, then the reference
       // description, then the standing rules — so nothing overrides the brief
       // they actually typed.
       const briefText=[text,
         refDesc?`Visual reference for the main character: ${refDesc}`:"",
         refStyle?`Visual style of the reference image — use this as the production's overall rendering style unless the brief above explicitly asks for something else: ${refStyle}`:"",
+        scriptTxt?`Source script / notes supplied by the user (\"${scriptTxt.name}\") — build the story from this faithfully rather than inventing a new one:\n${scriptTxt.text}`:"",
         rules?`Standing rules for this project that must be followed throughout: ${rules}`:""
       ].filter(Boolean).join("\n\n");
       const remembered=await SemanticMemory.recallCharacter(text);
@@ -2904,6 +2928,6 @@ const KosmicEngine=(function(){
   }
   function findTaskIn(tasks,id){return tasks.find(t=>t.id===id);}
 
-  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,setBudgetCap,setVideoQAMode,estimateTask,estimateBatch,estimatePlan,estimateDraft,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,editProjectRules,projectRules,handleRefUpload,removeRef,renderRefStrip,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode,dispatch:dispatchTasks,setEngineTier,setEngineModel,ensureEngineSelection,renderEngineModePicker,toggleSettings,deleteChat,withBrain:withEngineAiOverride};
+  return{send,approve,reject,retry,reset,renderThread,renameDirector,loadFromCloud,resumeExistingProduction,renderTaskPanel,toggleTaskPanel,openIntakeQuestions,closeIntakeQuestions,setIntakeAnswer,setIntakeAnswerText,submitIntakeAnswers,skipIntakeQuestions,openPermissionSettings,closePermissionSettings,setPermissionMode,setBudgetCap,setVideoQAMode,estimateTask,estimateBatch,estimatePlan,estimateDraft,allowGeneration,declineGeneration,resumeProduction,enterProject,stashCurrentSession,openSessionRecovery,restoreSession,toggleEngineMenu,closeEngineMenu,runMenuAction,viewGeneration,setEngineTab,renderNotebook,editProjectRules,projectRules,handleRefUpload,removeRef,removeScript,renderRefStrip,directorName,restoreAttempt,toggleBlock,currentTab:()=>_engineTab,openAutoReviewSettings,closeAutoReviewSettings,setAutoReviewMode,dispatch:dispatchTasks,setEngineTier,setEngineModel,ensureEngineSelection,renderEngineModePicker,toggleSettings,deleteChat,withBrain:withEngineAiOverride};
 })();
 
